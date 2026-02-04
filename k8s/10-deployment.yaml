@@ -1,0 +1,192 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildtovalue
+  namespace: buildtovalue
+  labels:
+    app: buildtovalue
+    version: v2.0.0
+spec:
+  replicas: 3
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Zero-downtime
+  
+  selector:
+    matchLabels:
+      app: buildtovalue
+  
+  template:
+    metadata:
+      labels:
+        app: buildtovalue
+        version: v2.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    
+    spec:
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      # Init container: Valida policies antes de iniciar
+      initContainers:
+        - name: validate-policies
+          image: buildtovalue:2.0.0
+          command: ["/app/scripts/validate_policies.py"]
+          envFrom:
+            - configMapRef:
+                name: buildtovalue-config
+          volumeMounts:
+            - name: profiles
+              mountPath: /app/profiles
+              readOnly: true
+      
+      containers:
+        - name: buildtovalue
+          image: buildtovalue:2.0.0
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          
+          envFrom:
+            - configMapRef:
+                name: buildtovalue-config
+          
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: buildtovalue-secrets
+                  key: DATABASE_URL
+            
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: buildtovalue-secrets
+                  key: REDIS_URL
+            
+            - name: SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: buildtovalue-secrets
+                  key: SIGNING_KEY
+            
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          
+          # Resource requests/limits
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          
+          # Liveness probe (reinicia se unhealthy)
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          # Readiness probe (remove do load balancer se not ready)
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Startup probe (dá mais tempo para inicialização)
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30  # 150s total
+          
+          # Volumes
+          volumeMounts:
+            - name: ledger-storage
+              mountPath: /app/data/ledger
+            
+            - name: explanations-storage
+              mountPath: /app/data/explanations
+            
+            - name: profiles
+              mountPath: /app/profiles
+              readOnly: true
+            
+            - name: logs
+              mountPath: /app/logs
+          
+          # Lifecycle hooks
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"]  # Drain connections
+      
+      # Volumes
+      volumes:
+        - name: ledger-storage
+          persistentVolumeClaim:
+            claimName: buildtovalue-ledger-pvc
+        
+        - name: explanations-storage
+          persistentVolumeClaim:
+            claimName: buildtovalue-explanations-pvc
+        
+        - name: profiles
+          configMap:
+            name: buildtovalue-profiles
+        
+        - name: logs
+          emptyDir: {}
+      
+      # Anti-affinity (distribui pods em nodes diferentes)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - buildtovalue
+                topologyKey: kubernetes.io/hostname

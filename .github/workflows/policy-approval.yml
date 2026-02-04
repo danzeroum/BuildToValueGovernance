@@ -1,0 +1,66 @@
+
+name: Policy Approval Workflow
+
+on:
+  pull_request:
+    paths:
+      - 'profiles/*.yaml'
+
+jobs:
+  validate-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - name: Validate YAML syntax
+        run: |
+          python scripts/validate_policy_syntax.py profiles/*.yaml
+      
+      - name: Blind Policy Testing
+        run: |
+          python scripts/blind_policy_test.py \
+            --policy ${{ github.event.pull_request.changed_files }} \
+            --test-suite tests/policy_tests/blind_test_cases.json
+      
+      - name: Check BiasDeclaration
+        run: |
+          python scripts/check_bias_declaration.py profiles/*.yaml
+      
+      - name: Adversarial Testing
+        run: |
+          pytest tests/adversarial/ -v --policy-file profiles/*.yaml
+      
+      - name: Request Ethical Committee Review
+        if: success()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `
+                🔍 **Policy Change Detected**
+                
+                Ethical Committee review required.
+                
+                **Changed Files:** ${{ github.event.pull_request.changed_files }}
+                
+                **Reviewers:**
+                @ethical-committee-member-1
+                @ethical-committee-member-2
+                @ethical-committee-member-3
+                
+                **Approval Quorum:** 2/3
+                
+                Please review within 48 hours.
+              `
+            })
+      
+      - name: Check Committee Approval
+        if: github.event.pull_request.reviews.length >= 2
+        run: |
+          python scripts/check_committee_quorum.py \
+            --pr-number ${{ github.event.pull_request.number }} \
+            --required-approvals 2

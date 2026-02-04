@@ -1,0 +1,63 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildtovalue-compliance
+  namespace: buildtovalue
+spec:
+  replicas: 3  # High availability
+  selector:
+    matchLabels:
+      app: buildtovalue-compliance
+  template:
+    metadata:
+      labels:
+        app: buildtovalue-compliance
+    spec:
+      containers:
+      - name: compliance-engine
+        image: buildtovalue/compliance:v2.1
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: WAL_PATH
+          value: "/data/threats.wal"
+        volumeMounts:
+        - name: wal-storage
+          mountPath: /data
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: wal-storage
+        persistentVolumeClaim:
+          claimName: wal-pvc
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wal-pvc
+  namespace: buildtovalue
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

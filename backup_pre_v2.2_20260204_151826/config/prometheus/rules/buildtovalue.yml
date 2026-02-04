@@ -1,0 +1,340 @@
+
+groups:
+  # ═══════════════════════════════════════════════════════════════
+  # Latency Alerts (SLO: p99 < 50ms)
+  # ═══════════════════════════════════════════════════════════════
+  - name: latency_alerts
+    interval: 30s
+    rules:
+      - alert: HighP99Latency
+        expr: |
+          histogram_quantile(0.99, 
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 0.050
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "P99 latency above 50ms"
+          description: |
+            P99 latency is {{ $value | humanizeDuration }} (threshold: 50ms)
+            Pod: {{ $labels.kubernetes_pod_name }}
+            Namespace: {{ $labels.kubernetes_namespace }}
+          runbook: https://docs.buildtovalue.com/runbooks/high-latency
+      
+      - alert: CriticalP99Latency
+        expr: |
+          histogram_quantile(0.99, 
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 0.100
+        for: 2m
+        labels:
+          severity: critical
+          component: performance
+        annotations:
+          summary: "P99 latency critically high (>100ms)"
+          description: |
+            P99 latency is {{ $value | humanizeDuration }} (critical threshold: 100ms)
+            Pod: {{ $labels.kubernetes_pod_name }}
+            IMMEDIATE ACTION REQUIRED
+          runbook: https://docs.buildtovalue.com/runbooks/critical-latency
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Error Rate Alerts (SLO: < 1% error rate)
+  # ═══════════════════════════════════════════════════════════════
+  - name: error_rate_alerts
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (kubernetes_namespace)
+            /
+            sum(rate(http_requests_total[5m])) by (kubernetes_namespace)
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: reliability
+        annotations:
+          summary: "Error rate above 1%"
+          description: |
+            Error rate is {{ $value | humanizePercentage }}
+            Namespace: {{ $labels.kubernetes_namespace }}
+            5xx errors detected in last 5 minutes
+          runbook: https://docs.buildtovalue.com/runbooks/high-error-rate
+      
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (kubernetes_namespace)
+            /
+            sum(rate(http_requests_total[5m])) by (kubernetes_namespace)
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          component: reliability
+        annotations:
+          summary: "Error rate critically high (>5%)"
+          description: |
+            Error rate is {{ $value | humanizePercentage }}
+            IMMEDIATE ACTION REQUIRED - Service degradation
+          runbook: https://docs.buildtovalue.com/runbooks/critical-error-rate
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Availability Alerts (SLO: 99.9% uptime)
+  # ═══════════════════════════════════════════════════════════════
+  - name: availability_alerts
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up{job="buildtovalue"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: availability
+        annotations:
+          summary: "BuildToValue service is DOWN"
+          description: |
+            Pod {{ $labels.kubernetes_pod_name }} is unreachable
+            Namespace: {{ $labels.kubernetes_namespace }}
+            IMMEDIATE INVESTIGATION REQUIRED
+          runbook: https://docs.buildtovalue.com/runbooks/service-down
+      
+      - alert: LowPodCount
+        expr: |
+          count(up{job="buildtovalue"} == 1) by (kubernetes_namespace) < 2
+        for: 5m
+        labels:
+          severity: warning
+          component: availability
+        annotations:
+          summary: "Less than 2 healthy pods running"
+          description: |
+            Only {{ $value }} pod(s) healthy in {{ $labels.kubernetes_namespace }}
+            Minimum required: 2 (for high availability)
+          runbook: https://docs.buildtovalue.com/runbooks/low-pod-count
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Resource Alerts (CPU/Memory)
+  # ═══════════════════════════════════════════════════════════════
+  - name: resource_alerts
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: |
+          (
+            rate(process_cpu_seconds_total{job="buildtovalue"}[5m]) * 100
+          ) > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High CPU usage (>80%)"
+          description: |
+            CPU usage is {{ $value | humanize }}%
+            Pod: {{ $labels.kubernetes_pod_name }}
+            Consider scaling horizontally
+      
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            process_resident_memory_bytes{job="buildtovalue"} 
+            / 
+            kube_pod_container_resource_limits{resource="memory"}
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High memory usage (>85%)"
+          description: |
+            Memory usage is {{ $value | humanizePercentage }}
+            Pod: {{ $labels.kubernetes_pod_name }}
+            Risk of OOMKill
+      
+      - alert: MemoryLeak
+        expr: |
+          rate(process_resident_memory_bytes{job="buildtovalue"}[30m]) > 1048576
+        for: 1h
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "Potential memory leak detected"
+          description: |
+            Memory growing at {{ $value | humanize }} bytes/sec
+            Pod: {{ $labels.kubernetes_pod_name }}
+            Investigation recommended
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Ethical Governance Alerts
+  # ═══════════════════════════════════════════════════════════════
+  - name: ethical_alerts
+    interval: 1m
+    rules:
+      - alert: HighBlockRate
+        expr: |
+          (
+            sum(rate(buildtovalue_decisions_total{action="BLOCK"}[15m]))
+            /
+            sum(rate(buildtovalue_decisions_total[15m]))
+          ) > 0.30
+        for: 15m
+        labels:
+          severity: warning
+          component: ethical_governance
+        annotations:
+          summary: "High block rate (>30%)"
+          description: |
+            {{ $value | humanizePercentage }} of decisions are BLOCK
+            Possible false positives or attack
+            Review needed
+      
+      - alert: BiasDeclarationExpired
+        expr: |
+          (time() - buildtovalue_bias_calibration_timestamp) > (90 * 24 * 3600)
+        for: 1h
+        labels:
+          severity: warning
+          component: ethical_governance
+        annotations:
+          summary: "BiasDeclaration expired (>90 days)"
+          description: |
+            Last calibration: {{ $value | humanizeDuration }} ago
+            Recalibration required for accuracy
+          runbook: https://docs.buildtovalue.com/runbooks/bias-recalibration
+      
+      - alert: LowMercyScore
+        expr: |
+          avg(buildtovalue_mercy_score) < 0.2
+        for: 1h
+        labels:
+          severity: info
+          component: ethical_governance
+        annotations:
+          summary: "Consistently low mercy scores"
+          description: |
+            Average mercy score is {{ $value | humanize }}
+            System may be too strict - ethical review recommended
+      
+      - alert: HighAppealRate
+        expr: |
+          (
+            sum(rate(buildtovalue_appeals_total{result="success"}[24h]))
+            /
+            sum(rate(buildtovalue_decisions_total{action="BLOCK"}[24h]))
+          ) > 0.10
+        for: 1h
+        labels:
+          severity: warning
+          component: ethical_governance
+        annotations:
+          summary: "High appeal success rate (>10%)"
+          description: |
+            {{ $value | humanizePercentage }} of appeals successful
+            Policy adjustments may be needed
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Security Alerts
+  # ═══════════════════════════════════════════════════════════════
+  - name: security_alerts
+    interval: 1m
+    rules:
+      - alert: RateLimitExceeded
+        expr: |
+          rate(buildtovalue_rate_limit_exceeded_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Rate limit frequently exceeded"
+          description: |
+            {{ $value }} rate limit violations per second
+            Source IP: {{ $labels.source_ip }}
+            Possible DDoS attempt
+      
+      - alert: AnomalousTrafficPattern
+        expr: |
+          (
+            rate(http_requests_total[5m])
+            /
+            rate(http_requests_total[1h] offset 1h)
+          ) > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Traffic spike detected (5x normal)"
+          description: |
+            Current traffic: {{ $value }}x baseline
+            Investigate for potential attack
+      
+      - alert: LedgerValidationFailure
+        expr: |
+          rate(buildtovalue_ledger_validation_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Ledger validation failures detected"
+          description: |
+            {{ $value }} ledger validation failures
+            POTENTIAL TAMPERING - IMMEDIATE ACTION REQUIRED
+          runbook: https://docs.buildtovalue.com/runbooks/ledger-tampering
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Database Alerts
+  # ═══════════════════════════════════════════════════════════════
+  - name: database_alerts
+    interval: 30s
+    rules:
+      - alert: HighDatabaseConnections
+        expr: |
+          pg_stat_database_numbackends{datname="buildtovalue"} > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "High number of database connections"
+          description: |
+            {{ $value }} active connections (limit: 100)
+            Connection pool may need tuning
+      
+      - alert: SlowQueries
+        expr: |
+          rate(pg_stat_statements_mean_exec_time{datname="buildtovalue"}[5m]) > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: |
+            Average query time: {{ $value }}ms
+            Query optimization recommended
+      
+      - alert: DatabaseDiskSpaceLow
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/var/lib/postgresql"}
+            /
+            node_filesystem_size_bytes{mountpoint="/var/lib/postgresql"}
+          ) < 0.20
+        for: 5m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database disk space critically low (<20%)"
+          description: |
+            Available: {{ $value | humanizePercentage }}
+            IMMEDIATE ACTION REQUIRED - Expand disk or cleanup

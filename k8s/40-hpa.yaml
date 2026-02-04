@@ -1,0 +1,59 @@
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: buildtovalue-hpa
+  namespace: buildtovalue
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: buildtovalue
+  
+  minReplicas: 3
+  maxReplicas: 10
+  
+  metrics:
+    # CPU
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    
+    # Memory
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    
+    # Custom metric: Request latency (p99)
+    - type: Pods
+      pods:
+        metric:
+          name: http_request_duration_p99
+        target:
+          type: AverageValue
+          averageValue: "30m"  # 30ms
+  
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5 min antes de scale down
+      policies:
+        - type: Percent
+          value: 50  # Reduz no máximo 50% dos pods de cada vez
+          periodSeconds: 60
+    
+    scaleUp:
+      stabilizationWindowSeconds: 0  # Scale up imediato
+      policies:
+        - type: Percent
+          value: 100  # Dobra número de pods se necessário
+          periodSeconds: 15
+        - type: Pods
+          value: 2  # Adiciona no máximo 2 pods de cada vez
+          periodSeconds: 15
+      selectPolicy: Max
