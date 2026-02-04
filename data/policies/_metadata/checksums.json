@@ -1,6 +1,10 @@
 {
-  "compliance/alertmanager.yml": "2052c721790b4d629bf18b9295d9124b115aea1b1cf586332cc17f3e299dfe2f",
-  "compliance/production.yaml": "905fa5433736fe4e4ab4d9c378814ecf6445bb9a1613d751126460b2b2d24253",
-  "compliance/prometheus.yml": "bdb04201ecf873bf130eb3a7d0f90ac300c8be36c6dfa063fb57aea5491aec29",
-  "profiles/medical-agent.yaml": "a2587b91b7ef8a27995c7e5311af21453cc68544873077603aa521c240afc448"
+  "version": "2.2.0",
+  "sealed_at": "2026-02-04T19:37:05Z",
+  "algorithm": "SHA-256",
+  "policies": {
+    "compliance/production.yaml": "905fa5433736fe4e4ab4d9c378814ecf6445bb9a1613d751126460b2b2d24253",
+    "profiles/medical-agent.yaml": "a2587b91b7ef8a27995c7e5311af21453cc68544873077603aa521c240afc448"
+  },
+  "signature": "HMAC-SHA256-PLACEHOLDER"
 }
