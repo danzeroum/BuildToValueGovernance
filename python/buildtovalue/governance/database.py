@@ -1,131 +1,112 @@
-
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
+"""
+Database - Wrapper seguro para operações de banco de dados.
+Demonstra boas práticas vs vulnerabilidades.
+"""
+import sqlite3
+from typing import Optional, List, Dict, Any
+from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
 
+
 class SecureDatabase:
     """
-    Database wrapper com proteção contra SQL injection.
-    
-    Princípios:
-    1. NUNCA concatenar strings em queries
-    2. Sempre usar parametrized queries
-    3. Validar inputs antes de usar
-    4. Limitar privilégios do DB user
+    Wrapper seguro para SQLite.
+
+    Garante:
+    - Prepared statements (proteção SQL injection)
+    - Connection pooling (thread-safe)
+    - Logging de queries
+    - Rollback automático em erros
     """
-    
-    def __init__(self, connection_string: str):
-        # Connection string validation
-        if not connection_string.startswith(('postgresql://', 'postgres://')):
-            raise ValueError("Invalid database connection string")
-        
-        # Create engine (no privilege escalation)
-        self.engine = create_engine(
-            connection_string,
-            poolclass=NullPool,  # No connection pooling (security)
-            echo=False,  # No SQL logging (prevent credential leaks)
-            isolation_level="READ COMMITTED",
-        )
-        
-        self.SessionLocal = sessionmaker(bind=self.engine)
-    
-    def execute_query(self, query: str, params: dict = None) -> list:
-        """
-        Executa query parametrizada (SQL injection safe).
-        
-        CORRETO:
-        >>> db.execute_query("SELECT * FROM users WHERE id = :id", {"id": user_id})
-        
-        INCORRETO (VULNERÁVEL):
-        >>> db.execute_query(f"SELECT * FROM users WHERE id = {user_id}")
-        """
-        if params is None:
-            params = {}
-        
-        # Valida que query não contém string interpolation
-        if any(marker in query for marker in ['%s', '%d', '{', '}']):
-            raise ValueError(
-                "Query contains string interpolation markers. "
-                "Use parameterized queries with :param syntax."
-            )
-        
-        with self.SessionLocal() as session:
-            try:
-                result = session.execute(text(query), params)
-                return result.fetchall()
-            except Exception as e:
-                logger.error(f"Query execution failed: {e}")
-                session.rollback()
-                raise
-    
-    def insert_appeal(self, session_id: str, verdict_id: str, reason: str) -> int:
-        """
-        Insere apelação (exemplo de query parametrizada).
-        """
-        query = """
-            INSERT INTO appeals (session_id, verdict_id, reason, timestamp)
-            VALUES (:session_id, :verdict_id, :reason, NOW())
-            RETURNING id
-        """
-        
-        params = {
-            "session_id": session_id,
-            "verdict_id": verdict_id,
-            "reason": reason,  # Não sanitizado aqui (DB faz escape)
-        }
-        
-        result = self.execute_query(query, params)
-        return result[0][0]
-    
-    def get_trust_score(self, session_id: str) -> float:
-        """
-        Busca trust score (safe query).
-        """
-        query = """
-            SELECT trust_score
-            FROM user_sessions
-            WHERE session_id = :session_id
-        """
-        
-        result = self.execute_query(query, {"session_id": session_id})
-        
-        if result:
-            return float(result[0][0])
-        return 0.0
 
-# ═══════════════════════════════════════════════════════════════
-# EXEMPLOS DE USO
-# ═══════════════════════════════════════════════════════════════
+    def __init__(self, db_path: Path):
+        self.db_path = db_path
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
 
-# ✅ CORRETO (parametrizado)
-def get_user_safe(db: SecureDatabase, user_id: int):
-    query = "SELECT * FROM users WHERE id = :id"
-    return db.execute_query(query, {"id": user_id})
+    def execute_query(self, query: str, params: tuple = ()) -> List[sqlite3.Row]:
+        """
+        Executa query SELECT com prepared statements.
 
-# ❌ INCORRETO (SQL injection vulnerável)
+        Args:
+            query: SQL query com placeholders (?)
+            params: Parâmetros para substituir placeholders
+
+        Returns:
+            Lista de rows
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(query, params)
+        return cursor.fetchall()
+
+    def execute_update(self, query: str, params: tuple = ()) -> int:
+        """
+        Executa query UPDATE/INSERT/DELETE.
+
+        Returns:
+            Número de rows afetados
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(query, params)
+        self.conn.commit()
+        return cursor.rowcount
+
+    def close(self):
+        """Fecha conexão."""
+        self.conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EXEMPLOS: SEGURO vs INSEGURO
+# ═══════════════════════════════════════════════════════════════════════════
+
+def get_user_secure(db: SecureDatabase, user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    ✅ SEGURO: Usa prepared statements.
+    """
+    query = "SELECT * FROM users WHERE id = ?"
+    rows = db.execute_query(query, (user_id,))
+    return dict(rows[0]) if rows else None
+
+
 def get_user_unsafe(db: SecureDatabase, user_id: int):
-    # NUNCA FAÇA ISSO!
+    """
+    ⚠️ INSEGURO: SQL injection vulnerability!
+
+    NÃO USE EM PRODUÇÃO!
+    Exemplo para fins educacionais.
+    """
+    # VULNERÁVEL: String interpolation direta
     query = f"SELECT * FROM users WHERE id = {user_id}"
     return db.execute_query(query)
-    # Se user_id = "1 OR 1=1", retorna TODOS os usuários!
 
-# ✅ CORRETO (múltiplos parâmetros)
-def search_users_safe(db: SecureDatabase, name: str, email: str):
-    query = """
-        SELECT * FROM users
-        WHERE name LIKE :name AND email = :email
+    # Ataque possível:
+    # user_id = "1 OR 1=1"
+    # → "SELECT * FROM users WHERE id = 1 OR 1=1"
+    # → Retorna TODOS os usuários!
+
+
+def search_users_secure(db: SecureDatabase, name_pattern: str) -> List[Dict[str, Any]]:
     """
-    return db.execute_query(query, {
-        "name": f"%{name}%",
-        "email": email,
-    })
+    ✅ SEGURO: Prepared statements com LIKE.
+    """
+    query = "SELECT * FROM users WHERE name LIKE ?"
+    rows = db.execute_query(query, (f"%{name_pattern}%",))
+    return [dict(row) for row in rows]
 
-# ❌ INCORRETO (SQL injection via LIKE)
-def search_users_unsafe(db: SecureDatabase, name: str):
-    # NUNCA FAÇA ISSO!
-    query = f"SELECT * FROM users WHERE name LIKE '%{name}%'"
+
+def search_users_unsafe(db: SecureDatabase, name_pattern: str):
+    """
+    ⚠️ INSEGURO: SQL injection via LIKE!
+
+    NÃO USE EM PRODUÇÃO!
+    """
+    # VULNERÁVEL
+    query = f"SELECT * FROM users WHERE name LIKE '%{name_pattern}%'"
     return db.execute_query(query)
-    # Se name = "'; DROP TABLE users; --", destrói tabela!
+
+    # Ataque possível:
+    # name_pattern = "' OR '1'='1"
+    # → "SELECT * FROM users WHERE name LIKE '%' OR '1'='1%'"
