@@ -1,4 +1,3 @@
-
 """
 AJL (Algorithmic Justice League) Certification Exporter
 Generates transparency reports for AJL certification.
@@ -16,10 +15,11 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+
 class AJLExporter:
     """
     Export AJL transparency reports from Rust bias metrics.
-    
+
     Example:
         exporter = AJLExporter()
         report = exporter.generate_report(
@@ -28,19 +28,19 @@ class AJLExporter:
         )
         exporter.save_report(report, "ajl_report_2026.json")
     """
-    
+
     def generate_report(
-        self,
-        rust_metrics: Dict[str, Any],  # From Rust FFI
-        system_info: Dict[str, str],
+            self,
+            rust_metrics: Dict[str, Any],  # From Rust FFI
+            system_info: Dict[str, str],
     ) -> Dict[str, Any]:
         """
         Generate AJL-compliant transparency report.
-        
+
         Args:
             rust_metrics: Output from ajl_metrics.rs (Protobuf)
             system_info: System metadata (name, version, etc.)
-        
+
         Returns:
             AJL report (JSON-serializable)
         """
@@ -52,13 +52,13 @@ class AJLExporter:
             "certification_status": self._assess_certification(rust_metrics),
             "recommendations": self._generate_recommendations(rust_metrics),
         }
-        
+
         return report
-    
+
     def _format_bias_metrics(self, rust_metrics: Dict) -> List[Dict]:
         """
         Format Rust metrics for AJL review.
-        
+
         AJL requires:
         - Demographic groups tested
         - Disparate Impact Ratio (DIR)
@@ -66,7 +66,7 @@ class AJLExporter:
         - Pass/fail status
         """
         formatted = []
-        
+
         for metric in rust_metrics.get("metrics", []):
             formatted.append({
                 "group_a": metric["group_a"],
@@ -77,13 +77,13 @@ class AJLExporter:
                 "sample_size": metric["sample_size"],
                 "tested_at": datetime.fromtimestamp(metric["timestamp"]).isoformat(),
             })
-        
+
         return formatted
-    
+
     def _assess_certification(self, rust_metrics: Dict) -> Dict[str, Any]:
         """
         Assess if system is eligible for AJL certification.
-        
+
         Criteria:
         - 95%+ of metrics pass DIR >= 0.8
         - No critical bias violations
@@ -92,9 +92,9 @@ class AJLExporter:
         total = rust_metrics.get("total_metrics", 0)
         compliant = rust_metrics.get("compliant_metrics", 0)
         compliance_rate = rust_metrics.get("compliance_rate", 0.0)
-        
+
         eligible = compliance_rate >= 0.95
-        
+
         return {
             "eligible": eligible,
             "compliance_rate": compliance_rate,
@@ -103,13 +103,13 @@ class AJLExporter:
             "failed": total - compliant,
             "certification_date": datetime.utcnow().isoformat() if eligible else None,
         }
-    
+
     def _generate_recommendations(self, rust_metrics: Dict) -> List[str]:
         """
         Generate actionable recommendations for bias mitigation.
         """
         recommendations = []
-        
+
         for metric in rust_metrics.get("metrics", []):
             if not metric["compliant"]:
                 recommendations.append(
@@ -117,31 +117,31 @@ class AJLExporter:
                     f"(DIR: {metric['dir']:.2f}, threshold: {metric['pass_threshold']}). "
                     f"Consider retraining or applying fairness constraints."
                 )
-        
+
         if not recommendations:
             recommendations.append("✅ All bias metrics passed. No action required.")
-        
+
         return recommendations
-    
+
     def save_report(self, report: Dict, output_path: str | Path) -> None:
         """Save AJL report to JSON file."""
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         with open(output_path, "w") as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
-        
+
         logger.info(f"✅ AJL report saved: {output_path}")
-    
+
     def submit_to_ajl(self, report: Dict) -> Dict[str, Any]:
         """
         Submit report to AJL for review (mock endpoint).
-        
+
         In production, this would POST to AJL's API.
         """
         # Mock submission
         logger.info("📤 Submitting report to AJL for review...")
-        
+
         return {
             "submission_id": "ajl-sub-20260204-001",
             "status": "under_review",
@@ -150,13 +150,26 @@ class AJLExporter:
         }
 
 
-# USAGE EXAMPLE
+# USAGE EXAMPLE (CORRIGIDO)
 if __name__ == "__main__":
-    from buildtovalue_compliance_ffi import get_ajl_metrics  # Rust FFI
-    
-    # Get metrics from Rust
-    rust_metrics = get_ajl_metrics()  # Returns Protobuf data
-    
+    # Mock metrics (em produção, viria do Rust FFI)
+    rust_metrics = {
+        "metrics": [
+            {
+                "group_a": "male",
+                "group_b": "female",
+                "dir": 0.92,
+                "pass_threshold": 0.8,
+                "compliant": True,
+                "sample_size": 1000,
+                "timestamp": 1707085200
+            }
+        ],
+        "total_metrics": 10,
+        "compliant_metrics": 9,
+        "compliance_rate": 0.9
+    }
+
     # Export to AJL format
     exporter = AJLExporter()
     report = exporter.generate_report(
@@ -167,10 +180,10 @@ if __name__ == "__main__":
             "operator": "ACME Corp",
         },
     )
-    
+
     # Save report
     exporter.save_report(report, "reports/ajl_transparency_2026.json")
-    
+
     # Submit to AJL (optional)
     submission = exporter.submit_to_ajl(report)
     print(f"✅ Submitted to AJL: {submission['submission_id']}")
