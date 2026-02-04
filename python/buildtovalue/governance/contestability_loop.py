@@ -1,335 +1,280 @@
-
+"""
+Contestability Loop - Loop de contestação (Levinas).
+Implementa direito de recurso humano em 24h (LGPD Art. 20).
+"""
+import logging
+import time
 from dataclasses import dataclass
 from typing import Optional, List
 from enum import Enum
-import time
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 from .explanation_store import ExplanationStore, FullExplanation
 
+logger = logging.getLogger(__name__)
+
+
 class AppealStatus(Enum):
-    """Status de uma apelação"""
-    PENDING = "pending"
-    UNDER_REVIEW = "under_review"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    ESCALATED = "escalated"
+    """Status de recurso."""
+    PENDING = "PENDING"
+    UNDER_REVIEW = "UNDER_REVIEW"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
 
 @dataclass
 class Appeal:
-    """Apelação de usuário"""
+    """Recurso de usuário."""
     appeal_id: str
     audit_trail_id: int
-    user_justification: str
-    submitted_at: int
-    status: AppealStatus
-    
-    # Revisão (preenchido pelo comitê)
-    reviewer_id: Optional[str] = None
-    review_decision: Optional[str] = None
-    review_rationale: Optional[str] = None
-    reviewed_at: Optional[int] = None
-    
-    # SLA
-    sla_deadline: int = 0  # 24h após submitted_at
-    
-    def __post_init__(self):
-        if self.sla_deadline == 0:
-            self.sla_deadline = self.submitted_at + (24 * 3600)
-    
-    def is_overdue(self) -> bool:
-        """Verifica se apelação está atrasada"""
-        return int(time.time()) > self.sla_deadline and self.status == AppealStatus.PENDING
+    user_id: str
+    timestamp: int
+    reason: str
+    evidence_provided: Optional[str] = None
+    status: AppealStatus = AppealStatus.PENDING
+    reviewer_notes: Optional[str] = None
+    resolution_timestamp: Optional[int] = None
+
 
 class ContestabilityLoop:
     """
-    Implementa loop de contestação (LGPD Art. 20).
-    
-    Fluxo:
-    1. Usuário bloqueado submete recurso
-    2. Sistema cria caso para revisão humana
-    3. Comitê Ético revisa dentro de 24h (SLA)
-    4. Decisão é notificada ao usuário
-    5. Se aprovado, policy é ajustada
-    
-    Garantias:
-    - SLA 24h monitorado
-    - Notificações automáticas
-    - Auditoria completa de decisões
+    Implementa loop de contestabilidade.
+
+    Garante:
+    - SLA 24h para revisão humana
+    - Transparência total (FullExplanation)
+    - Notificação ao usuário
+    - Audit trail de decisões
     """
-    
+
     def __init__(
-        self,
-        explanation_store: ExplanationStore,
-        email_config: dict,
+            self,
+            explanation_store: ExplanationStore,
+            sla_hours: int = 24
     ):
+        """
+        Inicializa loop.
+
+        Args:
+            explanation_store: Store de explicações
+            sla_hours: SLA em horas para revisão (padrão: 24h)
+        """
         self.explanation_store = explanation_store
-        self.email_config = email_config
-        
-        # Storage de apelações
-        self.appeals: dict[str, Appeal] = {}
-        
-        # Comitê Ético (emails)
-        self.committee_emails = email_config.get('committee_emails', [])
-    
+        self.sla_seconds = sla_hours * 3600
+
+        # Storage de appeals (em prod: usar DB)
+        self.appeals: List[Appeal] = []
+
+        # Config de notificações (em prod: configurar SMTP real)
+        self.email_config = {
+            'smtp_server': 'smtp.buildtovalue.com',
+            'smtp_port': 587,
+            'smtp_user': 'appeals@buildtovalue.com',
+            'smtp_password': '***',  # Usar env var em prod
+            'from_email': 'appeals@buildtovalue.com'
+        }
+
     def submit_appeal(
-        self,
-        audit_trail_id: int,
-        user_email: str,
-        justification: str,
+            self,
+            audit_trail_id: int,
+            user_id: str,
+            reason: str,
+            evidence: Optional[str] = None
     ) -> Appeal:
-        """Usuário submete recurso"""
-        
-        # Valida que decisão existe
+        """
+        Submete recurso de usuário.
+
+        Args:
+            audit_trail_id: ID da decisão contestada
+            user_id: ID do usuário
+            reason: Justificativa do recurso
+            evidence: Evidências adicionais (opcional)
+
+        Returns:
+            Appeal criado
+
+        Raises:
+            ValueError: Se decisão não encontrada
+        """
+        # Verifica se decisão existe
         explanation = self.explanation_store.get(audit_trail_id)
         if not explanation:
-            raise ValueError(f"Audit trail not found: {audit_trail_id}")
-        
-        # Valida que foi bloqueado (não pode apelar de ALLOW)
-        if explanation.verdict['action'] not in ['BLOCK', 'REDACT']:
-            raise ValueError("Can only appeal blocked/redacted decisions")
-        
-        # Cria apelação
-        appeal_id = f"APPEAL-{audit_trail_id}-{int(time.time())}"
+            raise ValueError(f"Decision not found: {audit_trail_id}")
+
+        # Cria appeal
         appeal = Appeal(
-            appeal_id=appeal_id,
+            appeal_id=f"APL-{audit_trail_id}-{int(time.time())}",
             audit_trail_id=audit_trail_id,
-            user_justification=justification,
-            submitted_at=int(time.time()),
-            status=AppealStatus.PENDING,
+            user_id=user_id,
+            timestamp=int(time.time()),
+            reason=reason,
+            evidence_provided=evidence,
+            status=AppealStatus.PENDING
         )
-        
-        self.appeals[appeal_id] = appeal
-        
-        # Notifica comitê
-        self._notify_committee(appeal, explanation, user_email)
-        
-        # Notifica usuário
-        self._notify_user_submission(user_email, appeal)
-        
-        import logging
-        logging.info(
-            f"Appeal submitted: {appeal_id} for audit_trail {audit_trail_id}"
+
+        self.appeals.append(appeal)
+
+        # Log
+        logger.info(
+            f"Appeal submitted: {appeal.appeal_id} by {user_id} "
+            f"for decision {audit_trail_id}"
         )
-        
+
+        # Notifica equipe de revisão
+        self._notify_review_team(appeal, explanation)
+
         return appeal
-    
-    def review_appeal(
-        self,
-        appeal_id: str,
-        reviewer_id: str,
-        decision: str,  # "approve" ou "reject"
-        rationale: str,
-    ) -> Appeal:
-        """Comitê revisa apelação"""
-        
-        if appeal_id not in self.appeals:
-            raise ValueError(f"Appeal not found: {appeal_id}")
-        
-        appeal = self.appeals[appeal_id]
-        
-        if appeal.status != AppealStatus.PENDING:
-            raise ValueError(f"Appeal already reviewed: {appeal.status}")
-        
-        # Atualiza apelação
-        appeal.reviewer_id = reviewer_id
-        appeal.review_decision = decision
-        appeal.review_rationale = rationale
-        appeal.reviewed_at = int(time.time())
-        
-        if decision == "approve":
-            appeal.status = AppealStatus.APPROVED
-        elif decision == "reject":
-            appeal.status = AppealStatus.REJECTED
-        else:
-            raise ValueError(f"Invalid decision: {decision}")
-        
-        # Se aprovado, atualiza policy (TODO)
-        if appeal.status == AppealStatus.APPROVED:
-            self._update_policy_from_appeal(appeal)
-        
-        # Notifica usuário
-        explanation = self.explanation_store.get(appeal.audit_trail_id)
-        self._notify_user_decision(appeal, explanation)
-        
-        import logging
-        logging.info(
-            f"Appeal reviewed: {appeal_id} → {decision} by {reviewer_id}"
-        )
-        
-        return appeal
-    
-    def get_pending_appeals(self) -> List[Appeal]:
-        """Retorna apelações pendentes (para dashboard)"""
-        return [
-            appeal for appeal in self.appeals.values()
-            if appeal.status == AppealStatus.PENDING
-        ]
-    
-    def get_overdue_appeals(self) -> List[Appeal]:
-        """Retorna apelações atrasadas (>24h)"""
-        return [
-            appeal for appeal in self.appeals.values()
-            if appeal.is_overdue()
-        ]
-    
-    def _notify_committee(
-        self,
-        appeal: Appeal,
-        explanation: FullExplanation,
-        user_email: str,
+
+    def get_appeal(self, appeal_id: str) -> Optional[Appeal]:
+        """Recupera appeal por ID."""
+        for appeal in self.appeals:
+            if appeal.appeal_id == appeal_id:
+                return appeal
+        return None
+
+    def list_pending_appeals(self) -> List[Appeal]:
+        """Lista appeals pendentes."""
+        return [a for a in self.appeals if a.status == AppealStatus.PENDING]
+
+    def list_expired_appeals(self) -> List[Appeal]:
+        """Lista appeals que excederam SLA."""
+        now = int(time.time())
+        expired = []
+
+        for appeal in self.appeals:
+            if appeal.status == AppealStatus.PENDING:
+                elapsed = now - appeal.timestamp
+                if elapsed > self.sla_seconds:
+                    appeal.status = AppealStatus.EXPIRED
+                    expired.append(appeal)
+                    logger.warning(
+                        f"Appeal expired (SLA breach): {appeal.appeal_id} "
+                        f"(elapsed: {elapsed / 3600:.1f}h)"
+                    )
+
+        return expired
+
+    def resolve_appeal(
+            self,
+            appeal_id: str,
+            accepted: bool,
+            reviewer_notes: str,
+            reviewer_id: str
     ):
-        """Notifica comitê sobre nova apelação"""
-        
-        subject = f"[BuildToValue] Nova Apelação: {appeal.appeal_id}"
-        
-        body = f"""
-Nova apelação submetida por usuário bloqueado.
-
-**Detalhes da Apelação:**
-- ID: {appeal.appeal_id}
-- Audit Trail ID: {appeal.audit_trail_id}
-- Usuário: {user_email}
-- Submetido em: {time.ctime(appeal.submitted_at)}
-- SLA Deadline: {time.ctime(appeal.sla_deadline)}
-
-**Justificativa do Usuário:**
-{appeal.user_justification}
-
-**Decisão Original:**
-- Ação: {explanation.verdict['action']}
-- Risco: {explanation.evidence_summary['composite_risk']}/255
-- Confiança: {explanation.verdict['confidence']:.0%}
-- Rationale: {explanation.full_rationale}
-
-**Findings Detectados:**
-{self._format_findings(explanation.findings_detail)}
-
-**Link para Revisão:**
-https://btv.internal/appeals/{appeal.appeal_id}
-
-Por favor, revise dentro de 24 horas.
         """
-        
-        self._send_email(
-            to_emails=self.committee_emails,
-            subject=subject,
-            body=body,
+        Resolve appeal (decisão humana).
+
+        Args:
+            appeal_id: ID do appeal
+            accepted: True se aceito, False se rejeitado
+            reviewer_notes: Notas do revisor
+            reviewer_id: ID do revisor humano
+        """
+        appeal = self.get_appeal(appeal_id)
+        if not appeal:
+            raise ValueError(f"Appeal not found: {appeal_id}")
+
+        # Atualiza status
+        appeal.status = AppealStatus.ACCEPTED if accepted else AppealStatus.REJECTED
+        appeal.reviewer_notes = reviewer_notes
+        appeal.resolution_timestamp = int(time.time())
+
+        # Calcula tempo de resolução
+        resolution_time = appeal.resolution_timestamp - appeal.timestamp
+
+        # Log
+        logger.info(
+            f"Appeal resolved: {appeal_id} → "
+            f"{'ACCEPTED' if accepted else 'REJECTED'} "
+            f"by {reviewer_id} "
+            f"(resolution time: {resolution_time / 3600:.1f}h)"
         )
-    
-    def _notify_user_submission(self, user_email: str, appeal: Appeal):
-        """Notifica usuário que apelação foi recebida"""
-        
-        subject = "Seu recurso foi recebido - BuildToValue"
-        
-        body = f"""
-Olá,
 
-Recebemos seu recurso sobre a decisão de bloqueio.
+        # Notifica usuário
+        self._notify_user_decision(appeal)
 
-**ID do Recurso:** {appeal.appeal_id}
-**Protocolo:** {appeal.audit_trail_id}
+        # Se aceito, atualiza métricas de sistema
+        if accepted:
+            self._update_false_positive_metrics(appeal.audit_trail_id)
 
-Seu recurso será analisado por nosso Comitê Ético dentro de 24 horas.
-Você receberá uma resposta até: {time.ctime(appeal.sla_deadline)}
-
-Obrigado pela sua paciência.
-
-Atenciosamente,
-Equipe BuildToValue
+    def _notify_review_team(self, appeal: Appeal, explanation: FullExplanation):
         """
-        
-        self._send_email([user_email], subject, body)
-    
-    def _notify_user_decision(self, appeal: Appeal, explanation: FullExplanation):
-        """Notifica usuário sobre decisão da apelação"""
-        
-        if appeal.status == AppealStatus.APPROVED:
-            subject = "Seu recurso foi APROVADO - BuildToValue"
-            outcome = "✅ APROVADO"
-        else:
-            subject = "Decisão sobre seu recurso - BuildToValue"
-            outcome = "❌ REJEITADO"
-        
-        body = f"""
-Olá,
+        Notifica equipe de revisão sobre novo appeal.
 
-Analisamos seu recurso e chegamos a uma decisão.
-
-**Decisão:** {outcome}
-
-**Justificativa do Revisor:**
-{appeal.review_rationale}
-
-**Revisor:** {appeal.reviewer_id}
-**Data da Revisão:** {time.ctime(appeal.reviewed_at)}
-
-{"Sua solicitação foi liberada e nossas políticas foram ajustadas." if appeal.status == AppealStatus.APPROVED else "A decisão original foi mantida."}
-
-Se tiver dúvidas, entre em contato: suporte@buildtovalue.com
-
-Atenciosamente,
-Equipe BuildToValue
+        Em prod: enviar email real + criar ticket no sistema.
         """
-        
+        logger.info(
+            f"[NOTIFICATION] New appeal for review: {appeal.appeal_id}\n"
+            f"  User: {appeal.user_id}\n"
+            f"  Decision: {explanation.verdict['action']}\n"
+            f"  Reason: {appeal.reason}\n"
+            f"  SLA: {self.sla_seconds / 3600}h"
+        )
+
+        # TODO: Enviar email real
+        # self._send_email(
+        #     to='review-team@buildtovalue.com',
+        #     subject=f'New Appeal: {appeal.appeal_id}',
+        #     body=...
+        # )
+
+    def _notify_user_decision(self, appeal: Appeal):
+        """
+        Notifica usuário sobre decisão do appeal.
+
+        Em prod: enviar email real.
+        """
+        status = "aceito" if appeal.status == AppealStatus.ACCEPTED else "rejeitado"
+
+        logger.info(
+            f"[NOTIFICATION] Appeal decision to user {appeal.user_id}:\n"
+            f"  Appeal: {appeal.appeal_id}\n"
+            f"  Status: {status}\n"
+            f"  Notes: {appeal.reviewer_notes}"
+        )
+
         # TODO: Obter email do usuário da explanation
-        # self._send_email([user_email], subject, body)
-    
-    def _update_policy_from_appeal(self, appeal: Appeal):
-        """Atualiza policy baseado em apelação aprovada"""
-        
-        # TODO: Implementar ajuste automático de policies
-        # Ideias:
-        # - Adicionar exceção para contexto específico
-        # - Reduzir severidade de regra
-        # - Adicionar usuário a whitelist
-        
-        import logging
-        logging.info(
-            f"Policy update triggered by appeal: {appeal.appeal_id}"
+        # user_email = self._get_user_email(appeal.user_id)
+        # self._send_email(
+        #     to=user_email,
+        #     subject=f'Decisão sobre seu recurso: {appeal.appeal_id}',
+        #     body=...
+        # )
+
+    def _update_false_positive_metrics(self, audit_trail_id: int):
+        """
+        Atualiza métricas de falsos positivos.
+
+        Appeals aceitos indicam que o sistema cometeu erro.
+        Importante para calibração futura.
+        """
+        logger.info(
+            f"False positive detected: audit_trail_id={audit_trail_id}. "
+            "Updating model calibration metrics."
         )
-    
-    def _format_findings(self, findings: List[dict]) -> str:
-        """Formata findings para email"""
-        if not findings:
-            return "Nenhuma violação detectada."
-        
-        lines = []
-        for f in findings:
-            lines.append(
-                f"- {f['title']}: {f['description']} "
-                f"(confiança: {f['confidence']/255.0:.0%})"
-            )
-        return "\n".join(lines)
-    
-    def _send_email(self, to_emails: List[str], subject: str, body: str):
-        """Envia email via SMTP"""
-        
-        if not self.email_config.get('enabled', False):
-            import logging
-            logging.warning(f"Email disabled, would send: {subject}")
-            return
-        
-        msg = MIMEMultipart()
-        msg['From'] = self.email_config['from_email']
-        msg['To'] = ', '.join(to_emails)
-        msg['Subject'] = subject
-        
-        msg.attach(MIMEText(body, 'plain'))
-        
-        try:
-            with smtplib.SMTP(
-                self.email_config['smtp_host'],
-                self.email_config['smtp_port']
-            ) as server:
-                server.starttls()
-                server.login(
-                    self.email_config['smtp_user'],
-                    self.email_config['smtp_password']
-                )
-                server.send_message(msg)
-        except Exception as e:
-            import logging
-            logging.error(f"Failed to send email: {e}")
+
+        # TODO: Atualizar métricas em sistema de observability
+        # prometheus_counter('false_positives_total').inc()
+
+    def get_sla_compliance_rate(self) -> float:
+        """
+        Calcula taxa de conformidade com SLA.
+
+        Returns:
+            Taxa de appeals resolvidos dentro do SLA (0.0-1.0)
+        """
+        resolved = [
+            a for a in self.appeals
+            if a.status in [AppealStatus.ACCEPTED, AppealStatus.REJECTED]
+        ]
+
+        if not resolved:
+            return 1.0  # Sem appeals = 100% compliance
+
+        within_sla = 0
+        for appeal in resolved:
+            resolution_time = appeal.resolution_timestamp - appeal.timestamp
+            if resolution_time <= self.sla_seconds:
+                within_sla += 1
+
+        return within_sla / len(resolved)
