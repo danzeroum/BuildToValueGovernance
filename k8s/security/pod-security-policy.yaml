@@ -1,0 +1,191 @@
+
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: buildtovalue-restricted
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName: 'runtime/default'
+spec:
+  # Privilege escalation
+  privileged: false
+  allowPrivilegeEscalation: false
+  
+  # Required drop capabilities
+  requiredDropCapabilities:
+    - ALL
+  
+  # Allowed capabilities (minimal)
+  allowedCapabilities: []
+  
+  # Volumes
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  
+  # Host namespaces
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  
+  # Run as non-root
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  
+  # SELinux
+  seLinux:
+    rule: 'RunAsAny'
+  
+  # Supplemental groups
+  supplementalGroups:
+    rule: 'RunAsAny'
+  
+  # FSGroup
+  fsGroup:
+    rule: 'RunAsAny'
+  
+  # Read-only root filesystem
+  readOnlyRootFilesystem: true
+
+---
+# k8s/security/network-policy.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: buildtovalue-network-policy
+  namespace: buildtovalue
+spec:
+  podSelector:
+    matchLabels:
+      app: buildtovalue
+  
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Ingress Rules (what can connect TO buildtovalue)
+  # ═══════════════════════════════════════════════════════════════
+  ingress:
+    # Allow from Ingress Controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+    
+    # Allow Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+    
+    # Allow from same namespace (pod-to-pod)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: buildtovalue
+      ports:
+        - protocol: TCP
+          port: 8000
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Egress Rules (what buildtovalue can connect TO)
+  # ═══════════════════════════════════════════════════════════════
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+    
+    # Allow PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    
+    # Allow Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    
+    # Allow HTTPS external (for remote sync, etc)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+    
+    # Block everything else (default deny)
+
+---
+# k8s/security/rbac.yaml
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: buildtovalue-sa
+  namespace: buildtovalue
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: buildtovalue-role
+  namespace: buildtovalue
+rules:
+  # Read-only access to ConfigMaps
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  
+  # Read-only access to Secrets (only specific ones)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["buildtovalue-secrets"]
+    verbs: ["get"]
+  
+  # Read-only access to own pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  
+  # No write access, no exec, no delete
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: buildtovalue-rolebinding
+  namespace: buildtovalue
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: buildtovalue-role
+subjects:
+  - kind: ServiceAccount
+    name: buildtovalue-sa
+    namespace: buildtovalue

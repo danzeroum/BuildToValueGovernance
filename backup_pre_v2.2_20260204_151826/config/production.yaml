@@ -1,0 +1,3 @@
+batch:
+  size: 100          # Should be 100
+  timeout_ms: 10     # Should be 10

@@ -1,0 +1,205 @@
+
+version: '3.9'
+
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # BuildToValue Core Service
+  # ═══════════════════════════════════════════════════════════════
+  buildtovalue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_ENV: development
+    image: buildtovalue:dev
+    container_name: buildtovalue-core
+    hostname: buildtovalue
+    restart: unless-stopped
+    
+    ports:
+      - "8000:8000"   # HTTP API
+      - "9090:9090"   # Metrics (Prometheus)
+    
+    volumes:
+      # Persiste ledger e explanations
+      - ./data/ledger:/app/data/ledger
+      - ./data/explanations:/app/data/explanations
+      
+      # Logs
+      - ./logs:/app/logs
+      
+      # Hot-reload para dev (opcional)
+      - ./src:/app/src:ro
+      - ./profiles:/app/profiles:ro
+      - ./config:/app/config:ro
+    
+    environment:
+      - BUILDTOVALUE_ENV=development
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+      - DATABASE_URL=postgresql://btv:password@postgres:5432/buildtovalue
+      - REDIS_URL=redis://redis:6379/0
+      - SIGNING_KEY_PATH=/run/secrets/signing_key
+      - ENABLE_SWAGGER=true
+    
+    secrets:
+      - signing_key
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    networks:
+      - buildtovalue-net
+    
+    healthcheck:
+      test: ["CMD", "/app/scripts/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Resource limits (development)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+  
+  # ═══════════════════════════════════════════════════════════════
+  # PostgreSQL (Metadata & Appeals)
+  # ═══════════════════════════════════════════════════════════════
+  postgres:
+    image: postgres:16-alpine
+    container_name: buildtovalue-postgres
+    restart: unless-stopped
+    
+    environment:
+      POSTGRES_DB: buildtovalue
+      POSTGRES_USER: btv
+      POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    
+    networks:
+      - buildtovalue-net
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U btv -d buildtovalue"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Redis (Cache & Session)
+  # ═══════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: buildtovalue-redis
+    restart: unless-stopped
+    
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    
+    volumes:
+      - redis-data:/data
+    
+    networks:
+      - buildtovalue-net
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Prometheus (Metrics)
+  # ═══════════════════════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: buildtovalue-prometheus
+    restart: unless-stopped
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    
+    ports:
+      - "9091:9090"
+    
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    
+    networks:
+      - buildtovalue-net
+    
+    depends_on:
+      - buildtovalue
+  
+  # ═══════════════════════════════════════════════════════════════
+  # Grafana (Dashboards)
+  # ═══════════════════════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: buildtovalue-grafana
+    restart: unless-stopped
+    
+    ports:
+      - "3000:3000"
+    
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=redis-datasource
+    
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    
+    networks:
+      - buildtovalue-net
+    
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  buildtovalue-net:
+    driver: bridge
+
+secrets:
+  signing_key:
+    file: ./secrets/signing_key.txt

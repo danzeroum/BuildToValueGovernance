@@ -1,0 +1,11 @@
+[package]
+name = "buildtovalue-kernel"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+blake3 = "1.5"
+
+[lib]
+crate-type = ["staticlib", "cdylib"]

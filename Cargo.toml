@@ -1,0 +1,9 @@
+[workspace]
+members = ["rust/kernel", "rust/bindings"]
+resolver = "2"
+
+[workspace.package]
+version = "2.2.0"
+edition = "2021"
+authors = ["BuildToValue Team"]
+license = "Apache-2.0"

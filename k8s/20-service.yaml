@@ -1,0 +1,76 @@
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildtovalue-service
+  namespace: buildtovalue
+  labels:
+    app: buildtovalue
+spec:
+  type: ClusterIP
+  selector:
+    app: buildtovalue
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  sessionAffinity: ClientIP  # Mantém sessão no mesmo pod
+
+---
+# k8s/21-ingress.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: buildtovalue-ingress
+  namespace: buildtovalue
+  annotations:
+    # NGINX Ingress
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "10"
+    
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    
+    # Buffer sizes
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    
+    # CORS (se necessário)
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    
+    # Cert Manager (TLS automático)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+spec:
+  ingressClassName: nginx
+  
+  tls:
+    - hosts:
+        - api.buildtovalue.com
+      secretName: buildtovalue-tls
+  
+  rules:
+    - host: api.buildtovalue.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: buildtovalue-service
+                port:
+                  number: 80
