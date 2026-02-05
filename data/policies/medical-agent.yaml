@@ -1,0 +1,48 @@
+# Medical Agent Profile - Inherits from base
+# Allows CPF in medical context with education
+
+id: medical-agent
+name: "Medical AI Agent"
+description: "Profile for AI agents in healthcare context. Allows CPF discussion in appropriate situations."
+
+parent_id: base  # Inherits from base
+
+version: "1.0.0"
+created_at: "2026-02-16"
+updated_at: "2026-02-16"
+
+rules:
+  # OVERRIDE: CPF in medical context → EDUCATE instead of BLOCK
+  - id: "BLOCK_CPF_GENERAL"  # Same ID overrides parent!
+    name: "Allow CPF in Medical (with education)"
+    description: "In medical context, CPF is allowed with EDUCATION. Requires trust_score >= 0.3"
+    action: EDUCATE  # Overrides parent's BLOCK
+    priority: 200
+    validators: ["cpf"]
+    categories: ["pii"]
+    min_severity: 0.7
+    min_confidence: 0.9
+
+  # NEW RULE: Allow CNPJ healthcare institutions
+  - id: "ALLOW_CNPJ_HEALTHCARE"
+    name: "Allow CNPJ Healthcare"
+    description: "CNPJ of clinics/hospitals is allowed (only LOG)"
+    action: LOG
+    priority: 180
+    validators: ["cnpj"]
+
+domain_config:
+  medical:
+    risk_multiplier: 0.7  # Reduce risk by 30% (privileged context)
+    allowed_findings:
+      - "CPF_DETECTED"
+      - "CNPJ_DETECTED"
+      - "PHONE_DETECTED"
+    blocked_findings:
+      - "CREDIT_CARD_DETECTED"  # Always blocked even in medical
+    education_message: |
+      You are in a medical context. Personal data can be discussed for healthcare purposes.
+      Ensure:
+      1. Patient authorized sharing (LGPD Art. 7, I)
+      2. Data is necessary for treatment (Art. 11, II, f)
+      3. Secure environment (TLS, no third parties)

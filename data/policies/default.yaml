@@ -1,0 +1,132 @@
+# BuildToValue Default Policy Set
+# Version: 1.0
+# República Algorítmica: Legislativo (Policy-as-Code)
+
+version: "1.0"
+
+metadata:
+  name: "BuildToValue Default Policies"
+  description: "Production-ready policy set for ethical AI governance"
+  created_at: "2026-02-16"
+  updated_at: "2026-02-16"
+  author: "BuildToValue Security Team"
+
+policies:
+  # ═══════════════════════════════════════════════════════════════════════
+  # L4: BLOCK (Highest severity)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: "block-valid-cpf"
+    name: "Block Valid CPF"
+    description: "Block requests containing valid Brazilian CPF (high confidence)"
+    enabled: true
+    priority: 100
+    conditions:
+      validators: ["cpf"]
+      min_severity: 0.7
+      min_confidence: 0.9
+    action: BLOCK
+
+  - id: "block-credit-card"
+    name: "Block Credit Card"
+    description: "Block requests containing valid credit card numbers"
+    enabled: true
+    priority: 100
+    conditions:
+      validators: ["credit_card"]
+      categories: ["financial"]
+      min_severity: 0.8
+    action: BLOCK
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # L3: REDACT (Mask sensitive data)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: "redact-invalid-cpf"
+    name: "Redact Invalid CPF"
+    description: "Mask invalid CPF patterns (lower risk)"
+    enabled: true
+    priority: 80
+    conditions:
+      validators: ["cpf"]
+      min_severity: 0.3
+      min_confidence: 0.5
+    action: REDACT
+
+  - id: "redact-cnpj"
+    name: "Redact CNPJ"
+    description: "Mask business IDs (lower risk than CPF)"
+    enabled: true
+    priority: 70
+    conditions:
+      validators: ["cnpj"]
+    action: REDACT
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # L2: EDUCATE (Warning to user)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: "educate-public-ip"
+    name: "Educate Public IP"
+    description: "Warn about public IP addresses"
+    enabled: true
+    priority: 60
+    conditions:
+      validators: ["ipv4"]
+      min_severity: 0.6
+    action: EDUCATE
+
+  - id: "educate-suspicious-url"
+    name: "Educate Suspicious URL"
+    description: "Warn about suspicious URLs"
+    enabled: true
+    priority: 60
+    conditions:
+      validators: ["url"]
+      min_severity: 0.5
+    action: EDUCATE
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # L1: LOG (Audit only)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: "log-all-pii"
+    name: "Log All PII"
+    description: "Log all PII detections for audit"
+    enabled: true
+    priority: 40
+    conditions:
+      categories: ["pii"]
+    action: LOG
+
+  - id: "log-domains"
+    name: "Log Domain Names"
+    description: "Log domain name detections"
+    enabled: true
+    priority: 30
+    conditions:
+      validators: ["domain"]
+    action: LOG
+
+  - id: "log-high-entropy"
+    name: "Log High Entropy"
+    description: "Log potentially encrypted/compressed data"
+    enabled: true
+    priority: 20
+    conditions:
+      validators: ["entropy"]
+      min_severity: 0.4
+    action: LOG
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # L0: ALLOW (Catch-all)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: "allow-low-risk"
+    name: "Allow Low Risk"
+    description: "Allow low risk patterns"
+    enabled: true
+    priority: 10
+    conditions:
+      min_severity: 0.0
+    action: ALLOW

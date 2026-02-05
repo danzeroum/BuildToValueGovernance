@@ -1,60 +1,39 @@
+# ════════════════════════════════════════════════════════════════════════════
+# BuildToValue v2.0 - Pod Security Standards
+# ════════════════════════════════════════════════════════════════════════════
+# ✅ CORRIGIDO: Substituiu PodSecurityPolicy (obsoleta) por Pod Security Admission
+# Kubernetes >= 1.25 compatível
+# ════════════════════════════════════════════════════════════════════════════
 
-apiVersion: policy/v1beta1
-kind: PodSecurityPolicy
+apiVersion: v1
+kind: Namespace
 metadata:
-  name: buildtovalue-restricted
-  annotations:
-    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'runtime/default'
-    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
-    seccomp.security.alpha.kubernetes.io/defaultProfileName: 'runtime/default'
-    apparmor.security.beta.kubernetes.io/defaultProfileName: 'runtime/default'
-spec:
-  # Privilege escalation
-  privileged: false
-  allowPrivilegeEscalation: false
-  
-  # Required drop capabilities
-  requiredDropCapabilities:
-    - ALL
-  
-  # Allowed capabilities (minimal)
-  allowedCapabilities: []
-  
-  # Volumes
-  volumes:
-    - 'configMap'
-    - 'emptyDir'
-    - 'projected'
-    - 'secret'
-    - 'downwardAPI'
-    - 'persistentVolumeClaim'
-  
-  # Host namespaces
-  hostNetwork: false
-  hostIPC: false
-  hostPID: false
-  
-  # Run as non-root
-  runAsUser:
-    rule: 'MustRunAsNonRoot'
-  
-  # SELinux
-  seLinux:
-    rule: 'RunAsAny'
-  
-  # Supplemental groups
-  supplementalGroups:
-    rule: 'RunAsAny'
-  
-  # FSGroup
-  fsGroup:
-    rule: 'RunAsAny'
-  
-  # Read-only root filesystem
-  readOnlyRootFilesystem: true
+  name: buildtovalue
+  labels:
+    # ═══════════════════════════════════════════════════════════════════════
+    # Pod Security Standards (PSS) - Kubernetes >= 1.25
+    # ═══════════════════════════════════════════════════════════════════════
+    # Enforce: Bloqueia pods que violam o padrão 'restricted'
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    
+    # Audit: Registra violações em logs de auditoria
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    
+    # Warn: Avisa usuário sobre violações (não bloqueia)
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    
+    # Metadata adicionais
+    name: buildtovalue
+    env: production
+    tier: critical
 
 ---
-# k8s/security/network-policy.yaml
+# ════════════════════════════════════════════════════════════════════════════
+# Network Policy (mantido do original)
+# ════════════════════════════════════════════════════════════════════════════
 
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -70,9 +49,9 @@ spec:
     - Ingress
     - Egress
   
-  # ═══════════════════════════════════════════════════════════════
-  # Ingress Rules (what can connect TO buildtovalue)
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
+  # Ingress Rules (o que pode conectar AO buildtovalue)
+  # ═══════════════════════════════════════════════════════════════════════
   ingress:
     # Allow from Ingress Controller
     - from:
@@ -101,9 +80,9 @@ spec:
         - protocol: TCP
           port: 8000
   
-  # ═══════════════════════════════════════════════════════════════
-  # Egress Rules (what buildtovalue can connect TO)
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
+  # Egress Rules (o que buildtovalue pode conectar)
+  # ═══════════════════════════════════════════════════════════════════════
   egress:
     # Allow DNS resolution
     - to:
@@ -132,7 +111,7 @@ spec:
         - protocol: TCP
           port: 6379
     
-    # Allow HTTPS external (for remote sync, etc)
+    # Allow HTTPS external (remote sync, APIs, etc)
     - to:
         - namespaceSelector: {}
       ports:
@@ -142,7 +121,9 @@ spec:
     # Block everything else (default deny)
 
 ---
-# k8s/security/rbac.yaml
+# ════════════════════════════════════════════════════════════════════════════
+# RBAC (mantido do original)
+# ════════════════════════════════════════════════════════════════════════════
 
 apiVersion: v1
 kind: ServiceAccount
@@ -189,3 +170,12 @@ subjects:
   - kind: ServiceAccount
     name: buildtovalue-sa
     namespace: buildtovalue
+
+---
+# ════════════════════════════════════════════════════════════════════════════
+# ℹ️ INFORMAÇÃO: Pod Security Standards (PSS)
+# ════════════════════════════════════════════════════════════════════════════
+# 
+# O PSS 'restricted' impõe as seguintes restrições:
+#
+# ✅ Containers devem rodar como
