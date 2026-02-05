@@ -5,10 +5,10 @@ Coverage: Misericórdia, Contexto, BiasDeclaration.
 """
 
 import pytest
-from python.buildtovalue.governance.ethical_context_engine_v3 import (
+from python.buildtovalue.governance.ethical_context_engine import (
     EthicalContextEngineV3,
     EthicalContext,
-    EthicalVerdict,
+    TechnicalVerdict,
     MercyFactor,
 )
 
@@ -62,7 +62,7 @@ class TestEthicalDecision:
 
         decision = engine.decide(high_risk_evidence, context, policy_action="BLOCK")
 
-        assert decision.verdict == EthicalVerdict.BLOCK
+        assert decision.verdict == TechnicalVerdict.BLOCK
         assert decision.adjusted_severity >= 0.8
         assert decision.contestable
 
@@ -72,7 +72,7 @@ class TestEthicalDecision:
 
         decision = engine.decide(low_risk_evidence, context, policy_action="LOG")
 
-        assert decision.verdict in [EthicalVerdict.ALLOW, EthicalVerdict.LOG]
+        assert decision.verdict in [TechnicalVerdict.ALLOW, TechnicalVerdict.LOG]
         assert decision.adjusted_severity < 0.5
 
 
@@ -129,7 +129,7 @@ class TestMercyAlgorithm:
 
         # Não deve ter misericórdia
         assert not decision.mercy_applied
-        assert decision.verdict == EthicalVerdict.BLOCK
+        assert decision.verdict == TechnicalVerdict.BLOCK
 
     def test_mercy_calculation(self):
         """Testa cálculo de MercyFactor."""
@@ -162,7 +162,7 @@ class TestContext:
 
         decision = engine.decide(high_risk_evidence, context)
 
-        assert decision.verdict == EthicalVerdict.EDUCATE
+        assert decision.verdict == TechnicalVerdict.EDUCATE
 
     def test_critical_operation(self, engine):
         """Operação crítica não deve ter misericórdia."""
@@ -181,7 +181,7 @@ class TestContext:
         decision = engine.decide(evidence, context, policy_action="BLOCK")
 
         # Crítico = BLOCK sempre
-        assert decision.verdict == EthicalVerdict.BLOCK
+        assert decision.verdict == TechnicalVerdict.BLOCK
 
 
 # ═══════════════════════════════════════════════════════════════════════════

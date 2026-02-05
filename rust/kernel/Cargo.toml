@@ -1,12 +1,17 @@
 [package]
 name = "buildtovalue-kernel"
-version = "2.0.0"
+version = "2.3.0"  # ⬆️ Bump: Remote Sync + FFI Timing Fix
 edition = "2021"
 
 [dependencies]
 # Async runtime
 tokio = { version = "1.36", features = ["full"] }
 async-trait = "0.1"
+
+# AWS S3 (PRIORIDADE 1: Remote Sync Real)
+aws-sdk-s3 = "1.15"
+aws-config = "1.1"
+aws-types = "1.1"
 
 # Serialização
 serde = { version = "1.0", features = ["derive"] }
@@ -41,10 +46,14 @@ chrono = { version = "0.4", features = ["serde"] }
 # Python FFI
 pyo3 = { version = "0.21", features = ["extension-module"] }
 
+# Policy engine
+serde_yaml = "0.9"
+
 [dev-dependencies]
 proptest = "1.4"
 criterion = "0.5"
 tempfile = "3.10"
+mockall = "0.12"  # Para mock de S3 em testes
 
 [lib]
 name = "buildtovalue_kernel"
@@ -56,5 +65,6 @@ lto = true
 codegen-units = 1
 strip = true
 
-# Policy engine
-serde_yaml = "0.9"
+[[bench]]
+name = "ffi_timing"
+harness = false
