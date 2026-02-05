@@ -125,3 +125,55 @@ impl CPFValidator {
         let _ = self.blacklist_cache.contains_ct(0u64);
     }
 }
+
+//! CPF Validator
+
+use super::{Validator, ValidationResult};
+use regex::Regex;
+use once_cell::sync::Lazy;
+
+static CPF_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}").unwrap()
+});
+
+pub struct CpfValidator;
+
+impl Validator for CpfValidator {
+    fn validate(&self, input: &str, name: &str) -> Option<ValidationResult> {
+        // Busca CPF no input
+        if let Some(captures) = CPF_REGEX.find(input) {
+            let cpf = captures.as_str();
+
+            return Some(ValidationResult {
+                validator_name: name.to_string(),
+                is_violation: true,
+                message: format!("CPF detected: {}", cpf),
+                category: "pii".to_string(),
+                location: format!("offset {}", captures.start()),
+                evidence: cpf.to_string(),
+                severity: 0.7, // HIGH
+                confidence: 0.9,
+            });
+        }
+
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cpf_detection() {
+        let validator = CpfValidator;
+
+        let input = "My CPF is 123.456.789-00";
+        let result = validator.validate(input, "cpf");
+
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert!(result.is_violation);
+        assert_eq!(result.severity, 0.7);
+    }
+}
