@@ -601,3 +601,28 @@ const _: () = assert!(
     std::mem::size_of::<Statistics>() == 256,
     "Statistics must be exactly 256 bytes"
 );
+
+// Adicionar novos módulos ao enum ValidatorModule
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ValidatorModule {
+    // Existing validators
+    CPF,
+    CNPJ,
+    CreditCard,
+    Luhn,
+    Entropy,
+    Statistics,
+    Deobfuscator,
+    Network,
+    SessionGuard,
+    OutputGuard,
+
+    // ✨ NOVO: LGPD Compliance Validators
+    Consent,
+    SensitiveData,
+    InternationalTransfer,
+    DataAccessRequest,
+    DataErasure,
+    BreachNotification,
+}

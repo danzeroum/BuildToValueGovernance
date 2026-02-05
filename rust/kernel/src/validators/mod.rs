@@ -163,3 +163,32 @@ impl ValidatorRegistry {
 pub trait Validator: Send + Sync {
     fn validate(&self, input: &str, name: &str) -> Option<ValidationResult>;
 }
+
+
+// BuildToValue v2.0 - Validators Module
+//
+// Adicionar novos validators ao módulo
+
+pub mod cpf_validator;
+pub mod cnpj_validator;
+pub mod credit_card_validator;
+pub mod luhn_validator;
+pub mod entropy_validator;
+
+// ✨ NOVO: LGPD Compliance Validators
+pub mod consent_validator;
+pub mod consent_revocation_validator;
+pub mod sensitive_data_validator;
+
+// Re-exports
+pub use cpf_validator::CPFValidator;
+pub use cnpj_validator::CNPJValidator;
+pub use credit_card_validator::CreditCardValidator;
+pub use luhn_validator::LuhnValidator;
+pub use entropy_validator::EntropyValidator;
+
+// ✨ NOVO: LGPD Validators
+pub use consent_validator::ConsentValidator;
+pub use consent_revocation_validator::ConsentRevocationValidator;
+pub use sensitive_data_validator::SensitiveDataValidator;
+
