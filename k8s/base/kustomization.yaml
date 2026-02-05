@@ -1,200 +1,64 @@
+# ════════════════════════════════════════════════════════════════════════════
+# BuildToValue v2.0 - Kustomization Base
+# ════════════════════════════════════════════════════════════════════════════
+# CORRIGIDO: Resources existentes + Namespace unificado + Images consistentes
+# ════════════════════════════════════════════════════════════════════════════
 
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# ✅ CORRIGIDO: Namespace unificado (buildtovalue em todos os ambientes)
 namespace: buildtovalue
 
-# ═══════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════
 # Common Labels
-# ═══════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════
 commonLabels:
   app.kubernetes.io/name: buildtovalue
   app.kubernetes.io/component: trust-os
   app.kubernetes.io/part-of: buildtovalue-platform
+  app.kubernetes.io/version: "2.0.0"
 
-# ═══════════════════════════════════════════════════════════════
-# Resources
-# ═══════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════
+# Resources (✅ CORRIGIDO: Apenas arquivos que EXISTEM)
+# ════════════════════════════════════════════════════════════════════════════
 resources:
-  - 00-namespace.yaml
-  - 10-deployment.yaml
-  - 20-service.yaml
-  - 30-configmap.yaml
-  - 40-postgres.yaml
-  - 50-redis.yaml
-  - 60-ingress.yaml
-  - 70-hpa.yaml
-  - 80-pdb.yaml
-  - 90-networkpolicy.yaml
+  # Core resources
+  - ../00-namespace.yaml
+  - ../10-deployment.yaml
+  - ../20-service.yaml
+  - ../30-pvc.yaml
+  - ../40-hpa.yaml
+  
+  # Security (✅ CORRIGIDO: Arquivos separados do security/)
+  - ../security/pod-security-standards.yaml  # Substituiu PSP obsoleta
+  - ../security/network-policy.yaml
+  - ../security/rbac.yaml
+  
+  # ⚠️ CRIAR ESTES ARQUIVOS (ou comentar se não precisar agora):
+  # - ../05-profiles-configmap.yaml  # ConfigMap de profiles
+  # - ../41-postgres.yaml            # StatefulSet Postgres
+  # - ../42-redis.yaml               # StatefulSet Redis
+  # - ../43-pdb.yaml                 # PodDisruptionBudget
 
-# ═══════════════════════════════════════════════════════════════
-# Config Map Generator
-# ═══════════════════════════════════════════════════════════════
-configMapGenerator:
-  - name: buildtovalue-config
-    files:
-      - config/production.yaml
-    options:
-      disableNameSuffixHash: true
+# ════════════════════════════════════════════════════════════════════════════
+# ❌ REMOVIDO: configMapGenerator (ConfigMap está em 00-namespace.yaml)
+# ❌ REMOVIDO: secretGenerator (usar SealedSecret em produção)
+# ════════════════════════════════════════════════════════════════════════════
+# MOTIVO: Evita duplicação e conflitos
 
-# ═══════════════════════════════════════════════════════════════
-# Secret Generator (placeholder, use sealed-secrets in prod)
-# ═══════════════════════════════════════════════════════════════
-secretGenerator:
-  - name: buildtovalue-secrets
-    envs:
-      - secrets/.env.production
-    options:
-      disableNameSuffixHash: true
-
-# ═══════════════════════════════════════════════════════════════
-# Images
-# ═══════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════
+# Images (✅ CORRIGIDO: Nomes consistentes com deployment)
+# ════════════════════════════════════════════════════════════════════════════
 images:
-  - name: buildtovalue-api
-    newName: ghcr.io/buildtovalue/api
-    newTag: latest
-  
-  - name: buildtovalue-kernel
-    newName: ghcr.io/buildtovalue/kernel
-    newTag: latest
-
----
-# k8s/overlays/production/kustomization.yaml
-
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-namespace: buildtovalue-production
-
-# ═══════════════════════════════════════════════════════════════
-# Base
-# ═══════════════════════════════════════════════════════════════
-bases:
-  - ../../base
-
-# ═══════════════════════════════════════════════════════════════
-# Production-Specific Labels
-# ═══════════════════════════════════════════════════════════════
-commonLabels:
-  environment: production
-  tier: critical
-
-# ═══════════════════════════════════════════════════════════════
-# Production Resources
-# ═══════════════════════════════════════════════════════════════
-resources:
-  - sealed-secret.yaml
-  - certificate.yaml
-  - priority-class.yaml
-
-# ═══════════════════════════════════════════════════════════════
-# Patches (Production Overrides)
-# ═══════════════════════════════════════════════════════════════
-patches:
-  # Increase replicas
-  - target:
-      kind: Deployment
-      name: buildtovalue-api
-    patch: |-
-      - op: replace
-        path: /spec/replicas
-        value: 5
-  
-  # Production resource limits
-  - target:
-      kind: Deployment
-      name: buildtovalue-api
-    patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/cpu
-        value: "2000m"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/memory
-        value: "2Gi"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/cpu
-        value: "1000m"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/memory
-        value: "512Mi"
-  
-  # Production HPA
-  - target:
-      kind: HorizontalPodAutoscaler
-      name: buildtovalue-api-hpa
-    patch: |-
-      - op: replace
-        path: /spec/minReplicas
-        value: 5
-      - op: replace
-        path: /spec/maxReplicas
-        value: 20
-  
-  # Production ingress (TLS)
-  - target:
-      kind: Ingress
-      name: buildtovalue-ingress
-    patch: |-
-      - op: add
-        path: /spec/tls
-        value:
-          - hosts:
-              - api.buildtovalue.com
-            secretName: buildtovalue-tls-cert
-      - op: replace
-        path: /spec/rules/0/host
-        value: api.buildtovalue.com
-
-# ═══════════════════════════════════════════════════════════════
-# Images (Production Tags)
-# ═══════════════════════════════════════════════════════════════
-images:
-  - name: buildtovalue-api
+  # ✅ Nome 'buildtovalue' bate com o deployment (10-deployment.yaml linha 48)
+  - name: buildtovalue
     newName: ghcr.io/buildtovalue/api
     newTag: v2.0.0
-  
-  - name: buildtovalue-kernel
-    newName: ghcr.io/buildtovalue/kernel
-    newTag: v2.0.0
 
----
-# k8s/overlays/staging/kustomization.yaml
-
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-namespace: buildtovalue-staging
-
-bases:
-  - ../../base
-
-commonLabels:
-  environment: staging
-  tier: non-critical
-
-patches:
-  # Staging uses fewer resources
-  - target:
-      kind: Deployment
-      name: buildtovalue-api
-    patch: |-
-      - op: replace
-        path: /spec/replicas
-        value: 2
-  
-  - target:
-      kind: HorizontalPodAutoscaler
-      name: buildtovalue-api-hpa
-    patch: |-
-      - op: replace
-        path: /spec/minReplicas
-        value: 2
-      - op: replace
-        path: /spec/maxReplicas
-        value: 5
-
-images:
-  - name: buildtovalue-api
-    newName: ghcr.io/buildtovalue/api
-    newTag: staging-latest
+# ════════════════════════════════════════════════════════════════════════════
+# Annotations Comuns
+# ════════════════════════════════════════════════════════════════════════════
+commonAnnotations:
+  buildtovalue.io/version: "2.0.0"
+  buildtovalue.io/managed-by: "kustomize"
