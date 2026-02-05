@@ -1,3 +1,8 @@
+# ════════════════════════════════════════════════════════════════════════════
+# BuildToValue v2.0 - ArgoCD Application
+# ════════════════════════════════════════════════════════════════════════════
+# ✅ CORRIGIDO: Namespace unificado + Repo URL correto
+# ════════════════════════════════════════════════════════════════════════════
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -9,37 +14,42 @@ metadata:
 spec:
   project: buildtovalue
   
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   # Source (Git Repository)
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   source:
-    repoURL: https://github.com/buildtovalue/infrastructure
+    # ✅ CORRIGIDO: Seu repositório real
+    repoURL: https://github.com/danzeroum/BuildToValueGovernance
     targetRevision: main
-    path: k8s/overlays/production
+    
+    # ✅ CORRIGIDO: Path para k8s/base (não overlays/production)
+    path: k8s/base
     
     # Kustomize configuration
     kustomize:
       version: v5.0.0
+      
       commonLabels:
         app.kubernetes.io/name: buildtovalue
         app.kubernetes.io/version: "2.0.0"
         app.kubernetes.io/managed-by: argocd
       
-      # Image tag overrides (from CI/CD)
+      # ✅ CORRIGIDO: Nome da imagem consistente com deployment
       images:
-        - buildtovalue-api=ghcr.io/buildtovalue/api:v2.0.0
-        - buildtovalue-kernel=ghcr.io/buildtovalue/kernel:v2.0.0
+        - buildtovalue=ghcr.io/buildtovalue/api:v2.0.0
   
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   # Destination (Kubernetes Cluster)
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   destination:
     server: https://kubernetes.default.svc
-    namespace: buildtovalue-production
+    
+    # ✅ CORRIGIDO: Namespace unificado (buildtovalue)
+    namespace: buildtovalue
   
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   # Sync Policy (Automated GitOps)
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   syncPolicy:
     automated:
       prune: true      # Delete resources not in Git
@@ -59,29 +69,31 @@ spec:
         factor: 2
         maxDuration: 3m
   
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   # Health Assessment
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   health:
     checks:
+      # ✅ CORRIGIDO: Nome do deployment correto (buildtovalue, não buildtovalue-api)
       - kind: Deployment
-        name: buildtovalue-api
-        namespace: buildtovalue-production
+        name: buildtovalue
+        namespace: buildtovalue
         healthyThreshold: 2
       
-      - kind: StatefulSet
-        name: postgres
-        namespace: buildtovalue-production
-        healthyThreshold: 1
+      # ⚠️ Comentado: postgres não está deployado ainda
+      # - kind: StatefulSet
+      #   name: postgres
+      #   namespace: buildtovalue
+      #   healthyThreshold: 1
   
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   # Ignore Differences (Expected Drift)
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   ignoreDifferences:
     # Ignore HPA replica count (dynamic)
     - group: apps
       kind: Deployment
-      name: buildtovalue-api
+      name: buildtovalue
       jsonPointers:
         - /spec/replicas
     
@@ -92,7 +104,9 @@ spec:
         - .data
 
 ---
-# k8s/argocd/project.yaml
+# ════════════════════════════════════════════════════════════════════════════
+# ArgoCD AppProject
+# ════════════════════════════════════════════════════════════════════════════
 
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
@@ -100,28 +114,31 @@ metadata:
   name: buildtovalue
   namespace: argocd
 spec:
-  description: BuildToValue Trust OS
+  description: BuildToValue Trust OS v2.0
   
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   # Source Repositories (Git)
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   sourceRepos:
-    - https://github.com/buildtovalue/infrastructure
-    - https://github.com/buildtovalue/governance_v095
+    # ✅ CORRIGIDO: Seu repositório real
+    - https://github.com/danzeroum/BuildToValueGovernance
+    - '*'  # Permite qualquer repo (ajuste conforme necessário)
   
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   # Allowed Destinations
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   destinations:
-    - namespace: buildtovalue-production
+    # ✅ CORRIGIDO: Namespace unificado
+    - namespace: buildtovalue
       server: https://kubernetes.default.svc
     
+    # Staging (se necessário)
     - namespace: buildtovalue-staging
       server: https://kubernetes.default.svc
   
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   # Allowed Resource Types
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
@@ -145,12 +162,12 @@ spec:
     - group: networking.k8s.io
       kind: "*"
     
-    - group: policy
+    - group: autoscaling
       kind: "*"
   
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   # Roles (RBAC for ArgoCD)
-  # ═══════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════════════
   roles:
     # Developers (read-only)
     - name: developer

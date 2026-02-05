@@ -1,0 +1,51 @@
+# Base Profile - Root of hierarchy
+# All profiles inherit from this
+
+id: base
+name: "Base Profile"
+description: "Base profile with fundamental security rules. All profiles inherit from this."
+
+parent_id: null  # Root profile
+
+version: "1.0.0"
+created_at: "2026-02-16"
+updated_at: "2026-02-16"
+
+rules:
+  # High priority: Block credit card ALWAYS
+  - id: "BLOCK_CREDIT_CARD_GLOBAL"
+    name: "Block Credit Card"
+    description: "Credit card numbers are never legitimate in any context"
+    action: BLOCK
+    priority: 300
+    validators: ["credit_card"]
+    categories: ["financial"]
+    min_severity: 0.8
+    min_confidence: 0.9
+
+  # Medium priority: Block CPF in general context
+  - id: "BLOCK_CPF_GENERAL"
+    name: "Block CPF in General"
+    description: "CPF in general context is blocked. Use appropriate context (medical/research/legal)"
+    action: BLOCK
+    priority: 200
+    validators: ["cpf"]
+    categories: ["pii"]
+    min_severity: 0.7
+    min_confidence: 0.9
+
+  # Low priority: Log all network activity
+  - id: "LOG_NETWORK"
+    name: "Log Network Activity"
+    description: "Log all network-related findings for audit"
+    action: LOG
+    priority: 100
+    categories: ["network"]
+
+domain_config:
+  general:
+    risk_multiplier: 1.0
+    blocked_findings:
+      - "CREDIT_CARD_DETECTED"
+      - "CPF_DETECTED"
+    education_message: "This is a general context. Personal data (CPF, credit cards) are blocked by default."
