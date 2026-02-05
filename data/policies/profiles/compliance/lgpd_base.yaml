@@ -1,0 +1,662 @@
+# BuildToValue v2.0 - LGPD Base Compliance Profile
+# Lei Geral de Proteção de Dados - Lei nº 13.709/2018 (Brasil)
+#
+# Filosofia Ética Integrada:
+# - Rawls (Justiça): Blind testing de políticas
+# - Levinas (Cuidado): Contestability obrigatória (Art. 20)
+# - Gilligan (Misericórdia): Educação antes de punição quando aplicável
+# - Jonas (Responsabilidade): Auditoria imutável de todas as decisões
+#
+# Status: Production-ready
+# Version: 1.0.0
+# Last Updated: 2026-02-05
+# Maintainer: Ethical Committee + DPO (Data Protection Officer)
+
+id: lgpd_base
+name: LGPD Base Compliance Profile
+description: |
+  Implementa requisitos fundamentais da Lei Geral de Proteção de Dados (LGPD).
+  Cobre: Princípios (Art. 6º), Bases Legais (Art. 7º), Consentimento (Art. 8º),
+  Dados Sensíveis (Art. 11), Direitos do Titular (Art. 18), 
+  Transferência Internacional (Art. 46-47), Segurança (Art. 46-48).
+
+parent_id: null  # Profile raiz (outros herdam deste)
+version: 1.0.0
+legal_framework: LGPD
+jurisdiction: BR
+created_at: 2026-02-05
+updated_at: 2026-02-05
+
+# ═══════════════════════════════════════════════════════════════════════════
+# METADATA LEGAL
+# ═══════════════════════════════════════════════════════════════════════════
+
+legal_metadata:
+  law_name: "Lei Geral de Proteção de Dados"
+  law_number: "Lei nº 13.709/2018"
+  law_url: "http://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm"
+  enforcement_authority: "ANPD (Autoridade Nacional de Proteção de Dados)"
+  authority_url: "https://www.gov.br/anpd/"
+  effective_date: "2020-09-18"
+
+  # Penalidades (Art. 52)
+  penalties:
+    - type: "Advertência"
+      description: "Com prazo para adoção de medidas corretivas"
+    - type: "Multa Simples"
+      value: "Até 2% do faturamento (limite R$ 50 milhões por infração)"
+    - type: "Multa Diária"
+      value: "Até o limite total de R$ 50 milhões"
+    - type: "Publicização da Infração"
+      description: "Divulgação pública da infração"
+    - type: "Bloqueio dos Dados"
+      description: "Suspensão parcial ou total do banco de dados"
+    - type: "Eliminação dos Dados"
+      description: "Eliminação dos dados pessoais"
+
+  # Definições (Art. 5º)
+  definitions:
+    dados_pessoais: "Informação relacionada a pessoa natural identificada ou identificável"
+    dados_sensiveis: "Origem racial/étnica, convicção religiosa, opinião política, saúde, vida sexual, dado genético/biométrico"
+    titular: "Pessoa natural a quem se referem os dados pessoais"
+    controlador: "Pessoa natural/jurídica que toma decisões sobre tratamento"
+    operador: "Pessoa natural/jurídica que realiza tratamento em nome do controlador"
+    encarregado_dpo: "Pessoa indicada pelo controlador/operador para canal de comunicação"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DOMAIN CONFIG
+# ═══════════════════════════════════════════════════════════════════════════
+
+domain_config:
+  general:
+    risk_multiplier: 1.2  # LGPD é rigorosa
+    require_dpo: true     # Encarregado obrigatório (Art. 41)
+    breach_notification_hours: 72  # Comunicar ANPD em tempo razoável (interpretação: 72h)
+    data_subject_request_days: 15  # Resposta a titular em 15 dias (Art. 18)
+
+  # Países com adequação para transferência internacional (Art. 33)
+  adequate_countries:
+    - "AT"  # Áustria (UE)
+    - "BE"  # Bélgica (UE)
+    - "DE"  # Alemanha (UE)
+    - "ES"  # Espanha (UE)
+    - "FR"  # França (UE)
+    - "IT"  # Itália (UE)
+    - "PT"  # Portugal (UE)
+    - "GB"  # Reino Unido
+    - "JP"  # Japão (acordo bilateral)
+    - "AR"  # Argentina (MERCOSUL)
+    # Lista completa: https://www.gov.br/anpd/pt-br/assuntos/regulacao/transferencia-internacional
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RULES - CAPÍTULO II: PRINCÍPIOS (Art. 6º)
+# ═══════════════════════════════════════════════════════════════════════════
+
+rules:
+  # ───────────────────────────────────────────────────────────────────────
+  # PRINCÍPIO DA FINALIDADE (Art. 6º, I)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART6_I_FINALIDADE
+    name: "Princípio da Finalidade"
+    description: "Dados tratados para propósitos legítimos, específicos, explícitos e informados ao titular"
+    action: ESCALATE
+    priority: 80
+    severity: HIGH
+
+    validators: ["purpose_validator"]
+
+    condition: |
+      data.contains_pii == true and 
+      (processing.purpose == null or processing.purpose not in approved_purposes)
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 6º, I"
+    legal_url: "http://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm#art6"
+
+    contestable: true
+    appeal_window_hours: 24
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+    rationale: |
+      Ethical reasoning (Rawls - Justiça como Equidade):
+      - Finalidade clara protege titular de uso arbitrário
+      - "Véu da Ignorância": mesmo sem saber quem é o titular, finalidade deve ser legítima
+      
+      Mercy applicable (Gilligan - Ética do Cuidado):
+      - Se incerteza sobre finalidade > 70%, EDUCATE antes de bloquear
+      - Primeira violação + bom histórico → orientação em vez de sanção
+
+  # ───────────────────────────────────────────────────────────────────────
+  # PRINCÍPIO DA NECESSIDADE (Art. 6º, III)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART6_III_NECESSIDADE
+    name: "Princípio da Necessidade (Minimização de Dados)"
+    description: "Tratamento limitado ao mínimo necessário para realização de suas finalidades"
+    action: MONITOR
+    priority: 60
+    severity: MEDIUM
+
+    validators: ["data_minimization_validator"]
+
+    condition: |
+      data.field_count > minimization_threshold or
+      data.retention_days > purpose_retention_limit
+
+    parameters:
+      minimization_threshold: 10  # Alerta se > 10 campos acessados
+      purpose_retention_limit: 30  # Dias máximos sem justificativa
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 6º, III"
+
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+
+    rationale: |
+      Gilligan (Ética do Cuidado): Minimização reduz danos potenciais.
+      Primeira detecção → LOG + educação.
+      Reincidência → ESCALATE.
+
+  # ───────────────────────────────────────────────────────────────────────
+  # PRINCÍPIO DA TRANSPARÊNCIA (Art. 6º, VI)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART6_VI_TRANSPARENCIA
+    name: "Princípio da Transparência"
+    description: "Garantia de informações claras, precisas e acessíveis ao titular"
+    action: LOG
+    priority: 50
+    severity: MEDIUM
+
+    validators: []  # Sem validator técnico (é obrigação processual)
+
+    condition: |
+      interaction.user_facing == true and
+      transparency_disclosure_shown == false
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 6º, VI"
+
+    contestable: false  # Log obrigatório, não bloqueio
+    mercy_eligible: false
+
+    rationale: |
+      Levinas (Dever de Cuidado): Titular tem direito de saber.
+      Log toda interação user-facing para auditoria (Art. 37 - relatório DPO).
+
+  # ───────────────────────────────────────────────────────────────────────
+  # PRINCÍPIO DA SEGURANÇA (Art. 6º, VII)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART6_VII_SEGURANCA
+    name: "Princípio da Segurança"
+    description: "Medidas técnicas e administrativas aptas a proteger dados de acessos não autorizados"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["encryption_validator"]
+
+    condition: |
+      (data.contains_pii == true and transmission.encrypted == false) or
+      (data.at_rest == true and storage.encrypted == false)
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 6º, VII c/c Art. 46"
+
+    contestable: false  # Segurança não é negociável
+    mercy_eligible: false
+
+    rationale: |
+      Jonas (Responsabilidade Proporcional): 
+      Dados pessoais não criptografados = risco inaceitável.
+      BLOCK imediato. Sem mercy (segurança é binária).
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # RULES - CAPÍTULO III: BASES LEGAIS (Art. 7º)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ───────────────────────────────────────────────────────────────────────
+  # BASE LEGAL: CONSENTIMENTO (Art. 7º, I)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART7_I_CONSENTIMENTO
+    name: "Base Legal: Consentimento do Titular"
+    description: "Processamento de dados pessoais requer consentimento do titular (Art. 7º, I)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["consent_validator"]
+
+    condition: |
+      user.has_consent == false and 
+      processing.requires_consent == true and
+      processing.legal_basis == null
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 7º, I"
+
+    contestable: true
+    appeal_window_hours: 24
+    mercy_eligible: false  # Consentimento é binário (sim/não)
+
+    rationale: |
+      Sem consentimento = sem processamento (exceto outras bases legais Art. 7º II-X).
+      
+      Levinas (Dever de Cuidado): Titular tem direito absoluto de escolha.
+      Bloqueio crítico. Contestability permite recurso se consentimento não foi registrado (bug de sistema).
+
+  # ───────────────────────────────────────────────────────────────────────
+  # BASE LEGAL: LEGÍTIMO INTERESSE (Art. 7º, IX)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART7_IX_LEGITIMO_INTERESSE
+    name: "Base Legal: Legítimo Interesse do Controlador"
+    description: "Legítimo interesse requer LIA (Legitimate Interest Assessment) documentado"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+
+    validators: ["lia_validator"]
+
+    condition: |
+      processing.legal_basis == "legitimate_interest" and
+      processing.lia_documented == false
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 7º, IX c/c Art. 10"
+
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+    rationale: |
+      Legítimo interesse é base legal mais complexa (requer balanceamento).
+      LIA (Legitimate Interest Assessment) obrigatório:
+      - Finalidade legítima?
+      - Necessário?
+      - Balanceamento: interesse controlador vs direitos titular?
+      
+      Mercy: Se LIA parcial existe, EDUCATE + prazo 7 dias para completar.
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # RULES - SEÇÃO III: CONSENTIMENTO (Art. 8º)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ───────────────────────────────────────────────────────────────────────
+  # REVOGAÇÃO DE CONSENTIMENTO (Art. 8º, § 5º)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART8_P5_REVOGACAO
+    name: "Direito de Revogação de Consentimento"
+    description: "Titular pode revogar consentimento a qualquer momento (Art. 8º, § 5º)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["consent_revocation_validator"]
+
+    condition: |
+      user.consent_revoked == true and
+      processing.continues == true
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 8º, § 5º"
+
+    contestable: false  # Revogação é direito absoluto
+    mercy_eligible: false
+
+    rationale: |
+      Levinas (Dever de Cuidado): Titular mudou de ideia → stop IMEDIATAMENTE.
+      Bloqueio automático. Sem contestação (é direito do titular).
+
+  # ───────────────────────────────────────────────────────────────────────
+  # QUALIDADE DO CONSENTIMENTO (Art. 8º)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART8_QUALIDADE_CONSENTIMENTO
+    name: "Consentimento Livre, Informado e Inequívoco"
+    description: "Consentimento deve ser explícito (não opt-out ou pre-checked)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+
+    validators: ["consent_quality_validator"]
+
+    condition: |
+      consent.is_explicit == false or
+      consent.is_informed == false or
+      consent.is_opt_out == true or
+      consent.is_pre_checked == true
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 8º"
+
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+    rationale: |
+      Consentimento via opt-out (caixa pré-marcada) é INVÁLIDO.
+      
+      Gilligan (Ética do Cuidado): Se design é ambíguo (incerteza > 70%), 
+      EDUCATE UX team antes de escalar para DPO.
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # RULES - SEÇÃO IV: DADOS SENSÍVEIS (Art. 11)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ───────────────────────────────────────────────────────────────────────
+  # DADOS SENSÍVEIS - CONSENTIMENTO ESPECÍFICO (Art. 11)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART11_DADOS_SENSIVEIS
+    name: "Dados Sensíveis Requerem Consentimento Específico"
+    description: |
+      Dados sensíveis (origem racial, saúde, biometria, etc.) requerem 
+      consentimento específico e destacado (Art. 11)
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["sensitive_data_validator"]
+
+    condition: |
+      data.is_sensitive == true and
+      consent.is_specific_for_sensitive == false
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 11"
+
+    contestable: true
+    mercy_eligible: false  # Dados sensíveis = zero tolerância
+
+    rationale: |
+      Dados sensíveis (Art. 5º, II):
+      - Origem racial ou étnica
+      - Convicção religiosa
+      - Opinião política
+      - Filiação sindical
+      - Dados genéticos/biométricos
+      - Dados sobre saúde
+      - Dados sobre vida sexual
+      
+      Jonas (Responsabilidade): Risco alto = proteção máxima.
+      BLOCK imediato. Contestação só se sistema classificou errado (ex: "diabetes" em contexto médico legítimo).
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # RULES - CAPÍTULO V: TRANSFERÊNCIA INTERNACIONAL (Art. 33, 46, 47)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ───────────────────────────────────────────────────────────────────────
+  # TRANSFERÊNCIA PARA PAÍS INADEQUADO (Art. 33)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART33_TRANSFERENCIA_INTERNACIONAL
+    name: "Transferência Internacional - País Adequado"
+    description: "Transferência só para países com nível adequado de proteção (Art. 33)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["international_transfer_validator"]
+
+    condition: |
+      transfer.destination_country not in adequate_countries and
+      transfer.has_sccs == false and
+      transfer.has_bcr == false
+
+    parameters:
+      adequate_countries: ${domain_config.adequate_countries}
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 33"
+
+    contestable: true
+    mercy_eligible: false
+
+    rationale: |
+      Transferência internacional sem adequação = risco de fuga de jurisdição.
+      
+      Alternativas ao país adequado (Art. 33, §§):
+      - SCCs (Standard Contractual Clauses) - Art. 33, VIII
+      - BCRs (Binding Corporate Rules) - Art. 33, VII
+      - Consentimento específico do titular - Art. 33, I
+      
+      BLOCK até garantia legal.
+
+  # ───────────────────────────────────────────────────────────────────────
+  # CLÁUSULAS CONTRATUAIS PADRÃO (Art. 33, VIII)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART33_VIII_SCCS
+    name: "Exigir SCCs para Transferência Internacional"
+    description: "Cláusulas contratuais padrão (SCCs) obrigatórias se país não adequado"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+
+    validators: ["sccs_validator"]
+
+    condition: |
+      transfer.destination_country not in adequate_countries and
+      transfer.has_sccs == false
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 33, VIII"
+
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+
+    rationale: |
+      SCCs (Standard Contractual Clauses) são contratos pré-aprovados pela ANPD.
+      
+      Mercy: Se SCC em processo de assinatura, EDUCATE + prazo 14 dias.
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # RULES - CAPÍTULO VI: DIREITOS DO TITULAR (Art. 18)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ───────────────────────────────────────────────────────────────────────
+  # DIREITO DE ACESSO (Art. 18, II)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART18_II_ACESSO
+    name: "Direito de Acesso aos Dados"
+    description: "Titular tem direito de acessar seus dados (resposta em 15 dias)"
+    action: ESCALATE
+    priority: 80
+    severity: HIGH
+
+    validators: ["data_access_request_validator"]
+
+    condition: |
+      request.type == "data_access" and
+      days_since(request.date) > 13
+
+    parameters:
+      sla_days: 15  # Art. 18: "imediata" = interpretação ANPD: 15 dias úteis
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 18, II"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.8
+
+    rationale: |
+      Prazo: "imediata" (Art. 18) = ANPD interpreta como 15 dias úteis.
+      
+      Alerta em Day 13 (buffer 2 dias para preparação).
+      
+      Gilligan (Cuidado): Se alta complexidade (incerteza > 80%), 
+      LOG + prazo estendido mediante comunicação ao titular.
+
+  # ───────────────────────────────────────────────────────────────────────
+  # DIREITO DE CORREÇÃO (Art. 18, III)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART18_III_CORRECAO
+    name: "Direito de Correção de Dados"
+    description: "Titular pode corrigir dados incompletos, inexatos ou desatualizados"
+    action: MONITOR
+    priority: 70
+    severity: MEDIUM
+
+    validators: ["data_rectification_validator"]
+
+    condition: |
+      request.type == "data_correction"
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 18, III"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Monitoramento de requisições de correção (não bloqueio).
+      DPO avalia se correção é legítima.
+
+  # ───────────────────────────────────────────────────────────────────────
+  # DIREITO DE ELIMINAÇÃO (Art. 18, VI)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART18_VI_ELIMINACAO
+    name: "Direito de Eliminação (Right to Erasure)"
+    description: "Titular pode solicitar eliminação de dados (exceto obrigações legais)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+
+    validators: ["data_erasure_validator"]
+
+    condition: |
+      request.type == "data_deletion" and
+      processing.has_legal_obligation == false and
+      days_since(request.date) > 13
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 18, VI"
+
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+    rationale: |
+      Similar ao GDPR "Right to be Forgotten".
+      
+      Exceções (Art. 16):
+      - Obrigação legal/regulatória
+      - Estudo por órgão de pesquisa (anonimizado)
+      - Exercício regular de direitos (ex: defesa judicial)
+      
+      Mercy: Se exceção aplicável mas incerta, EDUCATE DPO.
+
+  # ───────────────────────────────────────────────────────────────────────
+  # DIREITO DE PORTABILIDADE (Art. 18, V)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART18_V_PORTABILIDADE
+    name: "Direito de Portabilidade de Dados"
+    description: "Titular pode solicitar dados em formato estruturado e interoperável"
+    action: LOG
+    priority: 60
+    severity: MEDIUM
+
+    validators: ["data_portability_validator"]
+
+    condition: |
+      request.type == "data_portability"
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 18, V"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Portabilidade: fornecer dados em formato estruturado (JSON, XML, CSV).
+      LOG para tracking (não é bloqueio).
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # RULES - CAPÍTULO VII: SEGURANÇA E INCIDENTES (Art. 46, 48)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ───────────────────────────────────────────────────────────────────────
+  # MEDIDAS DE SEGURANÇA (Art. 46)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART46_SEGURANCA
+    name: "Medidas de Segurança Técnicas e Administrativas"
+    description: "Controlador/operador devem adotar medidas de segurança aptas a proteger dados"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["security_controls_validator"]
+
+    condition: |
+      agent.security_level < min_security_level
+
+    parameters:
+      min_security_level: 3  # Scale 1-5 (3 = adequate, 5 = exceptional)
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 46"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Segurança inadequada = risco de vazamento.
+      
+      Jonas (Responsabilidade): Proteção é obrigação, não opção.
+      BLOCK agentes com security_level < 3.
+
+  # ───────────────────────────────────────────────────────────────────────
+  # NOTIFICAÇÃO DE INCIDENTE (Art. 48)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: LGPD_ART48_NOTIFICACAO_INCIDENTE
+    name: "Notificação de Incidente de Segurança à ANPD"
+    description: "Comunicar ANPD e titular em caso de incidente que possa acarretar risco/dano relevante"
+    action: ESCALATE
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["breach_notification_validator"]
+
+    condition: |
+      incident.severity == "critical" and
+      incident.affects_rights == true and
+      hours_since(incident.detection) > 48
+
+    parameters:
+      notification_deadline_hours: 72  # Interpretação: "tempo razoável" = 72h
+
+    legal_basis: "LGPD Lei 13.709/2018 Art. 48"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Prazo legal: "prazo razoável" (Art. 48).
+      ANPD interpreta: 72h (similar a GDPR).
+      
+      Alerta em 48h (buffer 24h para preparar comunicação).
+      
+      Jonas (Responsabilidade): Transparência em crises é dever ético.
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ETHICAL INTEGRATION NOTES
+# ═══════════════════════════════════════════════════════════════════════════
+
+ethical_notes: |
+  Este profile integra compliance legal (LGPD) com governança ética:
+  
+  RAWLS (Justiça como Equidade):
+  - Blind policy testing: regras aplicam igualmente a todos
+  - "Véu da Ignorância": não sabemos quem será afetado, então regras devem ser justas para todos
+  
+  LEVINAS (Dever de Cuidado com o Outro):
+  - Contestability obrigatória: titular sempre pode recorrer (Art. 18, § 4º + Art. 20)
+  - SLA 24h para resposta de recurso (BuildToValue), 15 dias para ANPD (Art. 18)
+  
+  GILLIGAN (Ética do Cuidado):
+  - Mercy algorithm: alta incerteza + bom histórico → EDUCATE em vez de BLOCK
+  - Exemplo: Se consent_validator incerto (70%+), educar usuário antes de bloquear
+  
+  JONAS (Responsabilidade Proporcional):
+  - Auditoria total: cada decisão tem legal_basis rastreável (DurableLedger)
+  - Penalties awareness: sistema mostra multas possíveis (até R$ 50 milhões)
+  - Assinatura criptográfica: non-repudiation de decisões
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CHANGELOG
+# ═══════════════════════════════════════════════════════════════════════════
+
+changelog:
+  - version: 1.0.0
+    date: 2026-02-05
+    author: "Daniel Camargo + Ethical Committee"
+    changes:
+      - "Initial LGPD base profile"
+      - "Converted from lgpd_mappings.yaml"
+      - "Added ethical integration (Rawls, Levinas, Gilligan, Jonas)"
+      - "18 rules covering: Princípios, Bases Legais, Consentimento, Dados Sensíveis, Direitos do Titular, Transferência Internacional, Segurança"
+      - "Contestability enabled for all non-binary rules"
+      - "Mercy algorithm integrated where applicable"
