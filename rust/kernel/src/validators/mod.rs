@@ -1,194 +1,49 @@
-//! Validator Registry
+//! Validators Module v2.3.1
 //!
-//! Orquestra todos os validators disponíveis.
-
-pub mod cpf;
-pub mod patterns;
-
-use std::collections::HashMap;
+//! **CHANGELOG v2.3.1**:
+//! - ✅ Consolidação de validators (brazilian/)
+//! - ✅ Remoção de duplicações (CPF, penalty_calculator)
+//! - ✅ Estrutura modular por domínio
 
 // ═══════════════════════════════════════════════════════════════════════════
-// VALIDATION RESULT
+// SUBMÓDULOS POR DOMÍNIO
 // ═══════════════════════════════════════════════════════════════════════════
-
-#[derive(Debug, Clone)]
-pub struct ValidationResult {
-    pub validator_name: String,
-    pub is_violation: bool,
-    pub message: String,
-    pub category: String,
-    pub location: String,
-    pub evidence: String,
-    pub severity: f32,
-    pub confidence: f32,
-}
+pub mod brazilian;        // CPF, CNPJ (LGPD)
+pub mod financial;        // Credit Card (PCI-DSS)
+pub mod communication;    // Email, Phone
+pub mod network;          // IP, Domain
+pub mod sensitive;        // LGPD Sensitive Data Pattern Detection
+pub mod privacy;          // Consent & Rights Governance
+pub mod analysis;         // Statistical Anomaly Detection
 
 // ═══════════════════════════════════════════════════════════════════════════
-// VALIDATOR REGISTRY
+// RE-EXPORTS (Convenience)
 // ═══════════════════════════════════════════════════════════════════════════
-
-pub struct ValidatorRegistry {
-    validators: HashMap<String, Box<dyn Validator>>,
-}
-
-impl ValidatorRegistry {
-    pub fn new() -> Self {
-        let mut registry = Self {
-            validators: HashMap::new(),
-        };
-
-        // Registra validators
-        registry.register("cpf", Box::new(cpf::CpfValidator));
-        registry.register("email", Box::new(patterns::EmailValidator));
-        registry.register("url", Box::new(patterns::UrlValidator));
-
-        registry
-    }
-
-    pub fn register(&mut self, name: &str, validator: Box<dyn Validator>) {
-        self.validators.insert(name.to_string(), validator);
-    }
-
-    pub fn validate_all(&self, input: &str) -> Vec<ValidationResult> {
-        let mut results = Vec::new();
-
-        for (name, validator) in &self.validators {
-            if let Some(result) = validator.validate(input, name) {
-                results.push(result);
-            }
-        }
-
-        results
-    }
-}
+pub use brazilian::{CpfValidator, CnpjValidator};
+pub use financial::CreditCardValidator;
+pub use communication::{EmailValidator, PhoneValidator};
+pub use network::{Ipv4Validator, UrlValidator, DomainValidator};
+pub use sensitive::SensitiveDataValidator;
+pub use privacy::{ConsentValidator, ConsentRevocationValidator};
+pub use analysis::{EntropyValidator, ZScoreValidator, PatternValidator};
 
 // ═══════════════════════════════════════════════════════════════════════════
-// VALIDATOR TRAIT
+// TRAIT UNIFICADO
 // ═══════════════════════════════════════════════════════════════════════════
 
+use crate::Finding;
+use crate::ValidatorModule;
+
+/// Trait comum para todos os validators.
+///
+/// Garante interface uniforme para Gatekeeper.
 pub trait Validator: Send + Sync {
-    fn validate(&self, input: &str, name: &str) -> Option<ValidationResult>;
+    /// Valida input e retorna findings.
+    fn validate(&self, input: &str) -> Vec<Finding>;
+
+    /// Nome do validator (para logging/metrics).
+    fn name(&self) -> &'static str;
+
+    /// Módulo ao qual pertence (para evidence).
+    fn module(&self) -> ValidatorModule;
 }
-
-//! Validator Registry
-//!
-//! Orquestra todos os validators disponíveis.
-
-pub mod brazilian_ids;
-pub mod credit_card;
-pub mod network;
-pub mod statistics;
-pub mod patterns;
-
-use std::collections::HashMap;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// VALIDATION RESULT
-// ═══════════════════════════════════════════════════════════════════════════
-
-#[derive(Debug, Clone)]
-pub struct ValidationResult {
-    pub validator_name: String,
-    pub is_violation: bool,
-    pub message: String,
-    pub category: String,
-    pub location: String,
-    pub evidence: String,
-    pub severity: f32,
-    pub confidence: f32,
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// VALIDATOR REGISTRY v2.0
-// ═══════════════════════════════════════════════════════════════════════════
-
-pub struct ValidatorRegistry {
-    validators: HashMap<String, Box<dyn Validator>>,
-}
-
-impl ValidatorRegistry {
-    pub fn new() -> Self {
-        let mut registry = Self {
-            validators: HashMap::new(),
-        };
-
-        // Brazilian IDs
-        registry.register("cpf", Box::new(brazilian_ids::CpfValidator));
-        registry.register("cnpj", Box::new(brazilian_ids::CnpjValidator));
-
-        // Financial
-        registry.register("credit_card", Box::new(credit_card::CreditCardValidator));
-
-        // Network
-        registry.register("ipv4", Box::new(network::Ipv4Validator));
-        registry.register("url", Box::new(network::UrlValidator));
-        registry.register("domain", Box::new(network::DomainValidator));
-
-        // Statistics
-        registry.register("entropy", Box::new(statistics::EntropyValidator::default()));
-        registry.register("zscore", Box::new(statistics::ZScoreValidator::default()));
-        registry.register("pattern", Box::new(statistics::PatternValidator));
-
-        // Basic patterns
-        registry.register("email", Box::new(patterns::EmailValidator));
-
-        registry
-    }
-
-    pub fn register(&mut self, name: &str, validator: Box<dyn Validator>) {
-        self.validators.insert(name.to_string(), validator);
-    }
-
-    pub fn validate_all(&self, input: &str) -> Vec<ValidationResult> {
-        let mut results = Vec::new();
-
-        for (name, validator) in &self.validators {
-            if let Some(result) = validator.validate(input, name) {
-                results.push(result);
-            }
-        }
-
-        results
-    }
-
-    pub fn count(&self) -> usize {
-        self.validators.len()
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// VALIDATOR TRAIT
-// ═══════════════════════════════════════════════════════════════════════════
-
-pub trait Validator: Send + Sync {
-    fn validate(&self, input: &str, name: &str) -> Option<ValidationResult>;
-}
-
-
-// BuildToValue v2.0 - Validators Module
-//
-// Adicionar novos validators ao módulo
-
-pub mod cpf_validator;
-pub mod cnpj_validator;
-pub mod credit_card_validator;
-pub mod luhn_validator;
-pub mod entropy_validator;
-
-// ✨ NOVO: LGPD Compliance Validators
-pub mod consent_validator;
-pub mod consent_revocation_validator;
-pub mod sensitive_data_validator;
-
-// Re-exports
-pub use cpf_validator::CPFValidator;
-pub use cnpj_validator::CNPJValidator;
-pub use credit_card_validator::CreditCardValidator;
-pub use luhn_validator::LuhnValidator;
-pub use entropy_validator::EntropyValidator;
-
-// ✨ NOVO: LGPD Validators
-pub use consent_validator::ConsentValidator;
-pub use consent_revocation_validator::ConsentRevocationValidator;
-pub use sensitive_data_validator::SensitiveDataValidator;
-

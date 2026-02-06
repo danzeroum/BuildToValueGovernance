@@ -1,42 +1,62 @@
-# BuildToValue v2.0 - Makefile
-# Quick commands for build, test, and deploy
+# ═══════════════════════════════════════════════════════════════════════════
+# BuildToValue v2.3.1 - Sovereign Orquestrator Makefile
+# ═══════════════════════════════════════════════════════════════════════════
 
-.PHONY: help build test e2e clean install
+.PHONY: help build develop test e2e clean install quick
 
 help:
-	@echo "BuildToValue v2.0 - Available commands:"
+	@echo "BuildToValue Governance v2.3.1 - Orquestração Soberana"
 	@echo ""
-	@echo "  make build        - Build Rust validators (release)"
-	@echo "  make test         - Run all tests (Rust + Python)"
-	@echo "  make e2e          - Run E2E LGPD compliance tests"
-	@echo "  make clean        - Clean build artifacts"
-	@echo "  make install      - Install Python dependencies"
-	@echo "  make quick        - Quick test (Rust only)"
+	@echo "Comandos de Rust:"
+	@echo "  make build        - Compila o Workspace Rust (release)"
+	@echo "  make quick        - Executa apenas testes unitários do Kernel"
+	@echo ""
+	@echo "Comandos de Integração (Python + Rust):"
+	@echo "  make develop      - Compila Rust e instala no venv Python (via Maturin)"
+	@echo "  make install      - Instala dependências Python e a lib Rust"
+	@echo "  make test         - Executa todos os testes (Rust + Python)"
+	@echo "  make e2e          - Executa testes de conformidade LGPD ponta-a-ponta"
+	@echo ""
+	@echo "Manutenção:"
+	@echo "  make clean        - Remove artefatos de build de ambos os mundos"
 	@echo ""
 
+# Compilação pura de Rust
 build:
-	@echo "🦀 Building Rust validators..."
-	cd rust && cargo build --release --features ffi
+	[cite_start]@echo "🦀 Compilando Workspace Rust (Kernel + CLI + Bindings)..." [cite: 6]
+	cd rust && cargo build --release
 
-test: build
-	@echo "🧪 Running Rust tests..."
+# A mágica da integração: Maturin instala o Rust dentro do seu venv Python
+develop:
+	@echo "🌉 Instalando Rust Bindings no ambiente Python..."
+	cd rust && maturin develop --release
+
+# Instalação completa do ambiente
+install:
+	[cite_start]@echo "📦 Instalando dependências Python..." [cite: 7]
+	cd python && pip install -r requirements.txt
+	@make develop
+
+# Bateria completa de testes
+test: develop
+	[cite_start]@echo "🧪 Executando testes do Rust Kernel..." [cite: 7]
 	cd rust && cargo test --release
-	@echo "🐍 Running Python tests..."
-	cd python && pytest buildtovalue/governance/ -v
+	[cite_start]@echo "🐍 Executando testes de Governança Python..." [cite: 7]
+	cd python && pytest tests/ -v
 
-e2e: build
-	@echo "🏁 Running E2E LGPD compliance tests..."
-	bash scripts/run_e2e_lgpd.sh
+# Testes de ponta-a-ponta (Caminho corrigido para scripts/ci/)
+e2e: develop
+	[cite_start]@echo "🏁 Iniciando validação E2E LGPD..." [cite: 7]
+	bash scripts/ci/run_e2e_lgpd.sh
 
+# Limpeza total
 clean:
-	@echo "🧹 Cleaning build artifacts..."
+	[cite_start]@echo "🧹 Limpando o território..." [cite: 7]
 	cd rust && cargo clean
 	cd python && rm -rf build/ dist/ *.egg-info .pytest_cache __pycache__
+	find . -name "*.pyc" -delete
 
-install:
-	@echo "📦 Installing Python dependencies..."
-	cd python && pip install -e .
-
+# Atalho para desenvolvedor Rust
 quick:
-	@echo "⚡ Quick Rust tests..."
-	cd rust && cargo test --release --lib
+	[cite_start]@echo "⚡ Teste rápido do Kernel..." [cite: 8]
+	cd rust && cargo test --release -p buildtovalue-kernel

@@ -7,3 +7,5 @@ pub mod remote;
 
 pub use durable_ledger::{DurableLedger, LedgerError};
 pub use entry::{LedgerEntry, ActionType};
+pub use wal::WriteAheadLog;
+pub use remote::{S3Connector, S3Config};
