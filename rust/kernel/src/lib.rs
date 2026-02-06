@@ -1,155 +1,93 @@
-//! BuildToValue Sovereign Kernel v2.2.0
+//! BuildToValue Sovereign Kernel v2.3.1
 //!
-//! Rust-based ethical governance kernel for AI agents.
-//! Implements Evidence Protocol v2.1 with < 50ms p99 latency.
+//! **CHANGELOG v2.3.1**:
+//! - ✅ Consolidação de validators (brazilian/)
+//! - ✅ Remoção de duplicações (CPF, penalty_calculator)
+//! - ✅ Estrutura modular por domínio (Core, Evidence, Validators)
+//!
+//! O núcleo de aplicação da lei digital. Responsável pela validação de fatos,
+//! geração de evidências forenses e aplicação de políticas imutáveis.
+//!
+//! # Arquitetura
+//! - **Fail-Secure**: Padrão de bloqueio em caso de erro.
+//! - **Zero-Allocation**: Alocação fixa no hot-path.
+//! - **Auditabilidade**: Todo veredito gera um hash no Ledger.
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CORE STRUCTURES
+// MÓDULOS CORE (A Fundação)
 // ═══════════════════════════════════════════════════════════════════════════
 
-pub mod technical_evidence;
-pub mod finding;
-pub mod types;
+pub mod core;             // Contém types.rs e errors.rs
+pub mod api;              // Contém response.rs
+pub mod evidence;         // Contém technical.rs e finding.rs
+pub mod gatekeeper;       // Orquestrador principal
 
 // ═══════════════════════════════════════════════════════════════════════════
-// VALIDATION MODULES
+// SUBSISTEMAS (Domínios de Lógica)
 // ═══════════════════════════════════════════════════════════════════════════
 
-pub mod validators;
+pub mod validators;       // Detectores especializados (contém o trait Validator)
+pub mod statistics;       // Análise estatística
+pub mod deobfuscator;     // Detecção de ofuscação
+pub mod compliance;       // Conformidade regulatória
+pub mod security;         // Módulos de segurança
+pub mod ledger;           // Sistema de logging durável
+pub mod observability;    // Métricas e tracing
+pub mod policy;           // Policy engine
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STATISTICAL ANALYSIS
+// FFI (Conditional Compilation)
 // ═══════════════════════════════════════════════════════════════════════════
 
-pub mod statistics;
+#[cfg(feature = "ffi-bindings")]
+pub mod ffi;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DEOBFUSCATION
+// RE-EXPORTS (Facade Pattern)
 // ═══════════════════════════════════════════════════════════════════════════
+// Facilita o uso externo, expondo os tipos principais na raiz do crate.
 
-pub mod deobfuscator;
+// Orquestrador
+pub use gatekeeper::Gatekeeper;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// LEDGER & DURABILITY
-// ═══════════════════════════════════════════════════════════════════════════
+// Tipos de Evidência (Vindos do módulo evidence)
+pub use evidence::{TechnicalEvidence, Finding};
 
-pub mod ledger;
+// Tipos Fundamentais (Vindos do módulo core)
+// Nota: Redirecionamos core::types para parecer que estão na raiz
+pub use core::types::{ValidatorModule, TechnicalSeverity, Action, RiskLevel};
 
-// ═══════════════════════════════════════════════════════════════════════════
-// COMPLIANCE & POLICIES
-// ═══════════════════════════════════════════════════════════════════════════
-
-pub mod compliance;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SECURITY
-// ═══════════════════════════════════════════════════════════════════════════
-
-pub mod security;
+// Interfaces (Vindas do módulo validators)
+pub use validators::Validator;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ORCHESTRATION
+// VERSION INFO
 // ═══════════════════════════════════════════════════════════════════════════
 
-pub mod gatekeeper;
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const PROTOCOL_VERSION: u16 = 2;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// OBSERVABILITY
-// ═══════════════════════════════════════════════════════════════════════════
-
-pub mod observability;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// FFI BINDINGS
-// ═══════════════════════════════════════════════════════════════════════════
-
-#[cfg(feature = "pyo3")]
-pub mod bindings_python;
-
-#[cfg(feature = "c-bindings")]
-pub mod bindings_c;
+/// Retorna informações de versão completas
+pub fn version_info() -> String {
+    format!(
+        "BuildToValue Kernel v{} (protocol v{})",
+        VERSION,
+        PROTOCOL_VERSION
+    )
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TESTS
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// RE-EXPORTS (PUBLIC API)
-// ═══════════════════════════════════════════════════════════════════════════
-
-pub use technical_evidence::TechnicalEvidence;
-pub use finding::Finding;
-pub use types::{ValidatorModule, TechnicalSeverity, InputStatistics, BiasDeclaration};
-pub use gatekeeper::Gatekeeper;
-pub use ledger::{LedgerEntry, DurableLedger, WriteAheadLog};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// VERSION INFO
-// ═══════════════════════════════════════════════════════════════════════════
-
-pub const VERSION: &str = "2.2.0";
-pub const PROTOCOL_VERSION: u16 = 2;
-
-
-//! BuildToValue Rust Kernel
-//!
-//! Sovereign Trust OS - Core execution engine
-
-// Módulos públicos
-pub mod finding;
-pub mod types;
-pub mod validators;
-pub mod statistics;
-pub mod gatekeeper;
-pub mod ledger;
-pub mod ffi_security;  // NOVO: Day 2
-
-// Re-exports públicos
-pub use finding::{Finding, FindingBuilder};
-pub use types::{TechnicalEvidence, RiskLevel};
-pub use gatekeeper::Gatekeeper;
-pub use ledger::DurableLedger;
-pub use ffi_security::{FFIBuffer, FFIBatchProcessor, FFIError};  // NOVO
-
-// ═══════════════════════════════════════════════════════════════════════════
-// VERSÃO
-// ═══════════════════════════════════════════════════════════════════════════
-
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const BUILD_DATE: &str = env!("VERGEN_BUILD_TIMESTAMP");
-pub const GIT_SHA: &str = env!("VERGEN_GIT_SHA");
-
-/// Retorna informações de versão.
-pub fn version_info() -> String {
-    format!(
-        "BuildToValue Kernel v{} ({})\nGit: {}\nBuild: {}",
-        VERSION,
-        env!("TARGET"),
-        GIT_SHA,
-        BUILD_DATE
-    )
+    #[test]
+    fn test_version_info() {
+        let info = version_info();
+        assert!(info.contains("BuildToValue"));
+        assert!(info.contains("2.3"));
+    }
 }
-
-//! BuildToValue Rust Kernel v2.0
-
-pub mod finding;
-pub mod types;
-pub mod validators;
-pub mod statistics;
-pub mod gatekeeper;
-pub mod ledger;
-pub mod ffi_security;
-pub mod remote_sync;  // NOVO: Day 9
-
-// Re-exports
-pub use finding::{Finding, FindingBuilder};
-pub use types::{TechnicalEvidence, RiskLevel};
-pub use gatekeeper::Gatekeeper;
-pub use ledger::{DurableLedger, WalEntry};
-pub use ffi_security::{FFIBuffer, FFIBatchProcessor, FFIError};
-pub use remote_sync::{RemoteSyncService, RemoteConfig, create_remote_sync};
-
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");

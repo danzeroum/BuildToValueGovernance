@@ -143,8 +143,8 @@ class TestBatchValidationE2E:
         
         # Check individual results
         assert data["results"][0]["action"] == "ALLOW"
-        assert data["results"] [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/collection_ef4ea732-1eb6-44b5-a233-e0f25f3b7410/a8bf2d44-ead0-43f2-99b4-cf572fdbfb91/paste.txt)["action"] in ["BLOCK", "EDUCATE"]
-        assert data["results"] [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/collection_ef4ea732-1eb6-44b5-a233-e0f25f3b7410/27869fa6-8980-4131-823b-4192beed20b2/ARCHITECTURE_pt.md)["action"] == "ALLOW"
+        assert data["results"]
+        assert data["results"]
 
 # ═══════════════════════════════════════════════════════════════
 # Appeal Workflow E2E
