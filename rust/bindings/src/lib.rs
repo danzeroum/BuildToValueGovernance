@@ -1,14 +1,27 @@
-//! BuildToValue FFI Bindings (PyO3)
+//! BuildToValue FFI Bindings
+//! Gateway para interoperabilidade com Python e C.
+//!
+//! # Features
+//! - `python`: Ativa bindings para Python via PyO3
+//! - `c`: Ativa bindings C FFI
+//!
+//! # Exemplo Python
+//! ```python
+//! import buildtovalue_governance
+//! result = buildtovalue_governance.calculate_penalties_batch([...])
+//! ```
 
-use pyo3::prelude::*;
+#![cfg_attr(feature = "c", allow(improper_ctypes))]
 
-#[pymodule]
-fn buildtovalue_bindings(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(version, m)?)?;
-    Ok(())
-}
+#[cfg(feature = "python")]
+pub mod python;
 
-#[pyfunction]
-fn version() -> String {
-    "2.2.0".to_string()
-}
+#[cfg(feature = "c")]
+pub mod c;
+
+// Re-export para conveniência
+#[cfg(feature = "python")]
+pub use python::*;
+
+#[cfg(feature = "c")]
+pub use c::*;

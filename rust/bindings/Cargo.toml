@@ -2,10 +2,22 @@
 name = "buildtovalue-bindings"
 version.workspace = true
 edition.workspace = true
-
-[dependencies]
-buildtovalue-kernel = { path = "../kernel" }
-pyo3 = { version = "0.20", features = ["extension-module"] }
+authors.workspace = true
+description = "BuildToValue FFI Bindings for Python"
+license.workspace = true
 
 [lib]
+name = "buildtovalue_governance"
 crate-type = ["cdylib"]
+
+[dependencies]
+# ✅ CORREÇÃO: Referência explícita ao caminho relativo dentro do workspace
+buildtovalue-kernel = { path = "../kernel", features = ["ffi-bindings"] }
+
+# Python FFI (Herdado do Workspace)
+pyo3 = { workspace = true }
+prost = { workspace = true }
+
+[features]
+default = ["python"]
+python = ["buildtovalue-kernel/ffi-bindings"]
