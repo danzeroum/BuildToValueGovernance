@@ -1,6 +1,3 @@
-Claro! Aqui está a tradução fiel do arquivo `readme.md` para o português:
-
----
 
 # BuildToValue — Sistema Operacional de Confiança Soberana
 
