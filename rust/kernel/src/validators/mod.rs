@@ -1,4 +1,8 @@
-//! Validators Module v2.3.1
+//! Validators Module v2.4.0
+//!
+//! **CHANGELOG v2.4.0 (ADR-010)**:
+//! - ✅ BREAKING: bias_declaration() adicionado ao trait Validator
+//! - ✅ Todos validators DEVEM declarar viés empiricamente calibrado
 //!
 //! **CHANGELOG v2.3.1**:
 //! - ✅ Consolidação de validators (brazilian/)
@@ -33,10 +37,13 @@ pub use analysis::{StatisticalValidator};
 
 use crate::Finding;
 use crate::ValidatorModule;
+use crate::core::types::BiasDeclaration;
 
 /// Trait comum para todos os validators.
 ///
-/// Garante interface uniforme para Gatekeeper.
+/// **BREAKING CHANGE v2.4.0 (ADR-010)**: Adicionado bias_declaration() obrigatório.
+///
+/// Garante interface uniforme para Gatekeeper e documenta limitações técnicas.
 pub trait Validator: Send + Sync {
     /// Valida input e retorna findings.
     fn validate(&self, input: &str) -> Vec<Finding>;
@@ -46,4 +53,27 @@ pub trait Validator: Send + Sync {
 
     /// Módulo ao qual pertence (para evidence).
     fn module(&self) -> ValidatorModule;
+
+    /// **NOVO v2.4.0**: Declaração obrigatória de viés.
+    ///
+    /// DEVE retornar valores reais calibrados empiricamente.
+    /// PROIBIDO retornar Default::default() em produção.
+    ///
+    /// Filosofia (Jonas, 1984): Responsabilidade sobre consequências
+    /// imprevisíveis exige documentação honesta de limitações.
+    ///
+    /// # Example
+    /// ```rust
+    /// fn bias_declaration(&self) -> BiasDeclaration {
+    ///     BiasDeclaration::new(
+    ///         0.08, // FPR medido empiricamente
+    ///         0.02, // FNR medido empiricamente
+    ///         20260209, // Data da calibração
+    ///         500,   // Tamanho do dataset de teste
+    ///     )
+    ///     .with_limitations("Algorithm validation only; does not check CPF registry")
+    ///     .with_affected_groups("Non-standard formatting (spaces, symbols)")
+    /// }
+    /// ```
+    fn bias_declaration(&self) -> BiasDeclaration;
 }
