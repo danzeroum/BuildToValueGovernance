@@ -13042,7 +13042,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /build
 
 # Cache de dependências (layer optimization)
-COPY ../rust/Cargo.toml Cargo.lock ./
+COPY ../../rust/Cargo.toml Cargo.lock ./
 COPY src/kernel/Cargo.toml src/kernel/
 RUN mkdir -p src/kernel/src && \
     echo "fn main() {}" > src/kernel/src/main.rs && \
@@ -13113,7 +13113,7 @@ RUN /app/.venv/bin/pip install /tmp/*.whl && rm /tmp/*.whl
 # Copia configs
 COPY profiles /app/profiles
 COPY config /app/config
-COPY ../scripts /app/scripts
+COPY ../../scripts /app/scripts
 
 # Permissões
 RUN chown -R buildtovalue:buildtovalue /app && \

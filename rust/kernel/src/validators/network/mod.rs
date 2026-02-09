@@ -3,4 +3,4 @@
 
 pub mod ip;
 
-pub use ip::{Ipv4Validator, UrlValidator, DomainValidator};
+pub use ip::{Ipv4Validator, UrlValidator};

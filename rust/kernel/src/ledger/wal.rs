@@ -7,7 +7,7 @@
 //!
 //! Gate: Week 2 - Day 8
 
-use crate::types::TechnicalEvidence;
+use crate::evidence::TechnicalEvidence;
 use std::fs::{File, OpenOptions};
 use std::io::{Write, BufWriter, BufReader, BufRead, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -303,7 +303,7 @@ impl DurableLedger {
             
             // Valida checksum
             if !entry.validate() {
-                log::warn!("Invalid checksum at seq {}, stopping recovery", entry.seq);
+                :log::warn!("Invalid checksum at seq {}, stopping recovery", entry.seq);
                 break;
             }
             
