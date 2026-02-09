@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::net::IpAddr;
 
 pub struct ProbingDetector {
     request_history: HashMap<IpAddr, Vec<(Instant, Duration)>>,
