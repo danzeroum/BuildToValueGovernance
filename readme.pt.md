@@ -1,305 +1,324 @@
-
-
-**Sistema híbrido Rust/Python para governança ética de agentes de IA**
+Claro! Aqui está a tradução fiel do arquivo `readme.md` para o português:
 
 ---
 
-## Visão Geral
+# BuildToValue — Sistema Operacional de Confiança Soberana
 
-BuildToValue é um sistema experimental de governança projetado para aplicar restrições éticas ao comportamento de agentes de IA. Combina validadores de baixo nível (Rust) com raciocínio contextual (Python) para detectar violações de política e aplicar respostas proporcionais.
+**Infraestrutura de governança ética para agentes de IA. Kernel em Rust (fatos) + Governança em Python (julgamento).**
 
-O projeto surgiu de uma necessidade prática: motores de regras existentes ou bloqueiam de forma muito agressiva (frustrando usuários) ou permitem de forma muito permissiva (arriscando danos). Tentamos equilibrar detecção técnica com julgamento ético.
-
-**Status atual:** Protótipo de pesquisa. 95% completo. Ainda não pronto para produção.
+[![Licença: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Rust](https://img.shields.io/badge/Rust-1.75+-orange.svg)](https://www.rust-lang.org/)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 
 ---
 
-## Motivação
+## O que é isso
 
-Agentes de IA podem causar danos não intencionais ao processar dados sensíveis (PII, informações financeiras, registros de saúde) sem salvaguardas apropriadas. Abordagens tradicionais enfrentam trade-offs:
+BuildToValue é um sistema de governança ética que monitora o comportamento de agentes de IA em tempo real. Detecta violações de políticas (vazamento de PII, uso indevido de dados, ataques ofuscados) e responde com ações proporcionais — de educação a bloqueio — preservando o direito de apelação.
 
-- **Blocklists:** Rápidas mas frágeis. Muitos falsos positivos.
-- **Baseadas em ML:** Precisas mas opacas. Difícil explicar decisões.
-- **Motores de regras:** Transparentes mas inflexíveis. Cegas ao contexto.
+A arquitetura segue uma “República Algorítmica” com separação de poderes: Poder Legislativo (Política como Código), Poder Executivo (Kernel Rust), Poder Judiciário (Governança Python) e Poder Auditório (Livro-razão Imutável).
 
-BuildToValue explora um híbrido: validadores determinísticos (Rust) geram evidências, enquanto raciocínio contextual (Python) interpreta essas evidências considerando histórico do usuário, incerteza e direito de recurso.
+**Status atual:** Desenvolvimento ativo. Kernel v2.3.1 funcional. Camada de governança documentada, mas passando por refatoração v1.5. Não está pronto para produção.
 
-Nos baseamos em filosofia ética (Rawls, Levinas, Gilligan, Jonas) não por novidade, mas porque esses frameworks abordam diretamente justiça, cuidado e responsabilidade—conceitos sub-representados em sistemas de segurança tradicionais.
+---
+
+## Por que isso existe
+
+Agentes de IA que processam dados sensíveis precisam de guardrails rápidos, explicáveis e justos. As abordagens existentes têm tradeoffs:
+
+- **Listas de bloqueio:** Rápidas, mas cegas ao contexto. Um CPF deve ser permitido para um agente médico, mas bloqueado para um chatbot.
+- **Classificadores de ML:** Precisos, mas opacos. Não atendem ao Art. 20 da LGPD (direito à explicação).
+- **Motores de regras:** Transparentes, mas rígidos. Não há conceito de misericórdia, confiança ou proporcionalidade.
+
+BuildToValue combina detecção determinística (Rust, < 30ms) com julgamento ético contextual (Python, < 10ms). Toda decisão é explicável, assinada criptograficamente e contestável em até 24 horas.
+
+Nos baseamos em Rawls (justiça), Levinas (dever de cuidado), Gilligan (ética do cuidado/contextual) e Jonas (responsabilidade proporcional) — não por novidade, mas porque esses referenciais resolvem exatamente os problemas criados pela governança automatizada.
 
 ---
 
 ## Arquitetura
 
-### 1. Rust Sovereign Kernel (Executivo)
+### Monólito Modular (ADR-009)
 
-**Propósito:** Detecção rápida e determinística de padrões. Gera evidências forenses.
+Processo único, módulos logicamente separados. Sem microsserviços, sem gRPC, sem serialização entre processos no caminho crítico.
+```
+Requisição (usuário/agente)
+  → Ingestão (Unicode NFC, validação)                    < 1ms
+  → Ponte FFI (batch Protobuf, py.allow_threads)         < 2ms
+  → Kernel Soberano Rust (scan_for_evidence)             < 30ms
+    ├─ Validadores:   CPF, CNPJ, Email, Telefone, Cartão de Crédito
+    ├─ Estatísticas:  Entropia de Shannon, Z-Score, Proporções de caracteres
+    ├─ Desofuscador:  Base64, Hex, Leetspeak
+    ├─ Política:      Bloqueios duros (phf O(1))
+    ├─ Rede:          Classificação de IP (Tor/VPN/datacenter)
+    ├─ Guarda de Sessão: Detecção de desvio comportamental
+    └─ Saída: Evidence Técnica (9596 bytes, tamanho fixo, BLAKE3)
+  → Governança Python (EthicalContextEngine)             < 10ms
+    ├─ Resolução de perfil (hierarquia YAML)
+    ├─ Consulta de score de confiança
+    ├─ Análise ética (Rawls + Levinas + Jonas)
+    ├─ Checagem de misericórdia (Gilligan)
+    └─ Saída: Veredito Ético (assinado HMAC-SHA256)
+  → Execução                                              < 5ms
+    ├─ Append ao livro-razão (WAL + sincronização remota)
+    ├─ Ação: ALLOW | LOG | EDUCATE | REDACT | BLOCK
+    └─ Resposta (com URL de apelação)
 
-**Componentes:**
-- **Validators:** CPF, CNPJ, Cartão de Crédito, checksum Luhn (29 módulos implementados)
-- **Statistics:** Entropia, Z-score, distribuição de caracteres
-- **Deobfuscator:** Base64, Hex, Leetspeak (suporte básico)
-- **TechnicalEvidence:** Registro forense de tamanho fixo (9.4KB) com hash BLAKE3
+Total: < 50ms (p99) ponta a ponta
+```
 
-**Performance:** <30ms (p99) para geração de evidências.
+### Os Quatro Poderes
 
-**Filosofia (Jonas):** Evidências imutáveis criam responsabilidade. Cada achado é assinado e registrado com timestamp.
-
----
-
-### 2. Camada de Governança Python (Judiciário)
-
-**Propósito:** Tomada de decisão consciente do contexto. Equilibra regras com misericórdia.
-
-**Componentes:**
-- **EthicalContextEngine:** Interpreta evidências técnicas considerando confiança do usuário, histórico, incerteza
-- **ProfileManager:** Herança hierárquica de políticas (baseado em YAML)
-- **MercyAlgorithm:** Reduz severidade quando incerteza é alta (ética do cuidado de Gilligan)
-
-**Performance:** <10ms (p99) para decisão.
-
-**Filosofia (Gilligan):** Alta incerteza + contexto → resposta moderada. Um sistema deve educar antes de punir.
-
-**Limitação:** Limiares de misericórdia (0.7) são ajustados empiricamente mas não validados formalmente. Podem precisar ajuste por domínio.
-
----
-
-### 3. Sistema de Políticas (Legislativo)
-
-**Propósito:** Regras de governança transparentes e versionáveis.
-
-**Formato:** Arquivos YAML, rastreados em Git. Suporta:
-- Herança hierárquica (base → medical → specialized)
-- Sobrescrita de regras (mesmo ID = filho sobrescreve pai)
-- Teste cego (Rawls): Testar políticas sem saber se você é autor/alvo/auditor
-
-**Filosofia (Rawls):** "Véu da Ignorância" garante que regras sejam justas independente de quem as aplica.
-
-**Limitação:** Sem verificação formal de consistência de políticas. Regras conflitantes são detectadas em runtime, não em compile-time.
+| Poder | Papel | Implementação |
+|-------|------|----------------|
+| **Legislativo** | Definir regras | Políticas YAML no Git, testes cegos (Rawls), veto do Comitê Ético |
+| **Executivo** | Detectar violações | Kernel Rust: validadores determinísticos, evidence de tamanho fixo |
+| **Judiciário** | Julgar com contexto | Governança Python: misericórdia, scores de confiança, explain_decision() |
+| **Auditório** | Registrar e verificar | Livro-razão imutável: WAL, HMAC-SHA256, janela de apelação de 24h |
 
 ---
 
-### 4. Sistema de Contestabilidade (Auditivo)
-
-**Propósito:** Recurso humano de decisões. Direito à explicação (LGPD Art. 20).
-
-**Componentes:**
-- **ContestabilityLoop:** Submeter recurso → Revisão humana → Atualizar métricas
-- **SLA:** Tempo de resposta 24h (monitorado mas ainda não imposto)
-- **DurableLedger:** Log append-only com backup WAL (meta 99.99% durabilidade)
-
-**Performance:** <5ms para submeter recurso.
-
-**Filosofia (Levinas):** Dever de cuidado. Sistemas devem fornecer recurso, não apenas punição.
-
-**Limitação:** Recursos atualmente armazenados em memória. Produção requer backend de banco de dados.
+## Estrutura do Projeto
+```
+buildtovalue/
+├── rust/                              # Hemisfério Rust (fatos)
+│   ├── kernel/                        # buildtovalue-kernel (crate principal)
+│   │   └── src/
+│   │       ├── lib.rs                 # Re-exportações + versão
+│   │       ├── core/                  # types.rs, errors.rs
+│   │       ├── evidence/              # TechnicalEvidence v2.1 (9596 bytes)
+│   │       ├── gatekeeper.rs          # Orquestrador (scan_for_evidence)
+│   │       ├── validators/            # Detecção de PII (CPF, CNPJ, email, telefone, cartão)
+│   │       ├── statistics/            # Detecção de anomalia (entropia, zscore, proporção de caracteres)
+│   │       ├── deobfuscator/          # Anti-evasão (base64, hex, leetspeak)
+│   │       ├── policy/               # Regras de bloqueio duro (v1.6+)
+│   │       ├── network/              # Classificação de IP (v1.7+)
+│   │       ├── session_guard/        # Detecção de desvio (v1.7+)
+│   │       ├── output_guard/         # Sanitização de resposta (v1.6+)
+│   │       ├── interceptor/          # Hooks pré/pós (v1.7+)
+│   │       ├── ledger/               # WAL, cadeia de hashes, sincronização durável
+│   │       ├── compliance/           # Calculadora de penalidades, métricas AJL
+│   │       ├── security/             # HMAC-SHA256, comparação em tempo constante
+│   │       ├── api/                  # Tipos de resposta
+│   │       └── ffi/                  # Processador batch (condicional)
+│   ├── bindings/                      # Ponte PyO3/Maturin
+│   ├── gateway/                       # HTTP Axum (somente v1.9+)
+│   └── cli/                           # Ferramenta de linha de comando btv
+│
+├── python/buildtovalue/               # Hemisfério Python (julgamento)
+│   ├── governance/                    # EthicalContextEngine, misericórdia, confiança, perfis
+│   ├── compliance/                    # Tradutor PDF→YAML, AJL, motor de ROI
+│   ├── intelligence/                  # Ingestor MISP/STIX, classificador de ameaças
+│   ├── api/                           # Rotas FastAPI (validação, apelações, saúde)
+│   ├── core/                          # Config, exceções, tipos compartilhados
+│   ├── observability/                 # Logging, métricas, tracing
+│   └── cli/                           # Comandos CLI
+│
+├── data/policies/                     # Políticas YAML (core, compliance, perfis)
+├── spec/                              # Contratos Protobuf + OpenAPI
+└── docs/                              # ADRs, PROJECT_CONTEXT.md
+```
 
 ---
 
-## Fundamentos Filosóficos (Avaliação Honesta)
+## Invariantes Técnicos
 
-Referenciamos quatro filósofos porque seus frameworks éticos alinham com requisitos técnicos:
+Estes são inegociáveis. Qualquer violação impede merge.
 
-1. **John Rawls (Justiça como Equidade):**
-   - Conceito: "Véu da Ignorância" (projete regras sem saber sua posição)
-   - Implementação: Teste cego de políticas (teste sem saber se você é alvo)
-   - Status: Implementado em ProfileManager
-   - Limitação: Testar cego não garante justiça—apenas remove um vetor de viés
+| Invariante | Justificativa |
+|-----------|-----------|
+| TechnicalEvidence = 9596 bytes (fixo) | Zero alocação de heap no caminho crítico |
+| BLAKE3 para todos os hashes de evidence | 2-3x mais rápido que SHA-256, resistente a colisões |
+| Buffer circular: [Finding; 10] + [Finding; 3] críticos | Memória limitada, findings críticos preservados |
+| Qualquer erro/tempo esgotado → BLOCK | Fail-secure (Levinas: proteger o usuário) |
+| BiasDeclaration por validador | Transparência (Jonas: declarar limitações) |
+| explain_decision() em todo veredito | Explicabilidade (conformidade com LGPD Art. 20) |
+| HMAC-SHA256 em todo EthicalVerdict | Não repúdio (assinaturas, não confiança) |
+| contestable: true em todo veredito | Contestabilidade (SLA de apelação de 24h) |
 
-2. **Emmanuel Levinas (Ética do Outro):**
-   - Conceito: Dever de cuidado com o "Outro"
-   - Implementação: Contestabilidade (SLA 24h para revisão humana)
-   - Status: Implementado em ContestabilityLoop
-   - Limitação: SLA 24h não imposto. Apenas alertas.
+---
 
-3. **Carol Gilligan (Ética do Cuidado):**
-   - Conceito: Contexto sobre regras abstratas. Cuidado sobre punição.
-   - Implementação: Algoritmo de misericórdia (alta incerteza → severidade reduzida)
-   - Status: Implementado em MercyAlgorithm
-   - Limitação: Limiar de misericórdia (0.7) é empírico, não teoricamente derivado
+## Fundamentos Filosóficos
 
-4. **Hans Jonas (Princípio da Responsabilidade):**
-   - Conceito: Responsabilidade proporcional ao poder
-   - Implementação: Trilha de auditoria imutável, assinaturas criptográficas
-   - Status: Implementado em DurableLedger
-   - Limitação: Assinaturas usam HMAC-SHA256 (simétrico). Precisa PKI para verdadeiro non-repudiation.
+Citamos esses filósofos para reconhecer dívida intelectual, não para reivindicar novidade.
 
-**Citamos esses filósofos não para reivindicar novidade, mas para reconhecer dívida intelectual.** Os conceitos precedem nossa implementação por décadas. Estamos simplesmente traduzindo teoria ética em código executável.
+| Filósofo | Princípio | Implementação |
+|-------------|-----------|----------------|
+| **Rawls** (1971) | Justiça como equidade | Teste cego de políticas: avaliar sem saber se é autor, alvo ou auditor |
+| **Levinas** (1961) | Dever de cuidado | Fail-secure: erros protegem o usuário. Educar (L2) antes de bloquear (L4) |
+| **Gilligan** (1982) | Ética do cuidado | Algoritmo de misericórdia: alta incerteza + confiança + sem findings críticos → resposta mais branda |
+| **Jonas** (1984) | Responsabilidade proporcional | BiasDeclaration: cada módulo declara taxas de falso positivo/negativo. Livro-razão imutável |
 
 ---
 
 ## Status Técnico (Honesto)
 
-### O Que Funciona
-- ✅ 29 validadores Rust (CPF, CNPJ, Luhn, etc.) com latência <30ms
-- ✅ Camada de governança Python com algoritmo de misericórdia (<10ms)
-- ✅ Herança de políticas (YAML) com suporte a sobrescrita
-- ✅ Loop de contestabilidade (rastreamento SLA, fluxo de recurso)
-- ✅ 213+ testes passando (unitários + integração)
-- ✅ Latência E2E: ~11.6ms (76% melhor que meta 50ms)
+### O que funciona
 
-### O Que Está Faltando
-- ⚠️ **Sem detecção baseada em ML:** Validadores atuais são baseados em regras. Podem perder padrões ofuscados.
-- ⚠️ **Sem suporte multi-idioma:** Validadores ajustados para Português Brasileiro (CPF/CNPJ). Inglês/outros idiomas precisam módulos separados.
-- ⚠️ **Armazenamento de recursos em memória:** Produção precisa PostgreSQL/TimescaleDB.
-- ⚠️ **Sem verificação formal:** Políticas checadas em runtime, não compile-time.
-- ⚠️ **Apenas assinaturas HMAC:** Precisa PKI para auditoria pública (HMAC é chave simétrica).
-- ⚠️ **Sem observabilidade:** Integração Prometheus/Grafana planejada, não implementada.
+- 11 validadores Rust (CPF, CNPJ, Email, Telefone, Cartão de Crédito, Entropia, ZScore, Proporção de caracteres, Base64, Hex, Leetspeak) com latência do kernel < 30ms
+- TechnicalEvidence v2.1: 9596 bytes fixos, hash BLAKE3, buffer circular, detecção de adulteração
+- Orquestrador Gatekeeper: pipeline multietapa (validadores → estatísticas → desofuscador → finalização)
+- Ponte FFI PyO3/Maturin: Rust↔Python no processo (sem serialização de rede)
+- Ferramenta CLI (`btv`): comandos básicos de varredura e validação
+- 60+ testes passando (unitários Rust + unitários Python)
 
-### Limitações Conhecidas
-1. **Falsos positivos:** Validador de CPF matcha CPFs de teste (ex: 111.444.777-35). Recursos existem para isso, mas gera atrito.
-2. **Performance degrada com >100 achados:** Ring buffer (10 normais + 3 críticos) significa que achados mais antigos são descartados.
-3. **Sem ledger distribuído:** Ledger atual é single-node. Replicação planejada mas não implementada.
-4. **BiasDeclaration auto-reportado:** Taxa de 15% de falsos positivos vem de testes adversariais (70 amostras). Não validado por auditoria externa.
+### O que falta
+
+- **BiasDeclaration ainda não populada:** Estrutura existe em TechnicalEvidence, mas validadores retornam valores padrão. ADR-010 trata disso (meta v1.5.0).
+- **Governança Python ainda não integrada:** EthicalContextEngine documentado, mas aguardando ciclo de implementação v1.8.0.
+- **Sem observabilidade:** Prometheus/Grafana planejados para v1.9.0.
+- **Sem API REST em produção:** Rotas FastAPI documentadas, não implantadas. Gateway Axum em v1.9.0.
+- **Apelações em memória:** Produção precisa de armazenamento persistente.
+- **Assinaturas HMAC simétricas:** Precisa de PKI para auditoria pública (HMAC requer segredo compartilhado).
+- **Sem detecção por ML:** Validadores são baseados em regras. Padrões ofuscados podem escapar.
+- **Foco em PII brasileiro:** Apenas validadores CPF/CNPJ. PII internacional requer novos módulos.
+
+### Limitações conhecidas
+
+1. **Taxa de falso positivo ~15%** em testes adversariais (70 amostras). Não validado externamente.
+2. **Buffer circular descarta findings antigos** após > 10 findings normais. Findings críticos (máx. 3) sempre preservados.
+3. **Decodificador leetspeak cobre apenas substituições comuns.** Variantes regionais e homógrafos Unicode não cobertos (FNR ~12%).
+4. **Benchmarks feitos em ambiente de desenvolvimento.** Latência em produção depende de carga e I/O.
 
 ---
 
 ## Instalação
 
 ### Pré-requisitos
+
 - Rust 1.75+ (stable)
-- Python 3.11+
-- (Opcional) Docker para deployment containerizado
+- Python 3.10+
+- (Opcional) Docker para desenvolvimento em contêiner
 
-### Rust Kernel
-
+### Kernel Rust
 ```bash
 cd rust
 cargo build --release
-cargo test --release
+cargo test --workspace
+cargo clippy --workspace -- -D warnings
 
-# Executar benchmarks
-cargo bench
+# Benchmarks
+cd kernel && cargo bench
 ```
 
-### Python Governance
-
+### Governança Python
 ```bash
 cd python
-pip install -e .
+pip install -e ".[dev]"
+pytest tests/ -v
 
-# Executar testes
-pytest buildtovalue/governance/ -v
+# Checagem de tipos
+mypy buildtovalue/ --strict
+```
 
-# Executar testes de integração
-pytest buildtovalue/governance/test_integration_e2e.py -v
+### Ponte FFI (Rust → Python)
+```bash
+cd rust/bindings
+maturin develop --release
+
+# Verifique
+python -c "import buildtovalue_governance; print(buildtovalue_governance.version())"
+```
+
+### Build completo
+```bash
+make install   # Deps Python + FFI Rust
+make test      # Testes Rust + Python
+make build     # Build release Rust
 ```
 
 ---
 
-## Exemplo de Uso
+## Desenvolvimento com Esquadrão de IA
 
-```python
-from buildtovalue.governance import EthicalContextEngineV3, EthicalContext, ContestabilityLoop
-
-# Inicializar componentes
-engine = EthicalContextEngineV3()
-contestability = ContestabilityLoop(sla_hours=24)
-
-# Criar contexto
-context = EthicalContext(
-    session_id="session-123",
-    user_history={'violations': 0, 'trust_score': 0.5}
-)
-
-# Simular evidência técnica (do kernel Rust)
-evidence = {
-    'composite_risk': 192,
-    'findings': [{'validator': 'cpf', 'severity': 192, 'confidence': 0.95}],
-    'finding_count': 1,
-    'uncertainty_score': 0.3
-}
-
-# Tomar decisão ética
-verdict = engine.decide(evidence, context)
-
-print(f"Confiança da decisão: {verdict.confidence:.2f}")
-print(f"Justificativa: {verdict.rationale}")
-
-# Usuário pode recorrer
-appeal = contestability.submit_appeal(
-    audit_trail_id=12345,
-    user_id="user-123",
-    reason="Este era um CPF de teste dos padrões ABNT, não dados reais."
-)
-
-# Humano revisa recurso
-contestability.resolve_appeal(
-    appeal_id=appeal.appeal_id,
-    accepted=True,
-    reviewer_notes="Confirmado dados de teste. Recurso aprovado.",
-    reviewer_id="reviewer@example.com"
-)
-
-# Verificar métricas
-metrics = contestability.get_metrics()
-print(f"Taxa de sucesso de recursos: {metrics['appeal_success_rate']:.0%}")
+Este projeto usa um fluxo de trabalho estruturado com múltiplas IAs. Cada feature segue:
 ```
+Humano (define requisito)
+  → Arquiteto IA (gera ADR + traits Rust + contratos)
+  → Dev IA Rust/Python (implementa conforme especificado)
+  → Revisor IA (valida contra ADR + checklists)
+  → Humano (integra, compila, atualiza PROJECT_CONTEXT.md)
+```
+
+Principais artefatos:
+
+- `docs/PROJECT_CONTEXT.md` — Contexto completo colado em toda sessão de IA
+- `docs/HANDOFF_TEMPLATES.md` — Formatos padronizados de handoff entre papéis de IA
+- `docs/adrs/` — Registros de Decisão de Arquitetura com justificativa filosófica
+
+Regras: máximo 3 iterações Dev↔Revisor por feature. Compilar localmente antes de revisar. Atualizar PROJECT_CONTEXT.md após cada ciclo de revisão.
+
+Veja a [documentação do fluxo do Esquadrão de IA](docs/PROJECT_CONTEXT.md) para prompts e templates.
 
 ---
 
-## Benchmarks de Performance (Medidos, Não Prometidos)
+## Roadmap
 
-```
-Componente                   | Latência (p99) | Meta    | Status
------------------------------|----------------|---------|--------
-Validadores Rust             | 5.8ms          | 30ms    | ✅ 81% melhor
-Governança Python            | 5.7ms          | 10ms    | ✅ 43% melhor
-Contestabilidade (submit)    | 5ms            | 5ms     | ✅ Na meta
-E2E (Governança + Recurso)   | 11.6ms         | 50ms    | ✅ 76% melhor
-ProfileManager (cache)       | 0.05ms         | 5ms     | ✅ 100x melhor
-```
+### v1.5.0 ← Foco atual (18 fev – 12 abr 2026)
 
-**Ambiente de teste:** Windows 11, Python 3.12.3, Rust 1.75  
-**Carga:** Single-threaded, sem concorrência  
-**Dataset:** 213 testes unitários, 4 testes de integração
+- [ ] Refatoração TechnicalEvidence v2.1 + exigência de BiasDeclaration (ADR-010)
+- [ ] BatchProcessor (timeout 10ms, serialização Protobuf)
+- [ ] DurableLedger (WAL + recuperação < 5s)
+- [ ] 60+ testes (éticos + técnicos)
+- [ ] Benchmarks: kernel < 30ms p99
 
-**Disclaimer:** Estas são latências no melhor caso. Performance em produção depende de workload, I/O de rede e overhead de banco de dados (ainda não implementado).
+### v1.6.0 — Política & Saída
 
----
+- [ ] PolicyEngine (YAML → runtime, bloqueios duros phf)
+- [ ] OutputGuard (mascaramento de PII em respostas de agentes)
+- [ ] Desofuscador v2 (encadeamento: base64 → hex → leet, máx. 3 camadas)
 
-## Roadmap (Realista)
+### v1.7.0 — Contexto
 
-### v1.5.0 (Atual - 95% completo)
-- [x] TechnicalEvidence v2.1 (tamanho fixo 9.4KB)
-- [x] EthicalContextEngine v3 (algoritmo de misericórdia)
-- [x] ContestabilityLoop (rastreamento SLA)
-- [ ] Observabilidade (métricas Prometheus) - **Não iniciado**
+- [ ] IpClassifier (detecção Tor, VPN, datacenter)
+- [ ] SessionDriftDetector (similaridade cosseno comportamental)
+- [ ] Interceptor (hooks pré/pós requisição)
+- [ ] Testes contextuais: mesmo input, perfis diferentes → ações diferentes
 
-### v1.6.0 (Meta: Q2 2026)
-- [ ] Backend PostgreSQL para recursos
-- [ ] REST API (FastAPI + Swagger)
-- [ ] Deploy Docker Compose
-- [ ] Auditoria externa de BiasDeclaration
+### v1.8.0 — Governança
 
-### v1.7.0 (Meta: Q3 2026)
-- [ ] Suporte multi-idioma (validadores inglês)
-- [ ] Detecção baseada em ML (complementa regras)
-- [ ] Ledger distribuído (replicação multi-node)
+- [ ] EthicalContextEngine (Rawls + Levinas + Jonas + Gilligan)
+- [ ] MercyCalculator (6 cenários calibrados)
+- [ ] ContestabilityLoop (submissão, status, resolução de apelações)
+- [ ] explain_decision() + HMAC-SHA256 em todos os vereditos
 
-### v2.0.0 (Meta: Q4 2026)
-- [ ] Assinaturas PKI (substituir HMAC)
-- [ ] Verificação formal de políticas (TLA+/Alloy)
-- [ ] Avaliação ISO 42001
-- [ ] Relatório de auditoria pública
+### v1.9.0 — API & Observabilidade
 
-### Open Source (Meta: Q3 2027)
-- [ ] Release Apache 2.0
-- [ ] Submissão Linux Foundation AI & Data sandbox
-- [ ] Modelo de governança comunitária
+- [ ] Gateway Axum (substitui FastAPI para HTTP)
+- [ ] Métricas Prometheus + tracing distribuído
+- [ ] API PolicyTester (revisão cega)
+
+### v2.0.0 — Inteligência & Compliance
+
+- [ ] Hub de Inteligência (integração MISP/STIX)
+- [ ] Tradutor de Compliance (regulamentos PDF → políticas YAML via LLM)
+- [ ] Dashboard MVP Streamlit
+
+### Open Source (Q3 2027)
+
+- [ ] Lançamento público Apache 2.0
+- [ ] 100+ estrelas, 10+ contribuidores, 5+ estudos de caso
+
+### Linux Foundation (Q4 2027)
+
+- [ ] Submissão ao LF AI & Data Sandbox
+- [ ] 3+ organizações co-submissoras
 
 ---
 
 ## Contribuindo
 
 Aceitamos contribuições, especialmente:
-- **Validadores para outros idiomas** (SSN inglês, números NHS do Reino Unido, etc.)
-- **Auditorias externas de BiasDeclaration** (validar nossa alegação de 15% FPR)
-- **Verificação formal de políticas** (TLA+, Alloy ou similar)
-- **Guias de deployment em produção** (Kubernetes, observabilidade, etc.)
 
-**Código de Conduta:** Seja respeitoso. Critique código, não pessoas. Admita erros abertamente (nós fazemos).
+- **Validadores para outras jurisdições** (SSN dos EUA, NHS do Reino Unido, VAT da UE, etc.)
+- **Auditorias externas de BiasDeclaration** (validar nossas alegações de FPR/FNR)
+- **Verificação formal de políticas** (TLA+, Alloy, etc.)
+- **Guias de implantação em produção** (Kubernetes, observabilidade)
+- **Traduções** da documentação e templates de política
 
-**Requisito de testes:** Todos os PRs devem incluir testes. Cobertura não pode diminuir.
+**Código de Conduta:** Seja respeitoso. Critique o código, não as pessoas. Admita erros abertamente (nós fazemos).
+
+**Requisito de testes:** Todo PR deve incluir testes. Cobertura não pode diminuir. Zero `.unwrap()` em código de biblioteca.
 
 ---
 
@@ -307,111 +326,68 @@ Aceitamos contribuições, especialmente:
 
 **Apache 2.0 (Modelo Open Core)**
 
-- **Kernel (Rust):** Livre e aberto (Apache 2.0)
-- **Governança (Python):** Livre e aberto (Apache 2.0)
-- **Recursos enterprise (futuro):** Licença paga
-  - Suporte multi-tenant
-  - Deploy gerenciado em nuvem
-  - Garantias de SLA
+- **Kernel (Rust):** Gratuito e aberto (Apache 2.0)
+- **Governança (Python):** Gratuito e aberto (Apache 2.0)
+- **Recursos empresariais (futuro):** Licença paga (UI multi-tenant, cloud gerenciado, garantias de SLA)
 
-**Filosofia:** Segurança não é paywall. Lógica central de governança permanece gratuita.
+**Filosofia:** Segurança não é paywall. A lógica central de governança permanece livre.
 
 ---
 
 ## Citações & Agradecimentos
 
-Este projeto se baseia em:
-- **Fundamentos filosóficos:**
-  - Rawls, J. (1971). *Uma Teoria da Justiça*. Harvard University Press.
-  - Levinas, E. (1961). *Totalidade e Infinito*. Duquesne University Press.
-  - Gilligan, C. (1982). *Uma Voz Diferente*. Harvard University Press.
-  - Jonas, H. (1984). *O Princípio da Responsabilidade*. University of Chicago Press.
+**Fundamentos filosóficos:**
 
-- **Padrões técnicos:**
-  - NIST Cybersecurity Framework (referência, não certificação)
-  - OWASP ASVS 4.0 (orientação para validadores)
-  - ISO 42001 (sistema de gestão de IA - avaliação meta 2026)
+- Rawls, J. (1971). *Uma Teoria da Justiça*. Harvard University Press.
+- Levinas, E. (1961). *Totalidade e Infinito*. Duquesne University Press.
+- Gilligan, C. (1982). *Uma Voz Diferente*. Harvard University Press.
+- Jonas, H. (1984). *O Princípio Responsabilidade*. University of Chicago Press.
 
-- **Comunidade:**
-  - Daniel Camargo (Tech Lead, Arquiteto)
-  - Comitê Ético (revisão de políticas)
-  - Arquiteto de Segurança (modelagem de ameaças)
-  - Testadores iniciais (testes adversariais de validadores)
+**Referências técnicas (orientação, não certificação):**
 
-**Estamos nos ombros de gigantes.** Quaisquer erros são exclusivamente nossos.
+- NIST Cybersecurity Framework / NIST AI RMF
+- OWASP ASVS 4.0
+- ISO 42001 (sistema de gestão de IA)
+- EU AI Act (Art. 13: Transparência)
+- LGPD (Art. 20: Direito à explicação)
+
+**Equipe:**
+
+- Daniel Camargo — Tech Lead, Arquiteto
+- Comitê Ético — Revisão de políticas
+- Testadores iniciais — Validação adversarial
+
+**Estamos sobre os ombros de gigantes.** Quaisquer erros são de nossa responsabilidade.
 
 ---
 
 ## Contato
 
-- **Issues:** [GitHub Issues](https://github.com/danzeroum/BuildToValueGovernance/issues)
-- **Vulnerabilidades de segurança:** security@buildtovalue.com (chave PGP no repo)
-- **Questões gerais:** contact@buildtovalue.com
+- **Issues:** [GitHub Issues](https://github.com/buildtovalue/sovereign-trust-os/issues)
+- **Vulnerabilidades de segurança:** security@buildtovalue.com (chave PGP no repositório)
+- **Dúvidas gerais:** contact@buildtovalue.com
 
 **Tempo de resposta:** Melhor esforço. Este é um projeto de pesquisa, não um produto comercial (ainda).
 
 ---
 
-## Disclaimer
+## Aviso
 
-BuildToValue é software experimental. É fornecido "como está" sem garantia de qualquer tipo. Não use em sistemas de produção sem testes e revisão de segurança completos.
+BuildToValue é software experimental fornecido “no estado em que se encontra”, sem qualquer garantia. Não utilize em sistemas de produção sem testes e revisão de segurança aprofundados.
 
-**Em particular:**
-- Falsos positivos são inevitáveis (medimos 15%, mas seus dados podem diferir)
-- Recursos requerem revisão humana (SLA 24h é aspiracional, não garantido)
-- Benchmarks de performance são de ambiente de teste, não produção
+**Em especial:**
 
-**Se você implantar isto, assume responsabilidade pelos resultados.** Fornecemos ferramentas, não garantias.
+- Falsos positivos são inevitáveis (medimos ~15%, mas seus dados podem variar)
+- Apelações exigem revisão humana (SLA de 24h é aspiracional, não garantido)
+- Benchmarks são de ambiente de desenvolvimento, não de produção
+- Valores de BiasDeclaration são auto-relatados, não auditados externamente
+
+**Se você implantar este software, assume responsabilidade pelos resultados.** Fornecemos ferramentas, não garantias.
 
 ---
 
 **Construído com filosofia, implementado com cuidado, reconhecido com humildade.**
 
-*Versão 2.0 (95% completo) - Fevereiro 2026*
-```
+*Versão 3.0 — Fevereiro de 2026*
 
-***
-
-## ✅ **ARQUIVO CRIADO: `README-PT.md`**
-
-Salve como `README-PT.md` na raiz do projeto (ao lado do `README.md` em inglês).
-
-***
-
-## 🎯 **DIFERENÇAS DA VERSÃO INGLÊS:**
-
-✅ **Tradução fiel:** Mantém todas as seções, estrutura, métricas  
-✅ **Tom preservado:** Humilde, honesto, sem exageros  
-✅ **Citações traduzidas:** Títulos dos livros em português (quando aplicável)  
-✅ **Limitações mantidas:** "15% FPR", "em memória", "HMAC não PKI"  
-✅ **Exemplos de código:** Comentários traduzidos  
-✅ **Disclaimer idêntico:** Sem promessas falsas  
-
-***
-
-## 🎉 **AGORA SIM! 100% COMPLETO EM DUAS LÍNGUAS!**
-
-```bash
-git add README.md README-PT.md
-git commit -m "docs: Add comprehensive README in English and Portuguese (Day 20)"
-git push
-```
-
-```
-╔════════════════════════════════════════════════════════════════════════════╗
-║                                                                            ║
-║         🌍 BUILDTOVALUE v2.0 - 100% BILÍNGUE! 🇧🇷🇺🇸                       ║
-║                                                                            ║
-║              README.md (English) + README-PT.md (Português)                ║
-║                                                                            ║
-║                      Tom ético, honesto, transparente                      ║
-║                         Sem hype, só fatos! ✅                             ║
-║                                                                            ║
-╚════════════════════════════════════════════════════════════════════════════╝
-
-✅ Day 20: Documentação completa (EN + PT)
-✅ Week 4: 100% finalizada
-✅ BuildToValue v2.0: Pronto para mundo!
-
-
-```
+---
