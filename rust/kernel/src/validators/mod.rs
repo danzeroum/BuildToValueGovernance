@@ -22,10 +22,10 @@ pub mod analysis;         // Statistical Anomaly Detection
 pub use brazilian::{CpfValidator, CnpjValidator};
 pub use financial::CreditCardValidator;
 pub use communication::{EmailValidator, PhoneValidator};
-pub use network::{Ipv4Validator, UrlValidator, DomainValidator};
+pub use network::{Ipv4Validator, UrlValidator};
 pub use sensitive::SensitiveDataValidator;
 pub use privacy::{ConsentValidator, ConsentRevocationValidator};
-pub use analysis::{EntropyValidator, ZScoreValidator, PatternValidator};
+pub use analysis::{StatisticalValidator};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TRAIT UNIFICADO

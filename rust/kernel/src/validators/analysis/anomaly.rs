@@ -1,7 +1,6 @@
 
 use crate::evidence::finding::Finding;
 use crate::core::types::{ValidatorModule, TechnicalSeverity};
-use crate::types::{ValidatorModule, TechnicalSeverity};
 use crate::validators::Validator;
 use crate::statistics::{EntropyCalculator, ZScoreCalculator}; 
 
