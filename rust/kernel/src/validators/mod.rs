@@ -53,14 +53,13 @@ pub trait Validator: Send + Sync {
 
     /// Módulo ao qual pertence (para evidence).
     fn module(&self) -> ValidatorModule;
-    
+
     /// **NOVO v2.4.0**: Declaração obrigatória de viés.
     ///
     /// DEVE retornar valores reais calibrados empiricamente.
     /// PROIBIDO retornar Default::default() em produção.
     ///
     /// Filosofia (Jonas, 1984): Responsabilidade sobre consequências
-    /// imprevisíveis exige documentação honesta de limitações.
     ///
     /// # Example
     /// ```rust

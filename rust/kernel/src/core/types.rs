@@ -250,7 +250,7 @@ impl BiasDeclaration {
             _reserved: [0; 112],
         }
     }
-    
+
     /// Define grupos afetados (UTF-8 text, truncado se > 127 bytes)
     pub fn with_affected_groups(mut self, text: &str) -> Self {
         let bytes = text.as_bytes();
@@ -259,7 +259,7 @@ impl BiasDeclaration {
         self.affected_groups[len] = 0; // Null terminator
         self
     }
-    
+
     /// Define limitações (UTF-8 text, truncado se > 255 bytes)
     pub fn with_limitations(mut self, text: &str) -> Self {
         let bytes = text.as_bytes();
@@ -268,7 +268,9 @@ impl BiasDeclaration {
         self.known_limitations[len] = 0;
         self
     }
-    
+
+  
+  
     /// Valida se calibração está dentro de 90 dias
     ///
     /// Implementação aproximada (ignora meses de 28-31 dias).
@@ -277,30 +279,32 @@ impl BiasDeclaration {
     pub fn is_calibration_valid(&self) -> bool {
         // Parse current date as YYYYMMDD
         let now = chrono::Utc::now();
-        let now_yyyymmdd = now.year() as u32 * 10000 
-                         + now.month() * 100 
-                         + now.day();
-        
+        let now_yyyymmdd = now.year() as u32 * 10000
+            + now.month() * 100
+            + now.day();
+
         if self.calibration_date == 0 || self.calibration_date > now_yyyymmdd {
             return false; // Invalid date
         }
-        
+
+
         // Cálculo aproximado (cada mês = 30 dias)
         let cal_year = self.calibration_date / 10000;
         let cal_month = (self.calibration_date / 100) % 100;
         let cal_day = self.calibration_date % 100;
-        
+
+
         let now_year = now_yyyymmdd / 10000;
         let now_month = (now_yyyymmdd / 100) % 100;
         let now_day = now_yyyymmdd % 100;
-        
+
         let days_diff = ((now_year - cal_year) * 365) as i32
-                      + ((now_month as i32 - cal_month as i32) * 30)
-                      + (now_day as i32 - cal_day as i32);
-        
+            + ((now_month as i32 - cal_month as i32) * 30)
+            + (now_day as i32 - cal_day as i32);
+
         days_diff >= 0 && days_diff <= 90
     }
-    
+
     pub fn to_bytes(&self) -> [u8; 512] {
         unsafe { std::mem::transmute(*self) }
     }
