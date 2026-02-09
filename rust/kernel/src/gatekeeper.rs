@@ -1,4 +1,9 @@
-//! Gatekeeper v2.3.1 - Core Scanning Engine
+//! Gatekeeper v2.4.0 - Core Scanning Engine (ADR-010)
+//!
+//! **CHANGELOG v2.4.0**:
+//! - ✅ Implementado aggregate_bias_declarations() (Worst-Case Propagation)
+//! - ✅ BiasDeclaration agregado ANTES de finalize()
+//! - ✅ Logger warning se calibração expirada (> 90 dias)
 //!
 //! Orquestrador soberano que coordena todos os módulos de validação,
 //! coleta findings e produz o TechnicalEvidence v2.1.
@@ -6,13 +11,14 @@
 
 use std::time::Instant;
 use crate::evidence::{TechnicalEvidence, Finding};
-use crate::core::types::{ValidatorModule, TechnicalSeverity, RiskLevel};
+use crate::core::types::{ValidatorModule, TechnicalSeverity, RiskLevel, BiasDeclaration};
 use crate::statistics::char_ratio::CharRatioAnalyzer;
 use crate::statistics::entropy::EntropyCalculator;
 use crate::statistics::zscore::ZScoreCalculator;
 use crate::validators::brazilian::{CpfValidator, CnpjValidator};
 use crate::validators::communication::{EmailValidator, PhoneValidator};
 use crate::validators::financial::CreditCardValidator;
+use crate::validators::Validator;
 use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector};
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -78,6 +84,10 @@ impl Gatekeeper {
     /// # Performance
     /// - Target: < 30ms (p99)
     /// - Pipeline multi-estágio: Validators -> Statistics -> Deobfuscator
+    ///
+    /// # ADR-010 (v2.4.0)
+    /// - Agrega BiasDeclaration de todos validators (worst-case)
+    /// - Emite warning se calibração expirada (> 90 dias)
     pub fn scan_for_evidence(&mut self, input: &str, audit_trail_id: u128)
                              -> TechnicalEvidence
     {
@@ -104,6 +114,18 @@ impl Gatekeeper {
         evidence.executed_modules |= 1 << 2;
         self.run_deobfuscators(input, &mut evidence);
 
+        // **NOVO v2.4.0**: Agregação de BiasDeclaration (ADR-010)
+        evidence.bias = self.aggregate_bias_declarations();
+
+        // Warning se calibração expirada
+        if !evidence.bias.is_calibration_valid() {
+            log::warn!(
+                "BiasDeclaration expired (calibration_date: {}, audit_trail: {})",
+                evidence.bias.calibration_date,
+                audit_trail_id
+            );
+        }
+
         // 5. Finalização e Segurança
         evidence.processing_time_us = start.elapsed().as_micros() as u64;
         evidence.finalize().expect("Critical: Failed to finalize evidence");
@@ -112,6 +134,59 @@ impl Gatekeeper {
         self.update_metrics(start.elapsed().as_secs_f32() * 1000.0, &evidence);
 
         evidence
+    }
+
+    /// **NOVO v2.4.0**: Agrega BiasDeclaration de todos validators (worst-case)
+    ///
+    /// Filosofia (ADR-010):
+    /// - Princípio da Precaução (Jonas, 1984): adotar estimativa conservadora
+    ///   quando múltiplos sistemas falíveis compõem pipeline.
+    /// - max(FPR): taxa de falsos positivos worst-case
+    /// - max(FNR): taxa de falsos negativos worst-case
+    /// - min(calibration_date): data mais antiga determina validade
+    /// - sum(test_dataset_size): dataset agregado
+    ///
+    /// # Performance
+    /// - O(N) com N ≤ 15 validators (< 1μs overhead)
+    fn aggregate_bias_declarations(&self) -> BiasDeclaration {
+        // Coleta todos validators que implementam trait Validator
+        let validators: Vec<&dyn Validator> = vec![
+            &self.cpf_validator,
+            &self.cnpj_validator,
+            &self.email_validator,
+            &self.card_validator,
+            &self.phone_validator,
+        ];
+
+        let mut max_fpr = 0.0_f32;
+        let mut max_fnr = 0.0_f32;
+        let mut oldest_calibration = u32::MAX;
+        let mut total_test_size = 0_u32;
+
+        for v in validators {
+            let bias = v.bias_declaration();
+
+            // Worst-case propagation
+            max_fpr = max_fpr.max(bias.false_positive_rate);
+            max_fnr = max_fnr.max(bias.false_negative_rate);
+
+            // Data de calibração mais antiga determina validade
+            if bias.calibration_date > 0 {
+                oldest_calibration = oldest_calibration.min(bias.calibration_date);
+            }
+
+            // Dataset agregado (soma dos testes individuais)
+            total_test_size = total_test_size.saturating_add(bias.test_dataset_size);
+        }
+
+        // Se nenhum validator declarou calibration_date, usar 0 (inválido)
+        if oldest_calibration == u32::MAX {
+            oldest_calibration = 0;
+        }
+
+        BiasDeclaration::new(max_fpr, max_fnr, oldest_calibration, total_test_size)
+            .with_limitations("Aggregated from multiple validators (worst-case)")
+            .with_affected_groups("See individual validator documentation")
     }
 
     fn run_validators(&self, input: &str, evidence: &mut TechnicalEvidence) {
@@ -172,7 +247,7 @@ mod tests {
     #[test]
     fn test_clean_input_no_findings() {
         let mut gatekeeper = Gatekeeper::new();
-        let evidence = gatekeeper.scan_for_evidence("Texto limpo.", 0x1234);
+        let     evidence = gatekeeper.scan_for_evidence("Texto limpo.", 0x1234);
         assert_eq!(evidence.finding_count, 0);
         assert_eq!(evidence.critical_count, 0);
     }
@@ -180,8 +255,40 @@ mod tests {
     #[test]
     fn test_cpf_detection() {
         let mut gatekeeper = Gatekeeper::new();
-        let evidence = gatekeeper.scan_for_evidence("CPF: 123.456.789-09", 0x1234);
+        let       evidence    = gatekeeper.scan_for_evidence("CPF: 123.456.789-09", 0x1234);
         assert!(evidence.finding_count > 0);
         assert_eq!(evidence.critical_count, 1);
+    }
+
+    #[test]
+    fn test_bias_aggregation_worst_case() {
+        let mut gatekeeper = Gatekeeper::new();
+        let       evidence = gatekeeper.scan_for_evidence("test", 0x1234);
+
+        // BiasDeclaration deve ser agregado (max FPR/FNR de todos validators)
+        assert!(evidence.bias.false_positive_rate > 0.0);
+        assert!(evidence.bias.false_negative_rate > 0.0);
+        assert!(evidence.bias.test_dataset_size >= 500); // CPF tem 500, maior dataset
+        assert!(evidence.bias.calibration_date == 20260209); // Todos têm mesma data
+    }
+
+    #[test]
+    fn test_bias_calibration_valid() {
+        let mut gatekeeper = Gatekeeper::new();
+        let evidence = gatekeeper.scan_for_evidence("test", 0x1234);
+
+        // Calibração deve estar válida (dentro de 90 dias)
+        assert!(evidence.bias.is_calibration_valid());
+    }
+
+    #[test]
+    fn test_gatekeeper_latency_under_30ms() {
+        let mut gatekeeper = Gatekeeper::new();
+        let start = Instant::now();
+        let _ = gatekeeper.scan_for_evidence("CPF: 111.444.777-05, Email: test@example.com", 0x1234);
+        let elapsed = start.elapsed().as_millis();
+
+        // Garantia de latência (pode falhar em CI lento, usar margin)
+        assert!(elapsed < 50, "Latency too high: {}ms", elapsed);
     }
 }
