@@ -24,86 +24,57 @@ use std::mem;
 /// - Ring buffer para findings (10 normais + 3 critical preservados)
 ///
 /// **v2.4.0 (ADR-010)**: BiasDeclaration expandido para 512 bytes
+///
+/// **Layout de memória (9596 bytes)**:
+/// - Header: 64 bytes (protocol_version até _reserved)
+/// - Findings normais: 1280 bytes (10 × 128 bytes)
+/// - Findings críticos: 384 bytes (3 × 128 bytes)
+/// - Statistics: 256 bytes
+/// - BiasDeclaration: 512 bytes ⬅️ **NOVO v2.4.0**
+/// - Metadata: 6560 bytes (inclui _reserved_metadata[6520])
+/// - Checksum: 8 bytes
 #[repr(C, align(8))]
 pub struct TechnicalEvidence {
     // === HEADER (64 bytes) ===
-    /// Versão do protocolo (para compatibilidade futura)
     pub protocol_version: u16,
-
-    /// ID único desta evidência (correlação com ledger)
     pub audit_trail_id: u128,
-
-    /// Timestamp de criação (microssegundos desde epoch)
     pub timestamp: u128,
-
-    /// Hash BLAKE3 de toda a evidência (setado em finalize())
     pub evidence_hash: u64,
-
-    /// Risco composto final (0-255)
     pub composite_risk: u8,
-
-    /// Reserved para alinhamento
     pub _reserved: [u8; 7],
 
     // === FINDINGS NORMAIS (1280 bytes) ===
-    /// Ring buffer de findings (10 slots de 128 bytes cada)
     pub findings: [Finding; 10],
-
-    /// Número de findings válidos (0-10)
     pub finding_count: u8,
-
-    /// Posição atual no ring buffer
     pub finding_position: u8,
-
-    /// Padding
     pub _padding1: [u8; 6],
 
     // === FINDINGS CRÍTICOS (384 bytes) ===
-    /// Critical findings preservados (não sobrescritos)
     pub critical: [Finding; 3],
-
-    /// Número de critical findings (0-3)
     pub critical_count: u8,
-
-    /// Padding
     pub _padding2: [u8; 7],
 
     // === STATISTICS (256 bytes) ===
-    /// Estatísticas agregadas do input
     pub stats: InputStatistics,
 
     // === BIAS DECLARATION (512 bytes) ===
     /// **v2.4.0**: Expandido de 32 para 512 bytes (ADR-010)
-    /// Transparência sobre limitações do sistema
     pub bias: BiasDeclaration,
 
     // === METADATA (6560 bytes) ===
-    /// Request original (hash)
     pub original_request_hash: u64,
-
-    /// Tamanho do input processado
     pub input_size: u32,
-
-    /// Flags de processamento
     pub processing_flags: u32,
-
-    /// Módulos que executaram (bitmap)
     pub executed_modules: u64,
-
-    /// Tempo total de processamento (microssegundos)
     pub processing_time_us: u64,
-
-    /// Reserved para expansão futura
     /// **v2.4.0**: Reduzido de 7000 para 6520 bytes (compensar BiasDeclaration +480)
     pub _reserved_metadata: [u8; 6520],
 
     // === CHECKSUM FINAL (8 bytes) ===
-    /// Checksum BLAKE3 de toda a estrutura
     pub checksum: u64,
 }
 
-// Garantia de tamanho em compile-time
-// Header(64) + Findings(1280) + Critical(384) + Stats(256) + Bias(512) + Metadata(6560) + Checksum(8) = 9596
+// Garantia compile-time: 64 + 1280 + 384 + 256 + 512 + 6560 + 8 = 9596
 static_assertions::const_assert_eq!(
     mem::size_of::<TechnicalEvidence>(),
     9596  // 9.4KB exatos
@@ -111,6 +82,15 @@ static_assertions::const_assert_eq!(
 
 impl TechnicalEvidence {
     /// Cria nova evidência (inicializada com zeros)
+    ///
+    /// # Arguments
+    /// * `audit_trail_id` - ID único para correlação com ledger (u128)
+    ///
+    /// # Example
+    /// ```
+    /// use buildtovalue_kernel::evidence::TechnicalEvidence;
+    /// let evidence = TechnicalEvidence::new(0x1234_5678_9abc_def0);
+    /// ```
     pub fn new(audit_trail_id: u128) -> Self {
         Self {
             protocol_version: 0x0204,  // v2.4 (ADR-010)
@@ -139,6 +119,10 @@ impl TechnicalEvidence {
     }
 
     /// Adiciona finding (ring buffer para normais, preserva critical)
+    ///
+    /// **Ring Buffer Logic**:
+    /// - Findings normais: Sobrescreve após 10 entradas (FIFO)
+    /// - Critical findings: Preserva até 3, depois descarta novos
     pub fn add_finding(&mut self, finding: Finding) {
         // Se é critical, vai para o array separado
         if finding.severity.is_critical() {
@@ -161,6 +145,11 @@ impl TechnicalEvidence {
     }
 
     /// Calcula composite risk (média ponderada dos findings)
+    ///
+    /// **Algoritmo**:
+    /// - Severity × Confidence para cada finding
+    /// - Critical findings têm peso dobrado (×2)
+    /// - Resultado: 0-255
     pub fn calculate_composite_risk(&self) -> u8 {
         if self.finding_count == 0 && self.critical_count == 0 {
             return 0;
@@ -195,6 +184,12 @@ impl TechnicalEvidence {
     }
 
     /// Finaliza evidência (calcula hashes, imutável após isso)
+    ///
+    /// **Durability**: Após finalize(), struct é imutável
+    /// **Performance**: O(n) onde n = número de findings
+    ///
+    /// # Errors
+    /// - `EvidenceError::AlreadyFinalized` se chamar 2x
     pub fn finalize(&mut self) -> Result<(), EvidenceError> {
         if self.evidence_hash != 0 {
             return Err(EvidenceError::AlreadyFinalized);
@@ -241,6 +236,8 @@ impl TechnicalEvidence {
     }
 
     /// Valida integridade (checksum)
+    ///
+    /// **Security**: Detecta corrupção de memória ou tampering
     pub fn validate(&self) -> bool {
         if self.evidence_hash == 0 {
             return false;  // Não finalizado
@@ -271,6 +268,8 @@ impl TechnicalEvidence {
     }
 
     /// Serializa para bytes (para FFI)
+    ///
+    /// **Safety**: Usa transmute (unsafe), mas garantido por repr(C, align(8))
     pub fn to_bytes(&self) -> [u8; 9596] {
         unsafe {
             std::mem::transmute(*self)

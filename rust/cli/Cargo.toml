@@ -14,14 +14,14 @@ path = "src/main.rs"
 # Kernel
 buildtovalue-kernel = { path = "../kernel" }
 
-# CLI dependencies
-clap.workspace = true
-colored.workspace = true
-dotenv.workspace = true
-anyhow.workspace = true
-tokio.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+# CLI dependencies (Herdadas do Workspace)
+clap = { workspace = true }
+colored = { workspace = true }
+dotenv = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [build-dependencies]
 # Nenhum necessário por enquanto
