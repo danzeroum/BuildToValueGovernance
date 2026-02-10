@@ -11,7 +11,7 @@ name = "buildtovalue_governance"
 crate-type = ["cdylib"]
 
 [dependencies]
-# ✅ CORREÇÃO: Referência explícita ao caminho relativo dentro do workspace
+# Kernel com suporte a FFI ativado
 buildtovalue-kernel = { path = "../kernel", features = ["ffi-bindings"] }
 
 # Python FFI (Herdado do Workspace)
