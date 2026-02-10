@@ -60,6 +60,7 @@ pub trait Validator: Send + Sync {
     /// PROIBIDO retornar Default::default() em produção.
     ///
     /// Filosofia (Jonas, 1984): Responsabilidade sobre consequências
+    /// imprevisíveis exige documentação honesta de limitações.
     ///
     /// # Example
     /// ```rust

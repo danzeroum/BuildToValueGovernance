@@ -202,26 +202,26 @@ impl InputStatistics {
 pub struct BiasDeclaration {
     /// Taxa de falsos positivos (0.0-1.0)
     pub false_positive_rate: f32,
-    
+
     /// Taxa de falsos negativos (0.0-1.0)
     pub false_negative_rate: f32,
-    
+
     /// Data de calibração (formato YYYYMMDD, ex: 20260209)
     /// Validade: 90 dias. Após isso, validator DEVE recalibrar.
     pub calibration_date: u32,
-    
+
     /// Tamanho do dataset de teste usado para calibração
     pub test_dataset_size: u32,
-    
+
     /// Grupos populacionais afetados desproporcionalmente
     /// (codificação UTF-8, max 128 bytes, null-terminated)
     /// Ex: "Brazilian Portuguese, non-standard formatting"
     pub affected_groups: [u8; 128],
-    
+
     /// Limitações técnicas conhecidas (UTF-8, max 256 bytes)
     /// Ex: "Cannot detect implicit consent; 365-day validity arbitrary"
     pub known_limitations: [u8; 256],
-    
+
     /// Reservado para extensão futura
     pub _reserved: [u8; 112],
 }
@@ -269,8 +269,6 @@ impl BiasDeclaration {
         self
     }
 
-  
-  
     /// Valida se calibração está dentro de 90 dias
     ///
     /// Implementação aproximada (ignora meses de 28-31 dias).
@@ -287,12 +285,10 @@ impl BiasDeclaration {
             return false; // Invalid date
         }
 
-
         // Cálculo aproximado (cada mês = 30 dias)
         let cal_year = self.calibration_date / 10000;
         let cal_month = (self.calibration_date / 100) % 100;
         let cal_day = self.calibration_date % 100;
-
 
         let now_year = now_yyyymmdd / 10000;
         let now_month = (now_yyyymmdd / 100) % 100;
