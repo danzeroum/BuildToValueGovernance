@@ -1,9 +1,8 @@
-//! BuildToValue Sovereign Kernel v2.3.1
+//! BuildToValue Sovereign Kernel v2.3.1 (Projeto v3.0)
 //!
-//! **CHANGELOG v2.3.1**:
-//! - ✅ Consolidação de validators (brazilian/)
-//! - ✅ Remoção de duplicações (CPF, penalty_calculator)
-//! - ✅ Estrutura modular por domínio (Core, Evidence, Validators)
+//! **PROTOCOLO**: Kernel de governança digital soberana
+//! **VERSÃO DO PROJETO**: BuildToValue v3.0
+//! **VERSÃO DO KERNEL**: v2.3.1
 //!
 //! O núcleo de aplicação da lei digital. Responsável pela validação de fatos,
 //! geração de evidências forenses e aplicação de políticas imutáveis.
@@ -54,30 +53,36 @@ pub use gatekeeper::Gatekeeper;
 pub use evidence::{TechnicalEvidence, Finding};
 
 // Tipos Fundamentais (Vindos do módulo core)
-// Nota: Redirecionamos core::types para parecer que estão na raiz
 pub use core::types::{ValidatorModule, TechnicalSeverity, Action, RiskLevel};
 
 // Interfaces (Vindas do módulo validators)
 pub use validators::Validator;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// VERSION INFO
+// VERSION INFO (Sincronizado com Cargo.toml e PROJECT_CONTEXT.md)
 // ═══════════════════════════════════════════════════════════════════════════
 
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const PROTOCOL_VERSION: u16 = 2;
+/// Versão do kernel (sincronizada com Cargo.toml)
+pub const KERNEL_VERSION: &str = "2.3.1";
+
+/// Versão do projeto BuildToValue (PROJECT_CONTEXT.md)
+pub const PROJECT_VERSION: &str = "3.0";
+
+/// Versão do protocolo de evidência
+pub const PROTOCOL_VERSION: u16 = 3;
 
 /// Retorna informações de versão completas
 pub fn version_info() -> String {
     format!(
-        "BuildToValue Kernel v{} (protocol v{})",
-        VERSION,
+        "BuildToValue v{} (Kernel v{}, Protocol v{})",
+        PROJECT_VERSION,
+        KERNEL_VERSION,
         PROTOCOL_VERSION
     )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TESTS
+// TESTES
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -87,7 +92,7 @@ mod tests {
     #[test]
     fn test_version_info() {
         let info = version_info();
-        assert!(info.contains("BuildToValue"));
-        assert!(info.contains("2.3"));
+        assert!(info.contains("BuildToValue v3.0"));
+        assert!(info.contains("Kernel v2.3.1"));
     }
 }

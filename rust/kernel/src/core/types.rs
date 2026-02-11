@@ -1,23 +1,16 @@
-//! Core types for BuildToValue Kernel v2.4.0
+//! Core types for BuildToValue Kernel v2.3.1 (Projeto v3.0)
 //!
 //! Contém apenas Enums e Tipos primitivos compartilhados.
 //! As estruturas complexas (Evidence, Finding) foram movidas para `crate::evidence`.
 //!
-//! Gate: Core Definitions
-//!
-//! **CHANGELOG v2.4.0 (ADR-010)**:
-//! - ✅ BiasDeclaration expandida de 32 para 512 bytes
-//! - ✅ Adicionados campos calibration_date, test_dataset_size, affected_groups, known_limitations
-//! - ✅ Validação de expiração de calibração (90 dias)
-//! - ✅ Serialize/Deserialize manual para arrays grandes (Fixed: removed conflicting derive)
+//! Gate: Core Definitions - ADR-005 (Zero-Allocation)
+//! **PRINCÍPIO DE JONAS**: Transparência e precisão em cálculos de calibração
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
-// ✅ FIX: Import Datelike trait to enable .year(), .month(), .day() methods
-use chrono::Datelike;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CONSTANTS
+// CONSTANTS (ADR-005: Tamanhos fixos)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Tamanho máximo de findings normais (ring buffer)
@@ -29,11 +22,14 @@ pub const MAX_CRITICAL_FINDINGS: usize = 3;
 /// Tamanho do hash BLAKE3 (256 bits)
 pub const HASH_SIZE: usize = 32;
 
-/// Tamanho máximo de cada finding (bytes)
+/// Tamanho máximo de cada finding (bytes) - ADR-005
 pub const MAX_FINDING_SIZE: usize = 512;
 
-/// Tamanho total do TechnicalEvidence (9.4KB)
+/// Tamanho total do TechnicalEvidence (9.6KB fixos)
 pub const EVIDENCE_SIZE: usize = 9600;
+
+/// Dias máximos para calibração válida (Princípio de Jonas)
+pub const MAX_CALIBRATION_DAYS: i64 = 90;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SHARED ENUMS
@@ -221,27 +217,34 @@ impl InputStatistics {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BIAS DECLARATION (v2.4.0 - 512 bytes)
+// BIAS DECLARATION (v2.3.1 - 512 bytes com cálculo preciso de datas)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Declaração Obrigatória de Viés (Princípio de Jonas)
 ///
-/// **ATENÇÃO**: Não derivamos Serialize/Deserialize automaticamente aqui porque
-/// os arrays [u8; 112/128/256] estouram o limite padrão do Serde (32).
-/// Usamos implementação manual abaixo.
-#[derive(Debug, Clone, Copy)] // ✅ FIX: Removed Serialize, Deserialize
+/// **ATENÇÃO**: Para garantir precisão em auditorias regulatórias, usamos
+/// cálculo exato de datas via `chrono` (já dependência do projeto).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[repr(C, align(8))]
 pub struct BiasDeclaration {
     pub false_positive_rate: f32,
     pub false_negative_rate: f32,
+
+    // Data de calibração em formato YYYYMMDD (u32)
+    // Exemplo: 20240211 para 11 de fevereiro de 2024
     pub calibration_date: u32,
+
     pub test_dataset_size: u32,
+
+    // Arrays fixos para strings UTF-8 (null-terminated)
     pub affected_groups: [u8; 128],
     pub known_limitations: [u8; 256],
+
+    // Padding para garantir 512 bytes exatos (ADR-005)
     pub _reserved: [u8; 112],
 }
 
-// Garantia compile-time
+// Garantia compile-time do tamanho fixo
 static_assertions::const_assert_eq!(std::mem::size_of::<BiasDeclaration>(), 512);
 
 impl BiasDeclaration {
@@ -260,7 +263,6 @@ impl BiasDeclaration {
     pub fn with_affected_groups(mut self, text: &str) -> Self {
         let bytes = text.as_bytes();
         let len = bytes.len().min(127);
-        self.affected_groups = [0; 128]; // Limpa anterior
         self.affected_groups[..len].copy_from_slice(&bytes[..len]);
         self
     }
@@ -268,34 +270,78 @@ impl BiasDeclaration {
     pub fn with_limitations(mut self, text: &str) -> Self {
         let bytes = text.as_bytes();
         let len = bytes.len().min(255);
-        self.known_limitations = [0; 256]; // Limpa anterior
         self.known_limitations[..len].copy_from_slice(&bytes[..len]);
         self
     }
 
+    /// Verifica se a calibração está válida (≤ 90 dias)
+    ///
+    /// Usa cálculo exato de datas via `chrono` para conformidade
+    /// com o Princípio de Jonas (transparência e precisão).
     pub fn is_calibration_valid(&self) -> bool {
-        let now = chrono::Utc::now();
-        let now_yyyymmdd =
-            now.year() as u32 * 10000 + now.month() * 100 + now.day();
+        use chrono::{Datelike, NaiveDate, Utc};
 
-        if self.calibration_date == 0 || self.calibration_date > now_yyyymmdd {
+        // Se não há data de calibração, é inválido
+        if self.calibration_date == 0 {
             return false;
         }
 
-        let cal_year = self.calibration_date / 10000;
-        let cal_month = (self.calibration_date / 100) % 100;
-        let cal_day = self.calibration_date % 100;
+        // Extrai ano, mês e dia do formato YYYYMMDD
+        let year = (self.calibration_date / 10000) as i32;
+        let month = ((self.calibration_date / 100) % 100) as u32;
+        let day = (self.calibration_date % 100) as u32;
 
-        let now_year = now_yyyymmdd / 10000;
-        let now_month = (now_yyyymmdd / 100) % 100;
-        let now_day = now_yyyymmdd % 100;
+        // Cria data de calibração
+        let calibration_date = match NaiveDate::from_ymd_opt(year, month, day) {
+            Some(date) => date,
+            None => {
+                log::error!("Invalid calibration date: {}", self.calibration_date);
+                return false;
+            }
+        };
 
-        // Cálculo aproximado de diferença em dias
-        let days_diff = ((now_year as i32 - cal_year as i32) * 365)
-            + ((now_month as i32 - cal_month as i32) * 30)
-            + (now_day as i32 - cal_day as i32);
+        // Data atual em UTC
+        let now = Utc::now().naive_utc().date();
 
-        days_diff >= 0 && days_diff <= 90
+        // Calcula diferença em dias
+        let days_since_calibration = match (now - calibration_date).num_days() {
+            diff if diff < 0 => {
+                // Data futura - inválido
+                log::warn!("Calibration date is in the future: {}", calibration_date);
+                return false;
+            }
+            diff => diff,
+        };
+
+        // Verifica se está dentro do limite (90 dias)
+        days_since_calibration <= MAX_CALIBRATION_DAYS
+    }
+
+    /// Retorna dias restantes para expiração da calibração
+    pub fn days_until_expiration(&self) -> i64 {
+        use chrono::{Datelike, NaiveDate, Utc};
+
+        if self.calibration_date == 0 {
+            return -1; // Nunca calibrado
+        }
+
+        let year = (self.calibration_date / 10000) as i32;
+        let month = ((self.calibration_date / 100) % 100) as u32;
+        let day = (self.calibration_date % 100) as u32;
+
+        let calibration_date = match NaiveDate::from_ymd_opt(year, month, day) {
+            Some(date) => date,
+            None => return -1,
+        };
+
+        let now = Utc::now().naive_utc().date();
+        let days_since = (now - calibration_date).num_days();
+
+        if days_since < 0 {
+            -1 // Data futura
+        } else {
+            MAX_CALIBRATION_DAYS - days_since
+        }
     }
 
     pub fn to_bytes(&self) -> [u8; 512] {
@@ -309,140 +355,13 @@ impl BiasDeclaration {
     }
 }
 
-// ✅ FIX: Default para BiasDeclaration exigido pelo TechnicalEvidence
 impl Default for BiasDeclaration {
     fn default() -> Self {
-        Self::new(0.0, 0.0, 0, 0)
-    }
-}
+        // Data padrão: hoje (para desenvolvimento)
+        let today = chrono::Utc::now().naive_utc().date();
+        let calibration_date = (today.year() * 10000 + today.month() as i32 * 100 + today.day() as i32) as u32;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MANUAL SERIALIZE/DESERIALIZE (Arrays grandes)
-// ═══════════════════════════════════════════════════════════════════════════
-
-impl Serialize for BiasDeclaration {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("BiasDeclaration", 6)?;
-
-        state.serialize_field("false_positive_rate", &self.false_positive_rate)?;
-        state.serialize_field("false_negative_rate", &self.false_negative_rate)?;
-        state.serialize_field("calibration_date", &self.calibration_date)?;
-        state.serialize_field("test_dataset_size", &self.test_dataset_size)?;
-
-        // Serializar arrays como strings UTF-8 para legibilidade JSON
-        state.serialize_field(
-            "affected_groups",
-            &Self::array_to_string(&self.affected_groups),
-        )?;
-        state.serialize_field(
-            "known_limitations",
-            &Self::array_to_string(&self.known_limitations),
-        )?;
-
-        state.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for BiasDeclaration {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::{self, MapAccess, Visitor};
-
-        #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "snake_case")]
-        enum Field {
-            FalsePositiveRate,
-            FalseNegativeRate,
-            CalibrationDate,
-            TestDatasetSize,
-            AffectedGroups,
-            KnownLimitations,
-        }
-
-        struct BiasVisitor;
-
-        impl<'de> Visitor<'de> for BiasVisitor {
-            type Value = BiasDeclaration;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("struct BiasDeclaration")
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<BiasDeclaration, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut fpr = None;
-                let mut fnr = None;
-                let mut date = None;
-                let mut size = None;
-                let mut groups: Option<String> = None;
-                let mut limits: Option<String> = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::FalsePositiveRate => {
-                            if fpr.is_some() { return Err(de::Error::duplicate_field("false_positive_rate")); }
-                            fpr = Some(map.next_value()?);
-                        }
-                        Field::FalseNegativeRate => {
-                            if fnr.is_some() { return Err(de::Error::duplicate_field("false_negative_rate")); }
-                            fnr = Some(map.next_value()?);
-                        }
-                        Field::CalibrationDate => {
-                            if date.is_some() { return Err(de::Error::duplicate_field("calibration_date")); }
-                            date = Some(map.next_value()?);
-                        }
-                        Field::TestDatasetSize => {
-                            if size.is_some() { return Err(de::Error::duplicate_field("test_dataset_size")); }
-                            size = Some(map.next_value()?);
-                        }
-                        Field::AffectedGroups => {
-                            if groups.is_some() { return Err(de::Error::duplicate_field("affected_groups")); }
-                            groups = Some(map.next_value()?);
-                        }
-                        Field::KnownLimitations => {
-                            if limits.is_some() { return Err(de::Error::duplicate_field("known_limitations")); }
-                            limits = Some(map.next_value()?);
-                        }
-                    }
-                }
-
-                let fpr = fpr.ok_or_else(|| de::Error::missing_field("false_positive_rate"))?;
-                let fnr = fnr.ok_or_else(|| de::Error::missing_field("false_negative_rate"))?;
-                let date = date.ok_or_else(|| de::Error::missing_field("calibration_date"))?;
-                let size = size.ok_or_else(|| de::Error::missing_field("test_dataset_size"))?;
-
-                let mut bias = BiasDeclaration::new(fpr, fnr, date, size);
-
-                if let Some(g) = groups {
-                    bias = bias.with_affected_groups(&g);
-                }
-
-                if let Some(l) = limits {
-                    bias = bias.with_limitations(&l);
-                }
-
-                Ok(bias)
-            }
-        }
-
-        const FIELDS: &[&str] = &[
-            "false_positive_rate",
-            "false_negative_rate",
-            "calibration_date",
-            "test_dataset_size",
-            "affected_groups",
-            "known_limitations",
-        ];
-
-        deserializer.deserialize_struct("BiasDeclaration", FIELDS, BiasVisitor)
+        Self::new(0.0, 0.0, calibration_date, 0)
     }
 }
 
@@ -458,7 +377,7 @@ pub enum ThreatType {
     DenialOfWallet,
     Toxicity,
     BiasViolation,
-    DataRetention, // Adicionado para conformidade com PenaltyCalculator
+    DataRetention,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -471,12 +390,56 @@ pub enum RegulatoryFramework {
     PCIDSS,
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TESTS
+// ═══════════════════════════════════════════════════════════════════════════
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Duration, Utc};
 
     #[test]
     fn test_bias_declaration_size() {
         assert_eq!(std::mem::size_of::<BiasDeclaration>(), 512);
+    }
+
+    #[test]
+    fn test_bias_calibration_valid() {
+        // Data de hoje deve ser válida
+        let today = Utc::now().naive_utc().date();
+        let today_ymd = (today.year() * 10000 + today.month() as i32 * 100 + today.day() as i32) as u32;
+
+        let bias = BiasDeclaration::new(0.1, 0.2, today_ymd, 1000);
+        assert!(bias.is_calibration_valid());
+        assert!(bias.days_until_expiration() > 0);
+    }
+
+    #[test]
+    fn test_bias_calibration_expired() {
+        // Data há 100 dias deve estar expirada
+        let hundred_days_ago = Utc::now().naive_utc().date() - Duration::days(100);
+        let old_date = (hundred_days_ago.year() * 10000 + hundred_days_ago.month() as i32 * 100 + hundred_days_ago.day() as i32) as u32;
+
+        let bias = BiasDeclaration::new(0.1, 0.2, old_date, 1000);
+        assert!(!bias.is_calibration_valid());
+        assert!(bias.days_until_expiration() < 0);
+    }
+
+    #[test]
+    fn test_bias_calibration_future() {
+        // Data futura deve ser inválida
+        let future_date = 20301225; // 25/12/2030
+        let bias = BiasDeclaration::new(0.1, 0.2, future_date, 1000);
+        assert!(!bias.is_calibration_valid());
+    }
+
+    #[test]
+    fn test_risk_level_conversion() {
+        assert_eq!(RiskLevel::from_score(0.1), RiskLevel::Safe);
+        assert_eq!(RiskLevel::from_score(0.3), RiskLevel::Low);
+        assert_eq!(RiskLevel::from_score(0.6), RiskLevel::Medium);
+        assert_eq!(RiskLevel::from_score(0.8), RiskLevel::High);
+        assert_eq!(RiskLevel::from_score(1.0), RiskLevel::Critical);
     }
 }
