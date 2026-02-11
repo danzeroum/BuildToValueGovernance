@@ -1,5 +1,7 @@
-//! Deobfuscator Module
-//! Detecta e decodifica tentativas de ofuscação de dados.
+//! Deobfuscator Module v2.3.2
+//!
+//! Detecta e decodifica tentativas de ofuscação de dados (Base64, Hex, Leetspeak).
+//! Usado para revelar payloads maliciosos ou PII escondido antes da validação principal.
 
 pub mod base64;
 pub mod hex;

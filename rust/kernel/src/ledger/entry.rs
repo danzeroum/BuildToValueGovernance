@@ -5,10 +5,10 @@
 //!
 //! **CHANGELOG v2.3.2**:
 //! - ✅ Adicionado campo `ethical_verdict` (v2.4.0 types support)
-//! - ✅ Ajuste de padding para alinhamento estrito (384 bytes)
+//! - ✅ Correção de alinhamento u128 (Padding explícito)
+//! - ✅ Correção de tamanho total (384 bytes verificados)
 
 use serde::{Deserialize, Serialize};
-// ✅ CORREÇÃO 1: Typo corrigido (EthicalVerdi -> EthicalVerdict)
 use crate::core::types::{Action, EthicalVerdict, RiskLevel};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -40,29 +40,33 @@ impl From<Action> for ActionType {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[repr(C, align(8))]
 pub struct LedgerEntry {
-    // === IDENTIFICAÇÃO (40 bytes) ===
+    // === IDENTIFICAÇÃO (48 bytes) ===
     pub entry_id: u64,           // 8 bytes (Sequencial)
+
+    // ✅ FIX: Padding explícito para alinhar o u128 abaixo em 16 bytes
+    pub _align_padding: u64,     // 8 bytes
+
     pub audit_trail_id: u128,    // 16 bytes (UUID v7)
     pub timestamp: u128,         // 16 bytes (Microssegundos UNIX)
 
     // === VEREDITO (8 bytes) ===
     pub risk_level: RiskLevel,       // 1 byte
     pub action: ActionType,          // 1 byte
-    pub ethical_verdict: EthicalVerdict, // 1 byte (Novo v2.3/2.4)
+    pub ethical_verdict: EthicalVerdict, // 1 byte
     pub _padding_verdict: [u8; 5],   // 5 bytes (Alinhamento)
 
     // === INTEGRIDADE (64 bytes) ===
     pub previous_hash: [u8; 32],     // 32 bytes (Hash do entry anterior)
     pub entry_hash: [u8; 32],        // 32 bytes (Hash deste entry - BLAKE3)
 
-    // === METADATA (272 bytes) ===
+    // === METADATA (264 bytes) ===
     pub protocol_version: u16,       // 2 bytes
     pub schema_version: u16,         // 2 bytes
     pub producer_id: [u8; 32],       // 32 bytes (ID do componente gerador)
 
-    // ✅ CORREÇÃO 2: Uso de serde_bytes para array > 32 bytes
+    // ✅ FIX: Reduzido de 236 para 228 para compensar o _align_padding
     #[serde(with = "serde_bytes")]
-    pub _reserved: [u8; 236],        // 236 bytes (Expansão futura)
+    pub _reserved: [u8; 228],        // 228 bytes (Expansão futura)
 }
 
 // Garantia de tamanho em compile-time
@@ -80,6 +84,7 @@ impl LedgerEntry {
     ) -> Self {
         Self {
             entry_id,
+            _align_padding: 0, // Inicializa padding
             audit_trail_id,
             timestamp: Self::now_micros(),
             risk_level: risk,
@@ -91,7 +96,7 @@ impl LedgerEntry {
             protocol_version: 1,
             schema_version: 1,
             producer_id: [0; 32],
-            _reserved: [0; 236],
+            _reserved: [0; 228],
         }
     }
 
@@ -101,22 +106,15 @@ impl LedgerEntry {
 
         // Identificação
         hasher.update(&self.entry_id.to_le_bytes());
+        hasher.update(&self._align_padding.to_le_bytes()); // Inclui padding no hash para determinismo
         hasher.update(&self.audit_trail_id.to_le_bytes());
         hasher.update(&self.timestamp.to_le_bytes());
 
         // Veredito
         hasher.update(&[self.risk_level as u8]);
         hasher.update(&[self.action as u8]);
-        // Serialização manual simples para Enum (u8)
-        // EthicalVerdict é repr(rust) por padrão, mas é um enum simples.
-        // Assumindo que a ordem das variantes não muda (Approved=0, Rejected=1, etc)
-        // O ideal é implementar to_u8() no Enum, mas aqui usamos bincode implícito se necessário.
-        // Como o hasher pega bytes, vamos usar serialização via bincode para garantir consistência
-        // ou converter para u8 se tivermos certeza da representação.
-        // Para simplificar e evitar alocação do bincode aqui no hotpath,
-        // vamos confiar na ordem de declaração se usarmos `as u8` apenas se tiver `repr(u8)`.
-        // EthicalVerdict não tem repr(u8) no types.rs fornecido, mas é serializável.
-        // Vamos usar bincode para segurança:
+
+        // Serialização manual de Enum para consistência
         let verdict_bytes = bincode::serialize(&self.ethical_verdict).unwrap_or(vec![0]);
         hasher.update(&verdict_bytes);
 
@@ -151,6 +149,7 @@ impl Default for LedgerEntry {
     fn default() -> Self {
         Self {
             entry_id: 0,
+            _align_padding: 0,
             audit_trail_id: 0,
             timestamp: 0,
             risk_level: RiskLevel::Safe,
@@ -162,7 +161,7 @@ impl Default for LedgerEntry {
             protocol_version: 1,
             schema_version: 1,
             producer_id: [0; 32],
-            _reserved: [0; 236],
+            _reserved: [0; 228],
         }
     }
 }
