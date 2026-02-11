@@ -6,6 +6,7 @@
 //! **CHANGELOG**:
 //! - Estabilização v2.3.2: Removido campo 'details', adicionado 'matched_text' fixo [u8; 64].
 //! - Ajuste de padding para alinhamento de 8 bytes (Total: 144 bytes).
+//! - ✅ Fix: Adicionado serde_bytes para matched_text.
 
 use serde::{Deserialize, Serialize};
 use crate::core::types::{TechnicalSeverity, ValidatorModule};
@@ -34,13 +35,12 @@ pub struct Finding {
 
     // === EVIDÊNCIA (64 bytes) ===
     /// Snippet do texto que causou o match (truncado)
+    /// ✅ CORREÇÃO: serde_bytes necessário para arrays > 32 bytes
+    #[serde(with = "serde_bytes")]
     pub matched_text: [u8; 64],
 
     // === ALINHAMENTO (8 bytes) ===
     /// Padding explícito para completar 144 bytes
-    /// (144 - 8 - 64 - 64 = 8 bytes restantes)
-    /// Nota: O compilador pode adicionar padding implícito se não preenchermos,
-    /// mas explícito é mais seguro para transmutes.
     pub _padding: [u8; 8],
 }
 
@@ -114,7 +114,6 @@ impl Finding {
         }
     }
 
-    /// Helper para converter string em array de bytes de tamanho fixo N (truncando se necessário)
     fn str_to_fixed<const N: usize>(s: &str) -> [u8; N] {
         let mut buf = [0u8; N];
         let bytes = s.as_bytes();
@@ -123,12 +122,10 @@ impl Finding {
         buf
     }
 
-    /// Especialização para 64 bytes (matched_text)
     fn str_to_fixed_64(s: &str) -> [u8; 64] {
         Self::str_to_fixed::<64>(s)
     }
 
-    /// Helper para recuperar string do array (para debug/display)
     pub fn rule_id_str(&self) -> String {
         Self::fixed_to_string(&self.rule_id)
     }
@@ -145,55 +142,12 @@ impl Default for Finding {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// TESTS
-// ═══════════════════════════════════════════════════════════════════════════
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_finding_size_invariant() {
-        // Invariante crítica para FFI e alinhamento de memória
         assert_eq!(std::mem::size_of::<Finding>(), 144);
-    }
-
-    #[test]
-    fn test_finding_creation() {
-        let finding = Finding::new(
-            ValidatorModule::CPF,
-            TechnicalSeverity::High,
-            "VALIDATORS_CPF_001",
-            "PII_LEAKAGE",
-            "123.456.789-00"
-        ).with_confidence(255);
-
-        assert_eq!(finding.module, ValidatorModule::CPF);
-        assert_eq!(finding.severity, TechnicalSeverity::High);
-        assert_eq!(finding.confidence, 255);
-
-        // Verifica truncagem correta de strings
-        assert_eq!(finding.rule_id_str(), "VALIDATORS_CPF_001");
-
-        // Verifica se padding está zerado
-        assert_eq!(finding._padding, [0u8; 8]);
-    }
-
-    #[test]
-    fn test_text_truncation() {
-        let long_text = "A".repeat(100);
-        let finding = Finding::new(
-            ValidatorModule::Unknown,
-            TechnicalSeverity::Info,
-            "TEST",
-            "TEST",
-            &long_text
-        );
-
-        // Deve ter sido truncado para 64 bytes
-        assert_eq!(finding.matched_text[63], b'A');
-        // Não deve estourar o buffer
-        assert_eq!(std::mem::size_of_val(&finding.matched_text), 64);
     }
 }

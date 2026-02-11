@@ -10,12 +10,12 @@
 //! - Fail-safe: Se S3 falhar, dados estão salvos no WAL local.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use anyhow::{Result, Context};
 
 use crate::ledger::wal::{WriteAheadLog, WalConfig, WalEntry};
-use crate::ledger::remote::sync::{create_remote_sync, RemoteConfig, RemoteSyncService};
+// ✅ CORREÇÃO: Removido import de S3Config que quebrava o build (agora usamos RemoteConfig genérico)
+use crate::ledger::remote::sync::{create_remote_sync, RemoteConfig};
 use crate::evidence::TechnicalEvidence;
 
 /// Erros específicos do Ledger
@@ -39,11 +39,7 @@ pub struct DurableLedger {
     wal: WriteAheadLog,
 
     /// Canal para enviar entradas para o serviço de sync (S3)
-    sync_sender: mpsc::Sender<WalEntry>, // Usando Sender do tokio::sync::mpsc do sync.rs (que usa create_remote_sync)
-
-    // Nota: Em sync.rs definimos create_remote_sync retornando (mpsc::Sender<WalEntry>, RemoteSyncService).
-    // O Sender lá é unbounded ou bounded dependendo da implementação exata do sync.rs.
-    // Assumindo bounded conforme o snippet anterior corrigido.
+    sync_sender: mpsc::Sender<WalEntry>,
 }
 
 impl DurableLedger {
@@ -51,7 +47,7 @@ impl DurableLedger {
     ///
     /// # Argumentos
     /// * `wal_path` - Caminho para o arquivo de log local.
-    /// * `remote_config` - Configuração para o upload remoto (S3).
+    /// * `remote_config` - Configuração genérica para o upload remoto (S3/Mock).
     ///
     /// # Retorno
     /// Retorna a instância do Ledger. O serviço de sync é iniciado em background (tokio::spawn).
@@ -65,7 +61,7 @@ impl DurableLedger {
         let wal = WriteAheadLog::new(wal_config)
             .context("Failed to initialize Write-Ahead Log")?;
 
-        // 2. Inicializa Remote Sync Service (S3)
+        // 2. Inicializa Remote Sync Service (S3 ou Mock)
         // O serviço roda em background e recebe entradas via canal.
         let (tx, service) = create_remote_sync(remote_config);
 
@@ -100,23 +96,15 @@ impl DurableLedger {
         let entry = WalEntry::from_evidence(seq, evidence);
 
         // 3. Dispatch to Remote Sync (Best Effort / Non-blocking)
-        // Se o canal estiver cheio, isso pode bloquear ou falhar dependendo da estratégia.
-        // Aqui usamos blocking_send se estivermos em contexto sync, ou try_send.
-        // Como DurableLedger::append é síncrono (para ser chamado de qualquer lugar),
-        // usamos blocking_send no handle assíncrono ou try_send.
-
         // Estratégia: try_send para não bloquear a thread principal se o S3 estiver lento.
-        // Se falhar, o dado JÁ ESTÁ NO WAL, então o serviço de recovery (na inicialização)
-        // cuidará de enviar o que falta.
+        // Se falhar, o dado JÁ ESTÁ NO WAL.
         match self.sync_sender.try_send(entry) {
             Ok(_) => {},
             Err(mpsc::error::TrySendError::Full(_)) => {
                 log::warn!("Remote sync buffer full. Entry {} persisted to disk but delayed for upload.", seq);
-                // Não é erro fatal, pois está no WAL.
             },
             Err(mpsc::error::TrySendError::Closed(_)) => {
                 log::error!("Remote sync service channel closed unexpectedly.");
-                // Também não é fatal para a persistência local.
             }
         }
 
