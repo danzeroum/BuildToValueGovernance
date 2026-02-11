@@ -1,304 +1,255 @@
-// BuildToValue v2.0 - FFI Bridge for Validators
-// Expõe validators Rust para Python via C ABI
-//
-// Architecture: Rust (validators) → C ABI → Python (ctypes/PyO3)
-//
-// Author: BuildToValue Architecture Team
-// License: Apache 2.0
+//! Technical Evidence v2.4.0
+//!
+//! Estrutura central que representa a evidência técnica coletada durante uma validação.
+//! Tamanho fixo (9.6KB) para alocação stack e serialização direta.
 
-use crate::validators::{
-    ConsentValidator, ConsentRevocationValidator, SensitiveDataValidator,
-    CpfValidator, CnpjValidator, CreditCardValidator, Validator,
+use serde::{Deserialize, Serialize};
+use crate::core::types::{
+    ValidatorModule, TechnicalSeverity, RiskLevel, BiasDeclaration,
+    InputStatistics, MAX_FINDINGS, MAX_CRITICAL_FINDINGS, HASH_SIZE, EVIDENCE_SIZE
 };
 use crate::evidence::Finding;
-use std::collections::HashMap;
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
-use std::slice;
-use serde_json;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// FFI STRUCTURES (C-compatible)
-// ═══════════════════════════════════════════════════════════════════════════
+/// Evidência Técnica (9.6KB fixos)
+///
+/// Contém todos os findings, estatísticas e metadados de uma validação.
+/// Layout de memória fixo para permitir serialização direta e FFI seguro.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[repr(C, align(8))]
+pub struct TechnicalEvidence {
+    // === METADADOS (24 bytes) ===
+    pub version: u32,                    // 4 bytes
+    pub timestamp: u128,                 // 16 bytes (microssegundos UNIX)
+    pub audit_trail_id: u128,            // 16 bytes (UUID v7 ou similar)
+    pub processing_time_us: u64,         // 8 bytes
+    pub input_size: u32,                 // 4 bytes
+    pub original_request_hash: u64,      // 8 bytes (primeiros 8 bytes do BLAKE3 do input)
 
-/// FFI-compatible Finding structure
-#[repr(C)]
-pub struct FFIFinding {
-    pub rule_id: *mut c_char,
-    pub title: *mut c_char,
-    pub description: *mut c_char,
-    pub severity: u8,
-    pub confidence: u8,
-    pub validator_module: *mut c_char,
-    pub metadata: *mut c_char,
+    // === ESTATÍSTICAS (32 bytes) ===
+    pub stats: InputStatistics,          // 32 bytes
+
+    // === VIÉS (512 bytes) ===
+    pub bias: BiasDeclaration,           // 512 bytes
+
+    // === FINDINGS (1440 bytes) ===
+    pub findings: [Finding; MAX_FINDINGS], // 10 * 144 = 1440 bytes
+    pub critical_findings: [Finding; MAX_CRITICAL_FINDINGS], // 3 * 144 = 432 bytes
+
+    // === CONTAGENS E NÍVEIS (16 bytes) ===
+    pub finding_count: u8,               // 1 byte
+    pub critical_count: u8,              // 1 byte
+    pub risk_level: RiskLevel,           // 1 byte
+    pub composite_risk: f32,             // 4 bytes
+    pub executed_modules: u8,            // 1 byte (bitmask)
+    pub _reserved: [u8; 8],              // 8 bytes (alinhamento)
+
+    // === INTEGRIDADE (32 bytes) ===
+    pub hash: [u8; HASH_SIZE],           // 32 bytes (BLAKE3 do conteúdo acima)
 }
 
-impl FFIFinding {
-    fn from_finding(finding: &Finding) -> Self {
-        // Helper para converter arrays de bytes fixos (do Finding v2.3.2) para CString
-        // Trunca no primeiro byte nulo (0) ou usa a string inteira
-        let bytes_to_cstring = |bytes: &[u8]| -> *mut c_char {
-            let s = String::from_utf8_lossy(bytes)
-                .trim_matches('\0')
-                .to_string();
-            CString::new(s).unwrap_or_default().into_raw()
-        };
+// Garantia de tamanho em compile-time
+static_assertions::const_assert_eq!(std::mem::size_of::<TechnicalEvidence>(), EVIDENCE_SIZE);
 
-        // ✅ FIX: Uso de to_u8() em vez de match manual incorreto
-        // TechnicalSeverity::High não tem campos, então High(v) causava erro E0023
-        let severity_value = finding.severity.to_u8();
+impl TechnicalEvidence {
+    /// Cria uma nova evidência técnica com o ID de trilha de auditoria fornecido.
+    pub fn new(audit_trail_id: u128) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_micros();
 
-        // ✅ FIX: Mapeamento de campos v2.3.2 (arrays) para campos legado da FFI (pointers)
         Self {
-            rule_id: bytes_to_cstring(&finding.rule_id),
-
-            // Map threat_category -> title
-            title: bytes_to_cstring(&finding.threat_category),
-
-            // Map matched_text -> description
-            description: bytes_to_cstring(&finding.matched_text),
-
-            severity: severity_value,
-            confidence: finding.confidence,
-
-            validator_module: CString::new(format!("{:?}", finding.module))
-                .unwrap_or_default()
-                .into_raw(),
-
-            // Metadata removido do Kernel v2.3.2, retornamos null para compatibilidade FFI
-            metadata: std::ptr::null_mut(),
+            version: 2,
+            timestamp: now,
+            audit_trail_id,
+            processing_time_us: 0,
+            input_size: 0,
+            original_request_hash: 0,
+            stats: InputStatistics::empty(),
+            bias: BiasDeclaration::default(),
+            findings: [Finding::empty(); MAX_FINDINGS],
+            critical_findings: [Finding::empty(); MAX_CRITICAL_FINDINGS],
+            finding_count: 0,
+            critical_count: 0,
+            risk_level: RiskLevel::Safe,
+            composite_risk: 0.0,
+            executed_modules: 0,
+            _reserved: [0; 8],
+            hash: [0; HASH_SIZE],
         }
     }
-}
 
-/// FFI-compatible result array
-#[repr(C)]
-pub struct FFIValidationResult {
-    pub findings: *mut FFIFinding,
-    pub findings_count: usize,
-    pub error_message: *mut c_char,
-}
+    /// Adiciona um finding à evidência.
+    /// Se o finding for crítico, vai para o array de críticos (até 3).
+    /// Caso contrário, vai para o array normal (ring buffer de 10).
+    pub fn add_finding(&mut self, finding: Finding) {
+        if finding.severity.is_critical() {
+            // Adiciona ao array de críticos (substitui o mais antigo se cheio)
+            let idx = self.critical_count as usize;
+            if idx < MAX_CRITICAL_FINDINGS {
+                self.critical_findings[idx] = finding;
+                self.critical_count += 1;
+            } else {
+                // Substitui o mais antigo (simplesmente rotaciona)
+                self.critical_findings.rotate_left(1);
+                self.critical_findings[MAX_CRITICAL_FINDINGS - 1] = finding;
+            }
+        } else {
+            // Adiciona ao array normal (ring buffer)
+            let idx = self.finding_count as usize;
+            if idx < MAX_FINDINGS {
+                self.findings[idx] = finding;
+                self.finding_count += 1;
+            } else {
+                self.findings.rotate_left(1);
+                self.findings[MAX_FINDINGS - 1] = finding;
+            }
+        }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// HELPER: Parse metadata JSON to HashMap
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn parse_metadata_json(json_str: &str) -> Result<HashMap<String, String>, String> {
-    serde_json::from_str::<HashMap<String, String>>(json_str)
-        .map_err(|e| format!("Failed to parse metadata JSON: {}", e))
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// FFI EXPORTS - LGPD VALIDATORS
-// ═══════════════════════════════════════════════════════════════════════════
-
-/// Consent Validator (LGPD Art. 7º, I)
-#[no_mangle]
-pub unsafe extern "C" fn validate_consent(
-    input: *const c_char,
-    metadata_json: *const c_char,
-) -> FFIValidationResult {
-    let input_str = match CStr::from_ptr(input).to_str() {
-        Ok(s) => s,
-        Err(_) => return error_result("Invalid UTF-8 input"),
-    };
-
-    let metadata = parse_metadata_opt(metadata_json);
-    if let Err(e) = metadata {
-        return error_result(&e);
+        // Atualiza o risco composto (simplificado)
+        self.update_risk_score();
     }
-    let metadata = metadata.unwrap();
 
-    let validator = ConsentValidator::default();
-    // ✅ FIX: Passando 2 argumentos (input + metadata)
-    let findings = validator.validate(input_str, metadata.as_ref());
+    /// Atualiza o score de risco baseado nos findings atuais.
+    fn update_risk_score(&mut self) {
+        let mut total_score = 0.0;
+        let mut count = 0;
 
-    convert_findings_to_ffi(findings)
-}
+        for i in 0..self.finding_count as usize {
+            total_score += self.findings[i].severity.to_score();
+            count += 1;
+        }
+        for i in 0..self.critical_count as usize {
+            total_score += self.critical_findings[i].severity.to_score();
+            count += 1;
+        }
 
-/// Consent Revocation Validator (LGPD Art. 8º, § 5º)
-#[no_mangle]
-pub unsafe extern "C" fn validate_consent_revocation(
-    input: *const c_char,
-    metadata_json: *const c_char,
-) -> FFIValidationResult {
-    let input_str = match CStr::from_ptr(input).to_str() {
-        Ok(s) => s,
-        Err(_) => return error_result("Invalid UTF-8 input"),
-    };
-
-    let metadata = parse_metadata_opt(metadata_json);
-    if let Err(e) = metadata {
-        return error_result(&e);
-    }
-    let metadata = metadata.unwrap();
-
-    let validator = ConsentRevocationValidator;
-    // ✅ FIX: Passando 2 argumentos
-    let findings = validator.validate(input_str, metadata.as_ref());
-
-    convert_findings_to_ffi(findings)
-}
-
-/// Sensitive Data Validator (LGPD Art. 11)
-#[no_mangle]
-pub unsafe extern "C" fn validate_sensitive_data(
-    input: *const c_char,
-    metadata_json: *const c_char,
-) -> FFIValidationResult {
-    let input_str = match CStr::from_ptr(input).to_str() {
-        Ok(s) => s,
-        Err(_) => return error_result("Invalid UTF-8 input"),
-    };
-
-    let metadata = parse_metadata_opt(metadata_json);
-    if let Err(e) = metadata {
-        return error_result(&e);
-    }
-    let metadata = metadata.unwrap();
-
-    let validator = SensitiveDataValidator::default();
-    // ✅ FIX: Passando 2 argumentos
-    let findings = validator.validate(input_str, metadata.as_ref());
-
-    convert_findings_to_ffi(findings)
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// BATCH VALIDATION (Performance optimization)
-// ═══════════════════════════════════════════════════════════════════════════
-
-#[no_mangle]
-pub unsafe extern "C" fn validate_batch(
-    validator_names: *const c_char,
-    inputs: *const *const c_char,
-    inputs_count: usize,
-    metadata_json: *const c_char,
-) -> FFIValidationResult {
-    let validators_str = match CStr::from_ptr(validator_names).to_str() {
-        Ok(s) => s,
-        Err(_) => return error_result("Invalid validator names"),
-    };
-
-    let metadata = parse_metadata_opt(metadata_json);
-    if let Err(e) = metadata {
-        return error_result(&e);
-    }
-    let metadata = metadata.unwrap();
-
-    let input_ptrs = slice::from_raw_parts(inputs, inputs_count);
-    let mut all_findings = Vec::new();
-
-    for &input_ptr in input_ptrs {
-        let input_str = match CStr::from_ptr(input_ptr).to_str() {
-            Ok(s) => s,
-            Err(_) => continue, // Skip invalid inputs in batch
+        self.composite_risk = if count > 0 {
+            total_score / count as f32
+        } else {
+            0.0
         };
 
-        for validator_name in validators_str.split(',') {
-            // ✅ FIX: Nomes de tipos corrigidos (CamelCase) e 2 argumentos
-            let findings = match validator_name.trim() {
-                "consent" => ConsentValidator::default().validate(input_str, metadata.as_ref()),
-                "consent_revocation" => ConsentRevocationValidator.validate(input_str, metadata.as_ref()),
-                "sensitive_data" => SensitiveDataValidator::default().validate(input_str, metadata.as_ref()),
-                "cpf" => CpfValidator::default().validate(input_str, metadata.as_ref()),   // Era CPFValidator
-                "cnpj" => CnpjValidator::default().validate(input_str, metadata.as_ref()), // Era CNPJValidator
-                "credit_card" => CreditCardValidator::default().validate(input_str, metadata.as_ref()),
-                _ => Vec::new(),
-            };
+        self.risk_level = RiskLevel::from_score(self.composite_risk);
+    }
 
-            all_findings.extend(findings);
+    /// Retorna todos os findings (normais + críticos) como um slice.
+    pub fn get_all_findings(&self) -> Vec<&Finding> {
+        let mut all = Vec::new();
+        for i in 0..self.finding_count as usize {
+            all.push(&self.findings[i]);
+        }
+        for i in 0..self.critical_count as usize {
+            all.push(&self.critical_findings[i]);
+        }
+        all
+    }
+
+    /// Calcula o hash BLAKE3 da evidência (excluindo o campo hash)
+    pub fn calculate_hash(&self) -> [u8; HASH_SIZE] {
+        use blake3::Hasher;
+
+        let mut hasher = Hasher::new();
+
+        // Metadados
+        hasher.update(&self.version.to_le_bytes());
+        hasher.update(&self.timestamp.to_le_bytes());
+        hasher.update(&self.audit_trail_id.to_le_bytes());
+        hasher.update(&self.processing_time_us.to_le_bytes());
+        hasher.update(&self.input_size.to_le_bytes());
+        hasher.update(&self.original_request_hash.to_le_bytes());
+
+        // Estatísticas
+        hasher.update(&self.stats.to_bytes());
+
+        // Viés
+        hasher.update(&self.bias.to_bytes());
+
+        // Findings
+        for i in 0..self.finding_count as usize {
+            hasher.update(&self.findings[i].to_bytes());
+        }
+        for i in 0..self.critical_count as usize {
+            hasher.update(&self.critical_findings[i].to_bytes());
+        }
+
+        // Contagens e níveis
+        hasher.update(&[self.finding_count]);
+        hasher.update(&[self.critical_count]);
+        hasher.update(&[self.risk_level as u8]);
+        hasher.update(&self.composite_risk.to_le_bytes());
+        hasher.update(&[self.executed_modules]);
+        hasher.update(&self._reserved);
+
+        let mut hash = [0u8; HASH_SIZE];
+        hash.copy_from_slice(hasher.finalize().as_bytes());
+        hash
+    }
+
+    /// Finaliza a evidência, calculando e armazenando o hash.
+    pub fn finalize(&mut self) -> Result<(), crate::core::errors::EvidenceError> {
+        self.hash = self.calculate_hash();
+        Ok(())
+    }
+
+    /// Valida a integridade da evidência comparando o hash armazenado com o calculado.
+    pub fn validate_hash(&self) -> bool {
+        let computed = self.calculate_hash();
+        computed == self.hash
+    }
+
+    /// Serializa a evidência para um array de bytes de tamanho fixo.
+    pub fn to_bytes(&self) -> [u8; EVIDENCE_SIZE] {
+        unsafe {
+            let mut bytes = [0u8; EVIDENCE_SIZE];
+            let ptr = self as *const TechnicalEvidence as *const u8;
+            std::ptr::copy_nonoverlapping(ptr, bytes.as_mut_ptr(), std::mem::size_of::<TechnicalEvidence>());
+            bytes
         }
     }
 
-    convert_findings_to_ffi(all_findings)
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// MEMORY MANAGEMENT
-// ═══════════════════════════════════════════════════════════════════════════
-
-#[no_mangle]
-pub unsafe extern "C" fn free_validation_result(result: FFIValidationResult) {
-    if !result.findings.is_null() {
-        let findings_slice = slice::from_raw_parts_mut(result.findings, result.findings_count);
-
-        for finding in findings_slice {
-            if !finding.rule_id.is_null() { let _ = CString::from_raw(finding.rule_id); }
-            if !finding.title.is_null() { let _ = CString::from_raw(finding.title); }
-            if !finding.description.is_null() { let _ = CString::from_raw(finding.description); }
-            if !finding.validator_module.is_null() { let _ = CString::from_raw(finding.validator_module); }
-            if !finding.metadata.is_null() { let _ = CString::from_raw(finding.metadata); }
+    /// Desserializa a evidência a partir de um array de bytes.
+    pub fn from_bytes(bytes: &[u8; EVIDENCE_SIZE]) -> Option<Self> {
+        if bytes.len() == EVIDENCE_SIZE {
+            unsafe {
+                let ptr = bytes.as_ptr() as *const TechnicalEvidence;
+                Some(std::ptr::read_unaligned(ptr))
+            }
+        } else {
+            None
         }
-
-        let _ = Vec::from_raw_parts(result.findings, result.findings_count, result.findings_count);
-    }
-
-    if !result.error_message.is_null() {
-        let _ = CString::from_raw(result.error_message);
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-
-unsafe fn parse_metadata_opt(json_ptr: *const c_char) -> Result<Option<HashMap<String, String>>, String> {
-    if json_ptr.is_null() {
-        return Ok(None);
-    }
-    match CStr::from_ptr(json_ptr).to_str() {
-        Ok(json) => match parse_metadata_json(json) {
-            Ok(m) => Ok(Some(m)),
-            Err(e) => Err(e),
-        },
-        Err(_) => Ok(None),
-    }
-}
-
-fn error_result(msg: &str) -> FFIValidationResult {
-    FFIValidationResult {
-        findings: std::ptr::null_mut(),
-        findings_count: 0,
-        error_message: CString::new(msg).unwrap_or_default().into_raw(),
-    }
-}
-
-fn convert_findings_to_ffi(findings: Vec<Finding>) -> FFIValidationResult {
-    if findings.is_empty() {
-        return FFIValidationResult {
-            findings: std::ptr::null_mut(),
-            findings_count: 0,
-            error_message: std::ptr::null_mut(),
-        };
-    }
-
-    let ffi_findings: Vec<FFIFinding> = findings.iter().map(FFIFinding::from_finding).collect();
-
-    let findings_count = ffi_findings.len();
-    let findings_ptr = Box::into_raw(ffi_findings.into_boxed_slice()) as *mut FFIFinding;
-
-    FFIValidationResult {
-        findings: findings_ptr,
-        findings_count,
-        error_message: std::ptr::null_mut(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::CString;
 
     #[test]
-    fn test_ffi_consent_validator() {
-        let input = CString::new("").unwrap();
-        let metadata = CString::new(r#"{"user.has_consent": "false"}"#).unwrap();
+    fn test_evidence_size() {
+        assert_eq!(std::mem::size_of::<TechnicalEvidence>(), EVIDENCE_SIZE);
+    }
 
-        unsafe {
-            let result = validate_consent(input.as_ptr(), metadata.as_ptr());
-            // Apenas verifica se não crasha e se a memória é liberada
-            free_validation_result(result);
-        }
+    #[test]
+    fn test_add_finding() {
+        let mut evidence = TechnicalEvidence::new(12345);
+        let finding = Finding::new(
+            ValidatorModule::CPF,
+            TechnicalSeverity::High,
+            "CPF_001",
+            "PII",
+            "123.456.789-09",
+        );
+
+        evidence.add_finding(finding);
+        assert_eq!(evidence.finding_count, 1);
+        assert!(evidence.composite_risk > 0.0);
+    }
+
+    #[test]
+    fn test_hash_integrity() {
+        let mut evidence = TechnicalEvidence::new(12345);
+        evidence.finalize().unwrap();
+        assert!(evidence.validate_hash());
     }
 }
