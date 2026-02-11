@@ -1,72 +1,66 @@
 [package]
 name = "buildtovalue-kernel"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
+version = "2.3.1"
+authors = ["BuildToValue Architecture Team"]
+edition = "2021"
 
+# Metadados do projeto (sincronizado com PROJECT_CONTEXT.md)
+description = "Sovereign Kernel for BuildToValue Governance Platform v3.0"
+repository = "https://github.com/buildtovalue/governance"
+readme = "README.md"
+license = "Apache-2.0"
+
+# Features condicionais
 [features]
 default = []
-ffi-bindings = ["dep:pyo3", "dep:prost"]
-# Feature unificada de observabilidade
-observability = [
-    "dep:tracing",
-    "dep:tracing-subscriber",
-    "dep:tracing-opentelemetry",
-    "dep:opentelemetry",
-    "dep:opentelemetry-otlp",
-    "dep:opentelemetry_sdk",
-    "dep:prometheus"
-]
-# Feature para S3 Ledger
-s3 = ["dep:aws-config", "dep:aws-sdk-s3"]
+observability = ["opentelemetry", "opentelemetry-otlp", "tracing-opentelemetry", "prometheus"]
+ffi-bindings = ["pyo3"]
+s3 = ["aws-sdk-s3"]
 
 [dependencies]
-# --- Core ---
-blake3 = "1.5"
-phf = { version = "0.11", features = ["macros"] }
-regex = "1.10"
-base64 = "0.22"
-hex = "0.4"
-rand = "0.8"
-serde = { workspace = true }
-serde_json = { workspace = true }
-serde_yaml = "0.9" # Crítico para Policy Engine
-anyhow = { workspace = true }
-thiserror = { workspace = true }
-lazy_static = { workspace = true }
-chrono = { workspace = true }
-static_assertions = "1.1"
-log = "0.4"
-async-trait = "0.1" # Necessário para remote/sync.rs
-
-# --- Serialization for Ledger ---
+# Core
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 bincode = "1.3"
-serde_bytes = "0.11"
-crc32fast = "1.3"
+thiserror = "1.0"
+anyhow = "1.0"
+lazy_static = "1.4"
+regex = "1.10"
+blake3 = "1.5"
+rand = "0.8"
+uuid = { version = "1.7", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.21"
+hex = "0.4"
 
-# --- Async Runtime ---
-tokio = { workspace = true }
-
-# --- Optional / Features ---
-pyo3 = { workspace = true, optional = true }
-prost = { workspace = true, optional = true }
-
-aws-config = { workspace = true, optional = true }
-aws-sdk-s3 = { workspace = true, optional = true }
-
-tracing = { workspace = true, optional = true }
-tracing-subscriber = { workspace = true, features = ["env-filter", "json"], optional = true }
-# Versões compatíveis para evitar conflito
+# Observabilidade (feature-gated) - CORRIGIDO: opentelemetry_sdk (com underscore)
+opentelemetry = { version = "0.20", optional = true }
+opentelemetry-otlp = { version = "0.13", optional = true }
+opentelemetry_sdk = { version = "0.20", optional = true }  # ✅ CORRIGIDO
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", optional = true }
 tracing-opentelemetry = { version = "0.22", optional = true }
-opentelemetry = { version = "0.21", features = ["trace"], optional = true }
-opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"], optional = true }
-opentelemetry-otlp = { version = "0.14", features = ["tonic"], optional = true }
 prometheus = { version = "0.13", optional = true }
-metrics = "0.24.3"
-uuid = { version = "1.20.0", features = ["v4"] }
+
+# FFI (feature-gated)
+pyo3 = { version = "0.20", features = ["extension-module"], optional = true }
+
+# AWS S3 (feature-gated)
+aws-sdk-s3 = { version = "0.36", optional = true }
+aws-config = { version = "0.56", optional = true }
+
+# Test utilities
+tempfile = { version = "3.10", optional = true }
+static_assertions = "1.1"
 
 [dev-dependencies]
 tempfile = "3.10"
-env_logger = "0.11"
-mockall = "0.12"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "buildtovalue_kernel"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

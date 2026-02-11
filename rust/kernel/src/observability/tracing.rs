@@ -10,11 +10,8 @@
 #![cfg(feature = "observability")]
 
 use opentelemetry::{global, KeyValue};
-use opentelemetry_sdk::{
-    trace::{Config, Sampler},
-    Resource,
-};
-use opentelemetry::trace::{TraceError, Tracer, TracerProvider};
+use opentelemetry_sdk::{trace as sdktrace, Resource};
+use opentelemetry::trace::TraceError;
 use opentelemetry_otlp::WithExportConfig;
 use tracing::{info, span, Level};
 use tracing_opentelemetry::OpenTelemetryLayer;
@@ -46,10 +43,10 @@ pub fn init_tracer() -> Result<(), TraceError> {
                 ),
         )
         .with_trace_config(
-            Config::default()
+            sdktrace::Config::default()
                 .with_resource(resource)
-                .with_sampler(Sampler::ParentBased(Box::new(
-                    Sampler::TraceIdRatioBased(0.1),
+                .with_sampler(sdktrace::Sampler::ParentBased(Box::new(
+                    sdktrace::Sampler::TraceIdRatioBased(0.1),
                 ))),
         )
         .install_batch(opentelemetry_sdk::runtime::Tokio)?;
