@@ -39,8 +39,14 @@ log = "0.4"
 env_logger = "0.11"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+# CORRIGIDO: OpenTelemetry com nomes corretos
+opentelemetry = "0.20"
+opentelemetry-otlp = "0.13"
+opentelemetry_sdk = "0.20"  # ✅ CORRIGIDO (underscore)
+tracing-opentelemetry = "0.22"
+prometheus = "0.13"
 
-# CLI & Configuration (ADICIONADO PARA CORRIGIR O ERRO)
+# CLI & Configuration
 clap = { version = "4.4", features = ["derive"] }
 colored = "2.1"
 dotenv = "0.15"
