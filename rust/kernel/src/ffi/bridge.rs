@@ -9,12 +9,14 @@
 //! Gate: Week 2 - Day 10
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict};
+use pyo3::types::{PyDict};
 use pyo3::exceptions::PyRuntimeError;
 use crate::gatekeeper::Gatekeeper;
 use crate::ledger::{DurableLedger, WalConfig};
-use crate::types::TechnicalEvidence;
+use crate::evidence::TechnicalEvidence;
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PYTHON MODULE
@@ -41,17 +43,24 @@ pub struct RustKernel {
 
 #[pymethods]
 impl RustKernel {
-    /// Cria novo kernel
+    /// Cria novo kernel (versão síncrona)
     #[new]
     fn new(wal_path: Option<String>) -> PyResult<Self> {
         let config = WalConfig {
             wal_path: wal_path
                 .map(|p| p.into())
                 .unwrap_or_else(|| "ledger.wal".into()),
+            fsync_enabled: true,
+            max_size_bytes: 100 * 1024 * 1024, // 100MB
+        };
+
+        // Configuração remota padrão (desativada por padrão)
+        let remote_config = crate::ledger::remote::sync::RemoteConfig {
+            enabled: false, // Desativa sync remoto por padrão
             ..Default::default()
         };
 
-        let ledger = DurableLedger::new(config)
+        let ledger = DurableLedger::new(config, remote_config)
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to create ledger: {}", e)))?;
 
         Ok(Self {
@@ -69,7 +78,11 @@ impl RustKernel {
     ///     dict: TechnicalEvidence serializado como dict
     fn scan_for_evidence(&self, input: &str) -> PyResult<PyTechnicalEvidence> {
         let mut gatekeeper = self.gatekeeper.lock().unwrap();
-        let evidence = gatekeeper.scan_for_evidence(input);
+
+        // Gera um audit_trail_id único usando UUID v4
+        let audit_trail_id = Uuid::new_v4().as_u128();
+
+        let evidence = gatekeeper.scan_for_evidence(input, audit_trail_id);
 
         Ok(PyTechnicalEvidence { inner: evidence })
     }
@@ -147,9 +160,9 @@ impl PyTechnicalEvidence {
         self.inner.version
     }
 
-    /// Timestamp
+    /// Timestamp (em microssegundos)
     #[getter]
-    fn timestamp(&self) -> u64 {
+    fn timestamp(&self) -> u128 {
         self.inner.timestamp
     }
 
@@ -186,7 +199,7 @@ impl PyTechnicalEvidence {
     /// Tamanho do input
     #[getter]
     fn input_size(&self) -> u32 {
-        self.inner.stats.input_size
+        self.inner.input_size
     }
 
     /// Hash BLAKE3 (hex string)
@@ -217,8 +230,9 @@ impl PyTechnicalEvidence {
             dict.set_item("finding_count", self.inner.finding_count)?;
             dict.set_item("critical_count", self.inner.critical_count)?;
             dict.set_item("entropy", self.inner.stats.entropy)?;
-            dict.set_item("input_size", self.inner.stats.input_size)?;
+            dict.set_item("input_size", self.inner.input_size)?;
             dict.set_item("hash", hex::encode(&self.inner.hash))?;
+            dict.set_item("audit_trail_id", self.inner.audit_trail_id.to_string())?;
             Ok(dict.into())
         })
     }
@@ -234,4 +248,3 @@ impl PyTechnicalEvidence {
         )
     }
 }
-

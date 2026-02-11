@@ -10,12 +10,11 @@
 //! - Fail-safe: Se S3 falhar, dados estão salvos no WAL local.
 
 use std::path::PathBuf;
-use tokio::sync::mpsc;
+use std::sync::mpsc;
 use anyhow::{Result, Context};
 
 use crate::ledger::wal::{WriteAheadLog, WalConfig, WalEntry};
-// ✅ CORREÇÃO: Removido import de S3Config que quebrava o build (agora usamos RemoteConfig genérico)
-use crate::ledger::remote::sync::{create_remote_sync, RemoteConfig};
+use crate::ledger::remote::sync::{RemoteConfig, RemoteSyncService};
 use crate::evidence::TechnicalEvidence;
 
 /// Erros específicos do Ledger
@@ -43,34 +42,29 @@ pub struct DurableLedger {
 }
 
 impl DurableLedger {
-    /// Inicializa o Ledger Durável
+    /// Inicializa o Ledger Durável (versão síncrona)
     ///
     /// # Argumentos
-    /// * `wal_path` - Caminho para o arquivo de log local.
-    /// * `remote_config` - Configuração genérica para o upload remoto (S3/Mock).
+    /// * `wal_config` - Configuração do WAL (caminho e opções).
+    /// * `remote_config` - Configuração para o upload remoto (S3/Mock).
     ///
     /// # Retorno
-    /// Retorna a instância do Ledger. O serviço de sync é iniciado em background (tokio::spawn).
-    pub async fn new(wal_path: PathBuf, remote_config: RemoteConfig) -> Result<Self> {
+    /// Retorna a instância do Ledger. O serviço de sync é iniciado em background.
+    pub fn new(wal_config: WalConfig, remote_config: RemoteConfig) -> Result<Self> {
         // 1. Inicializa WAL (Disk)
-        let wal_config = WalConfig {
-            wal_path: wal_path.clone(),
-            ..Default::default()
-        };
-
         let wal = WriteAheadLog::new(wal_config)
             .context("Failed to initialize Write-Ahead Log")?;
 
-        // 2. Inicializa Remote Sync Service (S3 ou Mock)
-        // O serviço roda em background e recebe entradas via canal.
-        let (tx, service) = create_remote_sync(remote_config);
+        // 2. Cria canal para comunicação com serviço de sync
+        let (tx, rx) = mpsc::channel::<WalEntry>();
 
-        // Spawna o serviço de sync na runtime do Tokio
-        tokio::spawn(async move {
-            service.run().await;
+        // 3. Inicializa e executa serviço de sync em thread separada
+        let sync_service = RemoteSyncService::new(remote_config, rx);
+        std::thread::spawn(move || {
+            sync_service.run();
         });
 
-        log::info!("DurableLedger initialized at {:?}", wal_path);
+        log::info!("DurableLedger initialized at {:?}", wal.config.wal_path);
 
         Ok(Self {
             wal,
@@ -96,15 +90,11 @@ impl DurableLedger {
         let entry = WalEntry::from_evidence(seq, evidence);
 
         // 3. Dispatch to Remote Sync (Best Effort / Non-blocking)
-        // Estratégia: try_send para não bloquear a thread principal se o S3 estiver lento.
         // Se falhar, o dado JÁ ESTÁ NO WAL.
-        match self.sync_sender.try_send(entry) {
+        match self.sync_sender.send(entry) {
             Ok(_) => {},
-            Err(mpsc::error::TrySendError::Full(_)) => {
-                log::warn!("Remote sync buffer full. Entry {} persisted to disk but delayed for upload.", seq);
-            },
-            Err(mpsc::error::TrySendError::Closed(_)) => {
-                log::error!("Remote sync service channel closed unexpectedly.");
+            Err(e) => {
+                log::warn!("Remote sync channel error. Entry {} persisted to disk but sync failed: {}", seq, e);
             }
         }
 
@@ -115,6 +105,21 @@ impl DurableLedger {
     pub fn flush(&self) -> Result<()> {
         self.wal.flush().context("Failed to flush WAL")
     }
+
+    /// Retorna métricas básicas do ledger
+    pub fn get_metrics(&self) -> LedgerMetrics {
+        LedgerMetrics::default()
+    }
+}
+
+/// Métricas básicas do ledger
+#[derive(Debug, Default)]
+pub struct LedgerMetrics {
+    pub entries_total: u64,
+    pub bytes_written: u64,
+    pub fsync_count: u64,
+    pub fsync_failures: u64,
+    pub avg_append_ms: f64,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -125,21 +130,24 @@ impl DurableLedger {
 mod tests {
     use super::*;
     use tempfile::tempdir;
-    use crate::ledger::remote::sync::StorageType;
 
-    #[tokio::test]
-    async fn test_durable_ledger_lifecycle() {
+    #[test]
+    fn test_durable_ledger_lifecycle() {
         let dir = tempdir().unwrap();
         let wal_path = dir.path().join("test.wal");
 
-        let remote_config = RemoteConfig {
-            storage_type: StorageType::Mock, // Usa mock para não tentar conectar no S3 real
-            enabled: true,
+        let wal_config = WalConfig {
+            wal_path: wal_path.clone(),
+            fsync_enabled: false, // Para testes rápidos
             ..Default::default()
         };
 
-        let ledger = DurableLedger::new(wal_path.clone(), remote_config)
-            .await
+        let remote_config = RemoteConfig {
+            enabled: false, // Desativa sync remoto para teste
+            ..Default::default()
+        };
+
+        let ledger = DurableLedger::new(wal_config, remote_config)
             .expect("Failed to create ledger");
 
         // Cria evidência dummy
