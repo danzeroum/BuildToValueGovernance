@@ -15,7 +15,7 @@ crate-type = ["cdylib"]
 buildtovalue-kernel = { path = "../kernel", features = ["ffi-bindings"] }
 
 # Python FFI (Herdado do Workspace)
-pyo3 = { workspace = true }
+pyo3 = { version = "0.20", features = ["extension-module", "abi3-py310"] }
 prost = { workspace = true }
 
 [features]
