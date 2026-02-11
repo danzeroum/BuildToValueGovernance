@@ -1,11 +1,13 @@
-//! Compliance Module v2.3.1
+//! Compliance Module v2.3.2
 //!
-//! **CHANGELOG v2.3.1**:
-//! - ✅ penalty_calculator_v2 promovido para versão oficial
-//! - ✅ Remoção de penalty_calculator (v1)
+//! Módulo responsável pela conformidade regulatória e métricas de viés.
+//!
+//! Estrutura:
+//! - `penalty_calculator`: Motor de cálculo de multas regulatórias (LGPD/GDPR/etc).
+//! - `ajl_metrics`: Métricas de Justiça Algorítmica (Algorithmic Justice League).
 
 pub mod ajl_metrics;
-pub mod penalty_calculator;  // Agora é a v2 (phf_map)
+pub mod penalty_calculator;
 
 pub use penalty_calculator::PenaltyCalculator;
 pub use ajl_metrics::{AJLMetricsEngine, BiasMetric, DemographicGroup};

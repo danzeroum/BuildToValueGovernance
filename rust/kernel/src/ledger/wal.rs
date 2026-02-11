@@ -9,6 +9,8 @@
 //! - Recuperação de falhas (Replay)
 
 use crate::evidence::TechnicalEvidence;
+// ✅ FIX: Importando EVIDENCE_SIZE para evitar magic numbers e erros de tamanho
+use crate::core::types::EVIDENCE_SIZE;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::path::PathBuf;
@@ -83,17 +85,17 @@ impl WalEntry {
 
     /// Tenta desserializar o snapshot de volta para TechnicalEvidence
     pub fn restore_evidence(&self) -> Option<TechnicalEvidence> {
-        // Nota: Isso assume que o layout de memória (unsafe transmute do to_bytes)
-        // é compatível. Para produção robusta, usaríamos bincode/protobuf na TechnicalEvidence.
-        // Aqui, como to_bytes() retorna [u8; 9596], precisamos validar o tamanho.
+        // ✅ FIX: Usando constante EVIDENCE_SIZE (9600) em vez de magic number (9596)
+        // Isso corrige o erro "Cannot transmute between types of different sizes"
 
-        if self.evidence_snapshot.len() == 9596 {
-            let mut arr = [0u8; 9596];
+        if self.evidence_snapshot.len() == EVIDENCE_SIZE {
+            let mut arr = [0u8; EVIDENCE_SIZE];
             arr.copy_from_slice(&self.evidence_snapshot);
             unsafe {
                 Some(std::mem::transmute(arr))
             }
         } else {
+            // Log de erro silencioso ou apenas None
             None
         }
     }
@@ -214,7 +216,8 @@ mod tests {
         let entry = WalEntry::from_evidence(1, &evidence);
 
         assert_eq!(entry.seq, 1);
-        assert_eq!(entry.evidence_snapshot.len(), 9596);
+        // Verifica se o tamanho do snapshot bate com a constante
+        assert_eq!(entry.evidence_snapshot.len(), EVIDENCE_SIZE);
 
         let restored = entry.restore_evidence().unwrap();
         assert_eq!(restored.audit_trail_id, 999);

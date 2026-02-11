@@ -63,6 +63,7 @@ opentelemetry = { version = "0.21", features = ["trace"], optional = true }
 opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"], optional = true }
 opentelemetry-otlp = { version = "0.14", features = ["tonic"], optional = true }
 prometheus = { version = "0.13", optional = true }
+metrics = "0.24.3"
 
 [dev-dependencies]
 tempfile = "3.10"

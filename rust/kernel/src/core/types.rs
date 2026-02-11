@@ -9,9 +9,12 @@
 //! - ✅ BiasDeclaration expandida de 32 para 512 bytes
 //! - ✅ Adicionados campos calibration_date, test_dataset_size, affected_groups, known_limitations
 //! - ✅ Validação de expiração de calibração (90 dias)
+//! - ✅ Serialize/Deserialize manual para arrays grandes (Fixed: removed conflicting derive)
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
+// ✅ FIX: Import Datelike trait to enable .year(), .month(), .day() methods
+use chrono::Datelike;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -106,6 +109,28 @@ impl TechnicalSeverity {
     pub fn is_critical(&self) -> bool {
         self.to_score() >= 0.8
     }
+
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            TechnicalSeverity::Info => 0,
+            TechnicalSeverity::Low => 1,
+            TechnicalSeverity::Medium => 2,
+            TechnicalSeverity::High => 3,
+            TechnicalSeverity::Critical(val) => *val,
+            TechnicalSeverity::PolicyViolation => 255,
+        }
+    }
+
+    pub fn from_u8(val: u8) -> Self {
+        match val {
+            0 => TechnicalSeverity::Info,
+            1 => TechnicalSeverity::Low,
+            2 => TechnicalSeverity::Medium,
+            3 => TechnicalSeverity::High,
+            255 => TechnicalSeverity::PolicyViolation,
+            _ => TechnicalSeverity::Critical(val),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,13 +143,23 @@ pub enum Action {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum EthicalVerdict {
+    Approved = 0,
+    Rejected = 1,
+    ManualReview = 2,
+    Pending = 3,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum ValidatorModule {
     Unknown = 0,
     // Core
     CPF,
     CNPJ,
     CreditCard,
-    Luhn, // Mantido para compatibilidade, se usado internamente
+    Luhn,
     Email,
     Phone,
 
@@ -175,11 +210,8 @@ impl InputStatistics {
         Self::default()
     }
 
-    // Serialização para bytes (para hashing)
     pub fn to_bytes(&self) -> [u8; 32] {
         unsafe {
-            // Nota: InputStatistics tem 32 bytes (4*5 + 2 + 4 + padding)
-            // Ajustamos para garantir memória segura
             let mut bytes = [0u8; 32];
             let raw = std::mem::transmute::<InputStatistics, [u8; 32]>(*self);
             bytes.copy_from_slice(&raw);
@@ -188,58 +220,32 @@ impl InputStatistics {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// BIAS DECLARATION (v2.4.0 - 512 bytes)
+// ═══════════════════════════════════════════════════════════════════════════
+
 /// Declaração Obrigatória de Viés (Princípio de Jonas)
 ///
-/// Documentação técnica das limitações conhecidas de cada validator,
-/// com taxas de erro calibradas empiricamente e data de validade.
-///
-/// Filosofia: Humildade Algorítmica — reconhecer limitações é
-/// pré-condição para confiança legítima (Jonas, 1984).
-///
-/// **v2.4.0 BREAKING CHANGE**: Expandido de 32 para 512 bytes
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+/// **ATENÇÃO**: Não derivamos Serialize/Deserialize automaticamente aqui porque
+/// os arrays [u8; 112/128/256] estouram o limite padrão do Serde (32).
+/// Usamos implementação manual abaixo.
+#[derive(Debug, Clone, Copy)] // ✅ FIX: Removed Serialize, Deserialize
 #[repr(C, align(8))]
 pub struct BiasDeclaration {
-    /// Taxa de falsos positivos (0.0-1.0)
     pub false_positive_rate: f32,
-
-    /// Taxa de falsos negativos (0.0-1.0)
     pub false_negative_rate: f32,
-
-    /// Data de calibração (formato YYYYMMDD, ex: 20260209)
-    /// Validade: 90 dias. Após isso, validator DEVE recalibrar.
     pub calibration_date: u32,
-
-    /// Tamanho do dataset de teste usado para calibração
     pub test_dataset_size: u32,
-
-    /// Grupos populacionais afetados desproporcionalmente
-    /// (codificação UTF-8, max 128 bytes, null-terminated)
-    /// Ex: "Brazilian Portuguese, non-standard formatting"
     pub affected_groups: [u8; 128],
-
-    /// Limitações técnicas conhecidas (UTF-8, max 256 bytes)
-    /// Ex: "Cannot detect implicit consent; 365-day validity arbitrary"
     pub known_limitations: [u8; 256],
-
-    /// Reservado para extensão futura
     pub _reserved: [u8; 112],
 }
 
-// Garantia compile-time: 4 + 4 + 4 + 4 + 128 + 256 + 112 = 512 bytes
-static_assertions::const_assert_eq!(
-    std::mem::size_of::<BiasDeclaration>(),
-    512
-);
+// Garantia compile-time
+static_assertions::const_assert_eq!(std::mem::size_of::<BiasDeclaration>(), 512);
 
 impl BiasDeclaration {
-    /// Cria declaração com valores obrigatórios
-    pub fn new(
-        fpr: f32,
-        fnr: f32,
-        calibration_date: u32,
-        test_size: u32,
-    ) -> Self {
+    pub fn new(fpr: f32, fnr: f32, calibration_date: u32, test_size: u32) -> Self {
         Self {
             false_positive_rate: fpr,
             false_negative_rate: fnr,
@@ -251,41 +257,31 @@ impl BiasDeclaration {
         }
     }
 
-    /// Define grupos afetados (UTF-8 text, truncado se > 127 bytes)
     pub fn with_affected_groups(mut self, text: &str) -> Self {
         let bytes = text.as_bytes();
-        let len = bytes.len().min(127); // Reserve 1 byte para null terminator
+        let len = bytes.len().min(127);
+        self.affected_groups = [0; 128]; // Limpa anterior
         self.affected_groups[..len].copy_from_slice(&bytes[..len]);
-        self.affected_groups[len] = 0; // Null terminator
         self
     }
 
-    /// Define limitações (UTF-8 text, truncado se > 255 bytes)
     pub fn with_limitations(mut self, text: &str) -> Self {
         let bytes = text.as_bytes();
         let len = bytes.len().min(255);
+        self.known_limitations = [0; 256]; // Limpa anterior
         self.known_limitations[..len].copy_from_slice(&bytes[..len]);
-        self.known_limitations[len] = 0;
         self
     }
 
-    /// Valida se calibração está dentro de 90 dias
-    ///
-    /// Implementação aproximada (ignora meses de 28-31 dias).
-    /// Filosofia: Calibrações expiram para forçar reavaliação contínua,
-    /// evitando "esquecimento institucional" de data drift.
     pub fn is_calibration_valid(&self) -> bool {
-        // Parse current date as YYYYMMDD
         let now = chrono::Utc::now();
-        let now_yyyymmdd = now.year() as u32 * 10000
-            + now.month() * 100
-            + now.day();
+        let now_yyyymmdd =
+            now.year() as u32 * 10000 + now.month() * 100 + now.day();
 
         if self.calibration_date == 0 || self.calibration_date > now_yyyymmdd {
-            return false; // Invalid date
+            return false;
         }
 
-        // Cálculo aproximado (cada mês = 30 dias)
         let cal_year = self.calibration_date / 10000;
         let cal_month = (self.calibration_date / 100) % 100;
         let cal_day = self.calibration_date % 100;
@@ -294,7 +290,8 @@ impl BiasDeclaration {
         let now_month = (now_yyyymmdd / 100) % 100;
         let now_day = now_yyyymmdd % 100;
 
-        let days_diff = ((now_year - cal_year) * 365) as i32
+        // Cálculo aproximado de diferença em dias
+        let days_diff = ((now_year as i32 - cal_year as i32) * 365)
             + ((now_month as i32 - cal_month as i32) * 30)
             + (now_day as i32 - cal_day as i32);
 
@@ -304,11 +301,148 @@ impl BiasDeclaration {
     pub fn to_bytes(&self) -> [u8; 512] {
         unsafe { std::mem::transmute(*self) }
     }
+
+    /// Helper para extrair string UTF-8 de array (até null terminator)
+    pub fn array_to_string(arr: &[u8]) -> String {
+        let end = arr.iter().position(|&b| b == 0).unwrap_or(arr.len());
+        String::from_utf8_lossy(&arr[..end]).to_string()
+    }
 }
 
+// ✅ FIX: Default para BiasDeclaration exigido pelo TechnicalEvidence
 impl Default for BiasDeclaration {
     fn default() -> Self {
         Self::new(0.0, 0.0, 0, 0)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MANUAL SERIALIZE/DESERIALIZE (Arrays grandes)
+// ═══════════════════════════════════════════════════════════════════════════
+
+impl Serialize for BiasDeclaration {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("BiasDeclaration", 6)?;
+
+        state.serialize_field("false_positive_rate", &self.false_positive_rate)?;
+        state.serialize_field("false_negative_rate", &self.false_negative_rate)?;
+        state.serialize_field("calibration_date", &self.calibration_date)?;
+        state.serialize_field("test_dataset_size", &self.test_dataset_size)?;
+
+        // Serializar arrays como strings UTF-8 para legibilidade JSON
+        state.serialize_field(
+            "affected_groups",
+            &Self::array_to_string(&self.affected_groups),
+        )?;
+        state.serialize_field(
+            "known_limitations",
+            &Self::array_to_string(&self.known_limitations),
+        )?;
+
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for BiasDeclaration {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{self, MapAccess, Visitor};
+
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "snake_case")]
+        enum Field {
+            FalsePositiveRate,
+            FalseNegativeRate,
+            CalibrationDate,
+            TestDatasetSize,
+            AffectedGroups,
+            KnownLimitations,
+        }
+
+        struct BiasVisitor;
+
+        impl<'de> Visitor<'de> for BiasVisitor {
+            type Value = BiasDeclaration;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct BiasDeclaration")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<BiasDeclaration, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut fpr = None;
+                let mut fnr = None;
+                let mut date = None;
+                let mut size = None;
+                let mut groups: Option<String> = None;
+                let mut limits: Option<String> = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::FalsePositiveRate => {
+                            if fpr.is_some() { return Err(de::Error::duplicate_field("false_positive_rate")); }
+                            fpr = Some(map.next_value()?);
+                        }
+                        Field::FalseNegativeRate => {
+                            if fnr.is_some() { return Err(de::Error::duplicate_field("false_negative_rate")); }
+                            fnr = Some(map.next_value()?);
+                        }
+                        Field::CalibrationDate => {
+                            if date.is_some() { return Err(de::Error::duplicate_field("calibration_date")); }
+                            date = Some(map.next_value()?);
+                        }
+                        Field::TestDatasetSize => {
+                            if size.is_some() { return Err(de::Error::duplicate_field("test_dataset_size")); }
+                            size = Some(map.next_value()?);
+                        }
+                        Field::AffectedGroups => {
+                            if groups.is_some() { return Err(de::Error::duplicate_field("affected_groups")); }
+                            groups = Some(map.next_value()?);
+                        }
+                        Field::KnownLimitations => {
+                            if limits.is_some() { return Err(de::Error::duplicate_field("known_limitations")); }
+                            limits = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                let fpr = fpr.ok_or_else(|| de::Error::missing_field("false_positive_rate"))?;
+                let fnr = fnr.ok_or_else(|| de::Error::missing_field("false_negative_rate"))?;
+                let date = date.ok_or_else(|| de::Error::missing_field("calibration_date"))?;
+                let size = size.ok_or_else(|| de::Error::missing_field("test_dataset_size"))?;
+
+                let mut bias = BiasDeclaration::new(fpr, fnr, date, size);
+
+                if let Some(g) = groups {
+                    bias = bias.with_affected_groups(&g);
+                }
+
+                if let Some(l) = limits {
+                    bias = bias.with_limitations(&l);
+                }
+
+                Ok(bias)
+            }
+        }
+
+        const FIELDS: &[&str] = &[
+            "false_positive_rate",
+            "false_negative_rate",
+            "calibration_date",
+            "test_dataset_size",
+            "affected_groups",
+            "known_limitations",
+        ];
+
+        deserializer.deserialize_struct("BiasDeclaration", FIELDS, BiasVisitor)
     }
 }
 
@@ -324,6 +458,7 @@ pub enum ThreatType {
     DenialOfWallet,
     Toxicity,
     BiasViolation,
+    DataRetention, // Adicionado para conformidade com PenaltyCalculator
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -334,4 +469,14 @@ pub enum RegulatoryFramework {
     CCPA,
     HIPAA,
     PCIDSS,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bias_declaration_size() {
+        assert_eq!(std::mem::size_of::<BiasDeclaration>(), 512);
+    }
 }
