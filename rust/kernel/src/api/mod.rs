@@ -1,5 +1,4 @@
-//! API Layer
-//! Estruturas de contrato com o mundo externo.
-
+// rust/kernel/src/api/mod.rs
 pub mod response;
-pub use response::{ValidationResult, ResponseType}; // Ajuste conforme suas structs
+// Agora ValidationResult e ResponseType são públicos em response.rs
+pub use response::{ValidationResult, ResponseType};
