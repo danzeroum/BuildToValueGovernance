@@ -13,7 +13,7 @@ pub mod entry;
 pub mod wal;
 pub mod remote;
 
-pub use durable_ledger::{DurableLedger, LedgerError};
+pub use durable_ledger::{DurableLedger};
 pub use entry::{LedgerEntry, ActionType};
 // ✅ CORREÇÃO: Exportando WalEntry para ser visível pelo sync.rs e bridge
 pub use wal::{WriteAheadLog, WalEntry};

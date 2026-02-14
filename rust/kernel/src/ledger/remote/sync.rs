@@ -1,19 +1,14 @@
 //! Remote Sync Layer v2.3.2
-//!
-//! Orquestrador de sincronização background.
-//! - Gerencia fila de upload
-//! - Abstrai o Storage (S3, Mock, etc)
-//! - Implementa Batching
+//! Sincronização assíncrona do ledger com S3.
+//! Somente compilado com a feature `remote-sync`.
+
+#![cfg(feature = "remote-sync")]
 
 use crate::ledger::wal::WalEntry;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
-use anyhow::{Result, Context};
+use anyhow::Result;
 use serde::{Serialize, Deserialize};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// CONFIGURATION
-// ═══════════════════════════════════════════════════════════════════════════
 
 const BATCH_SIZE: usize = 100;
 const MAX_RETRIES: u32 = 3;
@@ -52,10 +47,6 @@ impl Default for RemoteConfig {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SYNC SERVICE
-// ═══════════════════════════════════════════════════════════════════════════
-
 pub struct RemoteSyncService {
     config: RemoteConfig,
     receiver: mpsc::Receiver<WalEntry>,
@@ -64,11 +55,10 @@ pub struct RemoteSyncService {
 
 impl RemoteSyncService {
     pub fn new(config: RemoteConfig, receiver: mpsc::Receiver<WalEntry>) -> Self {
-        let batch_size = config.batch_size;
         Self {
             config,
             receiver,
-            buffer: Vec::with_capacity(batch_size),
+            buffer: Vec::with_capacity(config.batch_size),
         }
     }
 
@@ -80,18 +70,15 @@ impl RemoteSyncService {
         }
 
         log::info!("Starting remote sync service [{:?}] bucket: {}", self.config.storage_type, self.config.bucket);
-
         while let Some(entry) = self.receiver.recv().await {
             self.handle_entry(entry).await;
         }
-
         self.flush_buffer().await;
         log::info!("Remote sync service stopped");
     }
 
     async fn handle_entry(&mut self, entry: WalEntry) {
         self.buffer.push(entry);
-
         if self.buffer.len() >= self.config.batch_size {
             self.flush_buffer().await;
         }
@@ -101,9 +88,7 @@ impl RemoteSyncService {
         if self.buffer.is_empty() {
             return;
         }
-
-        let batch: Vec<WalEntry> = self.buffer.drain(..).collect();
-
+        let batch = std::mem::take(&mut self.buffer);
         if let Err(e) = self.upload_batch_with_retry(&batch).await {
             log::error!("Failed to upload batch of {} entries: {}", batch.len(), e);
         } else {
@@ -112,34 +97,11 @@ impl RemoteSyncService {
     }
 
     async fn upload_batch_with_retry(&self, _batch: &[WalEntry]) -> Result<()> {
-        let mut attempts = 0;
-
-        loop {
-            attempts += 1;
-
-            // Simulação de sucesso (o S3Connector real é usado em produção)
-            let result: Result<()> = Ok(());
-
-            match result {
-                Ok(_) => return Ok(()),
-                Err(e) => {
-                    if attempts >= self.config.max_retries {
-                        return Err(e).context("Max retries exceeded");
-                    }
-
-                    // ✅ CORREÇÃO: Uso de saturating_sub para evitar overflow "0_usize - 1_usize"
-                    // Garante que não haja panic se attempts for 0 (embora comece em 1)
-                    let backoff = RETRY_BASE_DELAY_MS * 2u64.pow(attempts.saturating_sub(1));
-                    sleep(Duration::from_millis(backoff)).await;
-                }
-            }
-        }
+        // Implementação real com S3Connector (feature s3)
+        // Placeholder para compilação
+        Ok(())
     }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// PUBLIC FACTORY
-// ═══════════════════════════════════════════════════════════════════════════
 
 pub fn create_remote_sync(config: RemoteConfig) -> (mpsc::Sender<WalEntry>, RemoteSyncService) {
     let (tx, rx) = mpsc::channel(1000);

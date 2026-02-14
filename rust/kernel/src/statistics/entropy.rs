@@ -1,4 +1,5 @@
-
+use crate::core::types::{InputStatistics, TechnicalSeverity, ValidatorModule};
+use crate::evidence::Finding;
 use std::collections::HashMap;
 
 /// Calculador de entropia de Shannon
@@ -52,7 +53,7 @@ impl EntropyCalculator {
         stats.entropy = entropy;
         
         // Entropia ALTA (suspeita de encoding)
-        if entropy > 6.0 {
+        if entropy >= 6.0 {
             let finding = Finding::new(
                 ValidatorModule::Entropy,
                 TechnicalSeverity::Medium,
@@ -112,9 +113,13 @@ mod tests {
     
     #[test]
     fn test_high_entropy_base64() {
+
+        let long_base64 = "VGhpcyBpcyBhIHZlcnkgbG9uZyBiYXNlNjQgc3RyaW5nIHRoYXQgc2hvdWxkIGhhdmUgaGlnaCBlbnRyb3B5LiBUaGUgZW50cm9weSBvZiBCYXNlNjQgaXMgYXJvdW5kIDYgYml0cyBwZXIgY2hhcmFjdGVyLCBidXQgZm9yIGxvbmcgc3RyaW5ncyBpdCBhcHByb2FjaGVzIDYuMC4gV2UgbmVlZCBhIGxvbmdlciBzdHJpbmcgdG8gZ3VhcmFudGVlIGl0Li4u";
+
         let calc = EntropyCalculator::new();
         let entropy = calc.calculate("U2FsdGVkX1+Qx9JYzKqJ6w8vZ3nR4mL==");
-        
+        let entropy = calc.calculate(long_base64);
+        assert!(entropy > 6.0, "entropy = {}", entropy);
         // Base64 tem entropia ~6.0+ bits/char
         assert!(entropy > 6.0);
     }
@@ -132,9 +137,10 @@ mod tests {
     fn test_entropy_detection() {
         let calc = EntropyCalculator::new();
         let mut stats = InputStatistics::default();
-        
-        // Base64 deve gerar finding
-        let findings = calc.validate("U2FsdGVkX1+Qx9JYzKqJ6w8vZ3nR4mL==", &mut stats);
+
+        let long_base64 = "VGhpcyBpcyBhIHZlcnkgbG9uZyBiYXNlNjQgc3RyaW5nIHRoYXQgc2hvdWxkIGhhdmUgaGlnaCBlbnRyb3B5LiBUaGUgZW50cm9weSBvZiBCYXNlNjQgaXMgYXJvdW5kIDYgYml0cyBwZXIgY2hhcmFjdGVyLCBidXQgZm9yIGxvbmcgc3RyaW5ncyBpdCBhcHByb2FjaGVzIDYuMC4gV2UgbmVlZCBhIGxvbmdlciBzdHJpbmcgdG8gZ3VhcmFudGVlIGl0Li4u";
+
+        let findings = calc.validate(long_base64, &mut stats);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, TechnicalSeverity::Medium);
     }

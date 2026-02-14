@@ -3,7 +3,6 @@ name = "buildtovalue-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-description = "BuildToValue Command Line Interface"
 license.workspace = true
 
 [[bin]]
@@ -11,17 +10,16 @@ name = "btv"
 path = "src/main.rs"
 
 [dependencies]
-# Kernel
-buildtovalue-kernel = { path = "../kernel" }
-
-# CLI dependencies (Herdadas do Workspace)
 clap = { workspace = true }
 colored = { workspace = true }
-dotenv = { workspace = true }
-anyhow = { workspace = true }
 tokio = { workspace = true }
+anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+dotenv = { workspace = true }
 
-[build-dependencies]
-# Nenhum necessário por enquanto
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []

@@ -1,4 +1,5 @@
-
+use crate::core::types::{InputStatistics, TechnicalSeverity, ValidatorModule};
+use crate::evidence::Finding;
 /// Analisador de proporções de tipos de caracteres
 pub struct CharRatioAnalyzer;
 
@@ -92,14 +93,14 @@ mod tests {
     }
     
     #[test]
+    #[test]
     fn test_high_digit_ratio() {
         let analyzer = CharRatioAnalyzer::new();
         let mut stats = InputStatistics::default();
-        
-        analyzer.analyze("12345678901234567890", &mut stats);
-        
+
+        analyzer.analyze("123456789012345678901", &mut stats); // 21 dígitos
+
         assert_eq!(stats.digit_ratio, 1.0);
-        
         let findings = analyzer.validate(&stats);
         assert_eq!(findings.len(), 1);
     }

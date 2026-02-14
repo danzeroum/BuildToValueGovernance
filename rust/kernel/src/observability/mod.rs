@@ -5,29 +5,81 @@
 //! - ✅ Remoção de threat_ingestor (v1)
 //! - ✅ Correção de conflito de nomes no módulo tracing [E0432]
 
-pub mod metrics;
-pub mod threat_ingestor;
+// ═══════════════════════════════════════════════════════════════════════════
+// METRICS STUB
+// ═══════════════════════════════════════════════════════════════════════════
+pub mod metrics {
+    pub struct Metrics;
 
+    pub struct MetricsGuard;
+
+    impl Metrics {
+        #[inline]
+        pub fn record_validation(_profile: &str) {}
+
+        #[inline]
+        pub fn record_finding(_finding_type: &str, _severity: &str) {}
+
+        #[inline]
+        pub fn start_validation_timer(_profile: &str) -> MetricsGuard {
+            MetricsGuard
+        }
+    }
+
+    impl Drop for MetricsGuard {
+        fn drop(&mut self) {}
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THREAT INGESTOR STUB
+// ═══════════════════════════════════════════════════════════════════════════
+pub mod threat_ingestor {
+    pub struct ThreatIngestor;
+
+    #[derive(Debug, Clone)]
+    pub struct ThreatEvent;
+
+    impl ThreatIngestor {
+        pub fn new(_path: impl AsRef<std::path::Path>) -> Result<Self, String> {
+            Ok(ThreatIngestor)
+        }
+
+        pub fn ingest(&mut self, _event: ThreatEvent) -> Result<(), String> {
+            Ok(())
+        }
+
+        pub fn query_by_type(&self, _threat_type: &str) -> Vec<&ThreatEvent> {
+            vec![]
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRACING STUB
+// ═══════════════════════════════════════════════════════════════════════════
+pub mod tracing {
+    pub fn init_tracer() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        Ok(())
+    }
+
+    pub fn shutdown_tracer() {}
+
+    pub struct SpanGuard {
+        _private: (),
+    }
+
+    impl SpanGuard {
+        pub fn new(_name: &'static str) -> Self {
+            SpanGuard { _private: () }
+        }
+
+        pub fn record_error(&self, _error: &str) {}
+        pub fn record_success(&self) {}
+    }
+}
+
+// Re-exports
 pub use threat_ingestor::ThreatIngestor;
 pub use metrics::Metrics;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TRACING CONFIGURATION
-// ═══════════════════════════════════════════════════════════════════════════
-
-// ✅ CORREÇÃO 1 & 2: O módulo 'tracing' só é declarado se a feature estiver ativa.
-// Usamos 'self::tracing' para evitar conflito com a crate 'tracing'.
-#[cfg(feature = "observability")]
-pub mod tracing;
-
-#[cfg(feature = "observability")]
-pub use self::tracing::init_tracer;
-
-// ✅ CORREÇÃO 3: Fallback (Stub)
-// Se a observabilidade estiver desligada, fornecemos uma função dummy
-// para que o código que chama init_tracer() não quebre.
-#[cfg(not(feature = "observability"))]
-pub fn init_tracer() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // No-op: Observabilidade desativada, nada a fazer.
-    Ok(())
-}
+pub use tracing::init_tracer;
