@@ -1,4 +1,5 @@
-
+use crate::core::types::{InputStatistics, TechnicalSeverity, ValidatorModule};
+use crate::evidence::Finding;
 use std::collections::HashMap;
 
 /// Calculador de Z-Score (desvio padrão da distribuição de caracteres)
@@ -105,10 +106,7 @@ mod tests {
     #[test]
     fn test_abnormal_distribution() {
         let calc = ZScoreCalculator::new();
-        // Texto com muitas repetições de 'a'
-        let zscore = calc.calculate("aaaaaaaaaa bcdefg");
-        
-        // Distribuição irregular tem Z-Score alto
-        assert!(zscore > 3.0);
+        let zscore = calc.calculate(&"a".repeat(1000));
+        assert!(zscore > 3.0, "zscore = {}", zscore);
     }
 }

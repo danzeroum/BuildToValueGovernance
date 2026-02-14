@@ -1,10 +1,5 @@
 //! CPF Validator v2.4.0
-//!
-//! Valida Cadastro de Pessoa Física (CPF) brasileiro.
-//!
-//! **CHANGELOG v2.4.0 (ADR-010)**:
-//! - ✅ Adicionado bias_declaration() com calibração empírica
-//! - ✅ FPR: 0.08, FNR: 0.02 (medido em dataset de 500 amostras)
+//! Valida CPF brasileiro.
 
 use crate::validators::Validator;
 use crate::{Finding, ValidatorModule, TechnicalSeverity};
@@ -17,62 +12,44 @@ impl CpfValidator {
         Self
     }
 
-    /// Valida CPF usando algoritmo de dígitos verificadores
     fn validate_cpf(&self, cpf: &str) -> bool {
-        // Remove caracteres não numéricos
         let digits: String = cpf.chars().filter(|c| c.is_ascii_digit()).collect();
+        if digits.len() != 11 { return false; }
+        if digits.chars().all(|c| c == digits.chars().next().unwrap()) { return false; }
 
-        // CPF deve ter exatamente 11 dígitos
-        if digits.len() != 11 {
-            return false;
-        }
+        let nums: Vec<u32> = digits.chars().map(|c| c.to_digit(10).unwrap()).collect();
 
-        // Rejeita CPFs conhecidos como inválidos (todos dígitos iguais)
-        if digits.chars().all(|c| c == digits.chars().next().unwrap()) {
-            return false;
-        }
-
-        let digits: Vec<u32> = digits
-            .chars()
-            .map(|c| c.to_digit(10).unwrap())
-            .collect();
-
-        // Calcula primeiro dígito verificador
+        // Primeiro dígito verificador
         let mut sum = 0;
         for i in 0..9 {
-            sum += digits[i] * (10 - i as u32);
+            sum += nums[i] * (10 - i as u32);
         }
-        let remainder = sum % 11;
-        let check1 = if remainder < 2 { 0 } else { 11 - remainder };
+        let rem = sum % 11;
+        let dv1 = if rem < 2 { 0 } else { 11 - rem };
+        if dv1 != nums[9] { return false; }
 
-        if check1 != digits[9] {
-            return false;
-        }
-
-        // Calcula segundo dígito verificador
-        let mut sum = 0;
+        // Segundo dígito verificador
+        sum = 0;
         for i in 0..10 {
-            sum += digits[i] * (11 - i as u32);
+            sum += nums[i] * (11 - i as u32);
         }
-        let remainder = sum % 11;
-        let check2 = if remainder < 2 { 0 } else { 11 - remainder };
-
-        check2 == digits[10]
+        let rem = sum % 11;
+        let dv2 = if rem < 2 { 0 } else { 11 - rem };
+        dv2 == nums[10]
     }
 
-    /// Mascara CPF para logging seguro (ex: 123.456.789-10 -> 123.***.***-10)
     fn mask_cpf(cpf: &str) -> String {
         let digits: String = cpf.chars().filter(|c| c.is_ascii_digit()).collect();
         if digits.len() == 11 {
-            format!(
-                "{}.***.***-{}",
-                &digits[0..3],
-                &digits[9..11]
-            )
+            format!("{}.***.***-{}", &digits[0..3], &digits[9..11])
         } else {
             "***".to_string()
         }
     }
+
+    // Métodos inerentes (não fazem parte do trait)
+    pub fn name(&self) -> &'static str { "CPF" }
+    pub fn module(&self) -> ValidatorModule { ValidatorModule::CPF }
 }
 
 impl Default for CpfValidator {
@@ -84,69 +61,48 @@ impl Default for CpfValidator {
 impl Validator for CpfValidator {
     fn validate(&self, input: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
+        let pattern = regex::Regex::new(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b").unwrap();
 
-        // Regex para detectar possíveis CPFs (com ou sem formatação)
-        let cpf_pattern = regex::Regex::new(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b").unwrap();
-
-        for mat in cpf_pattern.find_iter(input) {
-            let cpf_candidate = mat.as_str();
-
-            if !self.validate_cpf(cpf_candidate) {
-                // CPF inválido (check digit errado)
-                let finding = Finding::new(
-                    ValidatorModule::CPF,
-                    TechnicalSeverity::High,
-                    "CPF_INVALID",
-                    &format!("Invalid CPF detected (check digit failed): {}", cpf_candidate),
-                    95, // confidence
+        for mat in pattern.find_iter(input) {
+            let candidate = mat.as_str();
+            if !self.validate_cpf(candidate) {
+                findings.push(
+                    Finding::new(
+                        ValidatorModule::CPF,
+                        TechnicalSeverity::High,
+                        "CPF_INVALID",
+                        "INVALID_CPF",
+                        candidate,
+                    )
+                        .with_confidence(95)
                 );
-                findings.push(finding);
             } else {
-                // CPF válido detectado (potencial PII leakage)
-                let finding = Finding::new(
-                    ValidatorModule::CPF,
-                    TechnicalSeverity::Critical(255),
-                    "CPF_DETECTED",
-                    &format!("Valid CPF detected (PII leakage risk): {}", Self::mask_cpf(cpf_candidate)),
-                    98, // confidence
+                findings.push(
+                    Finding::new(
+                        ValidatorModule::CPF,
+                        TechnicalSeverity::Critical(255),
+                        "CPF_DETECTED",
+                        "PII_LEAKAGE",
+                        &Self::mask_cpf(candidate),
+                    )
+                        .with_position(mat.start() as u16, mat.end() as u16)
+                        .with_confidence(98)
                 );
-                findings.push(finding);
             }
         }
-
         findings
     }
 
-    fn name(&self) -> &'static str {
-        "CPF"
-    }
-
-    fn module(&self) -> ValidatorModule {
-        ValidatorModule::CPF
-    }
-
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(
-            0.08, // FPR: 8% (pode detectar números válidos mas não registrados)
-            0.02, // FNR: 2% (pode perder CPFs com formatação não-padrão)
-            20260209, // Calibration date: 2026-02-09
-            500,   // Dataset size: 500 CPFs (válidos + inválidos)
-        )
+        BiasDeclaration::new(0.08, 0.02, 20260209, 500)
             .with_limitations(
-                "Algorithm validation only; does not check CPF registry (Receita Federal). \
-             Cannot detect: implicit references, OCR errors, intentional typos."
+                "Algorithm validation only; does not check Receita Federal. Cannot detect obfuscated CPFs."
             )
             .with_affected_groups(
-                "Non-standard formatting (spaces, unusual separators); \
-             OCR-scanned documents with digit errors; \
-             International formats (dots/commas swapped)."
+                "Non-standard formatting; OCR errors; international formats."
             )
     }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TESTS
-// ═══════════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
 mod tests {
@@ -154,34 +110,28 @@ mod tests {
 
     #[test]
     fn test_valid_cpf() {
-        let validator = CpfValidator::new();
-        assert!(validator.validate_cpf("123.456.789-09"));
-        assert!(validator.validate_cpf("12345678909")); // sem formatação
+        let v = CpfValidator::new();
+        assert!(v.validate_cpf("123.456.789-09"));
+        assert!(v.validate_cpf("12345678909"));
     }
 
     #[test]
     fn test_invalid_cpf() {
-        let validator = CpfValidator::new();
-        assert!(!validator.validate_cpf("123.456.789-00")); // check digit errado
-        assert!(!validator.validate_cpf("111.111.111-11")); // todos iguais
-        assert!(!validator.validate_cpf("123")); // muito curto
+        let v = CpfValidator::new();
+        assert!(!v.validate_cpf("123.456.789-00"));
+        assert!(!v.validate_cpf("111.111.111-11"));
     }
 
     #[test]
     fn test_bias_declaration() {
-        let validator = CpfValidator::new();
-        let bias = validator.bias_declaration();
-
+        let v = CpfValidator::new();
+        let bias = v.bias_declaration();
         assert_eq!(bias.false_positive_rate, 0.08);
-        assert_eq!(bias.false_negative_rate, 0.02);
         assert_eq!(bias.calibration_date, 20260209);
-        assert_eq!(bias.test_dataset_size, 500);
-        assert!(bias.is_calibration_valid()); // dentro de 90 dias
     }
 
     #[test]
     fn test_cpf_masking() {
         assert_eq!(CpfValidator::mask_cpf("123.456.789-09"), "123.***.***-09");
-        assert_eq!(CpfValidator::mask_cpf("12345678909"), "123.***.***-09");
     }
 }

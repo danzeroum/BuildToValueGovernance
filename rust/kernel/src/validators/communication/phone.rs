@@ -1,8 +1,5 @@
 //! Phone Validator v2.4.0
-//!
-//! **CHANGELOG v2.4.0 (ADR-010)**:
-//! - ✅ Adicionado bias_declaration()
-//! - ✅ FPR: 0.10, FNR: 0.05 (medido em dataset de 600 amostras)
+//! Detecta números de telefone brasileiros.
 
 use crate::validators::Validator;
 use crate::{Finding, ValidatorModule, TechnicalSeverity};
@@ -20,6 +17,18 @@ impl PhoneValidator {
             ).unwrap(),
         }
     }
+
+    fn mask_phone(phone: &str) -> String {
+        let digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
+        if digits.len() >= 8 {
+            format!("(##) ****-{}", &digits[digits.len()-4..])
+        } else {
+            "****".to_string()
+        }
+    }
+
+    pub fn name(&self) -> &'static str { "Phone" }
+    pub fn module(&self) -> ValidatorModule { ValidatorModule::Phone }
 }
 
 impl Default for PhoneValidator {
@@ -31,61 +40,30 @@ impl Default for PhoneValidator {
 impl Validator for PhoneValidator {
     fn validate(&self, input: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
-
         for mat in self.pattern.find_iter(input) {
             let phone = mat.as_str();
-
-            let finding = Finding::new(
-                ValidatorModule::Phone,
-                TechnicalSeverity::Medium,
-                "PHONE_DETECTED",
-                "Phone number detected",
-                &format!("Phone found: {}", Self::mask_phone(phone)),
-                85,
+            findings.push(
+                Finding::new(
+                    ValidatorModule::Phone,
+                    TechnicalSeverity::Medium,
+                    "PHONE_DETECTED",
+                    "PII_LEAKAGE",
+                    &Self::mask_phone(phone),
+                )
+                    .with_confidence(85)
             );
-            findings.push(finding);
         }
-
         findings
     }
 
-    fn name(&self) -> &'static str {
-        "Phone"
-    }
-
-    fn module(&self) -> ValidatorModule {
-        ValidatorModule::Phone
-    }
-
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(
-            0.10, // FPR: 10% (pode detectar números não-telefônicos)
-            0.05, // FNR: 5% (pode perder formatos internacionais)
-            20260209,
-            600,
-        )
+        BiasDeclaration::new(0.10, 0.05, 20260209, 600)
             .with_limitations(
-                "Brazilian phone format only; does not validate against carrier databases. \
-             Cannot detect: international formats (non-Brazilian), \
-             written-out numbers (five five five), VoIP numbers."
+                "Brazilian format only; does not validate carrier."
             )
             .with_affected_groups(
-                "International numbers; \
-             Non-standard separators (dots, spaces); \
-             Extension numbers (x1234); \
-             Toll-free numbers (0800)."
+                "International numbers; non-standard separators; extensions."
             )
-    }
-}
-
-impl PhoneValidator {
-    fn mask_phone(phone: &str) -> String {
-        let digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
-        if digits.len() >= 8 {
-            format!("(##) ****-{}", &digits[digits.len()-4..])
-        } else {
-            "****".to_string()
-        }
     }
 }
 
@@ -95,15 +73,15 @@ mod tests {
 
     #[test]
     fn test_phone_detection() {
-        let validator = PhoneValidator::new();
-        let findings = validator.validate("Call: (11) 98765-4321");
+        let v = PhoneValidator::new();
+        let findings = v.validate("Call: (11) 98765-4321");
         assert_eq!(findings.len(), 1);
     }
 
     #[test]
     fn test_bias_declaration() {
-        let validator = PhoneValidator::new();
-        let bias = validator.bias_declaration();
+        let v = PhoneValidator::new();
+        let bias = v.bias_declaration();
         assert_eq!(bias.false_positive_rate, 0.10);
     }
 }

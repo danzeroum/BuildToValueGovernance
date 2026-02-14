@@ -5,7 +5,7 @@
 //
 // Author: BuildToValue Architecture Team
 // License: Apache 2.0
-
+#![cfg(feature = "ffi-bindings")]
 use crate::validators::{
     ConsentValidator, ConsentRevocationValidator, SensitiveDataValidator,
     CpfValidator, CnpjValidator, CreditCardValidator, Validator,
