@@ -48,8 +48,6 @@ impl CreditCardValidator {
         }
     }
 
-    pub fn name(&self) -> &'static str { "CreditCard" }
-    pub fn module(&self) -> ValidatorModule { ValidatorModule::CreditCard }
 }
 
 impl Default for CreditCardValidator {
@@ -92,8 +90,29 @@ impl Validator for CreditCardValidator {
     }
 }
 
+use crate::core::module::{Module, ScanContext};
+
+impl Module for CreditCardValidator {
+    fn scan(&self, input: &str, _ctx: &mut ScanContext) -> Vec<Finding> {
+        self.validate(input)
+    }
+
+    fn name(&self) -> &'static str {
+        "CreditCard"
+    }
+
+    fn module_id(&self) -> ValidatorModule {
+        ValidatorModule::CreditCard
+    }
+
+    fn bias_declaration(&self) -> BiasDeclaration {
+        <Self as Validator>::bias_declaration(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::core::module;
     use super::*;
 
     #[test]
@@ -111,7 +130,7 @@ mod tests {
     #[test]
     fn test_bias_declaration() {
         let v = CreditCardValidator::new();
-        let bias = v.bias_declaration();
+        let bias = module::Module::bias_declaration(&v);
         assert_eq!(bias.false_positive_rate, 0.05);
     }
 }
