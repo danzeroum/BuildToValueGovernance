@@ -1,6 +1,6 @@
 //! Policy Engine v1.0 (placeholder)
 //! Carregamento de políticas YAML.
-
+use serde_yaml;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;

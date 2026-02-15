@@ -3,10 +3,8 @@
 //! Somente compilado com a feature `remote-sync`.
 
 #![cfg(feature = "remote-sync")]
-
 use crate::ledger::wal::WalEntry;
 use tokio::sync::mpsc;
-use tokio::time::{sleep, Duration};
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 
@@ -55,10 +53,11 @@ pub struct RemoteSyncService {
 
 impl RemoteSyncService {
     pub fn new(config: RemoteConfig, receiver: mpsc::Receiver<WalEntry>) -> Self {
+        let batch_size = config.batch_size;
         Self {
-            config,
+            config,  // agora config é movido depois que extraímos batch_size
             receiver,
-            buffer: Vec::with_capacity(config.batch_size),
+            buffer: Vec::with_capacity(batch_size),
         }
     }
 

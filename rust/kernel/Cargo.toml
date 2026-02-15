@@ -6,40 +6,41 @@ authors.workspace = true
 license.workspace = true
 
 [lib]
+name = "buildtovalue_kernel"
+path = "src/lib.rs"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
+static_assertions = { workspace = true }
 blake3 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_bytes = { workspace = true }
 serde_yaml = { workspace = true }
-chrono = { workspace = true }
 thiserror = { workspace = true }
+anyhow = { workspace = true }
 lazy_static = { workspace = true }
 regex = { workspace = true }
-base64 = { workspace = true }
 hex = { workspace = true }
-ring = { workspace = true }
+base64 = { workspace = true }
 rand = { workspace = true }
 spin_sleep = { workspace = true }
 unicode-normalization = { workspace = true }
-static_assertions = { workspace = true }
-tempfile = { workspace = true, optional = true }
-uuid = { workspace = true, features = ["v4"] }
-log = { workspace = true }
+chrono = { workspace = true }
 bincode = { workspace = true }
-anyhow = { workspace = true }
-
-# PyO3 (feature‑gated)
+uuid = { workspace = true }
+log = { workspace = true }
 pyo3 = { workspace = true, optional = true }
-tokio = "1.49.0"
+tokio = { workspace = true }
+aws-sdk-s3 = { workspace = true, optional = true }
+aws-config = { workspace = true, optional = true }
 
 [dev-dependencies]
-criterion = { workspace = true }
+tempfile = { workspace = true }
 
 [features]
-default = ["tempfile"]
-ffi-bindings = ["dep:pyo3"]
-tempfile = ["dep:tempfile"]
-# Observability e AWS desativados por enquanto
+default = ["ffi-bindings"]
+ffi-bindings = ["pyo3/extension-module"]
+observability = []
+remote-sync = ["tokio/full"]
+s3 = ["remote-sync", "dep:aws-sdk-s3", "dep:aws-config"]

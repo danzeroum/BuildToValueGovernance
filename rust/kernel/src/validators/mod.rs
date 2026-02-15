@@ -19,10 +19,11 @@ pub use sensitive::SensitiveDataValidator;
 pub use privacy::{ConsentValidator, ConsentRevocationValidator};
 pub use analysis::StatisticalValidator;
 
-use crate::Finding;
+use crate::evidence::Finding;
 use crate::core::types::BiasDeclaration;
 
-/// Trait comum para todos os validadores.
+/// Trait original para validadores (mantido por compatibilidade, mas obsoleto).
+/// Novos módulos devem implementar `crate::core::module::Module` diretamente.
 pub trait Validator: Send + Sync {
     /// Valida input e retorna findings.
     fn validate(&self, input: &str) -> Vec<Finding>;

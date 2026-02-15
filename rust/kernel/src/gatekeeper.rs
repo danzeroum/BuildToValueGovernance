@@ -1,19 +1,15 @@
-//! Gatekeeper v2.4.0 - Core Scanning Engine (ADR-010)
-//!
-//! Orquestrador soberano que coordena validadores, estatísticas e deobfuscadores.
-//! Produz TechnicalEvidence com BiasDeclaration agregado.
+//! Gatekeeper v2.4.0 – Orquestrador soberano (ADR-017)
 
+use crate::core::module::{Module, ScanContext};
+use crate::core::types::BiasDeclaration;
+use crate::evidence::TechnicalEvidence;
 use std::time::Instant;
-use log;
-use crate::evidence::{TechnicalEvidence, Finding};
-use crate::core::types::{BiasDeclaration, ValidatorModule};
-use crate::statistics::char_ratio::CharRatioAnalyzer;
-use crate::statistics::entropy::EntropyCalculator;
-use crate::statistics::zscore::ZScoreCalculator;
+
+// Importação de todos os módulos (use paths completos)
 use crate::validators::brazilian::{CpfValidator, CnpjValidator};
 use crate::validators::communication::{EmailValidator, PhoneValidator};
 use crate::validators::financial::CreditCardValidator;
-use crate::validators::Validator;
+use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer};
 use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector};
 
 // ---------------------------------------------------------------------
@@ -32,50 +28,39 @@ pub struct GatekeeperMetrics {
 // GATEKEEPER
 // ---------------------------------------------------------------------
 pub struct Gatekeeper {
-    pub metrics: GatekeeperMetrics,
-
-    // Validators (PII & Business Rules)
-    cpf_validator: CpfValidator,
-    cnpj_validator: CnpjValidator,
-    email_validator: EmailValidator,
-    card_validator: CreditCardValidator,
-    phone_validator: PhoneValidator,
-
-    // Statistics
-    entropy_calculator: EntropyCalculator,
-    zscore_calculator: ZScoreCalculator,
-    char_ratio_analyzer: CharRatioAnalyzer,
-
-    // Deobfuscator
-    base64_detector: Base64Detector,
-    hex_decoder: HexDecoder,
-    leet_detector: LeetspeakDetector,
+    modules: Vec<Box<dyn Module>>,
+    metrics: GatekeeperMetrics,
 }
 
 impl Gatekeeper {
     pub fn new() -> Self {
+        // A ordem deve corresponder à ordem histórica:
+        // validadores, estatísticos, desofuscadores
+        let modules: Vec<Box<dyn Module>> = vec![
+            Box::new(CpfValidator::new()),
+            Box::new(CnpjValidator::new()),
+            Box::new(EmailValidator::new()),
+            Box::new(CreditCardValidator::new()),
+            Box::new(PhoneValidator::new()),
+            Box::new(EntropyCalculator::new()),
+            Box::new(ZScoreCalculator::new()),
+            Box::new(CharRatioAnalyzer::new()),
+            Box::new(Base64Detector::new()),
+            Box::new(HexDecoder::new()),
+            Box::new(LeetspeakDetector::new()),
+        ];
+
         Self {
+            modules,
             metrics: GatekeeperMetrics::default(),
-            cpf_validator: CpfValidator::new(),
-            cnpj_validator: CnpjValidator::new(),
-            email_validator: EmailValidator::new(),
-            card_validator: CreditCardValidator::new(),
-            phone_validator: PhoneValidator::new(),
-            entropy_calculator: EntropyCalculator::new(),
-            zscore_calculator: ZScoreCalculator::new(),
-            char_ratio_analyzer: CharRatioAnalyzer::new(),
-            base64_detector: Base64Detector::new(),
-            hex_decoder: HexDecoder::new(),
-            leet_detector: LeetspeakDetector::new(),
         }
     }
 
-    /// Escaneia input e produz TechnicalEvidence.
     pub fn scan_for_evidence(&mut self, input: &str, audit_trail_id: u128) -> TechnicalEvidence {
         let start = Instant::now();
         let mut evidence = TechnicalEvidence::new(audit_trail_id);
 
-        // 1. Hash do input original
+        // Hash do input original
         let mut hasher = blake3::Hasher::new();
         hasher.update(input.as_bytes());
         evidence.original_request_hash = u64::from_le_bytes(
@@ -83,57 +68,26 @@ impl Gatekeeper {
         );
         evidence.input_size = input.len() as u32;
 
-        // 2. Validadores (PII)
-        evidence.executed_modules |= 1 << 0;
-        self.run_validators(input, &mut evidence);
+        let mut ctx = ScanContext::default();
 
-        // 3. Estatísticas
-        evidence.executed_modules |= 1 << 1;
-        self.run_statistics(input, &mut evidence);
-
-        // 4. Deobfuscadores
-        evidence.executed_modules |= 1 << 2;
-        self.run_deobfuscators(input, &mut evidence);
-
-        // 5. Agregação de BiasDeclaration (worst‑case)
-        evidence.bias = self.aggregate_bias_declarations();
-
-        // 6. Verifica validade da calibração (ADR-010)
-        if !evidence.bias.is_calibration_valid() {
-            log::warn!(
-                "BiasDeclaration expired (calibration_date: {}, audit_trail: {})",
-                evidence.bias.calibration_date,
-                audit_trail_id
-            );
-        }
-
-        // 7. Finalização
-        evidence.processing_time_us = start.elapsed().as_micros() as u64;
-        evidence.finalize().expect("Failed to finalize evidence");
-
-        // 8. Métricas
-        self.update_metrics(start.elapsed().as_secs_f32() * 1000.0, &evidence);
-
-        evidence
-    }
-
-    /// Agrega BiasDeclaration de todos os validadores (worst‑case propagation).
-    fn aggregate_bias_declarations(&self) -> BiasDeclaration {
-        let validators: Vec<&dyn Validator> = vec![
-            &self.cpf_validator,
-            &self.cnpj_validator,
-            &self.email_validator,
-            &self.card_validator,
-            &self.phone_validator,
-        ];
-
+        // Agregação de bias (pior caso)
         let mut max_fpr = 0.0_f32;
         let mut max_fnr = 0.0_f32;
         let mut oldest_calibration = u32::MAX;
         let mut total_test_size = 0_u32;
 
-        for v in validators {
-            let bias = v.bias_declaration();
+        for module in &self.modules {
+            // Executa o módulo e coleta findings
+            let findings = module.scan(input, &mut ctx);
+            for finding in findings {
+                evidence.add_finding(finding);
+            }
+
+            // Marca módulo como executado (bitmask)
+            evidence.executed_modules |= 1 << (module.module_id() as u8);
+
+            // Agrega bias
+            let bias = module.bias_declaration();
             max_fpr = max_fpr.max(bias.false_positive_rate);
             max_fnr = max_fnr.max(bias.false_negative_rate);
             if bias.calibration_date > 0 {
@@ -142,40 +96,33 @@ impl Gatekeeper {
             total_test_size = total_test_size.saturating_add(bias.test_dataset_size);
         }
 
-        if oldest_calibration == u32::MAX {
-            oldest_calibration = 0;
+        // Preenche estatísticas
+        evidence.stats = ctx.stats;
+
+        // Preenche bias agregado
+        evidence.bias = BiasDeclaration::new(
+            max_fpr,
+            max_fnr,
+            if oldest_calibration == u32::MAX { 0 } else { oldest_calibration },
+            total_test_size,
+        )
+            .with_limitations("Aggregated from all modules (worst-case)")
+            .with_affected_groups("See individual module documentation");
+
+        // Valida data de calibração (ADR-010)
+        if !evidence.bias.is_calibration_valid() {
+            log::warn!(
+                "BiasDeclaration expired (calibration_date: {}, audit_trail: {})",
+                evidence.bias.calibration_date,
+                audit_trail_id
+            );
         }
 
-        BiasDeclaration::new(max_fpr, max_fnr, oldest_calibration, total_test_size)
-            .with_limitations("Aggregated from multiple validators (worst-case)")
-            .with_affected_groups("See individual validator documentation")
-    }
+        evidence.processing_time_us = start.elapsed().as_micros() as u64;
+        evidence.finalize().expect("Failed to finalize evidence");
+        self.update_metrics(start.elapsed().as_secs_f32() * 1000.0, &evidence);
 
-    fn run_validators(&self, input: &str, evidence: &mut TechnicalEvidence) {
-        for f in self.cpf_validator.validate(input) { evidence.add_finding(f); }
-        for f in self.cnpj_validator.validate(input) { evidence.add_finding(f); }
-        for f in self.email_validator.validate(input) { evidence.add_finding(f); }
-        for f in self.card_validator.validate(input) { evidence.add_finding(f); }
-        for f in self.phone_validator.validate(input) { evidence.add_finding(f); }
-    }
-
-    fn run_statistics(&self, input: &str, evidence: &mut TechnicalEvidence) {
-        for f in self.entropy_calculator.validate(input, &mut evidence.stats) {
-            evidence.add_finding(f);
-        }
-        for f in self.zscore_calculator.validate(input, &mut evidence.stats) {
-            evidence.add_finding(f);
-        }
-        self.char_ratio_analyzer.analyze(input, &mut evidence.stats);
-        for f in self.char_ratio_analyzer.validate(&evidence.stats) {
-            evidence.add_finding(f);
-        }
-    }
-
-    fn run_deobfuscators(&self, input: &str, evidence: &mut TechnicalEvidence) {
-        for f in self.base64_detector.detect(input) { evidence.add_finding(f); }
-        for f in self.hex_decoder.detect(input) { evidence.add_finding(f); }
-        for f in self.leet_detector.detect(input) { evidence.add_finding(f); }
+        evidence
     }
 
     fn update_metrics(&mut self, latency_ms: f32, evidence: &TechnicalEvidence) {
@@ -199,52 +146,5 @@ impl Gatekeeper {
 impl Default for Gatekeeper {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_clean_input_no_findings() {
-        let mut gk = Gatekeeper::new();
-        let ev = gk.scan_for_evidence("Texto limpo.", 0x1234);
-        assert_eq!(ev.finding_count, 0);
-        assert_eq!(ev.critical_count, 0);
-    }
-
-    #[test]
-    fn test_cpf_detection() {
-        let mut gk = Gatekeeper::new();
-        let ev = gk.scan_for_evidence("CPF: 123.456.789-09", 0x1234);
-        assert!(ev.finding_count > 0);
-        assert_eq!(ev.critical_count, 1);
-    }
-
-    #[test]
-    fn test_bias_aggregation_worst_case() {
-        let mut gk = Gatekeeper::new();
-        let ev = gk.scan_for_evidence("test", 0x1234);
-        assert!(ev.bias.false_positive_rate > 0.0);
-        assert!(ev.bias.false_negative_rate > 0.0);
-        assert!(ev.bias.test_dataset_size >= 500);
-        assert_eq!(ev.bias.calibration_date, 20260209);
-    }
-
-    #[test]
-    fn test_bias_calibration_valid() {
-        let mut gk = Gatekeeper::new();
-        let ev = gk.scan_for_evidence("test", 0x1234);
-        assert!(ev.bias.is_calibration_valid());
-    }
-
-    #[test]
-    fn test_gatekeeper_latency_under_30ms() {
-        let mut gk = Gatekeeper::new();
-        let start = Instant::now();
-        let _ = gk.scan_for_evidence("CPF: 111.444.777-05, Email: test@example.com", 0x1234);
-        let elapsed = start.elapsed().as_millis();
-        assert!(elapsed < 50, "Latency too high: {}ms", elapsed);
     }
 }

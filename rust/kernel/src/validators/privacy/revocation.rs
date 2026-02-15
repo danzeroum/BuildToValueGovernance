@@ -2,7 +2,7 @@
 //! Verifica revogação de consentimento (LGPD Art. 8º, § 5º).
 
 use crate::validators::Validator;
-use crate::{Finding, ValidatorModule, TechnicalSeverity};
+use crate::{Finding, ValidatorModule};
 use crate::core::types::BiasDeclaration;
 
 pub struct ConsentRevocationValidator;
