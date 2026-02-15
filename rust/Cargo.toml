@@ -1,64 +1,62 @@
 [workspace]
+members = ["kernel", "bindings", "cli"]
 resolver = "2"
-members = [
-    "kernel",
-    "bindings",
-    "cli"
-]
 
 [workspace.package]
-version = "2.3.2"
+version = "2.3.1"
 edition = "2021"
-authors = ["BuildToValue Team"]
-license = "Proprietary"
+authors = ["BuildToValue Team <team@buildtovalue.com>"]
+license = "Apache-2.0"
 
 [workspace.dependencies]
-# Core & Error Handling
-anyhow = "1.0"
-thiserror = "1.0"
-serde = { version = "1.0", features = ["derive", "rc"] }
-serde_json = "1.0"
-serde_yaml = "0.9"
-tokio = { version = "1.36", features = ["full", "rt-multi-thread", "macros", "sync"] }
-chrono = { version = "0.4", features = ["serde", "clock"] }
-lazy_static = "1.4"
-static_assertions = "1.1"
-
-# Crypto & Hashing
+# Core
 blake3 = "1.5"
-hex = "0.4"
-base64 = "0.22"
-rand = "0.8"
-
-# Pattern Matching & Parsing
-regex = "1.10"
-phf = { version = "0.11", features = ["macros"] }
-
-# Logging & Tracing
-log = "0.4"
-env_logger = "0.11"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-# CORRIGIDO: OpenTelemetry com nomes corretos
-opentelemetry = "0.20"
-opentelemetry-otlp = "0.13"
-opentelemetry_sdk = "0.20"  # ✅ CORRIGIDO (underscore)
-tracing-opentelemetry = "0.22"
-prometheus = "0.13"
-
-# CLI & Configuration
-clap = { version = "4.4", features = ["derive"] }
-colored = "2.1"
-dotenv = "0.15"
-
-# FFI
-pyo3 = { version = "0.21", features = ["extension-module", "abi3-py310"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_bytes = "0.11"
+serde_yaml = "0.9"
+pyo3 = { version = "0.20", features = ["extension-module"] }
 prost = "0.12"
-
-# Cloud (Optional)
-aws-config = "1.1"
-aws-sdk-s3 = "1.14"
-
-[workspace.dev-dependencies]
+phf = { version = "0.11", features = ["macros"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+tracing = "0.1"
+tokio = { version = "1.44.0", features = ["rt", "rt-multi-thread", "macros", "sync"] }
+anyhow = "1.0"
+lazy_static = "1.4"
+log = "0.4"
+regex = "1.10"
+base64 = "0.22"
+hex = "0.4"
+ring = "0.17"
+rand = "0.8"
+spin_sleep = "1.1"
+unicode-normalization = "0.1"
+static_assertions = "1.1"
 tempfile = "3.10"
-mockall = "0.12"
+uuid = { version = "1.8", features = ["v4"] }
+dotenv = "0.15"
+bincode = "1.3.3"
+sha2 = "0.10"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+colored = "2.0"
+
+# FFI (build‑time only)
+maturin = "1.5"
+
+# Observability
+prometheus = "0.13"
+opentelemetry = "0.21"
+opentelemetry_sdk = "0.21"
+opentelemetry-otlp = "0.14"
+tracing-opentelemetry = "0.22"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# AWS
+aws-sdk-s3 = "1.123.0"
+aws-config = "1.8.14"
+
+# Dev
+criterion = "0.5"

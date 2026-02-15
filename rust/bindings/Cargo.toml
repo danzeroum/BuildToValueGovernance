@@ -3,7 +3,6 @@ name = "buildtovalue-bindings"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-description = "BuildToValue FFI Bindings for Python"
 license.workspace = true
 
 [lib]
@@ -11,13 +10,21 @@ name = "buildtovalue_governance"
 crate-type = ["cdylib"]
 
 [dependencies]
-# Kernel com suporte a FFI ativado
-buildtovalue-kernel = { path = "../kernel", features = ["ffi-bindings"] }
-
-# Python FFI (Herdado do Workspace)
-pyo3 = { version = "0.20", features = ["extension-module", "abi3-py310"] }
-prost = { workspace = true }
+pyo3 = { workspace = true }
+buildtovalue-kernel = { path = "../kernel" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+sha2 = { workspace = true }
+log = "0.4.29"          # <-- adicionado
 
 [features]
-default = ["python"]
-python = ["buildtovalue-kernel/ffi-bindings"]
+default = ["python", "c"]
+python = ["pyo3/extension-module"]
+c = []
+
+[package.metadata.maturin]
+name = "buildtovalue_governance"

@@ -10,7 +10,6 @@
 
 use serde::{Deserialize, Serialize};
 use crate::core::types::{TechnicalSeverity, ValidatorModule};
-use std::fmt;
 
 /// Finding individual (144 bytes fixos)
 ///

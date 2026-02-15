@@ -1,26 +1,15 @@
-//! FFI Bridge v2.1 - Python ↔ Rust integration
-//!
-//! Expõe Rust Sovereign Kernel para Python via PyO3:
-//! - scan_for_evidence() → TechnicalEvidence v2.1
-//! - Serialização Protobuf/JSON
-//! - Batch processing
-//! - Thread-safe
-//!
-//! Gate: Week 2 - Day 10
+#![cfg(feature = "ffi-bindings")]
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict};
 use pyo3::exceptions::PyRuntimeError;
 use crate::gatekeeper::Gatekeeper;
-use crate::ledger::{DurableLedger, WalConfig};
+use crate::ledger::{DurableLedger, LedgerEntry};
+use crate::ledger::remote::S3Config;
 use crate::evidence::TechnicalEvidence;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PYTHON MODULE
-// ═══════════════════════════════════════════════════════════════════════════
 
 #[pymodule]
 fn buildtovalue_kernel(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -30,11 +19,6 @@ fn buildtovalue_kernel(_py: Python, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// RUST KERNEL (Python-accessible)
-// ═══════════════════════════════════════════════════════════════════════════
-
-/// Rust Sovereign Kernel (Python interface)
 #[pyclass]
 pub struct RustKernel {
     gatekeeper: Arc<Mutex<Gatekeeper>>,
@@ -43,24 +27,15 @@ pub struct RustKernel {
 
 #[pymethods]
 impl RustKernel {
-    /// Cria novo kernel (versão síncrona)
     #[new]
-    fn new(wal_path: Option<String>) -> PyResult<Self> {
-        let config = WalConfig {
-            wal_path: wal_path
-                .map(|p| p.into())
-                .unwrap_or_else(|| "ledger.wal".into()),
-            fsync_enabled: true,
-            max_size_bytes: 100 * 1024 * 1024, // 100MB
-        };
+    fn new(ledger_path: Option<String>) -> PyResult<Self> {
+        let disk_path = ledger_path.map(Into::into).unwrap_or_else(|| "ledger.data".into());
+        let s3_config = S3Config::default();
 
-        // Configuração remota padrão (desativada por padrão)
-        let remote_config = crate::ledger::remote::sync::RemoteConfig {
-            enabled: false, // Desativa sync remoto por padrão
-            ..Default::default()
-        };
-
-        let ledger = DurableLedger::new(config, remote_config)
+        // Cria runtime tokio temporário para construir o ledger (async)
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create tokio runtime: {}", e)))?;
+        let ledger = runtime.block_on(DurableLedger::new(disk_path, s3_config))
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to create ledger: {}", e)))?;
 
         Ok(Self {
@@ -69,46 +44,33 @@ impl RustKernel {
         })
     }
 
-    /// Escaneia input e retorna TechnicalEvidence
-    ///
-    /// Args:
-    ///     input (str): Texto a escanear
-    ///
-    /// Returns:
-    ///     dict: TechnicalEvidence serializado como dict
     fn scan_for_evidence(&self, input: &str) -> PyResult<PyTechnicalEvidence> {
         let mut gatekeeper = self.gatekeeper.lock().unwrap();
-
-        // Gera um audit_trail_id único usando UUID v4
         let audit_trail_id = Uuid::new_v4().as_u128();
-
         let evidence = gatekeeper.scan_for_evidence(input, audit_trail_id);
-
         Ok(PyTechnicalEvidence { inner: evidence })
     }
 
-    /// Append evidence ao ledger
-    ///
-    /// Args:
-    ///     evidence (PyTechnicalEvidence): Evidence a persistir
-    ///
-    /// Returns:
-    ///     int: Sequence number
     fn append_to_ledger(&self, evidence: &PyTechnicalEvidence) -> PyResult<u64> {
-        let ledger = self.ledger.lock().unwrap();
+        // Constrói LedgerEntry a partir da evidência (placeholders para ação/veredito)
+        let mut entry = LedgerEntry::default();
+        entry.audit_trail_id = evidence.inner.audit_trail_id;
+        entry.timestamp = evidence.inner.timestamp;
+        entry.risk_level = evidence.inner.risk_level;
+        // TODO: action e ethical_verdict devem vir da governança Python no futuro
 
-        ledger.append(&evidence.inner)
-            .map_err(|e| PyRuntimeError::new_err(format!("Append failed: {}", e)))
+        let ledger = self.ledger.lock().unwrap();
+        let seq = ledger.append(entry, &evidence.inner)
+            .map_err(|e| PyRuntimeError::new_err(format!("Append failed: {}", e)))?;
+        Ok(seq)
     }
 
-    /// Scan + Append (operação completa)
     fn scan_and_persist(&self, input: &str) -> PyResult<(PyTechnicalEvidence, u64)> {
         let evidence = self.scan_for_evidence(input)?;
         let seq = self.append_to_ledger(&evidence)?;
         Ok((evidence, seq))
     }
 
-    /// Retorna métricas do gatekeeper
     fn get_gatekeeper_metrics(&self) -> PyResult<PyObject> {
         let gatekeeper = self.gatekeeper.lock().unwrap();
         let metrics = gatekeeper.get_metrics();
@@ -124,28 +86,9 @@ impl RustKernel {
         })
     }
 
-    /// Retorna métricas do ledger
-    fn get_ledger_metrics(&self) -> PyResult<PyObject> {
-        let ledger = self.ledger.lock().unwrap();
-        let metrics = ledger.get_metrics();
-
-        Python::with_gil(|py| {
-            let dict = PyDict::new(py);
-            dict.set_item("entries_total", metrics.entries_total)?;
-            dict.set_item("bytes_written", metrics.bytes_written)?;
-            dict.set_item("fsync_count", metrics.fsync_count)?;
-            dict.set_item("fsync_failures", metrics.fsync_failures)?;
-            dict.set_item("avg_append_ms", metrics.avg_append_ms)?;
-            Ok(dict.into())
-        })
-    }
+    // Método get_ledger_metrics removido temporariamente – DurableLedger ainda não implementa métricas.
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// TECHNICAL EVIDENCE (Python wrapper)
-// ═══════════════════════════════════════════════════════════════════════════
-
-/// TechnicalEvidence v2.1 (Python-accessible)
 #[pyclass]
 #[derive(Clone)]
 pub struct PyTechnicalEvidence {
@@ -154,72 +97,40 @@ pub struct PyTechnicalEvidence {
 
 #[pymethods]
 impl PyTechnicalEvidence {
-    /// Versão
     #[getter]
-    fn version(&self) -> u32 {
-        self.inner.version
-    }
+    fn version(&self) -> u32 { self.inner.version }
 
-    /// Timestamp (em microssegundos)
     #[getter]
-    fn timestamp(&self) -> u128 {
-        self.inner.timestamp
-    }
+    fn timestamp(&self) -> u128 { self.inner.timestamp }
 
-    /// Composite risk score
     #[getter]
-    fn composite_risk(&self) -> f32 {
-        self.inner.composite_risk
-    }
+    fn composite_risk(&self) -> f32 { self.inner.composite_risk }
 
-    /// Risk level (string)
     #[getter]
-    fn risk_level(&self) -> String {
-        format!("{}", self.inner.risk_level)
-    }
+    fn risk_level(&self) -> String { format!("{}", self.inner.risk_level) }
 
-    /// Número de findings
     #[getter]
-    fn finding_count(&self) -> u8 {
-        self.inner.finding_count
-    }
+    fn finding_count(&self) -> u8 { self.inner.finding_count }
 
-    /// Número de findings críticos
     #[getter]
-    fn critical_count(&self) -> u8 {
-        self.inner.critical_count
-    }
+    fn critical_count(&self) -> u8 { self.inner.critical_count }
 
-    /// Entropia (statistics)
     #[getter]
-    fn entropy(&self) -> f32 {
-        self.inner.stats.entropy
-    }
+    fn entropy(&self) -> f32 { self.inner.stats.entropy }
 
-    /// Tamanho do input
     #[getter]
-    fn input_size(&self) -> u32 {
-        self.inner.input_size
-    }
+    fn input_size(&self) -> u32 { self.inner.input_size }
 
-    /// Hash BLAKE3 (hex string)
     #[getter]
-    fn hash(&self) -> String {
-        hex::encode(&self.inner.hash)
-    }
+    fn hash(&self) -> String { hex::encode(&self.inner.hash) }
 
-    /// Valida integridade via hash
-    fn validate_hash(&self) -> bool {
-        self.inner.validate_hash()
-    }
+    fn validate_hash(&self) -> bool { self.inner.validate_hash() }
 
-    /// Serializa para JSON
     fn to_json(&self) -> PyResult<String> {
         serde_json::to_string(&self.inner)
             .map_err(|e| PyRuntimeError::new_err(format!("JSON serialization failed: {}", e)))
     }
 
-    /// Serializa para dict Python
     fn to_dict(&self) -> PyResult<PyObject> {
         Python::with_gil(|py| {
             let dict = PyDict::new(py);
@@ -237,7 +148,6 @@ impl PyTechnicalEvidence {
         })
     }
 
-    /// String representation
     fn __repr__(&self) -> String {
         format!(
             "TechnicalEvidence(risk={:.2}, findings={}, critical={}, entropy={:.2})",

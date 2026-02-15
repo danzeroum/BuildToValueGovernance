@@ -3,7 +3,9 @@
 
 pub mod types;
 pub mod errors;
+pub mod module;          // <-- ADICIONAR
 
 // Re-exports para facilitar o uso
-pub use types::{ValidatorModule, TechnicalSeverity, Action, RiskLevel};
+pub use types::{ValidatorModule, TechnicalSeverity, Action, RiskLevel, BiasDeclaration};
 pub use errors::EvidenceError;
+pub use module::{Module, ScanContext};   // <-- ADICIONAR

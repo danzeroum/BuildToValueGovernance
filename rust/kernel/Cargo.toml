@@ -1,66 +1,46 @@
 [package]
 name = "buildtovalue-kernel"
-version = "2.3.1"
-authors = ["BuildToValue Architecture Team"]
-edition = "2021"
-
-# Metadados do projeto (sincronizado com PROJECT_CONTEXT.md)
-description = "Sovereign Kernel for BuildToValue Governance Platform v3.0"
-repository = "https://github.com/buildtovalue/governance"
-readme = "README.md"
-license = "Apache-2.0"
-
-# Features condicionais
-[features]
-default = []
-observability = ["opentelemetry", "opentelemetry-otlp", "tracing-opentelemetry", "prometheus"]
-ffi-bindings = ["pyo3"]
-s3 = ["aws-sdk-s3"]
-
-[dependencies]
-# Core
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-bincode = "1.3"
-thiserror = "1.0"
-anyhow = "1.0"
-lazy_static = "1.4"
-regex = "1.10"
-blake3 = "1.5"
-rand = "0.8"
-uuid = { version = "1.7", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
-base64 = "0.21"
-hex = "0.4"
-
-# Observabilidade (feature-gated) - CORRIGIDO: opentelemetry_sdk (com underscore)
-opentelemetry = { version = "0.20", optional = true }
-opentelemetry-otlp = { version = "0.13", optional = true }
-opentelemetry_sdk = { version = "0.20", optional = true }  # ✅ CORRIGIDO
-tracing = { version = "0.1", optional = true }
-tracing-subscriber = { version = "0.3", optional = true }
-tracing-opentelemetry = { version = "0.22", optional = true }
-prometheus = { version = "0.13", optional = true }
-
-# FFI (feature-gated)
-pyo3 = { version = "0.20", features = ["extension-module"], optional = true }
-
-# AWS S3 (feature-gated)
-aws-sdk-s3 = { version = "0.36", optional = true }
-aws-config = { version = "0.56", optional = true }
-
-# Test utilities
-tempfile = { version = "3.10", optional = true }
-static_assertions = "1.1"
-
-[dev-dependencies]
-tempfile = "3.10"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
 
 [lib]
-crate-type = ["cdylib", "rlib"]
 name = "buildtovalue_kernel"
+path = "src/lib.rs"
+crate-type = ["lib", "cdylib"]
 
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
+[dependencies]
+static_assertions = { workspace = true }
+blake3 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_bytes = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+lazy_static = { workspace = true }
+regex = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
+spin_sleep = { workspace = true }
+unicode-normalization = { workspace = true }
+chrono = { workspace = true }
+bincode = { workspace = true }
+uuid = { workspace = true }
+log = { workspace = true }
+pyo3 = { workspace = true, optional = true }
+tokio = { workspace = true }
+aws-sdk-s3 = { workspace = true, optional = true }
+aws-config = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = ["ffi-bindings"]
+ffi-bindings = ["pyo3/extension-module"]
+observability = []
+remote-sync = ["tokio/full"]
+s3 = ["remote-sync", "dep:aws-sdk-s3", "dep:aws-config"]
