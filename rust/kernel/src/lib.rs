@@ -6,6 +6,8 @@ pub mod core;
 pub mod deobfuscator;
 pub mod evidence;
 pub mod gatekeeper;
+
+pub mod batch;
 pub mod ledger;
 pub mod observability;
 pub mod policy;
@@ -15,6 +17,7 @@ pub mod validators;
 
 #[cfg(feature = "ffi-bindings")]
 pub mod ffi;
+
 
 // Re-exports
 pub use gatekeeper::Gatekeeper;
