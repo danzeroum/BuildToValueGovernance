@@ -33,3 +33,40 @@ Três novos componentes:
 3. **Desobfuscador v2 (chaining)** — Hoje detecta base64, hex e leetspeak separados. Na v1.6, detecta truques em cadeia (ex: alguém codifica um CPF em base64, depois codifica o resultado em hex).
 
 **Em resumo:** v1.5 construiu a infraestrutura confiável. v1.6 adiciona a inteligência de decisão.
+
+
+## v1.7 — Contexto (Rust)
+
+Ensinou o kernel a entender **de onde** e **como** o request chega:
+
+- **IpClassifier**: Identifica se o IP é residencial, datacenter (AWS/GCP), VPN ou Tor. Tor = risco crítico.
+- **SessionDrift**: Compara comportamento atual vs histórico usando similaridade de cosseno. Se mudou muito → possível sessão comprometida.
+- **Interceptor**: Hooks de pré/pós-processamento (trim, max length, etc). Se um hook falha → BLOCK (fail-secure).
+- **Testes Contextuais**: Mesmo CPF, mas decisões diferentes dependendo do IP, drift, policy e interceptor.
+
+**Resumo**: antes o kernel só olhava o *conteúdo*. Agora olha o *contexto* também.
+
+---
+
+## v1.8 — Governança (Python)
+
+Ativou o "Judiciário" — a camada que interpreta evidências com ética:
+
+- **EthicalContextEngine v4.0**: Recebe evidências do Rust, aplica Rawls/Levinas/Jonas/Gilligan, emite decisão assinada (HMAC-SHA256).
+- **MercyCalculator**: 6 cenários calibrados (trust alto + primeira vez → abrandar; reincidente + trust baixo → manter BLOCK).
+- **ContestabilityLoop**: Usuário pode contestar decisões. SLA de 24h. Appeals aceitos melhoram trust score.
+- **E2E Tests**: Pipeline completo — request → BLOCK → appeal → resolução → trust atualizado.
+- **Fix**: Quebrou import circular extraindo `types.py`.
+
+**Resumo**: antes o sistema só detectava. Agora **julga com contexto**, permite **recurso**, e **aprende** com erros.
+
+---
+
+## v1.9 — O que vem (API + Observability)
+
+Duas peças planejadas:
+
+- **F1.9-01 Axum Gateway** (`rust/gateway/`): Servidor HTTP em Rust (substituindo FastAPI para serving). Rotas: `/validate`, `/appeals`, `/health`. Tokio runtime.
+- **F1.9-02 Observability** (`kernel/src/observability/`): Métricas Prometheus (latência, findings, trust scores, bias rates) + W3C Trace Context para rastreamento ponta a ponta.
+
+**Resumo**: v1.9 expõe tudo que foi construído até agora como API HTTP com monitoramento em produção.
