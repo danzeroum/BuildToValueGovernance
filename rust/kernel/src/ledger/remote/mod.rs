@@ -1,24 +1,15 @@
-//! Remote Sync Module v2.3.2
-//!
-//! Módulo responsável pela sincronização assíncrona do Ledger com armazenamento remoto (S3).
-//!
-//! Componentes:
-//! - `s3_connector`: Cliente S3 com retry, backoff e DLQ (Requer feature "s3").
-//! - `sync`: Serviço de background para upload em batch e não-bloqueante.
+//! Remote Sync Module - rust/kernel/src/ledger/remote/mod.rs
 
-// ✅ CORREÇÃO: Protegendo módulo que depende de aws-sdk-s3 (opcional)
+pub mod config;
 #[cfg(feature = "s3")]
 pub mod s3_connector;
-
+#[cfg(feature = "remote-sync")]
 pub mod sync;
 
-// ✅ CORREÇÃO: Re-exports protegidos e Typo corrigido (S3Connecto -> S3Connector)
-#[cfg(feature = "s3")]
-pub use s3_connector::{S3Connector, S3Config, S3Error};
+// Re-exporta S3Config incondicionalmente para uso em outros módulos
+pub use config::S3Config;
 
-pub use sync::{
-    create_remote_sync,
-    RemoteSyncService,
-    RemoteConfig,
-    StorageType
-};
+#[cfg(feature = "s3")]
+pub use s3_connector::{ S3Error};
+#[cfg(feature = "remote-sync")]
+pub use sync::{RemoteSyncService, RemoteConfig};

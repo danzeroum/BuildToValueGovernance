@@ -1,6 +1,5 @@
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Demographic groups for AJL compliance
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -108,7 +107,7 @@ mod tests {
         // Male: 80/100 hired, Female: 60/100 hired
         // DIR = 0.60 / 0.80 = 0.75 (FAIL)
         let dir = engine.calculate_dir(60, 100, 80, 100);
-        assert_eq!(dir, 0.75);
+        assert!((dir - 0.75).abs() < 1e-10, "dir = {}", dir);
         assert!(!engine.is_compliant(dir));
     }
 
