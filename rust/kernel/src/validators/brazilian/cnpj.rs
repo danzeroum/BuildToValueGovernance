@@ -43,8 +43,6 @@ impl CnpjValidator {
         }
     }
 
-    pub fn name(&self) -> &'static str { "CNPJ" }
-    pub fn module(&self) -> ValidatorModule { ValidatorModule::CNPJ }
 }
 
 impl Default for CnpjValidator {
@@ -100,8 +98,29 @@ impl Validator for CnpjValidator {
     }
 }
 
+use crate::core::module::{Module, ScanContext};
+
+impl Module for CnpjValidator {
+    fn scan(&self, input: &str, _ctx: &mut ScanContext) -> Vec<Finding> {
+        self.validate(input)
+    }
+
+    fn name(&self) -> &'static str {
+        "CNPJ"
+    }
+
+    fn module_id(&self) -> ValidatorModule {
+        ValidatorModule::CNPJ
+    }
+
+    fn bias_declaration(&self) -> BiasDeclaration {
+        <Self as Validator>::bias_declaration(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::core::module;
     use super::*;
 
     #[test]
@@ -119,7 +138,7 @@ mod tests {
     #[test]
     fn test_bias_declaration() {
         let v = CnpjValidator::new();
-        let bias = v.bias_declaration();
+        let bias = module::Module::bias_declaration(&v);
         assert_eq!(bias.false_positive_rate, 0.06);
     }
 
