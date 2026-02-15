@@ -1,0 +1,407 @@
+# BuildToValue v2.0 - ISO 42001 Base Compliance Profile
+# Artificial Intelligence Management System
+#
+# ISO/IEC 42001:2023 - World's first AI management system standard
+#
+# Version: 1.0.0
+# Last Updated: 2026-02-05
+
+id: iso_42001_base
+name: ISO 42001 Base Compliance Profile
+description: |
+  ISO/IEC 42001:2023 - AI Management System.
+  Framework for responsible development and use of AI systems.
+  
+  Covers: Risk management, transparency, human oversight,
+  data governance, model documentation, monitoring.
+
+parent_id: null
+version: 1.0.0
+legal_framework: ISO_42001
+jurisdiction: INTERNATIONAL
+created_at: 2026-02-05
+
+legal_metadata:
+  standard_name: "Artificial Intelligence Management System"
+  standard_number: "ISO/IEC 42001:2023"
+  standard_url: "https://www.iso.org/standard/81230.html"
+  certification_body: "ISO (International Organization for Standardization)"
+  publication_date: "2023-12-18"
+
+  scope:
+    - "AI system development lifecycle"
+    - "Risk management for AI"
+    - "Data governance"
+    - "Transparency and explainability"
+    - "Human oversight"
+    - "Continuous monitoring"
+
+  certification:
+    type: "Third-party certification available"
+    validity: "3 years (with annual surveillance audits)"
+    cost: "Varies by organization size ($10k-$100k+)"
+
+domain_config:
+  general:
+    risk_multiplier: 1.0  # ISO = voluntary standard (não tem multas)
+    require_ai_officer: true
+    require_risk_assessment: true
+    model_documentation_mandatory: true
+
+  ai_lifecycle_stages:
+    - "Planning"
+    - "Design"
+    - "Development"
+    - "Verification"
+    - "Deployment"
+    - "Operation"
+    - "Monitoring"
+    - "Maintenance"
+    - "Decommissioning"
+
+rules:
+  # ═══════════════════════════════════════════════════════════════════════
+  # CLAUSE 6: PLANNING (AI Objectives & Risk Assessment)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: ISO42001_6_1_RISK_ASSESSMENT
+    name: "AI Risk Assessment Required"
+    description: "Conduct comprehensive AI risk assessment (Clause 6.1)"
+    action: ESCALATE
+    priority: 95
+    severity: HIGH
+
+    validators: ["risk_assessment_validator"]
+
+    condition: |
+      ai_system.risk_assessment_completed == false and
+      ai_system.deployment_stage in ["verification", "deployment"]
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 6.1"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.8
+
+    rationale: |
+      Gilligan (Care): Risk assessment = understanding context before acting.
+      Mercy: If partial assessment exists, EDUCATE to complete.
+
+  - id: ISO42001_6_2_AI_OBJECTIVES
+    name: "AI Objectives Documentation"
+    description: "Document AI system objectives and success criteria (Clause 6.2)"
+    action: MONITOR
+    priority: 70
+    severity: MEDIUM
+
+    validators: ["documentation_validator"]
+
+    condition: |
+      ai_system.objectives_documented == false
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 6.2"
+
+    contestable: false
+    mercy_eligible: false
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CLAUSE 7: SUPPORT (Resources, Competence, Documentation)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: ISO42001_7_2_COMPETENCE
+    name: "AI Team Competence Requirements"
+    description: "Ensure personnel have necessary AI competence (Clause 7.2)"
+    action: ESCALATE
+    priority: 80
+    severity: MEDIUM
+
+    validators: ["competence_validator"]
+
+    condition: |
+      team.ai_training_completed == false or
+      days_since(team.last_training) > 365
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 7.2"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+
+    rationale: |
+      Annual AI ethics + technical training mandatory.
+      Mercy: If training scheduled, EDUCATE + grace period.
+
+  - id: ISO42001_7_5_DOCUMENTED_INFORMATION
+    name: "AI System Documentation"
+    description: "Maintain documented information on AI system (Clause 7.5)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+
+    validators: ["documentation_validator"]
+
+    condition: |
+      ai_system.documentation_complete == false and
+      required_docs_missing > 0
+
+    parameters:
+      required_docs:
+        - "Model card"
+        - "Data provenance"
+        - "Training methodology"
+        - "Performance metrics"
+        - "Bias testing results"
+        - "Deployment procedures"
+        - "Monitoring plan"
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 7.5"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+    rationale: |
+      Jonas (Responsibility): Documentation = accountability.
+      Model card similar to BuildToValue BiasDeclaration.
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CLAUSE 8: OPERATION (AI Lifecycle Implementation)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: ISO42001_8_1_DATA_GOVERNANCE
+    name: "AI Data Governance"
+    description: "Implement data governance for AI training/operation (Clause 8.1)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+
+    validators: ["data_quality_validator"]
+
+    condition: |
+      training_data.quality_validated == false or
+      training_data.bias_tested == false or
+      training_data.provenance_documented == false
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 8.1"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.75
+
+    rationale: |
+      Gilligan (Care): Bad data = biased AI = harm to vulnerable groups.
+      Mercy: If bias testing in progress, EDUCATE + monitor.
+
+  - id: ISO42001_8_2_TRANSPARENCY
+    name: "AI Transparency Requirements"
+    description: "Provide transparency about AI system capabilities/limitations (Clause 8.2)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+
+    validators: ["transparency_validator"]
+
+    condition: |
+      ai_system.user_facing == true and
+      (transparency_disclosure_provided == false or
+       limitations_disclosed == false)
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 8.2"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Levinas (Care): Users have right to know system limitations.
+      Similar to BuildToValue BiasDeclaration (FPR, FNR, limitations).
+
+  - id: ISO42001_8_3_HUMAN_OVERSIGHT
+    name: "Human Oversight of AI Decisions"
+    description: "Ensure human oversight for high-impact AI decisions (Clause 8.3)"
+    action: BLOCK
+    priority: 95
+    severity: HIGH
+
+    validators: ["human_oversight_validator"]
+
+    condition: |
+      decision.is_ai_generated == true and
+      decision.impact_level == "high" and
+      decision.human_reviewed == false
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 8.3"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Gilligan (Care): Automated decisions lack context = human must review.
+      Similar to GDPR Art. 22 (automated decision-making).
+
+  - id: ISO42001_8_4_CONTINUOUS_MONITORING
+    name: "Continuous AI System Monitoring"
+    description: "Monitor AI system performance and detect drift (Clause 8.4)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+
+    validators: ["model_drift_validator"]
+
+    condition: |
+      ai_system.monitoring_enabled == false or
+      model.drift_detected == true and
+      days_since(model.last_evaluation) > 30
+
+    parameters:
+      monitoring_frequency_days: 30
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 8.4"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+    rationale: |
+      Model drift = performance degradation = potential harm.
+      Mercy: If monitoring just implemented, EDUCATE on best practices.
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CLAUSE 9: PERFORMANCE EVALUATION
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: ISO42001_9_1_MONITORING_MEASUREMENT
+    name: "AI Performance Metrics"
+    description: "Define and track AI performance metrics (Clause 9.1)"
+    action: MONITOR
+    priority: 75
+    severity: MEDIUM
+
+    validators: ["metrics_validator"]
+
+    condition: |
+      ai_system.metrics_defined == false or
+      ai_system.metrics_tracked == false
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 9.1"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      "What gets measured gets managed" (Peter Drucker).
+      Metrics: accuracy, precision, recall, F1, fairness, latency.
+
+  - id: ISO42001_9_2_INTERNAL_AUDIT
+    name: "AI System Internal Audit"
+    description: "Conduct periodic internal audits (Clause 9.2)"
+    action: ESCALATE
+    priority: 80
+    severity: MEDIUM
+
+    validators: ["audit_validator"]
+
+    condition: |
+      ai_system.last_internal_audit == null or
+      days_since(ai_system.last_internal_audit) > 180
+
+    parameters:
+      audit_frequency_days: 180  # Semi-annual
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 9.2"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+
+  - id: ISO42001_9_3_MANAGEMENT_REVIEW
+    name: "Management Review of AI System"
+    description: "Top management reviews AI system periodically (Clause 9.3)"
+    action: ESCALATE
+    priority: 75
+    severity: MEDIUM
+
+    validators: []
+
+    condition: |
+      ai_system.last_management_review == null or
+      days_since(ai_system.last_management_review) > 365
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 9.3"
+
+    contestable: false
+    mercy_eligible: false
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CLAUSE 10: IMPROVEMENT
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: ISO42001_10_1_NONCONFORMITY_CORRECTIVE_ACTION
+    name: "AI Nonconformity & Corrective Action"
+    description: "Address AI system nonconformities promptly (Clause 10.1)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+
+    validators: ["nonconformity_validator"]
+
+    condition: |
+      nonconformity.detected == true and
+      corrective_action.implemented == false and
+      days_since(nonconformity.detection) > 30
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 10.1"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Nonconformity = system not meeting objectives.
+      30-day deadline for corrective action.
+
+  - id: ISO42001_10_2_CONTINUAL_IMPROVEMENT
+    name: "Continual Improvement of AI System"
+    description: "Demonstrate continual improvement of AI management (Clause 10.2)"
+    action: MONITOR
+    priority: 70
+    severity: MEDIUM
+
+    validators: []
+
+    condition: |
+      improvement_actions.implemented_last_year == 0
+
+    legal_basis: "ISO/IEC 42001:2023 Clause 10.2"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      ISO philosophy: Not just compliance, but continuous improvement.
+
+ethical_notes: |
+  ISO 42001 + BuildToValue ethical integration:
+  
+  RAWLS (Justice as Fairness):
+  - Clause 8.1 (Data Governance): Fair AI requires unbiased training data
+  - Blind testing = Rawls' Veil of Ignorance applied to AI systems
+  
+  LEVINAS (Duty of Care):
+  - Clause 8.2 (Transparency): Users have right to know AI limitations
+  - BiasDeclaration = practical implementation of transparency duty
+  
+  GILLIGAN (Ethics of Care):
+  - Clause 8.3 (Human Oversight): Automated decisions lack context
+  - Mercy algorithm = Gilligan's care ethics applied to enforcement
+  
+  JONAS (Responsibility Principle):
+  - Clause 7.5 (Documentation): Accountability requires traceability
+  - Continuous monitoring = proactive responsibility (not reactive)
+
+changelog:
+  - version: 1.0.0
+    date: 2026-02-05
+    changes:
+      - "Initial ISO 42001 base profile"
+      - "13 rules covering: Planning (risk), Support (docs), Operation (monitoring), Evaluation, Improvement"
+      - "Aligned with BuildToValue BiasDeclaration philosophy"
+      - "Voluntary standard (no fines, but certification-driven)"

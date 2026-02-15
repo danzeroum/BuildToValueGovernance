@@ -22,7 +22,7 @@ mod tests {
     #[test]
     fn test_scan_context_stats_properly_filled() {
         let mut gk = Gatekeeper::new();
-        let ev = gk.scan_for_evidence("aaaaa", 0x1234);
+        let ev = gk.scan_for_evidence("Hello world, this is a test with varied chars!", 0x1234);
         // O módulo de entropia deve ter preenchido stats.entropy
         assert!(ev.stats.entropy > 0.0);
     }
