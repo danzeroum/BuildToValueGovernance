@@ -1,6 +1,5 @@
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Demographic groups for AJL compliance
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]

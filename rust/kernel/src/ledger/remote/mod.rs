@@ -1,18 +1,15 @@
-//! Remote Sync Module
+//! Remote Sync Module - rust/kernel/src/ledger/remote/mod.rs
 
+pub mod config;
+#[cfg(feature = "s3")]
+pub mod s3_connector;
 #[cfg(feature = "remote-sync")]
 pub mod sync;
 
-#[cfg(feature = "s3")]
-pub mod s3_connector;
+// Re-exporta S3Config incondicionalmente para uso em outros módulos
+pub use config::S3Config;
 
+#[cfg(feature = "s3")]
+pub use s3_connector::{ S3Error};
 #[cfg(feature = "remote-sync")]
-pub use sync::{
-    create_remote_sync,
-    RemoteSyncService,
-    RemoteConfig,
-    StorageType
-};
-
-#[cfg(feature = "s3")]
-pub use s3_connector::{S3Connector, S3Config, S3Error};
+pub use sync::{RemoteSyncService, RemoteConfig};

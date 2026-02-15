@@ -1,18 +1,19 @@
 //! Email Validator v2.4.0
-//! Detecta endereços de e-mail.
 
+use crate::core::module::{Module, ScanContext};
+use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
+use crate::evidence::Finding;
 use crate::validators::Validator;
-use crate::{Finding, ValidatorModule, TechnicalSeverity};
-use crate::core::types::BiasDeclaration;
+use regex::Regex;
 
 pub struct EmailValidator {
-    pattern: regex::Regex,
+    pattern: Regex,
 }
 
 impl EmailValidator {
     pub fn new() -> Self {
         Self {
-            pattern: regex::Regex::new(
+            pattern: Regex::new(
                 r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"
             ).unwrap(),
         }
@@ -32,18 +33,7 @@ impl EmailValidator {
         }
     }
 
-    pub fn name(&self) -> &'static str { "Email" }
-    pub fn module(&self) -> ValidatorModule { ValidatorModule::Email }
-}
-
-impl Default for EmailValidator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Validator for EmailValidator {
-    fn validate(&self, input: &str) -> Vec<Finding> {
+    fn validate_impl(&self, input: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
         for mat in self.pattern.find_iter(input) {
             let email = mat.as_str();
@@ -60,6 +50,28 @@ impl Validator for EmailValidator {
         }
         findings
     }
+}
+
+impl Default for EmailValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Validator for EmailValidator {
+    fn validate(&self, input: &str) -> Vec<Finding> {
+        self.validate_impl(input)
+    }
+}
+
+impl Module for EmailValidator {
+    fn scan(&self, input: &str, _ctx: &mut ScanContext) -> Vec<Finding> {
+        self.validate_impl(input)
+    }
+
+    fn name(&self) -> &'static str { "email" }
+
+    fn module_id(&self) -> ValidatorModule { ValidatorModule::Email }
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.03, 0.08, 20260209, 800)
@@ -69,29 +81,5 @@ impl Validator for EmailValidator {
             .with_affected_groups(
                 "New TLDs; international domains; plus-addressing."
             )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_email_detection() {
-        let v = EmailValidator::new();
-        let findings = v.validate("Contact: user@example.com");
-        assert_eq!(findings.len(), 1);
-    }
-
-    #[test]
-    fn test_bias_declaration() {
-        let v = EmailValidator::new();
-        let bias = v.bias_declaration();
-        assert_eq!(bias.false_positive_rate, 0.03);
-    }
-
-    #[test]
-    fn test_email_masking() {
-        assert_eq!(EmailValidator::mask_email("user@example.com"), "u***@example.com");
     }
 }

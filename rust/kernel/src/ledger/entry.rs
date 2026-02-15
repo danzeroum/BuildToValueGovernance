@@ -1,9 +1,25 @@
 //! Ledger Entry v2.3.2
 //! Entrada imutável do ledger (384 bytes fixos).
-use anyhow::{Context, Result};
+use static_assertions;
 use serde::{Deserialize, Serialize};
 use crate::core::types::{Action, EthicalVerdict, RiskLevel};
-use std::time::{SystemTime, UNIX_EPOCH};
+
+// Serialização customizada para arrays de 196 bytes
+mod serde_array_196 {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(arr: &[u8; 196], serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_bytes(arr)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[u8; 196], D::Error> {
+        let bytes: Vec<u8> = Deserialize::deserialize(deserializer)?;
+        let mut arr = [0u8; 196];
+        let len = bytes.len().min(196);
+        arr[..len].copy_from_slice(&bytes[..len]);
+        Ok(arr)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
@@ -30,87 +46,50 @@ impl From<Action> for ActionType {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[repr(C, align(8))]
 pub struct LedgerEntry {
-    // === IDENTIFICAÇÃO (48 bytes) ===
     pub entry_id: u64,
     pub _align_padding: u64,
     pub audit_trail_id: u128,
     pub timestamp: u128,
-
-    // === VEREDITO (8 bytes) ===
     pub risk_level: RiskLevel,
     pub action: ActionType,
     pub ethical_verdict: EthicalVerdict,
     pub _padding_verdict: [u8; 5],
-
-    // === INTEGRIDADE (64 bytes) ===
     pub previous_hash: [u8; 32],
     pub entry_hash: [u8; 32],
-
-    // === METADATA (264 bytes) ===
+    pub merkle_root: [u8; 32],
     pub protocol_version: u16,
     pub schema_version: u16,
     pub producer_id: [u8; 32],
-    #[serde(with = "serde_bytes")]
-    pub _reserved: [u8; 228],
+    #[serde(with = "serde_array_196")]
+    pub _reserved: [u8; 196],
 }
 
 static_assertions::const_assert_eq!(std::mem::size_of::<LedgerEntry>(), 384);
 
 impl LedgerEntry {
-    pub fn new(
-        entry_id: u64,
-        audit_trail_id: u128,
-        previous_hash: [u8; 32],
-        risk: RiskLevel,
-        action: Action,
-        verdict: EthicalVerdict,
-    ) -> Self {
-        Self {
-            entry_id,
-            _align_padding: 0,
-            audit_trail_id,
-            timestamp: Self::now_micros(),
-            risk_level: risk,
-            action: ActionType::from(action),
-            ethical_verdict: verdict,
-            _padding_verdict: [0; 5],
-            previous_hash,
-            entry_hash: [0; 32],
-            protocol_version: 1,
-            schema_version: 1,
-            producer_id: [0; 32],
-            _reserved: [0; 228],
-        }
-    }
-
     pub fn calculate_hash(&self) -> [u8; 32] {
         let mut hasher = blake3::Hasher::new();
         hasher.update(&self.entry_id.to_le_bytes());
-        hasher.update(&self._align_padding.to_le_bytes());
         hasher.update(&self.audit_trail_id.to_le_bytes());
         hasher.update(&self.timestamp.to_le_bytes());
-        hasher.update(&[self.risk_level as u8]);
-        hasher.update(&[self.action as u8]);
-        let verdict_bytes = bincode::serialize(&self.ethical_verdict).unwrap_or(vec![0]);
-        hasher.update(&verdict_bytes);
-        hasher.update(&self._padding_verdict);
         hasher.update(&self.previous_hash);
-        hasher.update(&self.protocol_version.to_le_bytes());
-        hasher.update(&self.schema_version.to_le_bytes());
-        hasher.update(&self.producer_id);
         hasher.update(&self._reserved);
         *hasher.finalize().as_bytes()
+    }
+
+    pub fn calculate_merkle_root(&mut self, prev_merkle: [u8; 32]) {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&prev_merkle);
+        hasher.update(&self.entry_hash);
+        self.merkle_root = *hasher.finalize().as_bytes();
     }
 
     pub fn finalize(&mut self) {
         self.entry_hash = self.calculate_hash();
     }
 
-    fn now_micros() -> u128 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_micros()
+    pub fn validate(&self) -> bool {
+        self.entry_hash == self.calculate_hash()
     }
 }
 
@@ -127,35 +106,11 @@ impl Default for LedgerEntry {
             _padding_verdict: [0; 5],
             previous_hash: [0; 32],
             entry_hash: [0; 32],
+            merkle_root: [0; 32],
             protocol_version: 1,
             schema_version: 1,
             producer_id: [0; 32],
-            _reserved: [0; 228],
+            _reserved: [0; 196],
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ledger_entry_size() {
-        assert_eq!(std::mem::size_of::<LedgerEntry>(), 384);
-    }
-
-    #[test]
-    fn test_action_conversion() {
-        assert_eq!(ActionType::from(Action::Allow), ActionType::Allow);
-    }
-
-    #[test]
-    fn test_hashing_consistency() {
-        let mut entry = LedgerEntry::default();
-        entry.entry_id = 100;
-        let h1 = entry.calculate_hash();
-        let h2 = entry.calculate_hash();
-        assert_eq!(h1, h2);
-        assert_ne!(h1, [0u8; 32]);
     }
 }

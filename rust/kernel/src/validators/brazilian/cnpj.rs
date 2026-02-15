@@ -53,6 +53,7 @@ impl Default for CnpjValidator {
     }
 }
 
+
 impl Validator for CnpjValidator {
     fn validate(&self, input: &str) -> Vec<Finding> {
         let mut findings = Vec::new();

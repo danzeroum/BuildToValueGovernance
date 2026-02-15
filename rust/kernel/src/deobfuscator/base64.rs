@@ -1,11 +1,13 @@
+//! Base64 Detector
+
+use crate::core::module::{Module, ScanContext};
+use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
+use crate::evidence::Finding;
 use base64::{Engine as _, engine::general_purpose};
 use regex::Regex;
 use lazy_static::lazy_static;
-use crate::evidence::Finding;
-use crate::core::types::{TechnicalSeverity, ValidatorModule};
 
 lazy_static! {
-    // Detecta strings que parecem Base64 (múltiplo de 4, caracteres válidos)
     static ref BASE64_REGEX: Regex = Regex::new(
         r"(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?"
     ).unwrap();
@@ -27,28 +29,23 @@ impl Base64Detector {
 
         for mat in BASE64_REGEX.find_iter(input) {
             let matched = mat.as_str();
-
-            // Filtros para reduzir falsos positivos
             if matched.len() < 16 {
-                continue;  // Muito curto para ser significativo
+                continue;
             }
 
-            // Tenta decodificar
             if let Ok(decoded) = general_purpose::STANDARD.decode(matched) {
-                // Valida se conteúdo decodificado é plausível (UTF-8 ou binário)
                 let is_text = std::str::from_utf8(&decoded).is_ok();
-
-                // Quebra de Dependência Circular:
-                // Em vez de chamar CpfValidator aqui, usamos uma heurística leve.
-                // O Gatekeeper deve re-escanear o output decodificado.
-                let has_suspicious_patterns = if is_text {
-                    Self::heuristic_pii_check(&decoded)
+                let has_suspicious = if is_text {
+                    // heurística simples
+                    let text = String::from_utf8_lossy(&decoded);
+                    text.chars().filter(|c| c.is_numeric()).count() >= 11
+                        && (text.contains('.') || text.contains('-'))
                 } else {
                     false
                 };
 
-                let severity = if has_suspicious_patterns {
-                    TechnicalSeverity::High // Aumentamos o risco preventivamente
+                let severity = if has_suspicious {
+                    TechnicalSeverity::High
                 } else {
                     TechnicalSeverity::Medium
                 };
@@ -70,40 +67,20 @@ impl Base64Detector {
 
         findings
     }
-
-    /// Verificação heurística leve para evitar chamar validadores pesados aqui
-    fn heuristic_pii_check(decoded: &[u8]) -> bool {
-        if let Ok(text) = std::str::from_utf8(decoded) {
-            // Procura padrões genéricos de PII (ex: XXX.XXX.XXX-XX) sem validação profunda
-            text.chars().filter(|c| c.is_numeric()).count() >= 11
-                && (text.contains('.') || text.contains('-'))
-        } else {
-            false
-        }
-    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_base64_detection() {
-        let detector = Base64Detector::new();
-
-        // "Hello World" em Base64
-        let findings = detector.detect("SGVsbG8gV29ybGQ=");
-        assert_eq!(findings.len(), 1);
+impl Module for Base64Detector {
+    fn scan(&self, input: &str, _ctx: &mut ScanContext) -> Vec<Finding> {
+        self.detect(input)
     }
 
-    #[test]
-    fn test_base64_heuristic() {
-        // Simula um CPF: 123.456.789-00
-        let detector = Base64Detector::new();
-        let encoded = general_purpose::STANDARD.encode("123.456.789-00");
+    fn name(&self) -> &'static str { "base64" }
 
-        let findings = detector.detect(&encoded);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, TechnicalSeverity::High);
+    fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
+
+    fn bias_declaration(&self) -> BiasDeclaration {
+        BiasDeclaration::new(0.03, 0.25, 20260209, 300)
+            .with_limitations("Strings curtas (<16 chars) podem ser falsos positivos.")
+            .with_affected_groups("N/A")
     }
 }

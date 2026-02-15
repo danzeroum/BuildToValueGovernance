@@ -4,13 +4,12 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict};
 use pyo3::exceptions::PyRuntimeError;
 use crate::gatekeeper::Gatekeeper;
-use crate::ledger::{DurableLedger};
+use crate::ledger::{DurableLedger, LedgerEntry};
+use crate::ledger::remote::S3Config;
 use crate::evidence::TechnicalEvidence;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
-use log;
-use crate::ledger::wal::WalConfig;
+
 
 #[pymodule]
 fn buildtovalue_kernel(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -29,17 +28,14 @@ pub struct RustKernel {
 #[pymethods]
 impl RustKernel {
     #[new]
-    fn new(wal_path: Option<String>) -> PyResult<Self> {
-        let config = WalConfig {
-            wal_path: wal_path
-                .map(Into::into)
-                .unwrap_or_else(|| "ledger.wal".into()),
-            fsync_enabled: true,
-            max_size_bytes: 100 * 1024 * 1024, // 100MB
-        };
+    fn new(ledger_path: Option<String>) -> PyResult<Self> {
+        let disk_path = ledger_path.map(Into::into).unwrap_or_else(|| "ledger.data".into());
+        let s3_config = S3Config::default();
 
-        // Ledger sem sync remoto (por enquanto)
-        let ledger = DurableLedger::new(config)
+        // Cria runtime tokio temporário para construir o ledger (async)
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create tokio runtime: {}", e)))?;
+        let ledger = runtime.block_on(DurableLedger::new(disk_path, s3_config))
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to create ledger: {}", e)))?;
 
         Ok(Self {
@@ -56,9 +52,17 @@ impl RustKernel {
     }
 
     fn append_to_ledger(&self, evidence: &PyTechnicalEvidence) -> PyResult<u64> {
+        // Constrói LedgerEntry a partir da evidência (placeholders para ação/veredito)
+        let mut entry = LedgerEntry::default();
+        entry.audit_trail_id = evidence.inner.audit_trail_id;
+        entry.timestamp = evidence.inner.timestamp;
+        entry.risk_level = evidence.inner.risk_level;
+        // TODO: action e ethical_verdict devem vir da governança Python no futuro
+
         let ledger = self.ledger.lock().unwrap();
-        ledger.append(&evidence.inner)
-            .map_err(|e| PyRuntimeError::new_err(format!("Append failed: {}", e)))
+        let seq = ledger.append(entry, &evidence.inner)
+            .map_err(|e| PyRuntimeError::new_err(format!("Append failed: {}", e)))?;
+        Ok(seq)
     }
 
     fn scan_and_persist(&self, input: &str) -> PyResult<(PyTechnicalEvidence, u64)> {
@@ -82,20 +86,7 @@ impl RustKernel {
         })
     }
 
-    fn get_ledger_metrics(&self) -> PyResult<PyObject> {
-        let ledger = self.ledger.lock().unwrap();
-        let metrics = ledger.get_metrics();
-
-        Python::with_gil(|py| {
-            let dict = PyDict::new(py);
-            dict.set_item("entries_total", metrics.entries_total)?;
-            dict.set_item("bytes_written", metrics.bytes_written)?;
-            dict.set_item("fsync_count", metrics.fsync_count)?;
-            dict.set_item("fsync_failures", metrics.fsync_failures)?;
-            dict.set_item("avg_append_ms", metrics.avg_append_ms)?;
-            Ok(dict.into())
-        })
-    }
+    // Método get_ledger_metrics removido temporariamente – DurableLedger ainda não implementa métricas.
 }
 
 #[pyclass]

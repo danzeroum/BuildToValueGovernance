@@ -10,7 +10,7 @@ use std::fmt;
 // SERDE COMPATIBILITY (Arrays > 32)
 // ---------------------------------------------------------------------
 mod serde_array_compat {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(arr: &[u8; 128], serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_bytes(arr)
@@ -25,7 +25,7 @@ mod serde_array_compat {
     }
 
     pub mod size_256 {
-        use serde::{Deserialize, Deserializer, Serialize, Serializer};
+        use serde::{Deserialize, Deserializer, Serializer};
 
         pub fn serialize<S: Serializer>(arr: &[u8; 256], serializer: S) -> Result<S::Ok, S::Error> {
             serializer.serialize_bytes(arr)
@@ -41,7 +41,7 @@ mod serde_array_compat {
     }
 
     pub mod size_112 {
-        use serde::{Deserialize, Deserializer, Serialize, Serializer};
+        use serde::{Deserialize, Deserializer, Serializer};
 
         pub fn serialize<S: Serializer>(arr: &[u8; 112], serializer: S) -> Result<S::Ok, S::Error> {
             serializer.serialize_bytes(arr)
@@ -350,6 +350,7 @@ pub enum ThreatType {
     Toxicity,
     BiasViolation,
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RegulatoryFramework {

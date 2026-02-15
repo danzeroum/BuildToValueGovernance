@@ -19,7 +19,7 @@ pub mod ffi;
 // Re-exports
 pub use gatekeeper::Gatekeeper;
 pub use evidence::{TechnicalEvidence, Finding};
-pub use core::types::{ValidatorModule, TechnicalSeverity, Action, RiskLevel};
+pub use core::types::{ValidatorModule, TechnicalSeverity, Action, RiskLevel, BiasDeclaration};
 pub use validators::Validator;
 
 pub const KERNEL_VERSION: &str = "2.3.2";

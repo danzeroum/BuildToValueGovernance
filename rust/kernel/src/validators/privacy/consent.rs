@@ -2,7 +2,7 @@
 //! Verifica consentimento (LGPD Art. 7º, I).
 
 use crate::validators::Validator;
-use crate::{Finding, ValidatorModule, TechnicalSeverity};
+use crate::{Finding, ValidatorModule};
 use crate::core::types::BiasDeclaration;
 
 pub struct ConsentValidator;

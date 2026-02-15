@@ -111,8 +111,9 @@ impl WriteAheadLog {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::NamedTempFile;
+    use super::*;
+
 
     #[test]
     fn test_wal_write_and_flush() {

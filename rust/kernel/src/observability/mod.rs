@@ -5,6 +5,10 @@
 //! - ✅ Remoção de threat_ingestor (v1)
 //! - ✅ Correção de conflito de nomes no módulo tracing [E0432]
 
+pub use threat_ingestor::ThreatIngestor;
+pub use metrics::Metrics;
+pub use tracing::init_tracer;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // METRICS STUB
 // ═══════════════════════════════════════════════════════════════════════════
@@ -12,6 +16,8 @@ pub mod metrics {
     pub struct Metrics;
 
     pub struct MetricsGuard;
+
+    pub struct GatekeeperMetrics;
 
     impl Metrics {
         #[inline]
@@ -79,7 +85,4 @@ pub mod tracing {
     }
 }
 
-// Re-exports
-pub use threat_ingestor::ThreatIngestor;
-pub use metrics::Metrics;
-pub use tracing::init_tracer;
+

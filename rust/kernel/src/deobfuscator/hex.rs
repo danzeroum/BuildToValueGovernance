@@ -1,10 +1,10 @@
-//! Hex Decoder v2.3.2
-//! Detecta strings hexadecimais.
+//! Hex Decoder
 
+use crate::core::module::{Module, ScanContext};
+use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
+use crate::evidence::Finding;
 use regex::Regex;
 use lazy_static::lazy_static;
-use crate::evidence::Finding;
-use crate::core::types::{TechnicalSeverity, ValidatorModule, BiasDeclaration};
 
 lazy_static! {
     static ref HEX_REGEX: Regex = Regex::new(r"(?:0x)?[0-9a-fA-F]{16,}").unwrap();
@@ -42,9 +42,20 @@ impl HexDecoder {
         }
         findings
     }
+}
 
-    pub fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.200, 0.050, 20260209, 1000)
-            .with_limitations("Ambiguity with hashes and API keys")
+impl Module for HexDecoder {
+    fn scan(&self, input: &str, _ctx: &mut ScanContext) -> Vec<Finding> {
+        self.detect(input)
+    }
+
+    fn name(&self) -> &'static str { "hex" }
+
+    fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
+
+    fn bias_declaration(&self) -> BiasDeclaration {
+        BiasDeclaration::new(0.02, 0.20, 20260209, 200)
+            .with_limitations("UUIDs sem prefixo 0x podem não ser detectados.")
+            .with_affected_groups("N/A")
     }
 }

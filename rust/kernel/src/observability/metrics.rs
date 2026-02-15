@@ -165,3 +165,12 @@ impl Metrics {
         MetricsGuard
     }
 }
+
+#[derive(Debug, Default, Clone)]
+pub struct GatekeeperMetrics {
+    pub scans_total: u64,
+    pub findings_total: u64,
+    pub critical_findings: u64,
+    pub avg_latency_ms: f32,
+    pub p99_latency_ms: f32,
+}

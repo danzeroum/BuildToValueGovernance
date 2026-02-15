@@ -9,7 +9,7 @@ use crate::evidence::Finding;
 
 // Serialização customizada para o array de 7072 bytes
 mod serde_reserved {
-    use serde::{Deserialize, Deserializer, Serializer, Serialize};
+    use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(arr: &[u8; 7072], serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_bytes(arr)

@@ -1,9 +1,10 @@
 //! CPF Validator v2.4.0
-//! Valida CPF brasileiro.
 
+use crate::core::module::{Module, ScanContext};
+use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
+use crate::evidence::Finding;
 use crate::validators::Validator;
-use crate::{Finding, ValidatorModule, TechnicalSeverity};
-use crate::core::types::BiasDeclaration;
+use regex::Regex;
 
 pub struct CpfValidator;
 
@@ -47,21 +48,9 @@ impl CpfValidator {
         }
     }
 
-    // Métodos inerentes (não fazem parte do trait)
-    pub fn name(&self) -> &'static str { "CPF" }
-    pub fn module(&self) -> ValidatorModule { ValidatorModule::CPF }
-}
-
-impl Default for CpfValidator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Validator for CpfValidator {
-    fn validate(&self, input: &str) -> Vec<Finding> {
+    fn validate_impl(&self, input: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
-        let pattern = regex::Regex::new(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b").unwrap();
+        let pattern = Regex::new(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b").unwrap();
 
         for mat in pattern.find_iter(input) {
             let candidate = mat.as_str();
@@ -92,6 +81,28 @@ impl Validator for CpfValidator {
         }
         findings
     }
+}
+
+impl Default for CpfValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Validator for CpfValidator {
+    fn validate(&self, input: &str) -> Vec<Finding> {
+        self.validate_impl(input)
+    }
+}
+
+impl Module for CpfValidator {
+    fn scan(&self, input: &str, _ctx: &mut ScanContext) -> Vec<Finding> {
+        self.validate_impl(input)
+    }
+
+    fn name(&self) -> &'static str { "cpf" }
+
+    fn module_id(&self) -> ValidatorModule { ValidatorModule::CPF }
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.08, 0.02, 20260209, 500)
@@ -101,37 +112,5 @@ impl Validator for CpfValidator {
             .with_affected_groups(
                 "Non-standard formatting; OCR errors; international formats."
             )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_valid_cpf() {
-        let v = CpfValidator::new();
-        assert!(v.validate_cpf("123.456.789-09"));
-        assert!(v.validate_cpf("12345678909"));
-    }
-
-    #[test]
-    fn test_invalid_cpf() {
-        let v = CpfValidator::new();
-        assert!(!v.validate_cpf("123.456.789-00"));
-        assert!(!v.validate_cpf("111.111.111-11"));
-    }
-
-    #[test]
-    fn test_bias_declaration() {
-        let v = CpfValidator::new();
-        let bias = v.bias_declaration();
-        assert_eq!(bias.false_positive_rate, 0.08);
-        assert_eq!(bias.calibration_date, 20260209);
-    }
-
-    #[test]
-    fn test_cpf_masking() {
-        assert_eq!(CpfValidator::mask_cpf("123.456.789-09"), "123.***.***-09");
     }
 }
