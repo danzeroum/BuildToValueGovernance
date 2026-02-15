@@ -1,0 +1,9 @@
+C:\BuldToValue\PublicacaoBTV\BuildToValueGovernance\rust\target\debug\deps\aws_smithy_xml-63dfdc54ac3e489a.d: C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\lib.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\decode.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\encode.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\escape.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\unescape.rs
+
+C:\BuldToValue\PublicacaoBTV\BuildToValueGovernance\rust\target\debug\deps\libaws_smithy_xml-63dfdc54ac3e489a.rmeta: C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\lib.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\decode.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\encode.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\escape.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\unescape.rs
+
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\lib.rs:
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\decode.rs:
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\encode.rs:
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\escape.rs:
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-smithy-xml-0.60.14\src\unescape.rs:

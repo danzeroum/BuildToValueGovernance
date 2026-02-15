@@ -1,0 +1,11 @@
+C:\BuldToValue\PublicacaoBTV\BuildToValueGovernance\rust\target\debug\deps\ecdsa-ce459bf2f3064626.d: C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\lib.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\recovery.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\der.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\hazmat.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\sign.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\verify.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\../README.md
+
+C:\BuldToValue\PublicacaoBTV\BuildToValueGovernance\rust\target\debug\deps\libecdsa-ce459bf2f3064626.rmeta: C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\lib.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\recovery.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\der.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\hazmat.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\sign.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\verify.rs C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\../README.md
+
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\lib.rs:
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\recovery.rs:
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\der.rs:
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\hazmat.rs:
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\sign.rs:
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\verify.rs:
+C:\Users\danni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecdsa-0.14.8\src\../README.md:

@@ -1,11 +1,10 @@
-//! Gatekeeper v2.4.0 – Orquestrador soberano (ADR-017)
+//! Gatekeeper v2.4.0 — Orquestrador soberano (ADR-017)
 
 use crate::core::module::{Module, ScanContext};
 use crate::core::types::BiasDeclaration;
 use crate::evidence::TechnicalEvidence;
 use std::time::Instant;
 
-// Importação de todos os módulos (use paths completos)
 use crate::validators::brazilian::{CpfValidator, CnpjValidator};
 use crate::validators::communication::{EmailValidator, PhoneValidator};
 use crate::validators::financial::CreditCardValidator;
@@ -34,8 +33,6 @@ pub struct Gatekeeper {
 
 impl Gatekeeper {
     pub fn new() -> Self {
-        // A ordem deve corresponder à ordem histórica:
-        // validadores, estatísticos, desofuscadores
         let modules: Vec<Box<dyn Module>> = vec![
             Box::new(CpfValidator::new()),
             Box::new(CnpjValidator::new()),
@@ -83,8 +80,13 @@ impl Gatekeeper {
                 evidence.add_finding(finding);
             }
 
-            // Marca módulo como executado (bitmask)
-            evidence.executed_modules |= 1 << (module.module_id() as u8);
+            // Marca módulo como executado (bitmask, com proteção de overflow)
+            let bit = module.module_id() as u8;
+            if bit < 8 {
+                evidence.executed_modules |= 1u8 << bit;
+            } else {
+                log::warn!("Module bit index overflow: {} ({})", bit, module.name());
+            }
 
             // Agrega bias
             let bias = module.bias_declaration();
@@ -130,9 +132,9 @@ impl Gatekeeper {
         self.metrics.findings_total += evidence.finding_count as u64;
         self.metrics.critical_findings += evidence.critical_count as u64;
 
-        // Média móvel exponencial
         let alpha = 0.1;
-        self.metrics.avg_latency_ms = (alpha * latency_ms) + ((1.0 - alpha) * self.metrics.avg_latency_ms);
+        self.metrics.avg_latency_ms =
+            (alpha * latency_ms) + ((1.0 - alpha) * self.metrics.avg_latency_ms);
         if latency_ms > self.metrics.p99_latency_ms {
             self.metrics.p99_latency_ms = latency_ms;
         }
