@@ -1,4 +1,4 @@
-//! Gatekeeper v2.4.0 — Orquestrador soberano (ADR-017)
+//! Gatekeeper v2.5.0 — Orquestrador soberano (ADR-017)
 
 use crate::core::module::{Module, ScanContext};
 use crate::core::types::BiasDeclaration;
@@ -11,9 +11,6 @@ use crate::validators::financial::CreditCardValidator;
 use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer};
 use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector};
 
-// ---------------------------------------------------------------------
-// METRICS
-// ---------------------------------------------------------------------
 #[derive(Debug, Default, Clone)]
 pub struct GatekeeperMetrics {
     pub scans_total: u64,
@@ -23,9 +20,6 @@ pub struct GatekeeperMetrics {
     pub p99_latency_ms: f32,
 }
 
-// ---------------------------------------------------------------------
-// GATEKEEPER
-// ---------------------------------------------------------------------
 pub struct Gatekeeper {
     modules: Vec<Box<dyn Module>>,
     metrics: GatekeeperMetrics,
@@ -57,7 +51,6 @@ impl Gatekeeper {
         let start = Instant::now();
         let mut evidence = TechnicalEvidence::new(audit_trail_id);
 
-        // Hash do input original
         let mut hasher = blake3::Hasher::new();
         hasher.update(input.as_bytes());
         evidence.original_request_hash = u64::from_le_bytes(
@@ -67,28 +60,25 @@ impl Gatekeeper {
 
         let mut ctx = ScanContext::default();
 
-        // Agregação de bias (pior caso)
         let mut max_fpr = 0.0_f32;
         let mut max_fnr = 0.0_f32;
         let mut oldest_calibration = u32::MAX;
         let mut total_test_size = 0_u32;
 
         for module in &self.modules {
-            // Executa o módulo e coleta findings
             let findings = module.scan(input, &mut ctx);
             for finding in findings {
                 evidence.add_finding(finding);
             }
 
-            // Marca módulo como executado (bitmask, com proteção de overflow)
+            // ADR-017: u32 bitmask, suporta até 32 módulos
             let bit = module.module_id() as u8;
-            if bit < 8 {
-                evidence.executed_modules |= 1u8 << bit;
+            if bit < 32 {
+                evidence.executed_modules |= 1u32 << bit;
             } else {
                 log::warn!("Module bit index overflow: {} ({})", bit, module.name());
             }
 
-            // Agrega bias
             let bias = module.bias_declaration();
             max_fpr = max_fpr.max(bias.false_positive_rate);
             max_fnr = max_fnr.max(bias.false_negative_rate);
@@ -98,10 +88,8 @@ impl Gatekeeper {
             total_test_size = total_test_size.saturating_add(bias.test_dataset_size);
         }
 
-        // Preenche estatísticas
         evidence.stats = ctx.stats;
 
-        // Preenche bias agregado
         evidence.bias = BiasDeclaration::new(
             max_fpr,
             max_fnr,
@@ -111,7 +99,6 @@ impl Gatekeeper {
             .with_limitations("Aggregated from all modules (worst-case)")
             .with_affected_groups("See individual module documentation");
 
-        // Valida data de calibração (ADR-010)
         if !evidence.bias.is_calibration_valid() {
             log::warn!(
                 "BiasDeclaration expired (calibration_date: {}, audit_trail: {})",
