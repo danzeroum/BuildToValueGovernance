@@ -1,6 +1,7 @@
-//! Validators Module v2.3.2
+//! Validators Module v2.5.0 (ADR-017)
 //!
-//! Padronização da interface de validação.
+//! O trait `Validator` é mantido por compatibilidade mas está OBSOLETO.
+//! Todos os módulos devem implementar `crate::core::module::Module`.
 
 pub mod brazilian;
 pub mod financial;
@@ -10,7 +11,6 @@ pub mod sensitive;
 pub mod privacy;
 pub mod analysis;
 
-// Re-exports
 pub use brazilian::{CpfValidator, CnpjValidator};
 pub use financial::CreditCardValidator;
 pub use communication::{EmailValidator, PhoneValidator};
@@ -22,13 +22,12 @@ pub use analysis::StatisticalValidator;
 use crate::evidence::Finding;
 use crate::core::types::BiasDeclaration;
 
-/// Trait original para validadores (mantido por compatibilidade, mas obsoleto).
-/// Novos módulos devem implementar `crate::core::module::Module` diretamente.
+/// OBSOLETO — usar `crate::core::module::Module`.
+/// Mantido apenas para não quebrar LGPD validators (consent, sensitive, privacy)
+/// que ainda não migraram para Module.
 pub trait Validator: Send + Sync {
-    /// Valida input e retorna findings.
     fn validate(&self, input: &str) -> Vec<Finding>;
 
-    /// Declaração de viés do validador (Opcional, padrão vazio).
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::default()
     }
