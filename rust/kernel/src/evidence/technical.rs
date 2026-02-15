@@ -1,4 +1,5 @@
-//! Technical Evidence v2.4.0 – 9600 bytes fixos.
+//! Technical Evidence v2.5.0 – 9600 bytes fixos.
+//! ADR-017: executed_modules expandido de u8 para u32.
 
 use serde::{Deserialize, Serialize};
 use crate::core::types::{
@@ -7,7 +8,6 @@ use crate::core::types::{
 };
 use crate::evidence::Finding;
 
-// Serialização customizada para o array de 7072 bytes
 mod serde_reserved {
     use serde::{Deserialize, Deserializer, Serializer};
 
@@ -51,8 +51,8 @@ pub struct TechnicalEvidence {
     pub critical_count: u8,
     pub risk_level: RiskLevel,
     pub composite_risk: f32,
-    pub executed_modules: u8,
-    pub _reserved: [u8; 8],
+    pub executed_modules: u32,  // ADR-017: era u8, agora u32 (+3 bytes)
+    pub _reserved: [u8; 5],    // ADR-017: era [u8; 8], agora [u8; 5] (-3 bytes)
 
     // === METADADOS RESERVADOS (7072 bytes) ===
     #[serde(with = "serde_reserved")]
@@ -61,7 +61,6 @@ pub struct TechnicalEvidence {
     // === INTEGRIDADE (32 bytes) ===
     pub hash: [u8; HASH_SIZE],
 }
-
 
 impl TechnicalEvidence {
     pub fn new(audit_trail_id: u128) -> Self {
@@ -87,7 +86,7 @@ impl TechnicalEvidence {
             risk_level: RiskLevel::Safe,
             composite_risk: 0.0,
             executed_modules: 0,
-            _reserved: [0; 8],
+            _reserved: [0; 5],
             _reserved_metadata: [0; 7072],
             hash: [0; HASH_SIZE],
         }
@@ -163,7 +162,7 @@ impl TechnicalEvidence {
         hasher.update(&[self.critical_count]);
         hasher.update(&[self.risk_level as u8]);
         hasher.update(&self.composite_risk.to_le_bytes());
-        hasher.update(&[self.executed_modules]);
+        hasher.update(&self.executed_modules.to_le_bytes()); // ADR-017: 4 bytes
         hasher.update(&self._reserved);
         hasher.update(&self._reserved_metadata);
         *hasher.finalize().as_bytes()
