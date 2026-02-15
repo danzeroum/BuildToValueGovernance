@@ -7,7 +7,7 @@ from typing import Optional
 import math
 
 from .ffi_client import TechnicalEvidence
-from .ethical_context_engine import RequestMetadata
+from .types import RequestMetadata
 
 
 @dataclass

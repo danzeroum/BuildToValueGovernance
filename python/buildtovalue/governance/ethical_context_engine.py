@@ -27,6 +27,7 @@ from enum import Enum
 from typing import Optional, List, Dict, Any, Tuple, Union
 from functools import lru_cache
 
+
 # Imports de segurança
 from .safe_expression_evaluator import (
     SafeExpressionEvaluator,
@@ -43,21 +44,9 @@ from .ffi_client import TechnicalEvidence, Finding
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# TIPOS DE DADOS UNIFICADOS
+# TIPOS DE DADOS UNIFICADOS (importados de types.py)
 # ============================================================================
-
-class ActionType(Enum):
-    """Ações possíveis de governança - mantém compatibilidade v2."""
-    ALLOW = "ALLOW"
-    LOG = "LOG"
-    EDUCATE = "EDUCATE"
-    REDACT = "REDACT"
-    BLOCK = "BLOCK"
-
-    def severity_level(self) -> int:
-        """Nível de severidade (0-4) - v3."""
-        levels = {"ALLOW": 0, "LOG": 1, "EDUCATE": 2, "REDACT": 3, "BLOCK": 4}
-        return levels[self.value]
+from .types import ActionType, RequestMetadata, EthicalContext
 
 @dataclass
 class RequestMetadata:
@@ -928,9 +917,15 @@ class EthicalContextEngine:
         # Cria TechnicalEvidence mock
         class MockEvidence:
             def __init__(self, data):
+                self._data = data
                 self.__dict__.update(data)
                 self.findings = []
                 self.critical = []
+                if 'stats' not in data:
+                    self.stats = type('Stats', (), {'has_pii': data.get('critical_count', 0) > 0})()
+
+            def get(self, key, default=None):
+                return self._data.get(key, default)
 
         evidence = MockEvidence(technical_evidence)
 
