@@ -1,0 +1,88 @@
+version: "1.6"
+metadata:
+  name: "BTV Core Policies"
+  description: "Default policy set for Sovereign Trust OS"
+  created_at: "2026-02-15"
+  updated_at: "2026-02-15"
+  author: "BuildToValue Architecture Team"
+
+hard_blocks:
+  - "DROP TABLE"
+  - "DELETE FROM"
+  - "<script>"
+  - "javascript:"
+  - "eval("
+  - "UNION SELECT"
+  - "1=1"
+  - "OR 1=1"
+  - "cmd.exe"
+  - "/etc/passwd"
+  - "../../"
+  - "rm -rf"
+
+policies:
+  - id: "block-cpf-high"
+    name: "Block CPF with high confidence"
+    description: "Block valid CPF detection above 90% confidence"
+    enabled: true
+    priority: 100
+    conditions:
+      validators: ["cpf"]
+      min_severity: 0.5
+      min_confidence: 0.9
+    action: BLOCK
+
+  - id: "block-credit-card"
+    name: "Block credit card numbers"
+    description: "Block any credit card detection"
+    enabled: true
+    priority: 100
+    conditions:
+      validators: ["credit_card"]
+      min_severity: 0.3
+      min_confidence: 0.8
+    action: BLOCK
+
+  - id: "redact-cnpj"
+    name: "Redact CNPJ"
+    description: "Redact CNPJ numbers in output"
+    enabled: true
+    priority: 80
+    conditions:
+      validators: ["cnpj"]
+      min_severity: 0.5
+      min_confidence: 0.85
+    action: REDACT
+
+  - id: "redact-email"
+    name: "Redact email addresses"
+    description: "Mask email addresses in responses"
+    enabled: true
+    priority: 70
+    conditions:
+      validators: ["email"]
+      min_severity: 0.3
+      min_confidence: 0.8
+    action: REDACT
+
+  - id: "log-phone"
+    name: "Log phone detection"
+    description: "Log phone number detections for audit"
+    enabled: true
+    priority: 50
+    conditions:
+      validators: ["phone"]
+      min_severity: 0.3
+      min_confidence: 0.7
+    action: LOG
+
+  - id: "educate-low-risk"
+    name: "Educate on low-risk findings"
+    description: "Send educational message for low-confidence findings"
+    enabled: true
+    priority: 10
+    conditions:
+      validators: []
+      min_severity: 0.1
+      min_confidence: 0.3
+    action: EDUCATE
