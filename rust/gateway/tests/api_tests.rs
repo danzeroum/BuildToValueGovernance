@@ -143,7 +143,7 @@ policies:
                 .await;
         }
         let avg_ms = start.elapsed().as_secs_f64() * 1000.0 / iterations as f64;
-        println!("Gateway avg latency: {avg_ms:.2f}ms");
-        assert!(avg_ms < 50.0, "Avg {avg_ms:.2f}ms exceeds 50ms SLA");
+        println!("Gateway avg latency: {avg_ms:.2}ms");
+        assert!(avg_ms < 50.0, "Avg {avg_ms:.2}ms exceeds 50ms SLA");
     }
 }

@@ -38,7 +38,7 @@ policies:
     enabled: true
     priority: 100
     conditions:
-      validators: ["credit_card"]
+      validators: ["creditcard"]
       min_severity: 0.3
       min_confidence: 0.8
     action: BLOCK

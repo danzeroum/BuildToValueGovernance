@@ -1,0 +1,26 @@
+[package]
+name = "btv-gateway"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+buildtovalue-kernel = { path = "../kernel", features = ["observability"] }
+axum = { version = "0.7", features = ["json"] }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "timeout"] }
+uuid = { workspace = true }
+chrono = { workspace = true }
+prometheus = { workspace = true }
+log = "0.4.29"
+reqwest = { version = "0.12", features = ["json"] }
+futures = "0.3.32"
+
+[dev-dependencies]
+axum-test = "15"

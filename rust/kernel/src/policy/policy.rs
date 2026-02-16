@@ -298,7 +298,7 @@ impl PolicyEngine {
 
         for finding in findings {
             let validator_name = format!("{:?}", finding.module).to_lowercase();
-            let severity = finding.severity.to_score() / 255.0;
+            let severity = finding.severity.to_score();
             let confidence = finding.confidence as f32 / 100.0;
 
             let action = self.evaluate(&validator_name, "", severity, confidence);
@@ -307,7 +307,7 @@ impl PolicyEngine {
             }
 
             if action != PolicyAction::Allow {
-                matched_ids.push(format!("{}→{:?}", validator_name, action));
+                matched_ids.push(format!("{}->{:?}", validator_name, action));
             }
         }
 

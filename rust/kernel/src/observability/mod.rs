@@ -1,35 +1,30 @@
-//! Observability Module v2.3.1
+//! Observability Module v1.9.0 (ADR-019)
 //!
-//! **CHANGELOG v2.3.1**:
-//! - ✅ threat_ingestor_v2 promovido para versão oficial
-//! - ✅ Remoção de threat_ingestor (v1)
-//! - ✅ Correção de conflito de nomes no módulo tracing [E0432]
-
-pub use threat_ingestor::ThreatIngestor;
-pub use metrics::Metrics;
-pub use tracing::init_tracer;
+//! - Feature-gated: `observability` enables real Prometheus metrics
+//! - Without feature: no-op stubs (zero overhead)
+//! - Tracing and ThreatIngestor always available as stubs
 
 // ═══════════════════════════════════════════════════════════════════════════
-// METRICS STUB
+// METRICS (feature-gated)
 // ═══════════════════════════════════════════════════════════════════════════
+
+#[cfg(feature = "observability")]
+#[path = "metrics.rs"]
+pub mod metrics;
+
+#[cfg(not(feature = "observability"))]
 pub mod metrics {
     pub struct Metrics;
-
     pub struct MetricsGuard;
-
     pub struct GatekeeperMetrics;
 
     impl Metrics {
         #[inline]
         pub fn record_validation(_profile: &str) {}
-
         #[inline]
         pub fn record_finding(_finding_type: &str, _severity: &str) {}
-
         #[inline]
-        pub fn start_validation_timer(_profile: &str) -> MetricsGuard {
-            MetricsGuard
-        }
+        pub fn start_validation_timer(_profile: &str) -> MetricsGuard { MetricsGuard }
     }
 
     impl Drop for MetricsGuard {
@@ -85,4 +80,9 @@ pub mod tracing {
     }
 }
 
-
+// ═══════════════════════════════════════════════════════════════════════════
+// RE-EXPORTS
+// ═══════════════════════════════════════════════════════════════════════════
+pub use metrics::Metrics;
+pub use tracing::init_tracer;
+pub use threat_ingestor::ThreatIngestor;

@@ -1,17 +1,20 @@
 //! BuildToValue Sovereign Kernel v2.3.2
 
 pub mod api;
+pub mod batch;
 pub mod compliance;
 pub mod core;
 pub mod deobfuscator;
 pub mod evidence;
 pub mod gatekeeper;
-
-pub mod batch;
+pub mod interceptor;
 pub mod ledger;
+pub mod network;
 pub mod observability;
+pub mod output_guard;
 pub mod policy;
 pub mod security;
+pub mod session_guard;
 pub mod statistics;
 pub mod validators;
 
