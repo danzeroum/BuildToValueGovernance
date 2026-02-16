@@ -1,5 +1,5 @@
-//! Output Guard v2.3.2
-//! Sanitização de output (XSS, SQL, command injection).
+//! Output Guard v2.4.0
+//! Sanitização de output (XSS, SQL, command injection) + PII masking.
 
 use std::borrow::Cow;
 use regex::Regex;
@@ -26,7 +26,29 @@ lazy_static! {
         ('"', "&quot;"),
         ('\'', "&#x27;"),
     ];
+
+    // PII patterns for masking
+    static ref PII_CPF: Regex = Regex::new(r"\b(\d{3})\.?(\d{3})\.?(\d{3})-?(\d{2})\b").unwrap();
+    static ref PII_CNPJ: Regex = Regex::new(r"\b(\d{2})\.?(\d{3})\.?(\d{3})/?(\d{4})-?(\d{2})\b").unwrap();
+    static ref PII_EMAIL: Regex = Regex::new(r"\b([a-zA-Z0-9._%+-])([a-zA-Z0-9._%+-]*)@([a-zA-Z0-9])([a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\b").unwrap();
+    static ref PII_PHONE: Regex = Regex::new(r"\b(\d{2})\s?9?\d{4}-?\d{4}\b").unwrap();
+    static ref PII_CC: Regex = Regex::new(r"\b(\d{4})\s?\d{4}\s?\d{4}\s?(\d{4})\b").unwrap();
 }
+
+// ─────────────────────────────────────────────────────────────
+// PII MASK RESULT
+// ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PiiMaskResult {
+    pub sanitized_text: String,
+    pub masked_count: u32,
+    pub masked_types: Vec<String>,
+}
+
+// ─────────────────────────────────────────────────────────────
+// OUTPUT GUARD
+// ─────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
 pub struct OutputGuard {
@@ -50,7 +72,6 @@ impl OutputGuard {
     pub fn sanitize_text(&self, input: &str) -> String {
         let mut result = input.to_string();
 
-        // Limite de comprimento
         if let Some(max) = self.max_length {
             if result.len() > max {
                 result.truncate(max);
@@ -58,18 +79,15 @@ impl OutputGuard {
             }
         }
 
-        // Detecta padrões perigosos
         if self.detect_dangerous_patterns(&result) {
             eprintln!("Dangerous patterns detected, applying strict sanitization");
             result = self.apply_strict_sanitization(&result);
         }
 
-        // Remove tags perigosas
         if self.strip_dangerous_tags {
             result = self.remove_dangerous_tags(&result).to_string();
         }
 
-        // Escapa HTML
         if self.escape_html {
             result = self.escape_html_special_chars(&result).to_string();
         }
@@ -94,6 +112,60 @@ impl OutputGuard {
         }
         result = self.remove_dangerous_content(&result).to_string();
         result
+    }
+
+    /// Masks PII patterns in text (for LLM output sanitization).
+    pub fn mask_pii(&self, input: &str) -> PiiMaskResult {
+        let mut result = input.to_string();
+        let mut masked_count: u32 = 0;
+        let mut masked_types: Vec<String> = Vec::new();
+
+        // CPF: 123.456.789-09 -> ***.***.***-09
+        if PII_CPF.is_match(&result) {
+            result = PII_CPF.replace_all(&result, "***.***.***-$4").to_string();
+            masked_count += 1;
+            masked_types.push("cpf".to_string());
+        }
+
+        // CNPJ: 11.222.333/0001-81 -> **.***.***/**01-81
+        if PII_CNPJ.is_match(&result) {
+            result = PII_CNPJ.replace_all(&result, "**.***.***/$4-$5").to_string();
+            masked_count += 1;
+            masked_types.push("cnpj".to_string());
+        }
+
+        // Email: joao@empresa.com -> j***@e***.com
+        if PII_EMAIL.is_match(&result) {
+            result = PII_EMAIL.replace_all(&result, "${1}***@${3}***").to_string();
+            masked_count += 1;
+            masked_types.push("email".to_string());
+        }
+
+        // Phone: 11 98765-4321 -> 11 ****-****
+        if PII_PHONE.is_match(&result) {
+            result = PII_PHONE.replace_all(&result, "$1 ****-****").to_string();
+            masked_count += 1;
+            masked_types.push("phone".to_string());
+        }
+
+        // Credit card: 4532 0151 1283 0366 -> 4532 **** **** 0366
+        if PII_CC.is_match(&result) {
+            result = PII_CC.replace_all(&result, "$1 **** **** $2").to_string();
+            masked_count += 1;
+            masked_types.push("credit_card".to_string());
+        }
+
+        PiiMaskResult {
+            sanitized_text: result,
+            masked_count,
+            masked_types,
+        }
+    }
+
+    /// Full sanitization: XSS + PII masking.
+    pub fn sanitize_full(&self, input: &str) -> PiiMaskResult {
+        let xss_clean = self.sanitize_text(input);
+        self.mask_pii(&xss_clean)
     }
 
     fn detect_dangerous_patterns(&self, text: &str) -> bool {
@@ -146,6 +218,7 @@ impl OutputGuard {
         }
         if modified { Cow::Owned(result) } else { Cow::Borrowed(text) }
     }
+
     fn apply_strict_sanitization(&self, text: &str) -> String {
         text.chars()
             .filter(|c| c.is_alphanumeric() || c.is_whitespace() || ".!,?".contains(*c))
@@ -217,7 +290,6 @@ mod tests {
     #[test]
     fn test_html_escaping() {
         let g = OutputGuard::new();
-        // Usar uma string que não acione a sanitização estrita
         let out = g.sanitize_text("<div>");
         assert!(out.contains("&lt;div&gt;"));
     }
@@ -234,5 +306,47 @@ mod tests {
         let g = OutputGuard::new();
         assert!(g.sanitize_url("https://example.com").is_ok());
         assert!(g.sanitize_url("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn test_mask_cpf() {
+        let g = OutputGuard::new();
+        let r = g.mask_pii("CPF: 123.456.789-09");
+        assert_eq!(r.sanitized_text, "CPF: ***.***.***-09");
+        assert_eq!(r.masked_count, 1);
+        assert!(r.masked_types.contains(&"cpf".to_string()));
+    }
+
+    #[test]
+    fn test_mask_email() {
+        let g = OutputGuard::new();
+        let r = g.mask_pii("Email: joao@empresa.com");
+        assert!(r.sanitized_text.contains("j***@e***"));
+        assert!(r.masked_types.contains(&"email".to_string()));
+    }
+
+    #[test]
+    fn test_mask_credit_card() {
+        let g = OutputGuard::new();
+        let r = g.mask_pii("Cartao 4532 0151 1283 0366");
+        assert!(r.sanitized_text.contains("4532 **** **** 0366"));
+        assert!(r.masked_types.contains(&"credit_card".to_string()));
+    }
+
+    #[test]
+    fn test_mask_multiple() {
+        let g = OutputGuard::new();
+        let r = g.mask_pii("CPF 123.456.789-09 email joao@test.com");
+        assert!(r.masked_count >= 2);
+        assert!(r.masked_types.contains(&"cpf".to_string()));
+        assert!(r.masked_types.contains(&"email".to_string()));
+    }
+
+    #[test]
+    fn test_clean_text_no_mask() {
+        let g = OutputGuard::new();
+        let r = g.mask_pii("Ola, tudo bem?");
+        assert_eq!(r.masked_count, 0);
+        assert_eq!(r.sanitized_text, "Ola, tudo bem?");
     }
 }
