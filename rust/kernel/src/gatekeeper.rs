@@ -1,9 +1,10 @@
-//! Gatekeeper v2.6.0 — Pipeline de estágios (F1.5-05)
+//! Gatekeeper v2.6.1 — Pipeline de estágios (F1.5-05)
 //!
 //! Estágios ordenados:
 //! 1. Deobfuscate: normaliza input (Base64, Hex, Leetspeak)
 //! 2. Analyze: preenche statistics (Entropy, ZScore, CharRatio)
 //! 3. Validate: detecta PII/violações (CPF, CNPJ, Email, Phone, CC)
+//! 3.5. Re-scan: deobfuscator chaining + re-validate decoded text
 //! 4. Finalize: bias aggregation, hash, métricas
 
 use crate::core::module::{Module, ScanContext};
@@ -131,6 +132,22 @@ impl Gatekeeper {
                     oldest_calibration = oldest_calibration.min(bias.calibration_date);
                 }
                 total_test_size = total_test_size.saturating_add(bias.test_dataset_size);
+            }
+        }
+
+        // Stage 3.5: Re-scan decoded content (Deobfuscator Chaining)
+        let deob_chain = crate::deobfuscator::chain::DeobfuscatorChain::new();
+        let chain_result = deob_chain.deobfuscate(input);
+        if !chain_result.layers.is_empty() && chain_result.final_text != input {
+            for entry in &self.pipeline {
+                if entry.stage != PipelineStage::Validate {
+                    continue;
+                }
+                let mut rescan_ctx = ScanContext::default();
+                let findings = entry.module.scan(&chain_result.final_text, &mut rescan_ctx);
+                for finding in findings {
+                    evidence.add_finding(finding);
+                }
             }
         }
 
