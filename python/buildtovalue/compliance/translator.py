@@ -1,196 +1,107 @@
 """
-Compliance Translator v2.1
-Converts PDF regulations into YAML Policy Cards using LLM.
-
-DESIGN PRINCIPLE:
-- Rust  = Enforce the compiled policy (deterministic)
-- Python = Generate the policy (LLM-based, non-deterministic)
+Compliance Translator v2.0
+Converts regulatory text into YAML Policy Cards.
+No LLM dependency — rule-based extraction for determinism.
 """
-import os
 
-import openai
-from pathlib import Path
-from typing import Dict, Any, Optional
 import yaml
-import logging
-import PyPDF2
+import re
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional
 
-logger = logging.getLogger(__name__)
+
+@dataclass
+class RegulatoryArticle:
+    framework: str
+    article_id: str
+    title: str
+    text: str
+    keywords: List[str] = field(default_factory=list)
+
+
+@dataclass
+class PolicyCard:
+    id: str
+    name: str
+    framework: str
+    article: str
+    description: str
+    severity: str
+    action: str
+    patterns: List[str]
+    references: List[str]
+
+    def to_yaml(self) -> str:
+        doc = {
+            "id": self.id,
+            "name": self.name,
+            "framework": self.framework,
+            "article": self.article,
+            "description": self.description,
+            "severity": self.severity,
+            "action": self.action,
+            "patterns": self.patterns,
+            "references": self.references,
+        }
+        return yaml.dump(doc, default_flow_style=False, sort_keys=False)
+
+
+# Keyword → severity/action mapping
+KEYWORD_RULES = {
+    "dados pessoais": {"severity": "HIGH", "action": "REDACT", "pattern": r"\b(cpf|cnpj|rg|nome completo)\b"},
+    "dados sensíveis": {"severity": "CRITICAL", "action": "BLOCK", "pattern": r"\b(saúde|religião|orientação sexual|biometria)\b"},
+    "consentimento": {"severity": "HIGH", "action": "LOG", "pattern": r"\b(consent|autorização|opt.?in)\b"},
+    "transferência internacional": {"severity": "HIGH", "action": "BLOCK", "pattern": r"\b(transfer|cross.?border|internacional)\b"},
+    "anonimização": {"severity": "MEDIUM", "action": "REDACT", "pattern": r"\b(anoni|pseudoni|mask)\b"},
+    "direito de acesso": {"severity": "MEDIUM", "action": "LOG", "pattern": r"\b(acesso|portabilidade|retificação)\b"},
+    "personal data": {"severity": "HIGH", "action": "REDACT", "pattern": r"\b(name|email|phone|address|ssn)\b"},
+    "automated decision": {"severity": "HIGH", "action": "LOG", "pattern": r"\b(automated|profiling|algorithm)\b"},
+    "right to explanation": {"severity": "HIGH", "action": "LOG", "pattern": r"\b(explain|transparency|interpretab)\b"},
+}
+
 
 class ComplianceTranslator:
     """
-    Translates regulatory PDFs into BuildToValue Policy Cards.
-    
-    Example:
-        translator = ComplianceTranslator(model="gpt-4o", api_key="sk-...")
-        yaml_policy = translator.translate_pdf(
-            pdf_path="LGPD_Art20.pdf",
-            framework="LGPD"
-        )
-        translator.save_yaml(yaml_policy, "policies/lgpd_art20.yaml")
+    Rule-based translator: regulatory text → YAML policy cards.
+    Deterministic (no LLM). Matches keywords to generate policies.
     """
-    
-    def __init__(self, model: str = "gpt-4o", api_key: Optional[str] = None):
-        self.model = model
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.prompt_template = self._load_prompt_template()
-        
-        if not self.api_key:
-            raise ValueError("OpenAI API key required (set OPENAI_API_KEY env var)")
-        
-        openai.api_key = self.api_key
-    
-    def _load_prompt_template(self) -> str:
-        return """
-You are a legal compliance expert specializing in AI governance.
 
-TASK: Convert the following regulatory text into a BuildToValue Policy Card (YAML).
+    def __init__(self) -> None:
+        self.rules = KEYWORD_RULES.copy()
 
-INPUT:
-Framework: {framework}
-Regulatory Text:
-{regulatory_text}
+    def translate(self, article: RegulatoryArticle) -> List[PolicyCard]:
+        cards: List[PolicyCard] = []
+        text_lower = article.text.lower()
 
-OUTPUT FORMAT (YAML):
-```yaml
-name: "Policy Name"
-framework: "{framework}"
-article: "Art. X"
-description: "Brief description"
-rules:
-  - id: "rule_001"
-    action: "BLOCK"  # ALLOW, LOG, EDUCATE, REDACT, BLOCK
-    priority: 100
-    condition: "has_pii and risk_level == 'HIGH'"
-    rationale: "Article X prohibits..."
-domain_config:
-  healthcare:
-    risk_multiplier: 1.5
-    education_message: "This violates {framework} Article X..."
-```
+        for keyword, rule in self.rules.items():
+            if keyword in text_lower:
+                card = PolicyCard(
+                    id=f"compliance-{article.framework.lower()}-{article.article_id}-{len(cards)+1:03d}",
+                    name=f"{article.framework} {article.article_id}: {keyword.title()}",
+                    framework=article.framework,
+                    article=article.article_id,
+                    description=f"Enforces {keyword} requirement from {article.framework} {article.article_id}",
+                    severity=rule["severity"],
+                    action=rule["action"],
+                    patterns=[rule["pattern"]],
+                    references=[f"{article.framework} {article.article_id}"],
+                )
+                cards.append(card)
 
-REQUIREMENTS:
-- Extract ONLY enforceable rules (not aspirational goals)
-- Map to actionable conditions (use Python syntax)
-- Include rationale with article reference
-- Be conservative: if ambiguous, use EDUCATE or LOG
+        return cards
 
-OUTPUT (YAML only, no explanations):
-"""
-    
-    def translate_pdf(self, pdf_path: Path, framework: str) -> str:
-        """
-        Traduz PDF regulatório → YAML Policy Card.
-        
-        Args:
-            pdf_path: Caminho para PDF
-            framework: Nome do framework (LGPD, EU_AI_ACT, etc.)
-        
-        Returns:
-            YAML string completo
-        
-        Raises:
-            ValueError: Se PDF inválido ou LLM retornar erro
-        """
-        logger.info(f"Translating {pdf_path} ({framework})...")
-        
-        # 1. Extrai texto do PDF
-        text = self._extract_pdf_text(pdf_path)
-        logger.debug(f"Extracted {len(text)} characters from PDF")
-        
-        # 2. Gera YAML via LLM
-        yaml_content = self._generate_yaml_via_llm(text, framework)
-        
-        # 3. Valida YAML
-        self._validate_yaml(yaml_content)
-        
-        logger.info(f"✅ Translation completed: {framework}")
-        return yaml_content
-    
-    def _extract_pdf_text(self, pdf_path: Path) -> str:
-        """Extrai texto do PDF."""
-        pdf_path = Path(pdf_path)
-        if not pdf_path.exists():
-            raise FileNotFoundError(f"PDF not found: {pdf_path}")
-        
-        text_parts = []
-        with open(pdf_path, 'rb') as f:
-            reader = PyPDF2.PdfReader(f)
-            for page in reader.pages:
-                text_parts.append(page.extract_text())
-        
-        return "\n".join(text_parts)
-    
-    def _generate_yaml_via_llm(self, text: str, framework: str) -> str:
-        """Usa OpenAI para gerar YAML."""
-        prompt = self.prompt_template.format(
-            framework=framework,
-            regulatory_text=text[:8000]  # Limita para evitar token overflow
-        )
-        
-        response = openai.ChatCompletion.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": "You are a compliance expert."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.1,  # Baixa temperatura para consistência
-            max_tokens=2000
-        )
-        
-        yaml_content = response.choices[0].message.content
-        
-        # Remove markdown code blocks se presente
-        if yaml_content.startswith("```yaml"):
-            yaml_content = yaml_content.split("```yaml").split("```").strip()
-        elif yaml_content.startswith("```"):
-            yaml_content = yaml_content.split("```")
-        
-        return yaml_content
-    
-    def _validate_yaml(self, yaml_content: str):
-        """Valida estrutura do YAML."""
-        try:
-            data = yaml.safe_load(yaml_content)
-        except yaml.YAMLError as e:
-            raise ValueError(f"Invalid YAML generated: {e}")
-        
-        # Valida campos obrigatórios
-        required_fields = ['name', 'framework', 'rules']
-        for field in required_fields:
-            if field not in data:
-                raise ValueError(f"Missing required field: {field}")
-        
-        # Valida estrutura de regras
-        if not isinstance(data['rules'], list):
-            raise ValueError("'rules' must be a list")
-        
-        for rule in data['rules']:
-            required_rule_fields = ['id', 'action', 'priority']
-            for field in required_rule_fields:
-                if field not in rule:
-                    raise ValueError(f"Rule missing field: {field}")
-        
-        logger.debug("✅ YAML validation passed")
-    
-    def save_yaml(self, yaml_content: str, output_path: Path):
-        """Salva YAML em arquivo."""
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'w') as f:
-            f.write(yaml_content)
-        
-        logger.info(f"✅ Policy saved: {output_path}")
+    def translate_batch(self, articles: List[RegulatoryArticle]) -> str:
+        all_cards = []
+        for article in articles:
+            all_cards.extend(self.translate(article))
 
-# USAGE EXAMPLE
-if __name__ == "__main__":
-    translator = ComplianceTranslator(model="gpt-4o")
-    
-    yaml_policy = translator.translate_pdf(
-        pdf_path="docs/LGPD_Art20.pdf",
-        framework="LGPD"
-    )
-    
-    translator.save_yaml(yaml_policy, "policies/lgpd_art20.yaml")
-    print("✅ Translation complete")
+        doc = {
+            "version": "2.0",
+            "metadata": {
+                "name": "Compliance Policies",
+                "source": "ComplianceTranslator",
+                "frameworks": list(set(c.framework for c in all_cards)),
+            },
+            "policies": [yaml.safe_load(c.to_yaml()) for c in all_cards],
+        }
+        return yaml.dump(doc, default_flow_style=False, sort_keys=False)

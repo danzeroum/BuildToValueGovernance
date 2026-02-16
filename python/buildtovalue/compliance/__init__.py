@@ -1,1 +1,3 @@
-__version__ = "2.2.0"
+"""Compliance module v2.0 — Regulatory translation + AJL."""
+from .translator import ComplianceTranslator
+from .frameworks import FrameworkRegistry
