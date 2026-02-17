@@ -15,6 +15,9 @@ services:
       - BTV_GOVERNANCE_URL=http://governance:8000
 
   governance:
+    environment:
+      - BTV_HMAC_KEY=${BTV_HMAC_KEY:-btv-dev-key-NOT-FOR-PRODUCTION}
+      - BTV_ENV=${BTV_ENV:-development}
     build:
       context: ..
       dockerfile: ops/Dockerfile.python
