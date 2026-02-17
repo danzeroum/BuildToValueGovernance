@@ -6,14 +6,14 @@ Coverage: 10 scenarios (5 endpoints × happy + error paths).
 
 import pytest
 from fastapi.testclient import TestClient
-from python.buildtovalue.api.app import app
+from buildtovalue.api.app import app
 
 
 @pytest.fixture
 def client():
     """TestClient with fresh ContestabilityLoop."""
-    from python.buildtovalue.api import app as app_module
-    from python.buildtovalue.governance.contestability_loop import ContestabilityLoop
+    from buildtovalue.api import app as app_module
+    from buildtovalue.governance.contestability_loop import ContestabilityLoop
 
     app_module._contestability_loop = ContestabilityLoop(sla_hours=24)
     return TestClient(app)

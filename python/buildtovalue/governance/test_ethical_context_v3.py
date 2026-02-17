@@ -5,11 +5,11 @@ Coverage: Misericórdia, Contexto, BiasDeclaration, Performance.
 
 import pytest
 import time
-from python.buildtovalue.governance.ethical_context_engine import (
+from buildtovalue.governance.ethical_context_engine import (
     EthicalContextEngineV3,
     MercyFactor,
 )
-from python.buildtovalue.governance.types import (
+from buildtovalue.governance.types import (
     EthicalContext,
     ActionType,
 )

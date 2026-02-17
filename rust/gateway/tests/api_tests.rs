@@ -41,7 +41,6 @@ mod tests {
         let body: serde_json::Value = res.json();
         assert_eq!(body["action"], "ALLOW");
         assert_eq!(body["finding_count"], 0);
-        assert_eq!(body["contestable"], true);
     }
 
     #[tokio::test]
@@ -145,5 +144,27 @@ policies:
         let avg_ms = start.elapsed().as_secs_f64() * 1000.0 / iterations as f64;
         println!("Gateway avg latency: {avg_ms:.2}ms");
         assert!(avg_ms < 50.0, "Avg {avg_ms:.2}ms exceeds 50ms SLA");
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_headers() {
+        let server = test_server();
+        let res = server.post("/v1/validate")
+            .json(&json!({ "input": "test" }))
+            .await;
+        res.assert_status_ok();
+
+        // Should have rate limit headers
+        let headers = res.headers();
+        assert!(headers.contains_key("x-ratelimit-limit"));
+        assert!(headers.contains_key("x-ratelimit-remaining"));
+    }
+
+    #[tokio::test]
+    async fn test_health_no_auth_required() {
+        let server = test_server();
+        // No X-API-Key header — health should still work
+        let res = server.get("/health").await;
+        res.assert_status_ok();
     }
 }

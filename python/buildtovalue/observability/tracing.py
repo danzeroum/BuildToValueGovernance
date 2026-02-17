@@ -17,12 +17,12 @@ from opentelemetry.propagate import extract, inject, set_global_textmap
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 # CORRIGIDO: Imports corretos
-from python.buildtovalue.governance.ethical_context_engine import (
+from buildtovalue.governance.ethical_context_engine import (
     EthicalContextEngine,
     EthicalVerdict,
     RequestMetadata
 )
-from python.buildtovalue.governance.ffi_client import TechnicalEvidence
+from buildtovalue.governance.ffi_client import TechnicalEvidence
 
 
 # ═══════════════════════════════════════════════════════════════
