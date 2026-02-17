@@ -11,6 +11,9 @@ import hashlib
 import sqlite3
 import os
 import logging
+
+import app
+
 logger = logging.getLogger(__name__)
 
 from typing import Optional, List
@@ -36,6 +39,10 @@ COMPLIANCE_PLUGINS = {
     "LGPD": LGPDPlugin(),
     "EU_AI_ACT": EUAIActPlugin(),
 }
+
+# Em python/buildtovalue/api/app.py, adicionar:
+from buildtovalue.api.routes.intelligence import router as intelligence_router
+app.include_router(intelligence_router)
 
 
 # ═══════════════════════════════════════════════════════════════
