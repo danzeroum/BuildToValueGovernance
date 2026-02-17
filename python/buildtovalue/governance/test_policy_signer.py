@@ -9,7 +9,7 @@ import time
 import tempfile
 from pathlib import Path
 
-from python.buildtovalue.governance.policy_signer import (
+from buildtovalue.governance.policy_signer import (
     PolicySigner,
     SignedPolicy,
     PolicySignature,

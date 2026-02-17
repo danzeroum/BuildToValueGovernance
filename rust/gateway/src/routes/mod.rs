@@ -12,6 +12,8 @@ use tower_http::timeout::TimeoutLayer;
 use tower_http::cors::{CorsLayer, Any};
 use std::time::Duration;
 use crate::state::AppState;
+use crate::middleware::rate_limit::RateLimitLayer;
+use crate::middleware::auth::ApiKeyLayer;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     let cors = CorsLayer::new()
@@ -25,6 +27,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/policy/test", post(policy_test::policy_test_handler))
         .route("/health", get(health::health_handler))
         .route("/metrics", get(metrics::metrics_handler))
+        .layer(ApiKeyLayer::from_env())
+        .layer(RateLimitLayer::from_env())
         .layer(cors)
         .layer(TimeoutLayer::new(Duration::from_millis(5000)))
         .layer(TraceLayer::new_for_http())

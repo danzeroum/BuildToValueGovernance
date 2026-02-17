@@ -1,4 +1,5 @@
 //! POST /v1/validate — Scan + Policy + Governance (República Algorítmica).
+//! Gap #4: Profile-aware governance (sector whitelist via Python).
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
@@ -8,11 +9,16 @@ use std::time::Instant;
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
 
+// ── REQUEST / RESPONSE ────────────────────────────────────────
+
 #[derive(Deserialize)]
 pub struct ValidateRequest {
     pub input: String,
     #[serde(default)]
     pub session_id: Option<String>,
+    /// Profile ID (e.g. "medical", "financial"). Forwarded to Python governance.
+    #[serde(default)]
+    pub profile: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -34,6 +40,8 @@ pub struct ValidateResponse {
     pub rationale: String,
 }
 
+// ── INTERNAL TYPES ────────────────────────────────────────────
+
 const DEFAULT_POLICY: &str = include_str!("../../../../data/policies/core/default.yaml");
 
 #[derive(Serialize)]
@@ -45,6 +53,10 @@ struct GovernanceRequest {
     hard_blocked: bool,
     matched_policies: Vec<String>,
     session_id: Option<String>,
+    /// Profile forwarded for sector whitelist + mercy adjustment.
+    profile: Option<String>,
+    /// Full input text for sector trigger matching (Opção A).
+    input_text: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -74,6 +86,8 @@ struct ScanResult {
     hard_block_term: Option<String>,
     matched_policies: Vec<String>,
 }
+
+// ── HANDLER ───────────────────────────────────────────────────
 
 pub async fn validate_handler(
     State(state): State<Arc<AppState>>,
@@ -131,6 +145,8 @@ pub async fn validate_handler(
             hard_blocked: scan.hard_blocked,
             matched_policies: scan.matched_policies.clone(),
             session_id: req.session_id.clone(),
+            profile: req.profile.clone(),
+            input_text: req.input.clone(),
         };
 
         match state.http_client
@@ -186,6 +202,7 @@ pub async fn validate_handler(
         }
     }
 
+    // ── MESSAGE (user-facing) ─────────────────────────────────
     let message = if scan.hard_blocked {
         format!(
             "Mensagem bloqueada: conteudo perigoso detectado ({}). Este tipo de conteudo e proibido.",
@@ -222,13 +239,16 @@ pub async fn validate_handler(
             .and_then(|s| s.parse().ok())
             .unwrap_or(0x0000);
 
+        let profile_str = req.profile.as_deref().unwrap_or("default");
+
         let log_line = format!(
-            "{{\"ts\":{},\"session\":\"{}\",\"policy_action\":\"{}\",\"final_action\":\"{}\",\"mercy\":{},\"risk\":{:.4},\"findings\":{},\"critical\":{},\"hard_blocked\":{},\"verdict_id\":\"{}\",\"latency_ms\":{:.2}}}\n",
+            "{{\"ts\":{},\"session\":\"{}\",\"profile\":\"{}\",\"policy_action\":\"{}\",\"final_action\":\"{}\",\"mercy\":{},\"risk\":{:.4},\"findings\":{},\"critical\":{},\"hard_blocked\":{},\"verdict_id\":\"{}\",\"latency_ms\":{:.2}}}\n",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis(),
             session_id,
+            profile_str,
             scan.policy_action,
             final_action,
             mercy_applied,
@@ -267,6 +287,8 @@ pub async fn validate_handler(
         rationale,
     }))
 }
+
+// ── FALLBACK POLICY ───────────────────────────────────────────
 
 const FALLBACK_POLICY: &str = r#"
 version: "1.0"

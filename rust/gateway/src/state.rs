@@ -35,6 +35,14 @@ lazy_static! {
         opts!("btv_sanitize_masked_total", "Total PII masked by type"),
         &["type"]
     ).unwrap();
+
+    pub static ref RATE_LIMITED_TOTAL: IntCounter = register_int_counter!(
+        "btv_rate_limited_total", "Total rate-limited requests"
+    ).unwrap();
+
+    pub static ref AUTH_REJECTED_TOTAL: IntCounter = register_int_counter!(
+        "btv_auth_rejected_total", "Total rejected auth attempts"
+    ).unwrap();
 }
 
 pub struct AppState {
@@ -53,7 +61,8 @@ impl AppState {
         lazy_static::initialize(&FINDINGS_TOTAL);
         lazy_static::initialize(&SANITIZE_TOTAL);
         lazy_static::initialize(&SANITIZE_MASKED_TOTAL);
-
+        lazy_static::initialize(&RATE_LIMITED_TOTAL);
+        lazy_static::initialize(&AUTH_REJECTED_TOTAL);
         Self {
             gatekeeper: Mutex::new(Gatekeeper::new()),
             http_client: reqwest::Client::builder()

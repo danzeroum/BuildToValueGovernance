@@ -1,8 +1,8 @@
 """Tests for Compliance Translator v2.0."""
 
 import pytest
-from python.buildtovalue.compliance.translator import ComplianceTranslator, RegulatoryArticle
-from python.buildtovalue.compliance.frameworks import FrameworkRegistry
+from buildtovalue.compliance.translator import ComplianceTranslator, RegulatoryArticle
+from buildtovalue.compliance.frameworks import FrameworkRegistry
 
 
 @pytest.fixture

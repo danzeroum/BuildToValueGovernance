@@ -10,23 +10,28 @@ import hmac
 import hashlib
 import sqlite3
 import os
+import logging
+logger = logging.getLogger(__name__)
+
 from typing import Optional, List
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from enum import Enum
-
-from python.buildtovalue.compliance.plugin import ComplianceReport
-from python.buildtovalue.compliance.lgpd_plugin import LGPDPlugin
-from python.buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
-from python.buildtovalue.intelligence.threat_feed import (
+from pathlib import Path
+from buildtovalue.compliance.plugin import ComplianceReport
+from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
+from buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
+from buildtovalue.intelligence.threat_feed import (
     init_threats_db, ingest_threat, query_threats, get_threat, get_stats,
 )
-from python.buildtovalue.governance.contestability_loop import (
+from buildtovalue.governance.contestability_loop import (
     ContestabilityLoop,
     AppealStatus,
 )
-
+from buildtovalue.governance.profile_manager import ProfileManager
+from buildtovalue.governance.sector_loader import SectorLoader
+from buildtovalue.api.auth import require_api_key
 COMPLIANCE_PLUGINS = {
     "LGPD": LGPDPlugin(),
     "EU_AI_ACT": EUAIActPlugin(),
@@ -105,7 +110,8 @@ class EvidenceRequest(BaseModel):
     session_id: Optional[str] = None
     trust_score: Optional[float] = None
     is_first_offense: Optional[bool] = None
-
+    profile: Optional[str] = None
+    input_text: Optional[str] = None
 
 class VerdictResponse(BaseModel):
     verdict_id: str
@@ -203,12 +209,39 @@ class ThreatQueryRequest(BaseModel):
     limit: int = 50
 
 
+
+
+# ═══════════════════════════════════════════════════════════════
+# HMAC KEY — Must be set via environment (Gap #10)
+# Fail-secure: refuses to start without key in production.
+# Dev fallback: allows default key with warning.
+# ═══════════════════════════════════════════════════════════════
+
+def _load_hmac_key() -> bytes:
+    """Load HMAC signing key from environment."""
+    key = os.environ.get("BTV_HMAC_KEY")
+    if key:
+        return key.encode("utf-8")
+
+    env = os.environ.get("BTV_ENV", "development")
+    if env == "production":
+        raise RuntimeError(
+            "BTV_HMAC_KEY must be set in production. "
+            "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+
+    logger.warning(
+        "⚠️  BTV_HMAC_KEY not set — using default dev key. "
+        "Set BTV_HMAC_KEY for production."
+    )
+    return b"btv-dev-key-NOT-FOR-PRODUCTION"
+
+
+HMAC_KEY = _load_hmac_key()
+
 # ═══════════════════════════════════════════════════════════════
 # MERCY CALCULATOR (Gilligan)
 # ═══════════════════════════════════════════════════════════════
-
-HMAC_KEY = b"btv-sovereign-trust-os-v1"
-
 
 def calculate_mercy(
     composite_risk: float,
@@ -339,7 +372,7 @@ def _appeal_to_response(appeal) -> AppealResponse:
 # FASTAPI APP
 # ═══════════════════════════════════════════════════════════════
 
-app = FastAPI(title="BuildToValue Governance", version="1.4.0")
+app = FastAPI(title="BuildToValue Governance", version="1.5.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -349,20 +382,43 @@ app.add_middleware(
 )
 
 
+# ═══════════════════════════════════════════════════════════════
+# GLOBALS
+# ═══════════════════════════════════════════════════════════════
+
+_contestability_loop: Optional[ContestabilityLoop] = None
+_profile_manager: Optional[ProfileManager] = None
+_sector_loader: Optional[SectorLoader] = None
+
+
 @app.on_event("startup")
 def startup():
-    global _contestability_loop
+    global _contestability_loop, _profile_manager, _sector_loader
     init_db()
     init_threats_db()
     _contestability_loop = ContestabilityLoop(sla_hours=24)
 
+    # ── Profile + Sector support (Gap #4) ─────────────────────
+    root = Path(__file__).resolve().parent.parent.parent.parent
+    profiles_dir = root / "data" / "policies" / "agents"
+    if profiles_dir.exists():
+        _profile_manager = ProfileManager(profiles_dir)
+        logger.info(f"ProfileManager initialized: {profiles_dir}")
+    else:
+        logger.warning(f"Profiles dir not found: {profiles_dir}")
+
+    _sector_loader = SectorLoader()
+    logger.info("SectorLoader initialized")
+
+    from buildtovalue.api.auth import init_auth
+    init_auth()
 
 # ═══════════════════════════════════════════════════════════════
 # GOVERNANCE — /v1/decide
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/v1/decide", response_model=VerdictResponse)
-def decide(req: EvidenceRequest):
+def decide(req: EvidenceRequest, _=Depends(require_api_key)):
     start = time.perf_counter()
 
     verdict_id = f"verd_{uuid.uuid4().hex[:12]}"
@@ -407,21 +463,69 @@ def decide(req: EvidenceRequest):
             latency_ms=latency,
         )
 
+    # ── Profile-aware risk adjustment (Gap #4) ────────────────
+    profile_risk_multiplier = 1.0
+    sector_id = None
+    sector_note = ""
+
+    if req.profile and _profile_manager:
+        try:
+            loaded_profile = _profile_manager.load_profile(req.profile)
+            domain_keys = [
+                k for k in loaded_profile.domain_config.keys()
+                if k != "general"
+            ]
+            if domain_keys:
+                sector_id = domain_keys[0]
+        except ValueError:
+            logger.warning(
+                f"Profile not found: {req.profile}, using defaults"
+            )
+
+    if sector_id and _sector_loader and req.input_text:
+        matched_types = [p.split(":")[0] for p in req.matched_policies]
+        profile_risk_multiplier = _sector_loader.apply_whitelist(
+            input_text=req.input_text,
+            findings=matched_types,
+            sector_id=sector_id,
+        )
+        if profile_risk_multiplier < 1.0:
+            req.composite_risk *= profile_risk_multiplier
+            sector_note = (
+                f" Sector context ({sector_id}) reduced risk "
+                f"by {(1 - profile_risk_multiplier) * 100:.0f}%."
+            )
+            logger.info(
+                f"Sector whitelist: sector={sector_id}, "
+                f"multiplier={profile_risk_multiplier}, "
+                f"adjusted_risk={req.composite_risk:.4f}"
+            )
+
     # Ethical judgment
-    trust = req.trust_score if req.trust_score is not None else get_trust_score(session_id)
-    first = req.is_first_offense if req.is_first_offense is not None else is_first_offense(session_id)
+    trust = (
+        req.trust_score
+        if req.trust_score is not None
+        else get_trust_score(session_id)
+    )
+    first = (
+        req.is_first_offense
+        if req.is_first_offense is not None
+        else is_first_offense(session_id)
+    )
     original_action = req.action
 
     mercy_applied, mercy_reason = calculate_mercy(
         req.composite_risk, req.critical_count, trust, first,
     )
 
-    final_action = soften_action(original_action) if mercy_applied else original_action
+    final_action = (
+        soften_action(original_action) if mercy_applied else original_action
+    )
 
     rationale = build_rationale(
         original_action, final_action, mercy_applied, mercy_reason,
         trust, req.composite_risk, req.finding_count, req.critical_count,
-    )
+    ) + sector_note
 
     sig = sign_verdict(verdict_id, final_action, req.composite_risk)
     update_trust(session_id, final_action)
@@ -441,7 +545,6 @@ def decide(req: EvidenceRequest):
         signature=sig,
         latency_ms=latency,
     )
-
 
 # ═══════════════════════════════════════════════════════════════
 # APPEALS — /v1/appeals (ADR-023, Levinas)
@@ -483,7 +586,20 @@ def list_appeals(
     status: Optional[str] = None,
     user_id: Optional[str] = None,
 ):
-    """List appeals with optional filtering. Triggers SLA expiration check."""
+    """
+    This function retrieves a list of appeals based on the given optional filters such as
+    `status` and `user_id`. Appeals data is processed and filtered according to the
+    specified criteria before being returned in the response.
+
+    :param status: Optionally filters appeals by their status. Valid status values are
+        'pending', 'accepted', 'rejected', and 'expired'.
+    :type status: Optional[str]
+    :param user_id: Optionally filters appeals by a specific user ID.
+    :type user_id: Optional[str]
+    :return: An instance of `AppealListResponse` containing the filtered list of appeals
+        and the total number of appeals that meet the criteria.
+    :rtype: AppealListResponse
+    """
     _contestability_loop.list_expired_appeals()
 
     appeals = list(_contestability_loop.appeals.values())
@@ -553,7 +669,7 @@ def health():
 
 
 @app.get("/v1/trust/{session_id}")
-def get_trust(session_id: str):
+def get_trust(session_id: str, _=Depends(require_api_key)):
     session = db_get_session(session_id)
     return {
         "session_id": session_id,
@@ -568,7 +684,7 @@ def get_trust(session_id: str):
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/v1/compliance/check")
-def compliance_check(req: ComplianceRequest):
+def compliance_check(req: ComplianceRequest, _=Depends(require_api_key)):
     plugin = COMPLIANCE_PLUGINS.get(req.framework)
     if not plugin:
         return {"error": f"Unknown framework: {req.framework}. Available: {list(COMPLIANCE_PLUGINS.keys())}"}
@@ -593,7 +709,7 @@ def compliance_check(req: ComplianceRequest):
 
 
 @app.get("/v1/compliance/frameworks")
-def list_frameworks():
+def list_frameworks(_=Depends(require_api_key)):
     return {
         "frameworks": [
             {"id": p.framework_id(), "name": p.framework_name()}
@@ -603,7 +719,7 @@ def list_frameworks():
 
 
 @app.get("/v1/compliance/report/{framework}")
-def compliance_report(framework: str):
+def compliance_report(framework: str, _=Depends(require_api_key)):
     plugin = COMPLIANCE_PLUGINS.get(framework)
     if not plugin:
         return {"error": f"Unknown framework: {framework}"}
@@ -634,8 +750,8 @@ def compliance_report(framework: str):
 # INTELLIGENCE HUB — /v1/intelligence
 # ═══════════════════════════════════════════════════════════════
 
-@app.post("/v1/intelligence/ingest")
-def intelligence_ingest(req: ThreatIngestRequest):
+@app.post("/v1/intelligence/ingest",)
+def intelligence_ingest(req: ThreatIngestRequest, _=Depends(require_api_key)):
     return ingest_threat(
         req.id, req.threat_type, req.severity, req.source,
         req.indicators, req.description, req.mitre_id,
@@ -643,7 +759,7 @@ def intelligence_ingest(req: ThreatIngestRequest):
 
 
 @app.post("/v1/intelligence/ingest/batch")
-def intelligence_ingest_batch(threats: List[ThreatIngestRequest]):
+def intelligence_ingest_batch(threats: List[ThreatIngestRequest], _=Depends(require_api_key)):
     results = []
     for t in threats:
         r = ingest_threat(t.id, t.threat_type, t.severity, t.source, t.indicators, t.description, t.mitre_id)
@@ -651,14 +767,14 @@ def intelligence_ingest_batch(threats: List[ThreatIngestRequest]):
     return {"ingested": len(results), "results": results}
 
 
-@app.post("/v1/intelligence/query")
-def intelligence_query(req: ThreatQueryRequest):
+@app.post("/v1/intelligence/query" )
+def intelligence_query(req: ThreatQueryRequest, _=Depends(require_api_key)):
     threats = query_threats(req.threat_type, req.min_severity, req.source, req.limit)
     return {"count": len(threats), "threats": threats}
 
 
 @app.get("/v1/intelligence/threat/{threat_id}")
-def intelligence_get(threat_id: str):
+def intelligence_get(threat_id: str, _=Depends(require_api_key)):
     threat = get_threat(threat_id)
     if not threat:
         return {"error": f"Threat {threat_id} not found"}
@@ -666,5 +782,5 @@ def intelligence_get(threat_id: str):
 
 
 @app.get("/v1/intelligence/stats")
-def intelligence_stats():
+def intelligence_stats(_=Depends(require_api_key)):
     return get_stats()

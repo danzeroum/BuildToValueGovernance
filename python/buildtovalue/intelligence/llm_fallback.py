@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from enum import Enum
 import time
 
-from python.buildtovalue.intelligence.llm_async_client import (
+from buildtovalue.intelligence.llm_async_client import (
     LLMAsyncClient,
     LLMRequest,
     LLMResponse,

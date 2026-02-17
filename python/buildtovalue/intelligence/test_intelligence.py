@@ -1,9 +1,9 @@
 """Tests for Intelligence Hub v2.0."""
 
 import pytest
-from python.buildtovalue.intelligence.misp_ingestor import MispIngestor, ThreatEvent
-from python.buildtovalue.intelligence.threat_classifier import ThreatClassifier
-from python.buildtovalue.intelligence.policy_generator import PolicyGenerator
+from buildtovalue.intelligence.misp_ingestor import MispIngestor, ThreatEvent
+from buildtovalue.intelligence.threat_classifier import ThreatClassifier
+from buildtovalue.intelligence.policy_generator import PolicyGenerator
 
 
 @pytest.fixture
