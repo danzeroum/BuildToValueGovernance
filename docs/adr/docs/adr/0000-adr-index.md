@@ -68,6 +68,31 @@ Este catálogo documenta todas as decisões arquiteturais significativas (ADRs) 
 
 ---
 
+## 🏛️ Grupo E: Governance (v1.8)
+
+| ID | Título | Status | Versão | Link | Resumo |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| **0017** | **Contestability Loop** | ✅ Ativo | v1.8 | [Ver Detalhes](./0017-contestability-loop.md) | Appeals HTTP: submit, status, resolve. SLA 24h. Levinas. |
+
+---
+
+## 🌐 Grupo F: API & Observability (v1.9)
+
+| ID | Título | Status | Versão | Link | Resumo |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| **0018** | **Axum Gateway** | ✅ Ativo | v1.9 | [Ver Detalhes](./0018-axum-gateway.md) | Gateway HTTP Rust. Orquestra kernel + governance. |
+| **0019** | **Observability** | ✅ Ativo | v1.9 | [Ver Detalhes](./0019-observability.md) | Prometheus + Grafana. 7 famílias de métricas. |
+
+---
+
+## 🧠 Grupo G: Intelligence & Compliance (v2.0)
+
+| ID | Título | Status | Versão | Link | Resumo |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| **0020** | **Intelligence Hub** | ✅ Ativo | v2.0 | [Ver Detalhes](./0020-intelligence-hub.md) | Threat feed MISP/STIX. SQLite + BLAKE2b. |
+| **0021** | **Compliance Plugins** | ✅ Ativo | v2.0 | [Ver Detalhes](./0021-compliance-plugins.md) | Plugin architecture. LGPD + EU AI Act. |
+| **0022** | **Streamlit Dashboard** | ✅ Ativo | v2.0 | [Ver Detalhes](./0022-streamlit-dashboard.md) | MVP visual. 6 pages. Democratiza acesso. |
+
 ### 📝 Legenda de Status
 
 * ✅ **Ativo:** Decisão tomada, implementada e em vigor. Código deve seguir estritamente.

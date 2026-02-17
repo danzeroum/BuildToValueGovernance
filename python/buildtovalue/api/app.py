@@ -1,7 +1,7 @@
 """
-BuildToValue Governance API v1.3
+BuildToValue Governance API v1.4
 Python side of the República Algorítmica (Judiciário).
-Trust scores persist in SQLite.
+Trust scores persist in SQLite. Appeals in-memory (v1.5).
 """
 
 import time
@@ -11,22 +11,27 @@ import hashlib
 import sqlite3
 import os
 from typing import Optional, List
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-# Add at top of app.py
+from pydantic import BaseModel, Field
+from enum import Enum
+
 from python.buildtovalue.compliance.plugin import ComplianceReport
 from python.buildtovalue.compliance.lgpd_plugin import LGPDPlugin
 from python.buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
-
 from python.buildtovalue.intelligence.threat_feed import (
     init_threats_db, ingest_threat, query_threats, get_threat, get_stats,
+)
+from python.buildtovalue.governance.contestability_loop import (
+    ContestabilityLoop,
+    AppealStatus,
 )
 
 COMPLIANCE_PLUGINS = {
     "LGPD": LGPDPlugin(),
     "EU_AI_ACT": EUAIActPlugin(),
 }
+
 
 # ═══════════════════════════════════════════════════════════════
 # DATABASE
@@ -87,7 +92,7 @@ def db_update_session(session_id: str, trust_score: float, offense_delta: int):
 
 
 # ═══════════════════════════════════════════════════════════════
-# MODELS
+# MODELS — Governance
 # ═══════════════════════════════════════════════════════════════
 
 class EvidenceRequest(BaseModel):
@@ -114,6 +119,88 @@ class VerdictResponse(BaseModel):
     appeal_deadline_hours: int
     signature: str
     latency_ms: float
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODELS — Appeals (ADR-023)
+# ═══════════════════════════════════════════════════════════════
+
+class AppealStatusEnum(str, Enum):
+    """Mirror of governance.contestability_loop.AppealStatus."""
+    PENDING = "pending"
+    UNDER_REVIEW = "under_review"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
+class AppealSubmitRequest(BaseModel):
+    audit_trail_id: int = Field(..., description="ID da decisão contestada")
+    user_id: str = Field(..., min_length=1, description="ID do usuário")
+    reason: str = Field(..., min_length=20, description="Justificativa (min 20 chars)")
+    evidence: Optional[str] = Field(None, description="URL ou texto de evidência")
+
+
+class AppealResponse(BaseModel):
+    appeal_id: str
+    audit_trail_id: int
+    user_id: str
+    timestamp: int
+    reason: str
+    evidence_provided: Optional[str] = None
+    status: AppealStatusEnum
+    reviewer_notes: Optional[str] = None
+    resolution_timestamp: Optional[int] = None
+    sla_deadline: int
+    is_overdue: bool
+
+
+class AppealListResponse(BaseModel):
+    appeals: List[AppealResponse]
+    total: int
+
+
+class AppealResolveRequest(BaseModel):
+    accepted: bool
+    reviewer_notes: str = Field(..., min_length=10, description="Notas do revisor (min 10 chars)")
+    reviewer_id: str = Field(..., min_length=1, description="ID do revisor")
+
+
+class AppealMetricsResponse(BaseModel):
+    appeals_submitted: int
+    appeals_accepted: int
+    appeals_rejected: int
+    sla_violations: int
+    pending_appeals: int
+    sla_compliance_rate: float
+    appeal_success_rate: float
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODELS — Compliance & Intelligence
+# ═══════════════════════════════════════════════════════════════
+
+class ComplianceRequest(BaseModel):
+    framework: str
+    evidence: dict = {}
+    verdict: dict = {}
+
+
+class ThreatIngestRequest(BaseModel):
+    id: str
+    threat_type: str
+    severity: int
+    source: str = "manual"
+    indicators: List[str] = []
+    description: str = ""
+    mitre_id: str = ""
+
+
+class ThreatQueryRequest(BaseModel):
+    threat_type: Optional[str] = None
+    min_severity: int = 0
+    source: Optional[str] = None
+    limit: int = 50
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -182,10 +269,6 @@ def update_trust(session_id: Optional[str], action: str) -> float:
     return current
 
 
-# ═══════════════════════════════════════════════════════════════
-# OFFENSE TRACKER
-# ═══════════════════════════════════════════════════════════════
-
 def is_first_offense(session_id: Optional[str]) -> bool:
     if not session_id:
         return True
@@ -229,10 +312,34 @@ def build_rationale(
 
 
 # ═══════════════════════════════════════════════════════════════
+# APPEALS HELPER
+# ═══════════════════════════════════════════════════════════════
+
+_contestability_loop: Optional[ContestabilityLoop] = None
+
+
+def _appeal_to_response(appeal) -> AppealResponse:
+    """Convert internal Appeal dataclass to API response."""
+    return AppealResponse(
+        appeal_id=appeal.appeal_id,
+        audit_trail_id=appeal.audit_trail_id,
+        user_id=appeal.user_id,
+        timestamp=appeal.timestamp,
+        reason=appeal.reason,
+        evidence_provided=appeal.evidence_provided,
+        status=appeal.status.value,
+        reviewer_notes=appeal.reviewer_notes,
+        resolution_timestamp=appeal.resolution_timestamp,
+        sla_deadline=appeal.sla_deadline,
+        is_overdue=appeal.is_overdue(),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
 # FASTAPI APP
 # ═══════════════════════════════════════════════════════════════
 
-app = FastAPI(title="BuildToValue Governance", version="1.3.0")
+app = FastAPI(title="BuildToValue Governance", version="1.4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -244,9 +351,15 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup():
+    global _contestability_loop
     init_db()
     init_threats_db()
+    _contestability_loop = ContestabilityLoop(sla_hours=24)
 
+
+# ═══════════════════════════════════════════════════════════════
+# GOVERNANCE — /v1/decide
+# ═══════════════════════════════════════════════════════════════
 
 @app.post("/v1/decide", response_model=VerdictResponse)
 def decide(req: EvidenceRequest):
@@ -255,7 +368,7 @@ def decide(req: EvidenceRequest):
     verdict_id = f"verd_{uuid.uuid4().hex[:12]}"
     session_id = req.session_id
 
-    # ALLOW - update trust, no judgment
+    # ALLOW — update trust, no judgment
     if req.action == "ALLOW":
         trust = get_trust_score(session_id)
         update_trust(session_id, "ALLOW")
@@ -311,8 +424,6 @@ def decide(req: EvidenceRequest):
     )
 
     sig = sign_verdict(verdict_id, final_action, req.composite_risk)
-
-    # Update session state
     update_trust(session_id, final_action)
 
     latency = (time.perf_counter() - start) * 1000
@@ -332,6 +443,100 @@ def decide(req: EvidenceRequest):
     )
 
 
+# ═══════════════════════════════════════════════════════════════
+# APPEALS — /v1/appeals (ADR-023, Levinas)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/v1/appeals", response_model=AppealResponse, status_code=201)
+def submit_appeal(req: AppealSubmitRequest):
+    """Submit appeal for a decision (LGPD Art. 20, EU AI Act Art. 86)."""
+    try:
+        appeal = _contestability_loop.submit_appeal(
+            audit_trail_id=req.audit_trail_id,
+            user_id=req.user_id,
+            reason=req.reason,
+            evidence=req.evidence,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _appeal_to_response(appeal)
+
+
+@app.get("/v1/appeals/metrics", response_model=AppealMetricsResponse)
+def appeals_metrics():
+    """Appeal system metrics (Jonas: accountability requires measurement)."""
+    _contestability_loop.list_expired_appeals()
+    return AppealMetricsResponse(**_contestability_loop.get_metrics())
+
+
+@app.get("/v1/appeals/{appeal_id}", response_model=AppealResponse)
+def get_appeal(appeal_id: str):
+    """Get appeal by ID."""
+    appeal = _contestability_loop.get_appeal(appeal_id)
+    if appeal is None:
+        raise HTTPException(status_code=404, detail=f"Appeal not found: {appeal_id}")
+    return _appeal_to_response(appeal)
+
+
+@app.get("/v1/appeals", response_model=AppealListResponse)
+def list_appeals(
+    status: Optional[str] = None,
+    user_id: Optional[str] = None,
+):
+    """List appeals with optional filtering. Triggers SLA expiration check."""
+    _contestability_loop.list_expired_appeals()
+
+    appeals = list(_contestability_loop.appeals.values())
+
+    if status:
+        try:
+            target_status = AppealStatus(status)
+            appeals = [a for a in appeals if a.status == target_status]
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status: {status}. Valid: pending, accepted, rejected, expired",
+            )
+
+    if user_id:
+        appeals = [a for a in appeals if a.user_id == user_id]
+
+    return AppealListResponse(
+        appeals=[_appeal_to_response(a) for a in appeals],
+        total=len(appeals),
+    )
+
+
+@app.post("/v1/appeals/{appeal_id}/resolve", response_model=AppealResponse)
+def resolve_appeal(appeal_id: str, req: AppealResolveRequest):
+    """Resolve appeal (human reviewer). Levinas: reviewer MUST justify."""
+    existing = _contestability_loop.get_appeal(appeal_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"Appeal not found: {appeal_id}")
+
+    if existing.status in (AppealStatus.ACCEPTED, AppealStatus.REJECTED):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Appeal already resolved: {existing.status.value}",
+        )
+
+    try:
+        resolved = _contestability_loop.resolve_appeal(
+            appeal_id=appeal_id,
+            accepted=req.accepted,
+            reviewer_notes=req.reviewer_notes,
+            reviewer_id=req.reviewer_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return _appeal_to_response(resolved)
+
+
+# ═══════════════════════════════════════════════════════════════
+# HEALTH & TRUST
+# ═══════════════════════════════════════════════════════════════
+
 @app.get("/health")
 def health():
     conn = sqlite3.connect(DB_PATH)
@@ -342,7 +547,8 @@ def health():
         "service": "btv-governance",
         "sessions_tracked": sessions,
         "persistence": "sqlite",
-        "version": "1.3.0",
+        "appeals_pending": len(_contestability_loop.list_pending_appeals()) if _contestability_loop else 0,
+        "version": "1.4.0",
     }
 
 
@@ -357,13 +563,9 @@ def get_trust(session_id: str):
     }
 
 
-# Add these routes to app.py
-
-class ComplianceRequest(BaseModel):
-    framework: str  # "LGPD" or "EU_AI_ACT"
-    evidence: dict = {}
-    verdict: dict = {}
-
+# ═══════════════════════════════════════════════════════════════
+# COMPLIANCE — /v1/compliance
+# ═══════════════════════════════════════════════════════════════
 
 @app.post("/v1/compliance/check")
 def compliance_check(req: ComplianceRequest):
@@ -427,26 +629,10 @@ def compliance_report(framework: str):
         ],
     }
 
+
 # ═══════════════════════════════════════════════════════════════
-# INTELLIGENCE HUB
+# INTELLIGENCE HUB — /v1/intelligence
 # ═══════════════════════════════════════════════════════════════
-
-class ThreatIngestRequest(BaseModel):
-    id: str
-    threat_type: str
-    severity: int
-    source: str = "manual"
-    indicators: List[str] = []
-    description: str = ""
-    mitre_id: str = ""
-
-
-class ThreatQueryRequest(BaseModel):
-    threat_type: Optional[str] = None
-    min_severity: int = 0
-    source: Optional[str] = None
-    limit: int = 50
-
 
 @app.post("/v1/intelligence/ingest")
 def intelligence_ingest(req: ThreatIngestRequest):
