@@ -49,6 +49,19 @@ services:
     depends_on:
       - prometheus
 
+  dashboard:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      - BTV_GATEWAY_URL=http://gateway:8080
+      - BTV_GOVERNANCE_URL=http://governance:8000
+    depends_on:
+      - gateway
+      - governance
+
 volumes:
   ledger_data:
   grafana_data:
