@@ -1,0 +1,267 @@
+# data/policies/compliance/pci_dss.yaml
+# PCI-DSS v4.0 - Payment Card Industry Data Security Standard
+# Effective March 2024
+#
+# 12 Requirements in 6 goals:
+# 1-2: Secure network    3-4: Protect CHD
+# 5-6: Vulnerability mgmt  7-9: Access control
+# 10-11: Monitor/test    12: Security policy
+#
+# CHD = Cardholder Data (PAN, name, expiration, service code)
+# SAD = Sensitive Auth Data (CVV, stripe, PIN) - NEVER store after auth
+#
+# Penalties: $5,000-$100,000/month + forensics + brand damage
+
+_metadata:
+  framework_id: "PCI_DSS"
+  framework_name: "Payment Card Industry Data Security Standard v4.0"
+  version: "1.0.0"
+  source: "legacy_migration"
+  migrated_at: "2026-02-17"
+  total_rules: 27
+  btv_actions: ["BLOCK", "ESCALATE", "LOG"]
+  reference_url: "https://www.pcisecuritystandards.org/document_library/"
+
+articles:
+
+  # ===== REQ 1-2: SECURE NETWORK =====
+
+  "Requirement 1.2":
+    - requirement_text: "Firewall configurations restrict connections between untrusted networks"
+      policy_name: "PCI-DSS: Block CHD Access from Untrusted Networks"
+      policy_action: "BLOCK"
+      condition_template: "access.network_type in ['public', 'untrusted'] and data.contains_cardholder_data == true"
+      parameters: {}
+      confidence: 0.98
+      notes: "CHD accessible only from trusted networks"
+
+  "Requirement 2.2":
+    - requirement_text: "System components configured securely - remove unnecessary services"
+      policy_name: "PCI-DSS: Hardening Baseline for CHD Systems"
+      policy_action: "ESCALATE"
+      condition_template: "system.handles_chd == true and system.hardening_score < {min_score}"
+      parameters:
+        min_score: 0.9
+      confidence: 0.94
+      notes: "CIS benchmarks or vendor hardening guides"
+
+  # ===== REQ 3: PROTECT STORED CHD =====
+
+  "Requirement 3.3":
+    - requirement_text: "PAN rendered unreadable - strong cryptography"
+      policy_name: "PCI-DSS: Enforce PAN Encryption/Tokenization"
+      policy_action: "BLOCK"
+      condition_template: "data.contains_pan == true and (data.encrypted == false and data.tokenized == false and data.hashed == false)"
+      parameters: {}
+      confidence: 1.0
+      notes: "PAN must NEVER be stored in clear text"
+
+  "Requirement 3.4":
+    - requirement_text: "PAN unreadable in logs, removable media, external storage"
+      policy_name: "PCI-DSS: Block PAN in Logs"
+      policy_action: "BLOCK"
+      condition_template: "log_entry.contains_pan == true"
+      parameters: {}
+      confidence: 1.0
+      notes: "Critical violation - PAN in logs is prohibited"
+
+  "Requirement 3.5":
+    - requirement_text: "Key management - generation, distribution, storage, destruction"
+      policy_name: "PCI-DSS: Encryption Key Lifecycle Management"
+      policy_action: "ESCALATE"
+      condition_template: "encryption_key.rotation_days > {max_days} or encryption_key.has_custodian == false"
+      parameters:
+        max_days: 365
+      confidence: 0.95
+      notes: "Annual key rotation minimum"
+
+  "Requirement 3.6":
+    - requirement_text: "Cryptographic keys protected - split knowledge, dual control"
+      policy_name: "PCI-DSS: Dual Control for Key Access"
+      policy_action: "BLOCK"
+      condition_template: "key_access.single_person_access == true and key.is_production == true"
+      parameters: {}
+      confidence: 0.97
+      notes: "Production keys require dual authorization"
+
+  # ===== REQ 4: ENCRYPT TRANSMISSION =====
+
+  "Requirement 4.2":
+    - requirement_text: "PAN never sent via unencrypted channels"
+      policy_name: "PCI-DSS: Block Unencrypted PAN Transmission"
+      policy_action: "BLOCK"
+      condition_template: "transmission.contains_pan == true and (transmission.tls_version < 1.2 or transmission.protocol in ['email', 'sms', 'chat'])"
+      parameters: {}
+      confidence: 1.0
+      notes: "TLS 1.2+ mandatory, no PAN via email/SMS"
+
+  # ===== REQ 5-6: VULNERABILITY MANAGEMENT =====
+
+  "Requirement 5.2":
+    - requirement_text: "Anti-malware deployed on all systems commonly affected"
+      policy_name: "PCI-DSS: Anti-Malware Active on CHD Systems"
+      policy_action: "BLOCK"
+      condition_template: "system.handles_chd == true and (antimalware.installed == false or antimalware.up_to_date == false)"
+      parameters: {}
+      confidence: 0.96
+      notes: "Real-time anti-malware required"
+
+  "Requirement 6.3":
+    - requirement_text: "Vulnerabilities identified and addressed - risk-based approach"
+      policy_name: "PCI-DSS: Critical Vulnerability Patching SLA"
+      policy_action: "ESCALATE"
+      condition_template: "vulnerability.severity == 'critical' and vulnerability.affects_chd_system == true and days_since(vulnerability.published) > 30"
+      parameters: {}
+      confidence: 0.95
+      notes: "Critical CHD vulnerabilities patched within 30 days"
+
+  "Requirement 6.4":
+    - requirement_text: "Public-facing web applications protected - WAF or code review"
+      policy_name: "PCI-DSS: WAF Required for Public Web Apps"
+      policy_action: "BLOCK"
+      condition_template: "webapp.is_public_facing == true and webapp.handles_chd == true and webapp.has_waf == false"
+      parameters: {}
+      confidence: 0.97
+      notes: "Web Application Firewall mandatory"
+
+  "Requirement 6.5":
+    - requirement_text: "Change control processes for system components"
+      policy_name: "PCI-DSS: Change Approval for CHD Systems"
+      policy_action: "BLOCK"
+      condition_template: "change.affects_chd_system == true and (change.approved == false or change.tested == false)"
+      parameters: {}
+      confidence: 0.94
+      notes: "All CHD changes require approval + testing"
+
+  # ===== REQ 7-9: ACCESS CONTROL =====
+
+  "Requirement 7.1":
+    - requirement_text: "Limit access to CHD to business need-to-know"
+      policy_name: "PCI-DSS: Role-Based Access to CHD"
+      policy_action: "BLOCK"
+      condition_template: "user.chd_access_requested == true and user.business_justification_approved == false"
+      parameters: {}
+      confidence: 0.96
+      notes: "Need-to-know principle for CHD access"
+
+  "Requirement 8.2":
+    - requirement_text: "Multi-factor authentication for all access to CDE"
+      policy_name: "PCI-DSS: MFA Required for CDE Access"
+      policy_action: "BLOCK"
+      condition_template: "access.target == 'cardholder_data_environment' and user.mfa_verified == false"
+      parameters: {}
+      confidence: 0.99
+      notes: "MFA mandatory for all CDE access"
+
+  "Requirement 8.3":
+    - requirement_text: "Strong passwords - minimum 12 characters"
+      policy_name: "PCI-DSS: Password Complexity Check"
+      policy_action: "BLOCK"
+      condition_template: "password.length < 12 or password.complexity_score < {min_score}"
+      parameters:
+        min_score: 3
+      confidence: 0.93
+      notes: "12+ chars, uppercase + lowercase + numbers + symbols"
+
+  "Requirement 8.4":
+    - requirement_text: "User accounts reviewed quarterly"
+      policy_name: "PCI-DSS: Quarterly Account Review"
+      policy_action: "ESCALATE"
+      condition_template: "user.last_review_date == null or days_since(user.last_review_date) > 90"
+      parameters: {}
+      confidence: 0.90
+      notes: "Quarterly access review mandatory"
+
+  "Requirement 8.5":
+    - requirement_text: "Shared/group accounts prohibited except where necessary"
+      policy_name: "PCI-DSS: Block Shared Accounts for CHD"
+      policy_action: "BLOCK"
+      condition_template: "account.type == 'shared' and account.accesses_chd == true"
+      parameters: {}
+      confidence: 0.97
+      notes: "Shared accounts prohibited for CHD access"
+
+  # ===== REQ 10-11: MONITOR AND TEST =====
+
+  "Requirement 10.2":
+    - requirement_text: "Audit logs capture all access to CHD"
+      policy_name: "PCI-DSS: Comprehensive CHD Audit Logging"
+      policy_action: "LOG"
+      condition_template: "data.chd_accessed == true or data.chd_modified == true or data.chd_deleted == true"
+      parameters: {}
+      confidence: 1.0
+      notes: "All CHD interactions must be logged immutably"
+
+  "Requirement 10.4":
+    - requirement_text: "Logs reviewed daily - automated or manual"
+      policy_name: "PCI-DSS: Daily Log Review"
+      policy_action: "ESCALATE"
+      condition_template: "log_review.last_review_date == null or hours_since(log_review.last_review_date) > 24"
+      parameters: {}
+      confidence: 0.91
+      notes: "Daily log review (automated SIEM preferred)"
+
+  "Requirement 10.5":
+    - requirement_text: "Logs retained for at least one year"
+      policy_name: "PCI-DSS: Log Retention Policy"
+      policy_action: "ESCALATE"
+      condition_template: "log.age_days > 365 and log.archived == false"
+      parameters: {}
+      confidence: 0.92
+      notes: "1-year retention minimum, 3 months immediately available"
+
+  "Requirement 11.3":
+    - requirement_text: "External and internal penetration testing annually"
+      policy_name: "PCI-DSS: Annual Penetration Testing"
+      policy_action: "ESCALATE"
+      condition_template: "system.handles_chd == true and (pentest.last_external_date == null or days_since(pentest.last_external_date) > 365)"
+      parameters: {}
+      confidence: 0.93
+      notes: "Annual internal + external pentests"
+
+  "Requirement 11.4":
+    - requirement_text: "IDS/IPS monitor all CDE traffic"
+      policy_name: "PCI-DSS: IDS/IPS Active on CDE"
+      policy_action: "BLOCK"
+      condition_template: "network.segment == 'CDE' and ids_ips.enabled == false"
+      parameters: {}
+      confidence: 0.95
+      notes: "Real-time IDS/IPS required"
+
+  "Requirement 11.5":
+    - requirement_text: "File integrity monitoring on critical files"
+      policy_name: "PCI-DSS: FIM Alerts on CHD System Changes"
+      policy_action: "ESCALATE"
+      condition_template: "file.is_critical == true and file.integrity_check_failed == true"
+      parameters: {}
+      confidence: 0.94
+      notes: "FIM on system files, configs, CHD databases"
+
+  # ===== REQ 12: SECURITY POLICY =====
+
+  "Requirement 12.1":
+    - requirement_text: "Establish, publish, maintain information security policy"
+      policy_name: "PCI-DSS: Annual Policy Review"
+      policy_action: "ESCALATE"
+      condition_template: "organization.pci_policy_last_review == null or days_since(organization.pci_policy_last_review) > 365"
+      parameters: {}
+      confidence: 0.89
+      notes: "Annual security policy review"
+
+  "Requirement 12.6":
+    - requirement_text: "Security awareness program for all personnel"
+      policy_name: "PCI-DSS: Annual Security Awareness Training"
+      policy_action: "ESCALATE"
+      condition_template: "user.handles_chd == true and (user.security_training_date == null or days_since(user.security_training_date) > 365)"
+      parameters: {}
+      confidence: 0.92
+      notes: "Annual training for CHD handlers"
+
+  "Requirement 12.10":
+    - requirement_text: "Incident response plan - test annually"
+      policy_name: "PCI-DSS: Annual IR Plan Test"
+      policy_action: "ESCALATE"
+      condition_template: "organization.incident_response_test_date == null or days_since(organization.incident_response_test_date) > 365"
+      parameters: {}
+      confidence: 0.91
+      notes: "IR plan must be tested annually"

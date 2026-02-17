@@ -1,0 +1,104 @@
+# data/policies/sectors/_index.yaml
+# ═══════════════════════════════════════════════════════════════
+# Sector Safe Patterns Index — BuildToValue v3.0
+# ═══════════════════════════════════════════════════════════════
+#
+# PURPOSE: Maps AISector enum values to YAML pattern files.
+#          Replaces legacy Python dict SECTOR_SAFE_PATTERNS.
+#
+# CONSUMED BY: PolicyEngine.load_sector_patterns(sector_id)
+# PHILOSOPHY: Rawls — equal protection across sectors;
+#             Gilligan — context of care reduces severity.
+#
+# COMPLIANCE: EU AI Act Annex III (High-Risk AI Systems)
+# ═══════════════════════════════════════════════════════════════
+
+_metadata:
+  version: "1.0.0"
+  migrated_from: "compliance/sector_safe_patterns.py v0.9.0"
+  migration_date: "2026-02-17"
+  total_sectors: 15
+  total_pattern_files: 6
+
+# ─────────────────────────────────────────────────────────────
+# Direct mappings: sector_id → pattern file
+# ─────────────────────────────────────────────────────────────
+sectors:
+
+  # High-Risk (EU AI Act Annex III — dedicated files)
+  healthcare:
+    file: healthcare.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+
+  employment:
+    file: employment.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+
+  essential_services:
+    file: government.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+
+  critical_infrastructure:
+    file: infrastructure.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+
+  education:
+    file: education.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+
+  banking:
+    file: fintech.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+
+  insurance:
+    file: fintech.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+    notes: "Shares patterns with banking"
+
+  # Cross-referenced (inherit from primary files)
+  law_enforcement:
+    file: government.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+    notes: "Uses government patterns as baseline"
+
+  migration:
+    file: government.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+
+  justice:
+    file: government.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+
+  biometric:
+    file: healthcare.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+    notes: "Uses healthcare patterns — sensitive data overlap"
+
+  democratic_processes:
+    file: government.yaml
+    risk_classification: high_risk
+    eu_ai_act_annex: "III"
+
+  # General (no sector-specific patterns — global only)
+  marketing:
+    file: null
+    risk_classification: minimal_risk
+
+  general_commercial:
+    file: null
+    risk_classification: minimal_risk
+
+  general:
+    file: null
+    risk_classification: minimal_risk

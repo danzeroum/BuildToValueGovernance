@@ -1,10 +1,10 @@
-# BuildToValue v2.0 - HIPAA Base Compliance Profile
+# BuildToValue v3.0 - HIPAA Base Compliance Profile
 # Health Insurance Portability and Accountability Act (USA)
 #
 # Focus: Protected Health Information (PHI) security and privacy
 #
-# Version: 1.0.0
-# Last Updated: 2026-02-05
+# Version: 2.0.0 (gap-closed)
+# Last Updated: 2026-02-17
 
 id: hipaa_base
 name: HIPAA Base Compliance Profile
@@ -12,19 +12,21 @@ description: |
   HIPAA Privacy Rule (45 CFR Part 164, Subparts A & E),
   Security Rule (45 CFR Part 164, Subpart C),
   Breach Notification Rule (45 CFR Part 164, Subpart D).
+  Full coverage: 22 rules across all three rules.
 
 parent_id: null
-version: 1.0.0
+version: 2.0.0
 legal_framework: HIPAA
 jurisdiction: US
 created_at: 2026-02-05
+updated_at: 2026-02-17
 
 legal_metadata:
   law_name: "Health Insurance Portability and Accountability Act"
   law_number: "Public Law 104-191"
   law_url: "https://www.hhs.gov/hipaa/index.html"
   enforcement_authority: "HHS OCR (Office for Civil Rights)"
-  effective_date: "2003-04-14"  # Privacy Rule
+  effective_date: "2003-04-14"
 
   penalties:
     - type: "Tier 1 - Unknowing"
@@ -45,7 +47,7 @@ legal_metadata:
 
 domain_config:
   general:
-    risk_multiplier: 1.8  # HIPAA penalties podem ser criminais
+    risk_multiplier: 1.8
     require_privacy_officer: true
     require_security_officer: true
     breach_notification_days: 60
@@ -59,19 +61,14 @@ domain_config:
     - "Medical record numbers"
     - "Health plan beneficiary numbers"
     - "Account numbers"
-    - "Certificate/license numbers"
-    - "Vehicle identifiers"
-    - "Device identifiers/serial numbers"
-    - "URLs"
-    - "IP addresses"
     - "Biometric identifiers"
     - "Photos"
     - "Any unique identifying number/code"
 
 rules:
-  # ═══════════════════════════════════════════════════════════════════════
-  # PRIVACY RULE (45 CFR §164.502)
-  # ═══════════════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
+  # PRIVACY RULE (45 CFR §164.502-512)
+  # ═══════════════════════════════════════════════════════════════
 
   - id: HIPAA_164_502_MINIMUM_NECESSARY
     name: "Minimum Necessary Standard"
@@ -79,25 +76,19 @@ rules:
     action: BLOCK
     priority: 95
     severity: HIGH
-
     validators: ["phi_validator", "data_minimization_validator"]
-
     condition: |
       phi.access_requested == true and
       phi.fields_requested > max_phi_fields and
       justification.provided == false
-
     parameters:
       max_phi_fields: 5
-
     legal_basis: "45 CFR §164.502(b)"
-
     contestable: true
     mercy_eligible: true
     uncertainty_threshold: 0.7
-
     rationale: |
-      Gilligan (Care): Context matters. Emergency care may need more PHI.
+      Gilligan (Care): Emergency care may need more PHI.
       Mercy: If clinical urgency, EDUCATE + temporary allow (audit later).
 
   - id: HIPAA_164_508_AUTHORIZATION
@@ -106,21 +97,31 @@ rules:
     action: BLOCK
     priority: 100
     severity: CRITICAL
-
     validators: ["consent_validator", "phi_validator"]
-
     condition: |
       phi.disclosure_requested == true and
       (authorization.valid == false or authorization.expired == true)
-
     legal_basis: "45 CFR §164.508"
-
     contestable: true
     mercy_eligible: false
-
     rationale: |
-      Authorization must contain: description, expiration, signature.
       No mercy: PHI disclosure without auth = HIPAA violation.
+
+  - id: HIPAA_164_510_INCIDENTAL_DISCLOSURE
+    name: "Incidental Disclosure Prevention"
+    description: "Monitor PHI transmission channels for compliance (§164.510)"
+    action: LOG
+    priority: 70
+    severity: MEDIUM
+    validators: ["channel_validator"]
+    condition: |
+      phi.involved == true and
+      interaction.channel in ['public_chat', 'unencrypted_email']
+    legal_basis: "45 CFR §164.510"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      LOG for audit. Repeated violations on same channel -> ESCALATE.
 
   - id: HIPAA_164_512_PATIENT_ACCESS
     name: "Right to Access PHI"
@@ -128,191 +129,123 @@ rules:
     action: ESCALATE
     priority: 85
     severity: HIGH
-
     validators: ["data_access_request_validator"]
-
     condition: |
       request.type == "phi_access" and
       days_since(request.date) > 28
-
     parameters:
       sla_days: 30
-
     legal_basis: "45 CFR §164.524"
-
     contestable: false
     mercy_eligible: true
     uncertainty_threshold: 0.8
-
     rationale: |
       Alert Day 28 (buffer 2 days).
-      Extension allowed if reasonable (45 CFR §164.524(b)(2)(iii)).
+      Extension allowed if reasonable (§164.524(b)(2)(iii)).
 
-  # ═══════════════════════════════════════════════════════════════════════
-  # SECURITY RULE (45 CFR §164.312)
-  # ═══════════════════════════════════════════════════════════════════════
-
-  - id: HIPAA_164_312_ENCRYPTION
-    name: "Encryption of PHI"
-    description: "Encrypt PHI at rest and in transit (§164.312(a)(2)(iv))"
-    action: BLOCK
-    priority: 100
-    severity: CRITICAL
-
-    validators: ["encryption_validator", "phi_validator"]
-
+  - id: HIPAA_164_512_AMENDMENT
+    name: "Right to Amendment of PHI"
+    description: "Patient can request PHI corrections (§164.526)"
+    action: LOG
+    priority: 70
+    severity: MEDIUM
+    validators: ["data_rectification_validator"]
     condition: |
-      (phi.at_rest == true and encryption.enabled == false) or
-      (phi.in_transit == true and tls_version < 1.2)
-
-    legal_basis: "45 CFR §164.312(a)(2)(iv)"
-
+      request.type == 'phi_amendment' and
+      days_since(request.date) > 60
+    legal_basis: "45 CFR §164.526"
     contestable: false
     mercy_eligible: false
-
     rationale: |
-      Jonas (Responsibility): PHI encryption = non-negotiable.
-      AES-256 at rest, TLS 1.2+ in transit (NIST SP 800-52).
+      60-day response window. LOG to track compliance.
 
-  - id: HIPAA_164_312_ACCESS_CONTROL
-    name: "Unique User Identification"
-    description: "Shared credentials prohibited for PHI systems (§164.312(a)(1))"
+  # ═══════════════════════════════════════════════════════════════
+  # SECURITY RULE - ADMINISTRATIVE (§164.308) [GAPS CLOSED]
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: HIPAA_164_308_A1_RISK_ANALYSIS
+    name: "PHI Risk Assessment"
+    description: "Conduct accurate risk assessment annually (§164.308(a)(1))"
+    action: BLOCK
+    priority: 90
+    severity: HIGH
+    validators: ["risk_assessment_validator"]
+    condition: |
+      agent.handles_phi == true and
+      (agent.risk_assessment_completed == false or
+       days_since(agent.last_risk_assessment) > 365)
+    legal_basis: "45 CFR §164.308(a)(1)"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+    rationale: |
+      Annual risk assessment mandatory for PHI systems.
+      Mercy: If assessment started but incomplete, EDUCATE + 30-day deadline.
+
+  - id: HIPAA_164_308_A3_WORKFORCE_CLEARANCE
+    name: "Workforce PHI Authorization"
+    description: "All PHI access requires training + clearance (§164.308(a)(3))"
     action: BLOCK
     priority: 95
     severity: CRITICAL
-
-    validators: ["access_control_validator"]
-
+    validators: ["workforce_validator"]
     condition: |
-      user.id_type in ["shared", "generic"] and
-      phi.accessed == true
-
-    legal_basis: "45 CFR §164.312(a)(1)"
-
+      user.phi_training_completed == false or
+      user.background_check_completed == false
+    legal_basis: "45 CFR §164.308(a)(3)"
     contestable: false
     mercy_eligible: false
-
     rationale: |
-      Shared credentials = no accountability.
-      Jonas: Individual responsibility requires individual IDs.
+      Jonas (Responsibility): Untrained staff with PHI access = negligence.
 
-  - id: HIPAA_164_312_AUDIT_CONTROLS
-    name: "Audit Controls for PHI Access"
-    description: "Log all PHI interactions (§164.312(b))"
-    action: LOG
-    priority: 100
-    severity: CRITICAL
-
-    validators: []
-
-    condition: |
-      phi.accessed == true or
-      phi.modified == true or
-      phi.disclosed == true
-
-    legal_basis: "45 CFR §164.312(b)"
-
-    contestable: false
-    mercy_eligible: false
-
-    rationale: |
-      Every PHI touch = logged immutably.
-      Retention: 6 years (45 CFR §164.530(j)).
-
-  - id: HIPAA_164_312_MFA
-    name: "Multi-Factor Authentication for PHI"
-    description: "MFA mandatory for PHI access (§164.312(d))"
+  - id: HIPAA_164_308_A4_ROLE_BASED_ACCESS
+    name: "Role-Based PHI Access"
+    description: "PHI access must be role-based and approved (§164.308(a)(4))"
     action: BLOCK
-    priority: 98
-    severity: CRITICAL
-
-    validators: ["mfa_validator"]
-
-    condition: |
-      phi.access_attempted == true and
-      user.mfa_verified == false
-
-    legal_basis: "45 CFR §164.312(d)"
-
-    contestable: false
-    mercy_eligible: false
-
-    rationale: |
-      Post-2020: MFA = standard for PHI (HHS guidance).
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # BREACH NOTIFICATION RULE (45 CFR §164.404-414)
-  # ═══════════════════════════════════════════════════════════════════════
-
-  - id: HIPAA_164_404_BREACH_NOTIFICATION_INDIVIDUAL
-    name: "Breach Notification to Individuals"
-    description: "Notify affected individuals within 60 days (§164.404)"
-    action: ESCALATE
-    priority: 100
-    severity: CRITICAL
-
-    validators: ["breach_notification_validator"]
-
-    condition: |
-      breach.confirmed == true and
-      days_since(breach.discovery) > 50
-
-    parameters:
-      notification_deadline_days: 60
-
-    legal_basis: "45 CFR §164.404"
-
-    contestable: false
-    mercy_eligible: false
-
-    rationale: |
-      Alert Day 50 (buffer 10 days).
-      Levinas (Care): Affected individuals have right to know.
-
-  - id: HIPAA_164_408_BREACH_NOTIFICATION_HHS
-    name: "Breach Notification to HHS (500+ Individuals)"
-    description: "Notify HHS if breach affects 500+ individuals (§164.408)"
-    action: ESCALATE
-    priority: 100
-    severity: CRITICAL
-
-    validators: ["breach_notification_validator"]
-
-    condition: |
-      breach.affected_individuals >= 500 and
-      breach.hhs_notified == false
-
-    legal_basis: "45 CFR §164.408"
-
-    contestable: false
-    mercy_eligible: false
-
-    rationale: |
-      Large breaches = immediate HHS notification.
-      Public "Wall of Shame": https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf
-
-  - id: HIPAA_164_410_BREACH_NOTIFICATION_MEDIA
-    name: "Breach Notification to Media (500+ in Jurisdiction)"
-    description: "Notify prominent media if 500+ in state/jurisdiction (§164.410)"
-    action: ESCALATE
-    priority: 90
+    priority: 95
     severity: HIGH
-
-    validators: ["breach_notification_validator"]
-
+    validators: ["access_control_validator"]
     condition: |
-      breach.affected_individuals >= 500 and
-      breach.same_jurisdiction_count >= 500 and
-      breach.media_notified == false
+      user.role not in phi.authorized_roles or
+      user.access_granted_by == null
+    legal_basis: "45 CFR §164.308(a)(4)"
+    contestable: true
+    mercy_eligible: false
+    rationale: |
+      Rawls (Justice): Role-based = fair, documented access control.
 
-    legal_basis: "45 CFR §164.410"
+  - id: HIPAA_164_308_A5_SECURITY_TRAINING
+    name: "Annual Security Awareness Training"
+    description: "Workforce security education required annually (§164.308(a)(5))"
+    action: ESCALATE
+    priority: 80
+    severity: MEDIUM
+    validators: ["training_validator"]
+    condition: |
+      user.security_training_completion_date == null or
+      days_since(user.security_training_completion_date) > 365
+    legal_basis: "45 CFR §164.308(a)(5)"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+    rationale: |
+      Mercy: If training scheduled within 30 days, EDUCATE + track.
 
+  - id: HIPAA_164_308_A6_INCIDENT_RESPONSE
+    name: "Security Incident Response"
+    description: "Immediate response required for PHI incidents (§164.308(a)(6))"
+    action: ESCALATE
+    priority: 100
+    severity: CRITICAL
+    validators: ["incident_response_validator"]
+    condition: |
+      incident.involves_phi == true and
+      incident.response_initiated == false
+    legal_basis: "45 CFR §164.308(a)(6)"
     contestable: false
     mercy_eligible: false
-
-  # ═══════════════════════════════════════════════════════════════════════
-  # BUSINESS ASSOCIATE AGREEMENT (45 CFR §164.308(b))
-  # ═══════════════════════════════════════════════════════════════════════
+    rationale: |
+      Levinas (Care): PHI incidents require immediate response. No delay.
 
   - id: HIPAA_164_308_BAA
     name: "Business Associate Agreement (BAA) Required"
@@ -320,36 +253,221 @@ rules:
     action: BLOCK
     priority: 100
     severity: CRITICAL
-
     validators: ["baa_validator"]
-
     condition: |
       transfer.destination_is_third_party == true and
       third_party.has_baa == false and
       phi.involved == true
-
     legal_basis: "45 CFR §164.308(b)"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      No BAA = no PHI sharing. Zero exceptions.
 
+  # ═══════════════════════════════════════════════════════════════
+  # SECURITY RULE - PHYSICAL (§164.310) [GAP CLOSED]
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: HIPAA_164_310_WORKSTATION_SECURITY
+    name: "Workstation Access Controls"
+    description: "PHI access from shared/public devices is high-risk (§164.310(b))"
+    action: LOG
+    priority: 75
+    severity: MEDIUM
+    validators: ["device_validator"]
+    condition: |
+      access.device_type in ['public_terminal', 'shared_workstation'] and
+      phi.access_attempted == true
+    legal_basis: "45 CFR §164.310(b)"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      LOG for audit trail. SIEM should flag patterns.
+
+  # ═══════════════════════════════════════════════════════════════
+  # SECURITY RULE - TECHNICAL (§164.312)
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: HIPAA_164_312_ENCRYPTION
+    name: "Encryption of PHI"
+    description: "Encrypt PHI at rest and in transit (§164.312(a)(2)(iv))"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+    validators: ["encryption_validator", "phi_validator"]
+    condition: |
+      (phi.at_rest == true and encryption.enabled == false) or
+      (phi.in_transit == true and tls_version < 1.2)
+    legal_basis: "45 CFR §164.312(a)(2)(iv)"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Jonas (Responsibility): PHI encryption = non-negotiable.
+      AES-256 at rest, TLS 1.2+ in transit.
+
+  - id: HIPAA_164_312_ACCESS_CONTROL
+    name: "Unique User Identification"
+    description: "Shared credentials prohibited for PHI systems (§164.312(a)(1))"
+    action: BLOCK
+    priority: 95
+    severity: CRITICAL
+    validators: ["access_control_validator"]
+    condition: |
+      user.id_type in ["shared", "generic"] and
+      phi.accessed == true
+    legal_basis: "45 CFR §164.312(a)(1)"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Jonas: Individual responsibility requires individual IDs.
+
+  - id: HIPAA_164_312_AUTO_LOGOFF
+    name: "Auto-Logoff Idle PHI Sessions"
+    description: "15-minute idle timeout for PHI sessions (§164.312(a)(1))"
+    action: BLOCK
+    priority: 85
+    severity: HIGH
+    validators: ["session_validator"]
+    condition: |
+      session.idle_minutes > timeout and
+      session.phi_accessed == true
+    parameters:
+      timeout: 15
+    legal_basis: "45 CFR §164.312(a)(1)"
     contestable: false
     mercy_eligible: false
 
+  - id: HIPAA_164_312_AUDIT_CONTROLS
+    name: "Audit Controls for PHI Access"
+    description: "Log all PHI interactions (§164.312(b))"
+    action: LOG
+    priority: 100
+    severity: CRITICAL
+    validators: []
+    condition: |
+      phi.accessed == true or
+      phi.modified == true or
+      phi.disclosed == true
+    legal_basis: "45 CFR §164.312(b)"
+    contestable: false
+    mercy_eligible: false
     rationale: |
-      BAA = contract that third party will safeguard PHI.
-      No BAA = no PHI sharing. Zero exceptions.
+      Every PHI touch = logged immutably. Retention: 6 years (§164.530(j)).
+
+  - id: HIPAA_164_312_INTEGRITY
+    name: "PHI Integrity Protection"
+    description: "Block unauthorized PHI modification (§164.312(c))"
+    action: BLOCK
+    priority: 90
+    severity: HIGH
+    validators: ["integrity_validator"]
+    condition: |
+      phi.modification_detected == true and
+      user.has_write_permission == false
+    legal_basis: "45 CFR §164.312(c)"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Jonas (Responsibility): Unauthorized changes = data corruption risk.
+
+  - id: HIPAA_164_312_MFA
+    name: "Multi-Factor Authentication for PHI"
+    description: "MFA mandatory for PHI access (§164.312(d))"
+    action: BLOCK
+    priority: 98
+    severity: CRITICAL
+    validators: ["mfa_validator"]
+    condition: |
+      phi.access_attempted == true and
+      user.mfa_verified == false
+    legal_basis: "45 CFR §164.312(d)"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Post-2020: MFA = standard for PHI (HHS guidance).
+
+  - id: HIPAA_164_312_TRANSMISSION
+    name: "Block Unencrypted PHI Transmission"
+    description: "Never transmit PHI over unencrypted channels (§164.312(e)(1))"
+    action: BLOCK
+    priority: 95
+    severity: CRITICAL
+    validators: ["transmission_validator"]
+    condition: |
+      phi.in_transit == true and
+      (encryption.enabled == false or network.type == 'public_wifi')
+    legal_basis: "45 CFR §164.312(e)(1)"
+    contestable: false
+    mercy_eligible: false
+
+  # ═══════════════════════════════════════════════════════════════
+  # BREACH NOTIFICATION RULE (§164.404-410)
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: HIPAA_164_404_BREACH_INDIVIDUAL
+    name: "Breach Notification to Individuals"
+    description: "Notify affected individuals within 60 days (§164.404)"
+    action: ESCALATE
+    priority: 100
+    severity: CRITICAL
+    validators: ["breach_notification_validator"]
+    condition: |
+      breach.confirmed == true and
+      days_since(breach.discovery) > 50
+    parameters:
+      notification_deadline_days: 60
+    legal_basis: "45 CFR §164.404"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Alert Day 50 (buffer 10 days).
+      Levinas (Care): Affected individuals have right to know.
+
+  - id: HIPAA_164_408_BREACH_HHS
+    name: "Breach Notification to HHS (500+ Individuals)"
+    description: "Notify HHS if breach affects 500+ individuals (§164.408)"
+    action: ESCALATE
+    priority: 100
+    severity: CRITICAL
+    validators: ["breach_notification_validator"]
+    condition: |
+      breach.affected_individuals >= 500 and
+      breach.hhs_notified == false
+    legal_basis: "45 CFR §164.408"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Large breaches = immediate HHS notification.
+
+  - id: HIPAA_164_410_BREACH_MEDIA
+    name: "Breach Notification to Media (500+ in Jurisdiction)"
+    description: "Notify prominent media if 500+ in state/jurisdiction (§164.410)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+    validators: ["breach_notification_validator"]
+    condition: |
+      breach.affected_individuals >= 500 and
+      breach.same_jurisdiction_count >= 500 and
+      breach.media_notified == false
+    legal_basis: "45 CFR §164.410"
+    contestable: false
+    mercy_eligible: false
 
 ethical_notes: |
-  HIPAA compliance + ethical governance:
-  
-  RAWLS (Justice): Minimum Necessary = fair treatment (no excessive data collection).
-  LEVINAS (Care): Breach notification = duty to inform those at risk.
-  GILLIGAN (Context): Emergency care may require more PHI (mercy applicable).
-  JONAS (Responsibility): Audit logs = accountability for every PHI touch.
+  HIPAA v2.0 gap-closed profile:
+  RAWLS: §164.308(a)(4) Role-based access = fair treatment
+  LEVINAS: §164.404-410 Breach notification = duty to inform
+  GILLIGAN: §164.502 Minimum Necessary with emergency context
+  JONAS: §164.312 Audit controls + encryption = accountability
 
 changelog:
   - version: 1.0.0
     date: 2026-02-05
     changes:
-      - "Initial HIPAA base profile"
-      - "11 rules covering: Privacy Rule, Security Rule, Breach Notification"
-      - "PHI-specific validators (encryption, MFA, BAA)"
-      - "Penalties up to $1.5M annual cap"
+      - "Initial HIPAA base profile (11 rules)"
+  - version: 2.0.0
+    date: 2026-02-17
+    changes:
+      - "Gap closure: added §164.510, §164.512 Amendment, §164.308(a)(1/3/4/5/6), §164.310(b), §164.312 Auto-Logoff/Integrity/Transmission"
+      - "Total: 22 rules (was 11). Full parity with compliance/hipaa.yaml"
