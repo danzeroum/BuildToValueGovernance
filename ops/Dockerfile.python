@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 WORKDIR /app
 COPY python/ ./python/
-RUN pip install --no-cache-dir fastapi uvicorn
+RUN pip install --no-cache-dir fastapi uvicorn pyyaml
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "python.buildtovalue.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
