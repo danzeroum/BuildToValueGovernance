@@ -1,0 +1,291 @@
+# data/policies/compliance/iso_42001.yaml
+# ISO/IEC 42001:2023 - AI Management System
+# First international standard for AI management systems
+#
+# Structure: Clauses 4-10 + Annex A (AI-specific controls)
+# Certification available from accredited bodies
+# Aligns with EU AI Act, NIST AI RMF
+
+_metadata:
+  framework_id: "ISO_42001"
+  framework_name: "ISO/IEC 42001:2023 AI Management System"
+  version: "1.0.0"
+  source: "legacy_migration"
+  migrated_at: "2026-02-17"
+  total_rules: 27
+  btv_actions: ["BLOCK", "ESCALATE", "LOG"]
+  reference_url: "https://www.iso.org/standard/81230.html"
+
+articles:
+
+  # ===== CLAUSE 4: CONTEXT =====
+
+  "4.1":
+    - requirement_text: "Understanding organization and its context for AI systems"
+      policy_name: "ISO 42001: Document AI System Context"
+      policy_action: "ESCALATE"
+      condition_template: "agent.context_documented == false or agent.stakeholders_identified == false"
+      parameters: {}
+      confidence: 0.88
+      notes: "AI systems must have documented organizational context"
+
+  "4.2":
+    - requirement_text: "Understanding needs and expectations of interested parties"
+      policy_name: "ISO 42001: Stakeholder Requirements Captured"
+      policy_action: "LOG"
+      condition_template: "agent.stakeholder_requirements_reviewed == false or days_since(agent.last_stakeholder_review) > 180"
+      parameters: {}
+      confidence: 0.85
+      notes: "Bi-annual stakeholder review recommended"
+
+  # ===== CLAUSE 5: LEADERSHIP =====
+
+  "5.1":
+    - requirement_text: "Top management commitment to AI management system"
+      policy_name: "ISO 42001: AI Governance Structure Established"
+      policy_action: "LOG"
+      condition_template: "organization.ai_governance_board_exists == false"
+      parameters: {}
+      confidence: 0.82
+      notes: "Leadership accountability for AI systems"
+
+  "5.2":
+    - requirement_text: "AI policy - establish, implement, and maintain"
+      policy_name: "ISO 42001: AI Policy Document Current"
+      policy_action: "ESCALATE"
+      condition_template: "organization.ai_policy_version_date == null or days_since(organization.ai_policy_version_date) > 365"
+      parameters: {}
+      confidence: 0.90
+      notes: "Annual AI policy review required"
+
+  "5.3":
+    - requirement_text: "Roles, responsibilities, and authorities for AI management"
+      policy_name: "ISO 42001: AI Roles Assigned"
+      policy_action: "BLOCK"
+      condition_template: "agent.owner_assigned == false or agent.data_protection_officer_assigned == false"
+      parameters: {}
+      confidence: 0.93
+      notes: "Every AI system must have designated owner and DPO"
+
+  # ===== CLAUSE 6: PLANNING =====
+
+  "6.1.2":
+    - requirement_text: "AI-specific risk assessment"
+      policy_name: "ISO 42001: AI Risk Assessment Mandatory"
+      policy_action: "BLOCK"
+      condition_template: "agent.risk_assessment_completed == false or (agent.deployment_status == 'production' and days_since(agent.last_risk_assessment) > 180)"
+      parameters: {}
+      confidence: 0.95
+      notes: "Risk assessment before deployment + every 6 months"
+
+  "6.1.3":
+    - requirement_text: "Impact assessment for AI systems"
+      policy_name: "ISO 42001: Impact Assessment Required"
+      policy_action: "ESCALATE"
+      condition_template: "agent.impact_assessment_types_completed not contains 'DPIA' and agent.processes_personal_data == true"
+      parameters: {}
+      confidence: 0.92
+      notes: "DPIA required when processing personal data"
+
+  "6.2":
+    - requirement_text: "AI objectives and planning to achieve them"
+      policy_name: "ISO 42001: AI Objectives Documented"
+      policy_action: "LOG"
+      condition_template: "agent.objectives_defined == false or agent.success_metrics == null"
+      parameters: {}
+      confidence: 0.87
+      notes: "Clear, measurable objectives for each AI system"
+
+  # ===== CLAUSE 7: SUPPORT =====
+
+  "7.2":
+    - requirement_text: "Competence - ensure persons doing AI work are competent"
+      policy_name: "ISO 42001: AI Team Competency Verified"
+      policy_action: "ESCALATE"
+      condition_template: "team.ai_certified_members_percentage < {min_percentage}"
+      parameters:
+        min_percentage: 0.6
+      confidence: 0.88
+      notes: "Minimum 60% of AI team should have relevant certifications"
+
+  "7.3":
+    - requirement_text: "Awareness - workers aware of AI policy and their role"
+      policy_name: "ISO 42001: AI Awareness Training Completion"
+      policy_action: "LOG"
+      condition_template: "user.ai_awareness_training_completed == false and user.works_with_ai == true"
+      parameters: {}
+      confidence: 0.85
+      notes: "All AI workers must complete awareness training"
+
+  "7.4":
+    - requirement_text: "Communication - determine internal/external AI communications"
+      policy_name: "ISO 42001: AI System Transparency Disclosure"
+      policy_action: "LOG"
+      condition_template: "agent.user_facing == true and agent.ai_disclosure_present == false"
+      parameters: {}
+      confidence: 0.90
+      notes: "Users must be informed they are interacting with AI"
+
+  "7.5":
+    - requirement_text: "Documented information - create, update, control AI documentation"
+      policy_name: "ISO 42001: AI Documentation Up-to-Date"
+      policy_action: "ESCALATE"
+      condition_template: "agent.documentation_last_updated == null or days_since(agent.documentation_last_updated) > 90"
+      parameters: {}
+      confidence: 0.89
+      notes: "Quarterly documentation review cycle"
+
+  # ===== CLAUSE 8: OPERATION =====
+
+  "8.1":
+    - requirement_text: "Operational planning and control of AI systems"
+      policy_name: "ISO 42001: AI Operational Controls Active"
+      policy_action: "BLOCK"
+      condition_template: "agent.in_production == true and len(agent.active_controls) < {min_controls}"
+      parameters:
+        min_controls: 5
+      confidence: 0.92
+      notes: "Minimum operational controls for production AI"
+
+  "8.2":
+    - requirement_text: "AI impact assessment execution"
+      policy_name: "ISO 42001: High-Risk AI Impact Assessment"
+      policy_action: "BLOCK"
+      condition_template: "agent.risk_level in ['high', 'critical'] and agent.human_rights_impact_assessment_completed == false"
+      parameters: {}
+      confidence: 0.94
+      notes: "Human rights impact assessment for high-risk AI"
+
+  "8.3":
+    - requirement_text: "Data management for AI systems"
+      policy_name: "ISO 42001: AI Data Quality Gate"
+      policy_action: "BLOCK"
+      condition_template: "training_data.quality_score < {min_quality} or training_data.provenance_documented == false"
+      parameters:
+        min_quality: 0.8
+      confidence: 0.93
+      notes: "Data quality and provenance mandatory"
+
+    - requirement_text: "Data for AI - quality, relevance, representativeness"
+      policy_name: "ISO 42001: Training Data Bias Check"
+      policy_action: "ESCALATE"
+      condition_template: "training_data.bias_assessment_completed == false and agent.affects_individuals == true"
+      parameters: {}
+      confidence: 0.91
+      notes: "Bias assessment for AI affecting people"
+
+  "8.4":
+    - requirement_text: "AI system development and deployment"
+      policy_name: "ISO 42001: AI Development Lifecycle Gates"
+      policy_action: "BLOCK"
+      condition_template: "agent.deployment_requested == true and (agent.testing_completed == false or agent.security_scan_passed == false or agent.ethics_review_passed == false)"
+      parameters: {}
+      confidence: 0.96
+      notes: "Testing + Security + Ethics gates before deployment"
+
+  "8.5":
+    - requirement_text: "AI system use - operate according to intended purpose"
+      policy_name: "ISO 42001: Prevent AI Scope Creep"
+      policy_action: "ESCALATE"
+      condition_template: "agent.current_use_case not in agent.approved_use_cases"
+      parameters: {}
+      confidence: 0.89
+      notes: "AI must stay within approved use cases"
+
+  "8.6":
+    - requirement_text: "Human oversight of AI systems"
+      policy_name: "ISO 42001: Human-in-the-Loop Required"
+      policy_action: "BLOCK"
+      condition_template: "agent.autonomy_level >= 4 and agent.human_oversight_enabled == false"
+      parameters: {}
+      confidence: 0.94
+      notes: "High autonomy AI requires human oversight"
+
+  "8.7":
+    - requirement_text: "Continual improvement of AI systems"
+      policy_name: "ISO 42001: AI Performance Monitoring Active"
+      policy_action: "ESCALATE"
+      condition_template: "agent.in_production == true and agent.monitoring_enabled == false"
+      parameters: {}
+      confidence: 0.93
+      notes: "Production AI must have continuous monitoring"
+
+  # ===== CLAUSE 9: PERFORMANCE EVALUATION =====
+
+  "9.1":
+    - requirement_text: "Monitoring, measurement, analysis, and evaluation of AI"
+      policy_name: "ISO 42001: AI Metrics Dashboard Active"
+      policy_action: "LOG"
+      condition_template: "agent.has_performance_dashboard == false or agent.metrics_review_frequency == null"
+      parameters: {}
+      confidence: 0.87
+      notes: "Real-time metrics tracking for AI systems"
+
+  "9.2":
+    - requirement_text: "Internal audit of AI management system"
+      policy_name: "ISO 42001: Annual AI Audit Required"
+      policy_action: "ESCALATE"
+      condition_template: "organization.last_ai_audit_date == null or days_since(organization.last_ai_audit_date) > 365"
+      parameters: {}
+      confidence: 0.91
+      notes: "Annual internal AI audit mandatory"
+
+  "9.3":
+    - requirement_text: "Management review of AI management system"
+      policy_name: "ISO 42001: Quarterly Management Review"
+      policy_action: "LOG"
+      condition_template: "organization.last_ai_management_review == null or days_since(organization.last_ai_management_review) > 90"
+      parameters: {}
+      confidence: 0.86
+      notes: "Quarterly executive review of AI portfolio"
+
+  # ===== CLAUSE 10: IMPROVEMENT =====
+
+  "10.1":
+    - requirement_text: "Continual improvement of AI management system suitability"
+      policy_name: "ISO 42001: Track AI Improvement Actions"
+      policy_action: "LOG"
+      condition_template: "count(agent.improvement_actions_implemented_last_quarter) == 0 and count(agent.incidents_last_quarter) > 3"
+      parameters: {}
+      confidence: 0.84
+      notes: "Incidents without improvements indicate systemic issues"
+
+  "10.2":
+    - requirement_text: "Nonconformity and corrective action for AI issues"
+      policy_name: "ISO 42001: AI Incident Root Cause Analysis"
+      policy_action: "ESCALATE"
+      condition_template: "incident.severity in ['high', 'critical'] and incident.root_cause_analysis_completed == false and days_since(incident.date) > 7"
+      parameters: {}
+      confidence: 0.92
+      notes: "RCA within 7 days for high-severity AI incidents"
+
+  # ===== ANNEX A: AI-SPECIFIC CONTROLS =====
+
+  "A.6.1.1":
+    - requirement_text: "AI policy enforcement"
+      policy_name: "ISO 42001: Runtime AI Policy Enforcement"
+      policy_action: "BLOCK"
+      condition_template: "agent.policy_enforcement_enabled == false and agent.in_production == true"
+      parameters: {}
+      confidence: 0.95
+      notes: "All production AI must have active policy enforcement"
+
+  "A.6.2.3":
+    - requirement_text: "AI explainability and transparency"
+      policy_name: "ISO 42001: Explainability for High-Stakes Decisions"
+      policy_action: "ESCALATE"
+      condition_template: "agent.decision_type in ['credit', 'hiring', 'healthcare', 'legal'] and agent.explainability_score < {min_score}"
+      parameters:
+        min_score: 0.7
+      confidence: 0.93
+      notes: "High-stakes AI must be explainable"
+
+  "A.6.3.1":
+    - requirement_text: "AI fairness and non-discrimination"
+      policy_name: "ISO 42001: Fairness Metrics Baseline"
+      policy_action: "BLOCK"
+      condition_template: "agent.fairness_metrics.demographic_parity < {min_parity} and agent.affects_protected_groups == true"
+      parameters:
+        min_parity: 0.8
+      confidence: 0.94
+      notes: "Fairness threshold for AI affecting protected groups"

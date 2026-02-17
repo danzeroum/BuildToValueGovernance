@@ -1,0 +1,107 @@
+# data/policies/sectors/employment.yaml
+# ═══════════════════════════════════════════════════════════════
+# HR & Employment Sector Safe Patterns
+# ═══════════════════════════════════════════════════════════════
+
+_metadata:
+  sector_id: employment
+  version: "1.0.0"
+  eu_ai_act_annex: "III"
+  risk_classification: high_risk
+  total_patterns: 16
+  basis: "sector_safe_patterns.py v0.9.0 (HR_SAFE_PATTERNS)"
+  philosophy: "Rawls — veil of ignorance in hiring; legitimate criteria only"
+  compliance_refs:
+    - "EU AI Act Annex III, §4 — Employment, workers management"
+    - "GDPR Art. 22 — Automated individual decision-making"
+    - "LGPD Art. 20 — Right to review automated decisions"
+
+cross_references:
+  inherits_from: []
+  inherited_by: []
+
+safe_patterns:
+
+  # ── Legitimate screening criteria ──────────────────────────
+  "years of experience":
+    keywords: ["age", "over"]
+    rationale: "Experience requirements are job-related, not age discrimination"
+
+  "required experience":
+    keywords: ["years"]
+    rationale: "Minimum experience is legitimate qualification"
+
+  "minimum experience":
+    keywords: ["years"]
+    rationale: "Threshold-based screening for qualifications"
+
+  "work experience":
+    keywords: ["years"]
+    rationale: "Career history evaluation"
+
+  # ── Job requirements (not discrimination) ──────────────────
+  "required certifications":
+    keywords: ["reject", "filter"]
+    rationale: "Certification-based filtering is objective and legitimate"
+
+  "mandatory qualifications":
+    keywords: ["reject", "filter"]
+    rationale: "Qualification requirements are bona fide occupational qualifications"
+
+  "language proficiency":
+    keywords: ["filter", "reject"]
+    rationale: "Language skills when job-essential"
+
+  "technical skills":
+    keywords: ["filter", "reject"]
+    rationale: "Technical skill screening is merit-based"
+
+  # ── Legitimate candidate evaluation ────────────────────────
+  "rank candidates":
+    keywords: ["prioritize", "score"]
+    rationale: "Merit-based ranking is standard HR practice"
+
+  "score candidates":
+    keywords: ["prioritize", "rank"]
+    rationale: "Scoring rubrics for objective evaluation"
+
+  "assess qualifications":
+    keywords: ["evaluate"]
+    rationale: "Qualification assessment"
+
+  "match skills":
+    keywords: ["filter"]
+    rationale: "Skill-matching for role fit"
+
+  # ── Interview scheduling ───────────────────────────────────
+  "video interview":
+    keywords: ["facial", "video"]
+    rationale: "Video interviews are standard; NOT emotion analysis"
+
+  "schedule interview":
+    keywords: ["video", "facial"]
+    rationale: "Scheduling logistics, not biometric assessment"
+
+  # ── Compliance verification ────────────────────────────────
+  "verify eligibility":
+    keywords: ["check", "verify"]
+    rationale: "Work authorization verification is legally required"
+
+  "background check":
+    keywords: ["verify", "check"]
+    rationale: "Background checks when role-appropriate and consented"
+
+  "reference check":
+    keywords: ["verify"]
+    rationale: "Reference verification is standard due diligence"
+
+  # ── Diversity initiatives (positive action) ────────────────
+  # NOTE: These are LOG-only; diversity data must never be used
+  # for individual rejection decisions (Rawls, Principle of Difference)
+  "diversity metrics":
+    keywords: ["gender", "ethnicity"]
+    rationale: "Aggregate diversity tracking for equal opportunity compliance"
+
+  "equal opportunity":
+    keywords: ["gender", "race"]
+    rationale: "EEO reporting is legally mandated in many jurisdictions"

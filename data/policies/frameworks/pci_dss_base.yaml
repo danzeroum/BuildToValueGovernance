@@ -1,0 +1,435 @@
+# BuildToValue v3.0 - PCI-DSS v4.0 Base Compliance Profile
+# Payment Card Industry Data Security Standard
+#
+# Filosofia Etica Integrada:
+# - Rawls (Justica): Need-to-know = fair access (Req. 7)
+# - Levinas (Cuidado): Breach notification = duty to inform (Req. 12.10)
+# - Gilligan (Misericordia): Limited - financial data = low mercy tolerance
+# - Jonas (Responsabilidade): Comprehensive logging (Req. 10) + encryption (Req. 3-4)
+#
+# Status: Production-ready
+# Version: 1.0.0
+# Last Updated: 2026-02-17
+
+id: pci_dss_base
+name: PCI-DSS v4.0 Base Compliance Profile
+description: |
+  Payment Card Industry Data Security Standard v4.0 (March 2024).
+  Covers: Network security (Req. 1-2), CHD protection (Req. 3-4),
+  Vulnerability management (Req. 5-6), Access control (Req. 7-9),
+  Monitoring (Req. 10-11), Security policy (Req. 12).
+
+parent_id: null
+version: 1.0.0
+legal_framework: PCI_DSS
+jurisdiction: INTERNATIONAL
+created_at: 2026-02-17
+updated_at: 2026-02-17
+
+legal_metadata:
+  standard_name: "Payment Card Industry Data Security Standard"
+  standard_number: "PCI-DSS v4.0"
+  standard_url: "https://www.pcisecuritystandards.org/document_library/"
+  enforcement_authority: "PCI SSC (Payment Card Industry Security Standards Council)"
+  authority_url: "https://www.pcisecuritystandards.org/"
+  effective_date: "2024-03-31"
+
+  compliance_levels:
+    - level: 1
+      description: "6M+ transactions/year"
+      assessment: "Annual on-site assessment by QSA"
+    - level: 2
+      description: "1-6M transactions/year"
+      assessment: "Annual Self-Assessment Questionnaire (SAQ)"
+    - level: 3
+      description: "20K-1M e-commerce transactions/year"
+      assessment: "Annual SAQ"
+    - level: 4
+      description: "<20K e-commerce or <1M transactions/year"
+      assessment: "Annual SAQ"
+
+  penalties:
+    - type: "Monthly non-compliance fines"
+      value: "$5,000 - $100,000/month"
+    - type: "Card replacement costs"
+      value: "Variable (per compromised card)"
+    - type: "Forensic investigation"
+      value: "$10,000 - $500,000+"
+    - type: "Loss of card processing privileges"
+      value: "Business-ending risk"
+
+  definitions:
+    chd: "Cardholder Data: PAN, cardholder name, expiration date, service code"
+    sad: "Sensitive Authentication Data: CVV/CVC, full magnetic stripe, PIN/PIN block - NEVER store after authorization"
+    cde: "Cardholder Data Environment: systems that store, process, or transmit CHD"
+    pan: "Primary Account Number: the 14-19 digit card number"
+    qsa: "Qualified Security Assessor"
+
+domain_config:
+  general:
+    risk_multiplier: 1.8  # Financial data = high stakes
+    require_qsa_assessment: true
+    require_quarterly_scans: true
+    require_annual_pentest: true
+
+  encryption_requirements:
+    at_rest: "AES-256"
+    in_transit: "TLS 1.2+"
+    key_rotation: "Annual minimum"
+
+  session_timeout_minutes: 15
+
+rules:
+  # ═══════════════════════════════════════════════════════════════
+  # REQ 3: PROTECT STORED CHD
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: PCIDSS_REQ3_3_PAN_ENCRYPTION
+    name: "PAN Rendered Unreadable"
+    description: "PAN must never be stored in clear text (Req. 3.3)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["pan_validator", "encryption_validator"]
+
+    condition: |
+      data.contains_pan == true and
+      (data.encrypted == false and data.tokenized == false and data.hashed == false)
+
+    legal_basis: "PCI-DSS v4.0 Requirement 3.3"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Jonas (Responsibility): Clear-text PAN = absolute violation.
+      No contestability. No mercy. Immediate BLOCK.
+      Acceptable methods: encryption (AES-256), tokenization, truncation, hashing.
+
+  - id: PCIDSS_REQ3_4_PAN_IN_LOGS
+    name: "Block PAN in Logs"
+    description: "PAN must not appear in log files (Req. 3.4)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["log_sanitizer_validator"]
+
+    condition: |
+      log_entry.contains_pan == true
+
+    legal_basis: "PCI-DSS v4.0 Requirement 3.4"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      PAN in logs = instant compliance failure.
+      BuildToValue OutputGuard (v1.6+) must sanitize before logging.
+
+  - id: PCIDSS_REQ3_6_DUAL_CONTROL_KEYS
+    name: "Dual Control for Encryption Keys"
+    description: "Production encryption keys require split knowledge (Req. 3.6)"
+    action: BLOCK
+    priority: 95
+    severity: CRITICAL
+
+    validators: ["key_management_validator"]
+
+    condition: |
+      key_access.single_person_access == true and
+      key.is_production == true
+
+    legal_basis: "PCI-DSS v4.0 Requirement 3.6"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Jonas (Responsibility): Single-person key access = single point of failure.
+      Dual control = accountability shared, risk reduced.
+
+  # ═══════════════════════════════════════════════════════════════
+  # REQ 4: ENCRYPT TRANSMISSION
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: PCIDSS_REQ4_2_ENCRYPTED_TRANSMISSION
+    name: "Block Unencrypted PAN Transmission"
+    description: "PAN never sent via unencrypted channels (Req. 4.2)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["transmission_validator", "encryption_validator"]
+
+    condition: |
+      transmission.contains_pan == true and
+      (transmission.tls_version < 1.2 or
+       transmission.protocol in ['email', 'sms', 'chat'])
+
+    legal_basis: "PCI-DSS v4.0 Requirement 4.2"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      TLS 1.2+ mandatory. No PAN via email, SMS, chat, or any unencrypted channel.
+      Absolute requirement. BLOCK immediate.
+
+  # ═══════════════════════════════════════════════════════════════
+  # REQ 6: SECURE DEVELOPMENT
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: PCIDSS_REQ6_4_WAF
+    name: "WAF Required for Public Web Apps"
+    description: "Public-facing web apps handling CHD need WAF (Req. 6.4)"
+    action: BLOCK
+    priority: 95
+    severity: HIGH
+
+    validators: ["waf_validator"]
+
+    condition: |
+      webapp.is_public_facing == true and
+      webapp.handles_chd == true and
+      webapp.has_waf == false
+
+    legal_basis: "PCI-DSS v4.0 Requirement 6.4"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Web Application Firewall = minimum protection for public CHD applications.
+      Alternative: annual code review by qualified personnel.
+
+  - id: PCIDSS_REQ6_5_CHANGE_CONTROL
+    name: "Change Approval for CHD Systems"
+    description: "All changes to CHD systems require approval + testing (Req. 6.5)"
+    action: BLOCK
+    priority: 90
+    severity: HIGH
+
+    validators: ["change_control_validator"]
+
+    condition: |
+      change.affects_chd_system == true and
+      (change.approved == false or change.tested == false)
+
+    legal_basis: "PCI-DSS v4.0 Requirement 6.5"
+
+    contestable: true
+    mercy_eligible: false
+
+    rationale: |
+      Jonas (Responsibility): Unapproved changes to CHD = reckless risk.
+      Contestable: emergency patches may need retroactive approval.
+
+  # ═══════════════════════════════════════════════════════════════
+  # REQ 7-8: ACCESS CONTROL
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: PCIDSS_REQ7_1_NEED_TO_KNOW
+    name: "Role-Based Access to CHD"
+    description: "Limit CHD access to business need-to-know (Req. 7.1)"
+    action: BLOCK
+    priority: 95
+    severity: HIGH
+
+    validators: ["access_control_validator"]
+
+    condition: |
+      user.chd_access_requested == true and
+      user.business_justification_approved == false
+
+    legal_basis: "PCI-DSS v4.0 Requirement 7.1"
+
+    contestable: true
+    mercy_eligible: false
+
+    rationale: |
+      Rawls (Justice): Need-to-know = fair access principle.
+      No one gets CHD without documented business justification.
+
+  - id: PCIDSS_REQ8_2_MFA_CDE
+    name: "MFA Required for CDE Access"
+    description: "Multi-factor authentication mandatory for CDE (Req. 8.2)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["mfa_validator"]
+
+    condition: |
+      access.target == 'cardholder_data_environment' and
+      user.mfa_verified == false
+
+    legal_basis: "PCI-DSS v4.0 Requirement 8.2"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      MFA for CDE = non-negotiable since PCI-DSS v3.2.
+      v4.0 extends to all CDE access (not just remote).
+
+  - id: PCIDSS_REQ8_5_SHARED_ACCOUNTS
+    name: "Block Shared Accounts for CHD"
+    description: "Shared/group accounts prohibited for CHD access (Req. 8.5)"
+    action: BLOCK
+    priority: 95
+    severity: CRITICAL
+
+    validators: ["access_control_validator"]
+
+    condition: |
+      account.type == 'shared' and
+      account.accesses_chd == true
+
+    legal_basis: "PCI-DSS v4.0 Requirement 8.5"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Jonas (Responsibility): Shared accounts = zero accountability.
+      Individual user IDs for all CHD access. No exceptions.
+
+  # ═══════════════════════════════════════════════════════════════
+  # REQ 10: LOG AND MONITOR
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: PCIDSS_REQ10_2_AUDIT_LOGGING
+    name: "Comprehensive CHD Audit Logging"
+    description: "All CHD access must be logged immutably (Req. 10.2)"
+    action: LOG
+    priority: 100
+    severity: CRITICAL
+
+    validators: []
+
+    condition: |
+      data.chd_accessed == true or
+      data.chd_modified == true or
+      data.chd_deleted == true
+
+    legal_basis: "PCI-DSS v4.0 Requirement 10.2"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Every CHD touch = immutable log entry.
+      Jonas (Responsibility): Audit trail = accountability.
+      BuildToValue DurableLedger provides immutable storage.
+
+  - id: PCIDSS_REQ10_5_LOG_RETENTION
+    name: "Log Retention Policy"
+    description: "Logs retained 1 year, 3 months immediately available (Req. 10.5)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+
+    validators: ["log_retention_validator"]
+
+    condition: |
+      log.age_days > 365 and log.archived == false
+
+    legal_basis: "PCI-DSS v4.0 Requirement 10.5"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+
+    rationale: |
+      Mercy: If log archival system just implemented, grace period for backfill.
+
+  # ═══════════════════════════════════════════════════════════════
+  # REQ 11: TEST SECURITY
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: PCIDSS_REQ11_4_IDS_IPS
+    name: "IDS/IPS Active on CDE"
+    description: "Intrusion detection/prevention monitors all CDE traffic (Req. 11.4)"
+    action: BLOCK
+    priority: 95
+    severity: CRITICAL
+
+    validators: ["ids_ips_validator"]
+
+    condition: |
+      network.segment == 'CDE' and
+      ids_ips.enabled == false
+
+    legal_basis: "PCI-DSS v4.0 Requirement 11.4"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      CDE without IDS/IPS = blind to attacks.
+      Real-time monitoring is minimum standard.
+
+  # ═══════════════════════════════════════════════════════════════
+  # REQ 12: SECURITY POLICY
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: PCIDSS_REQ12_10_IR_PLAN
+    name: "Annual IR Plan Test"
+    description: "Incident response plan must be tested annually (Req. 12.10)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+
+    validators: ["incident_response_validator"]
+
+    condition: |
+      organization.incident_response_test_date == null or
+      days_since(organization.incident_response_test_date) > 365
+
+    legal_basis: "PCI-DSS v4.0 Requirement 12.10"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+
+    rationale: |
+      Levinas (Care): Untested IR plan = false sense of security.
+      Mercy: If test scheduled within 30 days, EDUCATE + track.
+
+ethical_notes: |
+  PCI-DSS compliance + ethical governance integration:
+
+  Note: PCI-DSS is primarily a TECHNICAL standard with limited ethical
+  flexibility. Financial data protection has lower mercy tolerance than
+  other domains due to direct monetary harm potential.
+
+  RAWLS (Justice as Fairness):
+  - Req. 7 (Need-to-know): Fair access = only those who need CHD
+  - Req. 8 (Identification): Individual accountability for all
+
+  LEVINAS (Duty of Care):
+  - Req. 12.10 (IR Plan): Duty to be prepared to protect cardholders
+  - Breach notification: Duty to inform affected individuals
+
+  GILLIGAN (Ethics of Care):
+  - LIMITED APPLICATION: Financial data is largely binary (secure or not)
+  - Mercy applicable only for administrative/process rules
+  - Core security rules (encryption, access) = zero mercy
+
+  JONAS (Responsibility Principle):
+  - Req. 3-4 (Encryption): Technical safeguards = duty of care
+  - Req. 10 (Logging): Comprehensive audit = accountability
+  - Req. 11 (Testing): Proactive testing = precautionary principle
+
+changelog:
+  - version: 1.0.0
+    date: 2026-02-17
+    author: "Daniel Camargo + Ethical Committee"
+    changes:
+      - "Initial PCI-DSS v4.0 base profile"
+      - "14 rules: CHD protection (3), Transmission (1), Development (2), Access (3), Logging (2), Testing (1), Policy (1), Network (1)"
+      - "Low mercy tolerance (financial data = direct monetary harm)"
+      - "Aligned with BuildToValue OutputGuard for PAN sanitization"
+      - "DurableLedger integration for immutable audit trails"

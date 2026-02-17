@@ -1,0 +1,137 @@
+# data/policies/compliance/eu_ai_act.yaml
+# EU Artificial Intelligence Act - Regulation (EU) 2024/1689
+# Source: Legacy mappings (2026-01-08) adapted for BTV v3.0
+#
+# Status: Art. 5 (prohibited practices) in force since Feb 2025
+#         Art. 6-52 high-risk requirements from Aug 2026
+#
+# BTV action mapping: MONITOR -> LOG (v3.0 vocabulary)
+
+_metadata:
+  framework_id: "EU_AI_ACT"
+  framework_name: "EU Artificial Intelligence Act"
+  version: "1.0.0"
+  source: "legacy_migration"
+  migrated_at: "2026-02-17"
+  total_rules: 4
+  btv_actions: ["BLOCK", "ESCALATE", "LOG"]
+  reference_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689"
+
+articles:
+
+  "Article 5":
+    - requirement_text: "Prohibited: AI systems that deploy subliminal techniques"
+      policy_name: "Block Subliminal Manipulation Techniques"
+      policy_action: "BLOCK"
+      condition_template: "agent.capabilities.contains('behavior_modification') and agent.transparency_score < 0.5"
+      parameters: {}
+      confidence: 0.9
+      notes: "Art. 5(1)(a) - In force since Feb 2025"
+
+    - requirement_text: "Prohibited: AI systems that exploit vulnerabilities of specific groups"
+      policy_name: "Block Exploitation of Vulnerable Groups"
+      policy_action: "BLOCK"
+      condition_template: "target_demographic in ['children', 'elderly', 'disabled'] and risk_score > {threshold}"
+      parameters:
+        threshold: 0.7
+      confidence: 0.85
+      notes: "Art. 5(1)(b) - In force since Feb 2025"
+
+  "Article 6":
+    - requirement_text: "High-risk: AI systems used in employment decisions"
+      policy_name: "Employment Decision Oversight Required"
+      policy_action: "ESCALATE"
+      condition_template: "use_case == 'employment' and decision_type in ['hiring', 'termination', 'promotion']"
+      parameters: {}
+      confidence: 0.95
+      notes: "Annex III high-risk category"
+
+  "Article 52":
+    - requirement_text: "Users must be informed when interacting with AI"
+      policy_name: "Disclose AI Interaction to Users"
+      policy_action: "LOG"
+      condition_template: "interaction_type == 'user_facing'"
+      parameters: {}
+      confidence: 1.0
+      notes: "Transparency obligation"
+
+  "Article 5 - Social Scoring":
+    - requirement_text: "Prohibited: Social scoring by public authorities"
+      policy_name: "Block AI Social Scoring"
+      policy_action: "BLOCK"
+      condition_template: "agent.purpose == 'social_scoring' and agent.operator_type == 'public_authority'"
+      parameters: {}
+      confidence: 1.0
+      notes: "Art. 5.1.c - Absolute prohibition"
+
+  "Article 5 - Biometric RBI":
+    - requirement_text: "Prohibited: Real-time remote biometric identification in public spaces"
+      policy_name: "Block Real-Time RBI in Public Spaces"
+      policy_action: "BLOCK"
+      condition_template: "agent.uses_biometric_identification == true and agent.biometric_type == 'real_time_remote' and agent.location_type == 'publicly_accessible'"
+      parameters: {}
+      confidence: 0.95
+      notes: "Art. 5.1.h - Exceptions for law enforcement (Art. 5.2)"
+
+  "Article 6 - Employment":
+    - requirement_text: "High-risk: AI in employment decisions requires human oversight"
+      policy_name: "Employment Decision Human Oversight"
+      policy_action: "ESCALATE"
+      condition_template: "use_case == 'employment' and decision_type in ['hiring', 'termination', 'promotion', 'task_allocation'] and human_review.available == false"
+      parameters: {}
+      confidence: 0.95
+      notes: "Annex III, point 4"
+
+  "Article 13":
+    - requirement_text: "High-risk AI must be transparent for deployers"
+      policy_name: "High-Risk AI Transparency"
+      policy_action: "ESCALATE"
+      condition_template: "agent.risk_level == 'high' and (agent.instructions_for_use_provided == false or agent.limitations_disclosed == false)"
+      parameters: {}
+      confidence: 0.90
+      notes: "Instructions, limitations, intended purpose required"
+
+  "Article 14":
+    - requirement_text: "High-risk AI must have human oversight mechanisms"
+      policy_name: "Human Oversight for High-Risk AI"
+      policy_action: "BLOCK"
+      condition_template: "agent.risk_level == 'high' and agent.human_oversight_enabled == false"
+      parameters: {}
+      confidence: 0.95
+      notes: "Art. 14.4: override, intervene, or stop"
+
+  "Article 15":
+    - requirement_text: "High-risk AI must achieve appropriate accuracy and robustness"
+      policy_name: "Accuracy and Robustness Gate"
+      policy_action: "BLOCK"
+      condition_template: "agent.risk_level == 'high' and (agent.validation_accuracy < 0.90 or agent.adversarial_test_passed == false)"
+      parameters: {}
+      confidence: 0.90
+      notes: "Security scan + adversarial testing required"
+
+  "Article 43":
+    - requirement_text: "Conformity assessment required before market placement"
+      policy_name: "Conformity Assessment Gate"
+      policy_action: "BLOCK"
+      condition_template: "agent.risk_level == 'high' and agent.conformity_assessment_completed == false and agent.deployment_requested == true"
+      parameters: {}
+      confidence: 0.95
+      notes: "Self-assessment or third-party (biometrics)"
+
+  "Article 51":
+    - requirement_text: "GPAI with systemic risk requires additional obligations"
+      policy_name: "GPAI Systemic Risk Assessment"
+      policy_action: "ESCALATE"
+      condition_template: "agent.model_type == 'gpai' and agent.training_compute_flops > 1e25 and agent.systemic_risk_assessment_completed == false"
+      parameters: {}
+      confidence: 0.90
+      notes: "Model evaluation, adversarial testing, incident reporting"
+
+  "Article 71":
+    - requirement_text: "High-risk AI must be registered in EU database"
+      policy_name: "EU Database Registration Required"
+      policy_action: "ESCALATE"
+      condition_template: "agent.risk_level == 'high' and agent.eu_database_registration_id == null"
+      parameters: {}
+      confidence: 0.85
+      notes: "Public transparency through EU database"

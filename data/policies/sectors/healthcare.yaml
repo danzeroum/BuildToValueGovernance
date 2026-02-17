@@ -1,0 +1,105 @@
+# data/policies/sectors/healthcare.yaml
+# ═══════════════════════════════════════════════════════════════
+# Healthcare Sector Safe Patterns
+# ═══════════════════════════════════════════════════════════════
+
+_metadata:
+  sector_id: healthcare
+  version: "1.0.0"
+  eu_ai_act_annex: "III"
+  risk_classification: high_risk
+  total_patterns: 18
+  basis: "sector_safe_patterns.py v0.9.0 (HEALTHCARE_SAFE_PATTERNS)"
+  philosophy: "Gilligan — medical context is care context; PII access is legitimate for treatment"
+  compliance_refs:
+    - "EU AI Act Annex III, §5(a) — Medical devices"
+    - "HIPAA §164.502 — Minimum necessary standard"
+    - "LGPD Art. 11 — Sensitive data for health protection"
+
+cross_references:
+  inherits_from: []
+  inherited_by: ["biometric"]
+
+safe_patterns:
+
+  # ── Legitimate medical operations ──────────────────────────
+  "medical diagnosis":
+    keywords: ["pii", "personal data", "health data"]
+    rationale: "Diagnosis requires patient PII access"
+
+  "patient assessment":
+    keywords: ["pii", "personal data", "health data"]
+    rationale: "Clinical assessment requires health records"
+
+  "treatment recommendation":
+    keywords: ["pii", "personal data"]
+    rationale: "Treatment plans reference patient identity"
+
+  "clinical decision":
+    keywords: ["pii", "personal data"]
+    rationale: "Clinical decisions are inherently personal"
+
+  "diagnostic test":
+    keywords: ["pii", "personal data"]
+    rationale: "Tests are linked to patient records"
+
+  "medical record":
+    keywords: ["pii", "personal data", "health"]
+    rationale: "Record access is core healthcare operation"
+
+  # ── Triage operations ──────────────────────────────────────
+  "triage level":
+    keywords: ["prioritize", "priority"]
+    rationale: "Triage prioritization is clinical, not discriminatory"
+
+  "emergency triage":
+    keywords: ["prioritize", "priority"]
+    rationale: "Emergency triage requires rapid priority assignment"
+
+  "assess priority":
+    keywords: ["prioritize", "priority"]
+    rationale: "Priority assessment is standard medical workflow"
+
+  # ── Age-appropriate care ───────────────────────────────────
+  "pediatric patient":
+    keywords: ["age", "minor"]
+    rationale: "Pediatric care requires age context"
+
+  "elderly patient":
+    keywords: ["age"]
+    rationale: "Geriatric protocols are age-dependent"
+
+  "geriatric care":
+    keywords: ["age"]
+    rationale: "Age-specific care pathways"
+
+  # ── Legitimate demographic factors in medicine ─────────────
+  "patient demographics":
+    keywords: ["gender", "age", "race"]
+    rationale: "Epidemiological factors affect diagnosis (e.g. sickle cell, osteoporosis)"
+
+  "risk factors":
+    keywords: ["gender", "age"]
+    rationale: "Sex-linked and age-linked risk factors are clinically valid"
+
+  "disease prevalence":
+    keywords: ["ethnicity", "race"]
+    rationale: "Population-level prevalence data is evidence-based medicine"
+
+  # ── Privacy-compliant operations ───────────────────────────
+  "verify patient identity":
+    keywords: ["passport", "ssn", "social security"]
+    rationale: "Patient identification prevents medical errors"
+
+  "medical consent":
+    keywords: ["passport", "ssn"]
+    rationale: "Consent forms require identity verification"
+
+  # ── Imaging and biometrics (medical context) ───────────────
+  "imaging protocol":
+    keywords: ["biometric", "facial"]
+    rationale: "Medical imaging is diagnostic, not surveillance"
+
+  "patient identification":
+    keywords: ["biometric", "facial recognition"]
+    rationale: "Biometric ID in hospitals prevents wrong-patient events"

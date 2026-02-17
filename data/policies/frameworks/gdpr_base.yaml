@@ -1,33 +1,30 @@
-# BuildToValue v2.0 - GDPR Base Compliance Profile
+# BuildToValue v3.0 - GDPR Base Compliance Profile
 # General Data Protection Regulation (EU) - Regulation 2016/679
 #
-# Filosofia Ética Integrada:
-# - Rawls (Justiça): Processamento justo independente de quem é o titular
+# Filosofia Etica Integrada:
+# - Rawls (Justica): Processamento justo independente de quem e o titular
 # - Levinas (Cuidado): Right to be forgotten (Art. 17) + Right to object (Art. 21)
-# - Gilligan (Misericórdia): DPIA (Art. 35) com contexto de risco
+# - Gilligan (Misericordia): DPIA (Art. 35) com contexto de risco
 # - Jonas (Responsabilidade): Accountability (Art. 5.2) + Breach notification (Art. 33)
 #
-# Status: Production-ready
-# Version: 1.0.0
-# Last Updated: 2026-02-05
+# Version: 2.0.0 (gap-closed)
+# Last Updated: 2026-02-17
 
 id: gdpr_base
 name: GDPR Base Compliance Profile
 description: |
   General Data Protection Regulation (EU) - Regulation (EU) 2016/679.
-  Covers: Lawfulness (Art. 6), Data Minimization (Art. 5), Rights (Art. 15-22),
-  Breach Notification (Art. 33-34), International Transfers (Art. 44-50), DPIA (Art. 35).
+  Full coverage: Principles (Art. 5), Lawfulness (Art. 6-7), Consent (Art. 7),
+  Special Categories (Art. 9), Transparency (Art. 12-13), Rights (Art. 15-22),
+  Privacy by Design (Art. 25), Records (Art. 30), Security (Art. 32),
+  Breach (Art. 33-34), DPIA (Art. 35), Transfers (Art. 44-46).
 
 parent_id: null
-version: 1.0.0
+version: 2.0.0
 legal_framework: GDPR
 jurisdiction: EU
 created_at: 2026-02-05
-updated_at: 2026-02-05
-
-# ═══════════════════════════════════════════════════════════════════════════
-# METADATA LEGAL
-# ═══════════════════════════════════════════════════════════════════════════
+updated_at: 2026-02-17
 
 legal_metadata:
   law_name: "General Data Protection Regulation"
@@ -39,10 +36,10 @@ legal_metadata:
 
   penalties:
     - type: "Administrative Fine (Tier 1)"
-      value: "Up to €10 million or 2% of global turnover"
+      value: "Up to EUR 10 million or 2% of global turnover"
       applies_to: "Art. 8, 11, 25-39, 42-43"
     - type: "Administrative Fine (Tier 2)"
-      value: "Up to €20 million or 4% of global turnover"
+      value: "Up to EUR 20 million or 4% of global turnover"
       applies_to: "Art. 5-6 (principles), 7-9 (consent), 12-22 (rights), 44-49 (transfers)"
 
   definitions:
@@ -54,484 +51,526 @@ legal_metadata:
 
 domain_config:
   general:
-    risk_multiplier: 1.5  # GDPR penalties são mais altas que LGPD
+    risk_multiplier: 1.5
     require_dpo: true
     breach_notification_hours: 72
-    data_subject_request_days: 30  # GDPR = 1 mês (LGPD = 15 dias)
+    data_subject_request_days: 30
 
   adequate_countries:
-    - "AR"  # Argentina
-    - "CA"  # Canada (commercial orgs)
-    - "CH"  # Switzerland
-    - "GB"  # UK (post-Brexit adequacy)
-    - "IL"  # Israel
-    - "JP"  # Japan
-    - "KR"  # South Korea
-    - "NZ"  # New Zealand
-    - "UY"  # Uruguay
-    # Full list: https://ec.europa.eu/info/law/law-topic/data-protection/international-dimension-data-protection/adequacy-decisions_en
-
-# ═══════════════════════════════════════════════════════════════════════════
-# RULES - CHAPTER II: PRINCIPLES (Art. 5)
-# ═══════════════════════════════════════════════════════════════════════════
+    - "AR"
+    - "CA"
+    - "CH"
+    - "GB"
+    - "IL"
+    - "JP"
+    - "KR"
+    - "NZ"
+    - "UY"
 
 rules:
-  # ───────────────────────────────────────────────────────────────────────
-  # LAWFULNESS, FAIRNESS, TRANSPARENCY (Art. 5.1.a)
-  # ───────────────────────────────────────────────────────────────────────
+  # ═══════════════════════════════════════════════════════════════
+  # CHAPTER II: PRINCIPLES (Art. 5)
+  # ═══════════════════════════════════════════════════════════════
+
   - id: GDPR_ART5_1A_LAWFULNESS
     name: "Lawfulness, Fairness and Transparency"
     description: "Processing must be lawful, fair and transparent (Art. 5.1.a)"
     action: ESCALATE
     priority: 90
     severity: HIGH
-
     validators: ["consent_validator", "purpose_validator"]
-
     condition: |
       data.contains_personal_data == true and
       (processing.legal_basis == null or processing.transparency_provided == false)
-
-    legal_basis: "GDPR Regulation (EU) 2016/679 Art. 5.1.a"
+    legal_basis: "GDPR Art. 5.1.a"
     legal_url: "https://gdpr-info.eu/art-5-gdpr/"
-
     contestable: true
     mercy_eligible: true
     uncertainty_threshold: 0.7
-
     rationale: |
       Rawls (Justice as Fairness): Transparent processing is prerequisite for fairness.
       Mercy: If transparency was attempted but unclear, EDUCATE rather than punish.
 
-  # ───────────────────────────────────────────────────────────────────────
-  # PURPOSE LIMITATION (Art. 5.1.b)
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART5_1B_PURPOSE_LIMITATION
     name: "Purpose Limitation"
     description: "Data collected for specified, explicit, legitimate purposes (Art. 5.1.b)"
     action: ESCALATE
     priority: 85
     severity: HIGH
-
     validators: ["purpose_validator"]
-
     condition: |
       processing.purpose_changed == true and
       processing.compatible_purpose_assessment == false
-
     legal_basis: "GDPR Art. 5.1.b"
-
     contestable: true
     mercy_eligible: true
     uncertainty_threshold: 0.75
-
     rationale: |
       Purpose compatibility requires case-by-case assessment (Recital 50).
-      High uncertainty → EDUCATE DPO to conduct compatibility test.
+      High uncertainty -> EDUCATE DPO to conduct compatibility test.
 
-  # ───────────────────────────────────────────────────────────────────────
-  # DATA MINIMIZATION (Art. 5.1.c)
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART5_1C_DATA_MINIMIZATION
     name: "Data Minimization"
     description: "Adequate, relevant, limited to what is necessary (Art. 5.1.c)"
-    action: MONITOR
+    action: LOG
     priority: 70
     severity: MEDIUM
-
     validators: ["data_minimization_validator"]
-
     condition: |
       data.field_count > minimization_threshold
-
     parameters:
-      minimization_threshold: 12  # GDPR mais leniente que LGPD (10)
-
+      minimization_threshold: 12
     legal_basis: "GDPR Art. 5.1.c"
-
     contestable: true
     mercy_eligible: true
     uncertainty_threshold: 0.6
 
-  # ───────────────────────────────────────────────────────────────────────
-  # STORAGE LIMITATION (Art. 5.1.e)
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART5_1E_STORAGE_LIMITATION
     name: "Storage Limitation"
     description: "Data kept no longer than necessary (Art. 5.1.e)"
     action: LOG
     priority: 60
     severity: MEDIUM
-
     validators: ["retention_validator"]
-
     condition: |
       data.purpose_fulfilled == true and
       data.retention_days > retention_limit
-
     parameters:
-      retention_limit: 90  # Default 90 days post-purpose
-
+      retention_limit: 90
     legal_basis: "GDPR Art. 5.1.e"
-
     contestable: false
     mercy_eligible: false
 
-  # ═══════════════════════════════════════════════════════════════════════
-  # RULES - CHAPTER III: RIGHTS OF DATA SUBJECT (Art. 12-22)
-  # ═══════════════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
+  # CHAPTER II: LAWFULNESS (Art. 6-7) [GAP CLOSED]
+  # ═══════════════════════════════════════════════════════════════
 
-  # ───────────────────────────────────────────────────────────────────────
-  # RIGHT OF ACCESS (Art. 15)
-  # ───────────────────────────────────────────────────────────────────────
+  - id: GDPR_ART6_LAWFUL_BASIS
+    name: "Verify Lawful Basis for Processing"
+    description: "Every processing operation must have a lawful basis (Art. 6)"
+    action: BLOCK
+    priority: 95
+    severity: CRITICAL
+    validators: ["consent_validator", "purpose_validator"]
+    condition: |
+      processing.lawful_basis == null or
+      processing.lawful_basis not in approved_bases
+    legal_basis: "GDPR Art. 6"
+    contestable: true
+    mercy_eligible: false
+    rationale: |
+      Rawls (Justice): No processing without legal ground = fairness baseline.
+      BLOCK immediate. Contestable only if basis exists but was not recorded.
+
+  - id: GDPR_ART6_CONSENT_QUALITY
+    name: "Validate Consent Quality"
+    description: "Consent must be freely given, specific, informed, unambiguous (Art. 6.1.a)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+    validators: ["consent_quality_validator"]
+    condition: |
+      processing.basis == 'consent' and
+      (consent.is_explicit == false or consent.is_granular == false)
+    legal_basis: "GDPR Art. 6.1.a + Recital 32"
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+    rationale: |
+      Pre-checked boxes or blanket consent = invalid (Recital 32).
+      Mercy: If consent design ambiguous, EDUCATE UX team.
+
+  - id: GDPR_ART7_CONSENT_AUDIT_TRAIL
+    name: "Consent Audit Trail Required"
+    description: "Controller must demonstrate consent was given (Art. 7.1)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+    validators: ["consent_validator"]
+    condition: |
+      processing.basis == 'consent' and
+      consent.audit_trail_exists == false
+    legal_basis: "GDPR Art. 7.1"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+    rationale: |
+      Jonas (Responsibility): Consent must be provable.
+      Mercy: If audit system being implemented, EDUCATE + 30-day deadline.
+
+  - id: GDPR_ART7_CONSENT_WITHDRAWAL
+    name: "Honor Consent Withdrawal"
+    description: "Right to withdraw consent at any time (Art. 7.3)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+    validators: ["consent_revocation_validator"]
+    condition: |
+      user.consent_withdrawn == true and
+      processing.continues == true
+    legal_basis: "GDPR Art. 7.3"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Levinas (Care): Withdrawal = absolute right. Stop IMMEDIATELY.
+
+  # ═══════════════════════════════════════════════════════════════
+  # SPECIAL CATEGORIES (Art. 9) [GAP CLOSED]
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: GDPR_ART9_SPECIAL_CATEGORIES
+    name: "Block Sensitive Data Without Explicit Consent"
+    description: "Special category data prohibited unless exception applies (Art. 9)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+    validators: ["sensitive_data_validator"]
+    condition: |
+      data.is_sensitive == true and
+      (consent.explicit_for_sensitive == false and exception.documented == false)
+    legal_basis: "GDPR Art. 9"
+    contestable: true
+    mercy_eligible: false
+    rationale: |
+      Health, biometric, genetic, racial data = maximum protection.
+      Jonas (Responsibility): Zero tolerance. Contestable only if misclassified.
+
+  # ═══════════════════════════════════════════════════════════════
+  # TRANSPARENCY (Art. 12-13) [GAP CLOSED]
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: GDPR_ART12_TRANSPARENT_COMMUNICATION
+    name: "Privacy Notice Readability"
+    description: "Information in concise, transparent, intelligible form (Art. 12)"
+    action: LOG
+    priority: 65
+    severity: MEDIUM
+    validators: ["readability_validator"]
+    condition: |
+      privacy_notice.readability_score < min_score
+    parameters:
+      min_score: 60
+    legal_basis: "GDPR Art. 12"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Levinas (Care): Privacy notices must be understandable (Flesch Reading Ease).
+
+  - id: GDPR_ART13_PRIVACY_DISCLOSURE
+    name: "Mandatory Privacy Disclosure Elements"
+    description: "Provide identity, purposes, legal basis, retention at collection (Art. 13)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+    validators: ["privacy_notice_validator"]
+    condition: |
+      data_collection.privacy_notice_shown == false or
+      privacy_notice.missing_elements_count > 0
+    legal_basis: "GDPR Art. 13"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+    rationale: |
+      Complete privacy notice required at point of collection.
+      Mercy: If notice exists but incomplete, EDUCATE + deadline to fix.
+
+  # ═══════════════════════════════════════════════════════════════
+  # CHAPTER III: RIGHTS OF DATA SUBJECT (Art. 15-22)
+  # ═══════════════════════════════════════════════════════════════
+
   - id: GDPR_ART15_ACCESS
     name: "Right of Access by Data Subject"
     description: "Data subject has right to access personal data (response in 1 month)"
     action: ESCALATE
     priority: 85
     severity: HIGH
-
     validators: ["data_access_request_validator"]
-
     condition: |
       request.type == "data_access" and
       days_since(request.date) > 28
-
     parameters:
-      sla_days: 30  # 1 month = 30 days (GDPR) vs 15 days (LGPD)
-
+      sla_days: 30
     legal_basis: "GDPR Art. 15"
-
     contestable: false
     mercy_eligible: true
     uncertainty_threshold: 0.8
-
     rationale: |
       Alert at Day 28 (buffer 2 days).
       Mercy: Complex requests can extend to 3 months (Art. 12.3).
 
-  # ───────────────────────────────────────────────────────────────────────
-  # RIGHT TO RECTIFICATION (Art. 16)
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART16_RECTIFICATION
     name: "Right to Rectification"
     description: "Data subject can request correction of inaccurate data"
-    action: MONITOR
+    action: LOG
     priority: 70
     severity: MEDIUM
-
     validators: ["data_rectification_validator"]
-
     condition: |
       request.type == "data_correction"
-
     legal_basis: "GDPR Art. 16"
-
     contestable: false
     mercy_eligible: false
 
-  # ───────────────────────────────────────────────────────────────────────
-  # RIGHT TO ERASURE (Art. 17 - "Right to be Forgotten")
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART17_ERASURE
     name: "Right to Erasure (Right to be Forgotten)"
     description: "Data subject can request erasure if grounds apply (Art. 17)"
     action: ESCALATE
     priority: 90
     severity: HIGH
-
     validators: ["data_erasure_validator"]
-
     condition: |
       request.type == "data_deletion" and
       processing.has_legal_obligation == false and
       days_since(request.date) > 28
-
     legal_basis: "GDPR Art. 17"
-
     contestable: true
     mercy_eligible: true
     uncertainty_threshold: 0.75
-
     rationale: |
-      Levinas (Care for Other): Right to be forgotten = right to restart.
-      Mercy: If exceptions (Art. 17.3) are uncertain, EDUCATE DPO.
+      Levinas (Care): Right to be forgotten = right to restart.
+      Mercy: If exceptions (Art. 17.3) uncertain, EDUCATE DPO.
 
-  # ───────────────────────────────────────────────────────────────────────
-  # RIGHT TO DATA PORTABILITY (Art. 20)
-  # ───────────────────────────────────────────────────────────────────────
+  - id: GDPR_ART18_RESTRICTION
+    name: "Right to Restriction of Processing"
+    description: "Data subject can request restriction of processing (Art. 18)"
+    action: BLOCK
+    priority: 85
+    severity: HIGH
+    validators: ["restriction_validator"]
+    condition: |
+      user.has_restriction_request == true and
+      data_access.purpose not in ['storage_only', 'legal_claims']
+    legal_basis: "GDPR Art. 18"
+    contestable: true
+    mercy_eligible: false
+    rationale: |
+      Restricted data can only be stored, not processed.
+      Contestable: compelling legitimate grounds may override.
+
   - id: GDPR_ART20_PORTABILITY
     name: "Right to Data Portability"
     description: "Data subject can receive data in structured, machine-readable format"
     action: LOG
     priority: 65
     severity: MEDIUM
-
     validators: ["data_portability_validator"]
-
     condition: |
       request.type == "data_portability"
-
     legal_basis: "GDPR Art. 20"
-
     contestable: false
     mercy_eligible: false
 
-  # ───────────────────────────────────────────────────────────────────────
-  # RIGHT TO OBJECT (Art. 21)
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART21_OBJECT
     name: "Right to Object"
     description: "Data subject can object to processing (esp. direct marketing)"
     action: BLOCK
     priority: 95
     severity: CRITICAL
-
     validators: ["objection_validator"]
-
     condition: |
       user.has_objected == true and
       processing.continues == true and
       processing.type in ["direct_marketing", "profiling"]
-
     legal_basis: "GDPR Art. 21"
-
     contestable: false
     mercy_eligible: false
-
     rationale: |
-      Art. 21.3: Objection to direct marketing = ABSOLUTE RIGHT (no exceptions).
+      Art. 21.3: Objection to direct marketing = ABSOLUTE RIGHT.
       Jonas (Responsibility): Marketing must stop IMMEDIATELY.
 
-  # ───────────────────────────────────────────────────────────────────────
-  # AUTOMATED DECISION-MAKING (Art. 22)
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART22_AUTOMATED_DECISIONS
     name: "Automated Individual Decision-Making (incl. Profiling)"
     description: "Right not to be subject to purely automated decisions with legal/significant effects"
     action: ESCALATE
     priority: 95
     severity: HIGH
-
     validators: ["automated_decision_validator"]
-
     condition: |
       decision.is_automated == true and
       decision.has_legal_effects == true and
       decision.has_human_review == false
-
     legal_basis: "GDPR Art. 22"
-
     contestable: true
     mercy_eligible: false
-
     rationale: |
       Gilligan (Care): Automated decisions lack context = must have human oversight.
-      Exceptions (Art. 22.2): Explicit consent, contract necessity, or law.
+      Exceptions (Art. 22.2): Explicit consent, contract, law.
 
-  # ═══════════════════════════════════════════════════════════════════════
-  # RULES - CHAPTER IV: CONTROLLER & PROCESSOR (Art. 24-43)
-  # ═══════════════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
+  # CHAPTER IV: CONTROLLER & PROCESSOR (Art. 25-32) [GAPS CLOSED]
+  # ═══════════════════════════════════════════════════════════════
 
-  # ───────────────────────────────────────────────────────────────────────
-  # SECURITY OF PROCESSING (Art. 32)
-  # ───────────────────────────────────────────────────────────────────────
+  - id: GDPR_ART25_PRIVACY_BY_DESIGN
+    name: "Data Protection by Design and Default"
+    description: "Default settings must favor privacy (Art. 25)"
+    action: LOG
+    priority: 70
+    severity: MEDIUM
+    validators: ["privacy_by_design_validator"]
+    condition: |
+      system.default_privacy_settings.score < min_score
+    parameters:
+      min_score: 0.8
+    legal_basis: "GDPR Art. 25"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Rawls (Justice): Privacy by default = fair starting point for all users.
+
+  - id: GDPR_ART30_RECORDS_OF_PROCESSING
+    name: "Processing Activity Record (RoPA)"
+    description: "Maintain records of processing activities (Art. 30)"
+    action: ESCALATE
+    priority: 80
+    severity: HIGH
+    validators: ["ropa_validator"]
+    condition: |
+      agent.processes_personal_data == true and
+      agent.ropa_documented == false
+    legal_basis: "GDPR Art. 30"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+    rationale: |
+      Jonas (Responsibility): Accountability requires documentation.
+      Mercy: If RoPA being built, EDUCATE + 60-day deadline.
+
   - id: GDPR_ART32_SECURITY
     name: "Security of Processing"
     description: "Appropriate technical and organizational measures (Art. 32)"
     action: BLOCK
     priority: 100
     severity: CRITICAL
-
     validators: ["encryption_validator", "security_controls_validator"]
-
     condition: |
       (data.contains_personal_data == true and transmission.encrypted == false) or
       (data.at_rest == true and storage.encrypted == false) or
       (agent.security_level < min_security_level)
-
     parameters:
-      min_security_level: 4  # GDPR exige alto nível (scale 1-5)
-
+      min_security_level: 4
     legal_basis: "GDPR Art. 32"
-
     contestable: false
     mercy_eligible: false
-
     rationale: |
       Jonas (Responsibility): Security is duty, not option.
       Encryption = minimum baseline (Recital 83).
 
-  # ───────────────────────────────────────────────────────────────────────
-  # BREACH NOTIFICATION TO AUTHORITY (Art. 33)
-  # ───────────────────────────────────────────────────────────────────────
+  # ═══════════════════════════════════════════════════════════════
+  # BREACH NOTIFICATION (Art. 33-35)
+  # ═══════════════════════════════════════════════════════════════
+
   - id: GDPR_ART33_BREACH_NOTIFICATION_AUTHORITY
     name: "Notification of Personal Data Breach to Authority"
     description: "Notify supervisory authority within 72h (Art. 33)"
     action: ESCALATE
     priority: 100
     severity: CRITICAL
-
     validators: ["breach_notification_validator"]
-
     condition: |
       incident.severity in ["high", "critical"] and
       incident.affects_personal_data == true and
       hours_since(incident.detection) > 60
-
     parameters:
       notification_deadline_hours: 72
-
     legal_basis: "GDPR Art. 33"
-
     contestable: false
     mercy_eligible: false
-
     rationale: |
-      Alert at 60h (buffer 12h for preparation).
-      Recital 85: "Without undue delay" = 72h max.
+      Alert at 60h (buffer 12h). Recital 85: 72h max.
 
-  # ───────────────────────────────────────────────────────────────────────
-  # BREACH NOTIFICATION TO DATA SUBJECT (Art. 34)
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART34_BREACH_NOTIFICATION_SUBJECT
-    name: "Communication of Personal Data Breach to Data Subject"
+    name: "Communication of Breach to Data Subject"
     description: "Notify data subject if high risk (Art. 34)"
     action: ESCALATE
     priority: 95
     severity: HIGH
-
     validators: ["breach_notification_validator"]
-
     condition: |
       incident.severity == "critical" and
       incident.risk_to_rights == "high" and
       incident.data_subject_notified == false
-
     legal_basis: "GDPR Art. 34"
-
     contestable: false
     mercy_eligible: false
-
     rationale: |
       Levinas (Duty to Other): High risk = must inform affected individuals.
       Exceptions (Art. 34.3): Encrypted data, public awareness, disproportionate effort.
 
-  # ───────────────────────────────────────────────────────────────────────
-  # DPIA - DATA PROTECTION IMPACT ASSESSMENT (Art. 35)
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART35_DPIA
     name: "Data Protection Impact Assessment (DPIA)"
     description: "DPIA required for high-risk processing (Art. 35)"
     action: ESCALATE
     priority: 90
     severity: HIGH
-
     validators: ["dpia_validator"]
-
     condition: |
       processing.is_high_risk == true and
       processing.dpia_completed == false and
       processing.type in ["automated_decision", "large_scale_monitoring", "special_categories"]
-
     legal_basis: "GDPR Art. 35"
-
     contestable: true
     mercy_eligible: true
     uncertainty_threshold: 0.7
-
     rationale: |
-      Gilligan (Care): DPIA = contextual risk assessment (not blind rules).
+      Gilligan (Care): DPIA = contextual risk assessment.
       Mercy: If DPIA in progress, EDUCATE + deadline extension.
 
-  # ═══════════════════════════════════════════════════════════════════════
-  # RULES - CHAPTER V: INTERNATIONAL TRANSFERS (Art. 44-50)
-  # ═══════════════════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
+  # CHAPTER V: INTERNATIONAL TRANSFERS (Art. 44-46)
+  # ═══════════════════════════════════════════════════════════════
 
-  # ───────────────────────────────────────────────────────────────────────
-  # ADEQUACY DECISION (Art. 45)
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART45_ADEQUACY
     name: "Transfers Based on Adequacy Decision"
     description: "Transfer only to countries with adequacy decision (Art. 45)"
     action: BLOCK
     priority: 100
     severity: CRITICAL
-
     validators: ["international_transfer_validator"]
-
     condition: |
       transfer.destination_country not in adequate_countries and
       transfer.has_sccs == false and
       transfer.has_bcr == false
-
     parameters:
       adequate_countries: ${domain_config.adequate_countries}
-
     legal_basis: "GDPR Art. 45"
-
     contestable: true
     mercy_eligible: false
-
     rationale: |
-      Post-Schrems II: US lost adequacy (2020).
-      Alternatives: SCCs (Art. 46), BCRs (Art. 47), derogations (Art. 49).
+      Post-Schrems II: Alternatives: SCCs (Art. 46), BCRs (Art. 47), derogations (Art. 49).
 
-  # ───────────────────────────────────────────────────────────────────────
-  # STANDARD CONTRACTUAL CLAUSES (Art. 46)
-  # ───────────────────────────────────────────────────────────────────────
   - id: GDPR_ART46_SCCS
     name: "Standard Contractual Clauses (SCCs)"
     description: "SCCs required if no adequacy decision (Art. 46)"
     action: ESCALATE
     priority: 90
     severity: HIGH
-
     validators: ["sccs_validator"]
-
     condition: |
       transfer.destination_country not in adequate_countries and
       transfer.has_sccs == false
-
     legal_basis: "GDPR Art. 46"
-
     contestable: true
     mercy_eligible: true
     uncertainty_threshold: 0.65
-
     rationale: |
       Mercy: If SCCs in signature process, EDUCATE + 21-day grace period.
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ETHICAL INTEGRATION NOTES
-# ═══════════════════════════════════════════════════════════════════════════
-
 ethical_notes: |
-  GDPR compliance + ethical governance integration:
-  
-  RAWLS (Justice as Fairness):
-  - Art. 22 (Automated Decisions): No blind algorithms without human review
-  - Art. 5.1.a (Transparency): Fairness requires data subjects know what happens
-  
-  LEVINAS (Duty of Care):
-  - Art. 17 (Right to be Forgotten): Care = allowing people to restart
-  - Art. 34 (Breach Notification): High risk = duty to inform immediately
-  
-  GILLIGAN (Ethics of Care):
-  - Art. 35 (DPIA): Context-based risk assessment (not one-size-fits-all)
-  - Art. 21 (Objection): Respect individual circumstances (esp. vulnerable groups)
-  
-  JONAS (Responsibility Principle):
-  - Art. 32 (Security): Technical safeguards = accountability
-  - Art. 33 (Breach Notification): 72h = urgency proportional to risk
+  GDPR v2.0 gap-closed profile:
+  RAWLS: Art. 5.1.a (transparency), Art. 6 (lawful basis), Art. 25 (privacy by design)
+  LEVINAS: Art. 7.3 (withdrawal), Art. 17 (erasure), Art. 34 (breach notification)
+  GILLIGAN: Art. 35 (DPIA context), Art. 22 (automated decisions need human context)
+  JONAS: Art. 30 (RoPA), Art. 32 (security), Art. 33 (72h breach)
 
 changelog:
   - version: 1.0.0
     date: 2026-02-05
     author: "Daniel Camargo + Ethical Committee"
     changes:
-      - "Initial GDPR base profile"
-      - "15 rules covering: Principles (Art. 5), Rights (Art. 15-22), Security (Art. 32-35), Transfers (Art. 45-46)"
-      - "Integrated ethical frameworks"
-      - "Mercy algorithm where applicable (DPIA, purpose compatibility)"
-      - "Harsher penalties than LGPD (€20M or 4% turnover)"
+      - "Initial GDPR base profile (15 rules)"
+  - version: 2.0.0
+    date: 2026-02-17
+    author: "Daniel Camargo + Ethical Committee"
+    changes:
+      - "Gap closure: added Art. 6 (2 rules), Art. 7 (2 rules), Art. 9, Art. 12, Art. 13, Art. 18, Art. 25, Art. 30"
+      - "Total: 24 rules (was 15). Full parity with compliance/gdpr.yaml"
