@@ -1,3 +1,5 @@
+# python/pyproject.toml
+
 [build-system]
 requires = ["hatchling>=1.18.0"]
 build-backend = "hatchling.build"
@@ -5,12 +7,84 @@ build-backend = "hatchling.build"
 [project]
 name = "buildtovalue"
 version = "2.2.0"
-description = "Sovereign Trust OS"
+description = "Sovereign Trust OS - Ethical AI Governance Infrastructure"
+authors = [
+    {name = "BuildToValue Team", email = "team@buildtovalue.com"}
+]
 requires-python = ">=3.10"
-dependencies = ["fastapi>=0.109.0", "pydantic>=2.5.0", "PyYAML>=6.0"]
+license = {text = "Apache-2.0"}
+keywords = ["ai-governance", "compliance", "ethics", "llm-security"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "fastapi>=0.109.0",
+    "pydantic>=2.5.0",
+    "uvicorn[standard]>=0.27.0",
+    "httpx>=0.26.0",
+    "PyYAML>=6.0",
+    "python-multipart>=0.0.6",
+    "prometheus-client>=0.19.0",
+    "click>=8.1.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-benchmark>=4.0.0",
+    "black>=23.12.0",
+    "ruff>=0.1.9",
+    "mypy>=1.8.0",
+]
+otel = [
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.22.0",
+]
+compliance = [
+    "PyMuPDF>=1.23.0",
+]
 
 [project.scripts]
 btv = "buildtovalue.cli.main:cli"
 
+[project.urls]
+Homepage = "https://github.com/buildtovalue/sovereign-trust-os"
+Documentation = "https://docs.buildtovalue.com"
+Repository = "https://github.com/buildtovalue/sovereign-trust-os"
+Issues = "https://github.com/buildtovalue/sovereign-trust-os/issues"
+
 [tool.hatch.build.targets.wheel]
 packages = ["buildtovalue"]
+
+[tool.pytest.ini_options]
+testpaths = ["buildtovalue", "tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+select = ["E", "F", "W", "I", "N", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_any_explicit = false
