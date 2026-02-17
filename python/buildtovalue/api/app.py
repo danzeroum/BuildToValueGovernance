@@ -14,7 +14,19 @@ from typing import Optional, List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+# Add at top of app.py
+from python.buildtovalue.compliance.plugin import ComplianceReport
+from python.buildtovalue.compliance.lgpd_plugin import LGPDPlugin
+from python.buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
 
+from python.buildtovalue.intelligence.threat_feed import (
+    init_threats_db, ingest_threat, query_threats, get_threat, get_stats,
+)
+
+COMPLIANCE_PLUGINS = {
+    "LGPD": LGPDPlugin(),
+    "EU_AI_ACT": EUAIActPlugin(),
+}
 
 # ═══════════════════════════════════════════════════════════════
 # DATABASE
@@ -233,6 +245,7 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     init_db()
+    init_threats_db()
 
 
 @app.post("/v1/decide", response_model=VerdictResponse)
@@ -342,3 +355,130 @@ def get_trust(session_id: str):
         "offenses": session["offenses"],
         "total_requests": session["total_requests"],
     }
+
+
+# Add these routes to app.py
+
+class ComplianceRequest(BaseModel):
+    framework: str  # "LGPD" or "EU_AI_ACT"
+    evidence: dict = {}
+    verdict: dict = {}
+
+
+@app.post("/v1/compliance/check")
+def compliance_check(req: ComplianceRequest):
+    plugin = COMPLIANCE_PLUGINS.get(req.framework)
+    if not plugin:
+        return {"error": f"Unknown framework: {req.framework}. Available: {list(COMPLIANCE_PLUGINS.keys())}"}
+    artifacts = plugin.generate_artifacts(req.evidence, req.verdict)
+    compliant = sum(1 for a in artifacts if a.status.value == "COMPLIANT")
+    return {
+        "framework": req.framework,
+        "total": len(artifacts),
+        "compliant": compliant,
+        "compliance_rate": compliant / len(artifacts) if artifacts else 0,
+        "artifacts": [
+            {
+                "article": a.article,
+                "requirement": a.requirement,
+                "status": a.status.value,
+                "evidence": a.evidence,
+                "recommendation": a.recommendation,
+            }
+            for a in artifacts
+        ],
+    }
+
+
+@app.get("/v1/compliance/frameworks")
+def list_frameworks():
+    return {
+        "frameworks": [
+            {"id": p.framework_id(), "name": p.framework_name()}
+            for p in COMPLIANCE_PLUGINS.values()
+        ]
+    }
+
+
+@app.get("/v1/compliance/report/{framework}")
+def compliance_report(framework: str):
+    plugin = COMPLIANCE_PLUGINS.get(framework)
+    if not plugin:
+        return {"error": f"Unknown framework: {framework}"}
+    report = plugin.validate_requirements()
+    return {
+        "framework": report.framework,
+        "version": report.version,
+        "total_requirements": report.total_requirements,
+        "compliant": report.compliant,
+        "partial": report.partial,
+        "non_compliant": report.non_compliant,
+        "compliance_rate": report.compliance_rate,
+        "generated_at": report.generated_at,
+        "artifacts": [
+            {
+                "article": a.article,
+                "requirement": a.requirement,
+                "status": a.status.value,
+                "evidence": a.evidence,
+                "recommendation": a.recommendation,
+            }
+            for a in report.artifacts
+        ],
+    }
+
+# ═══════════════════════════════════════════════════════════════
+# INTELLIGENCE HUB
+# ═══════════════════════════════════════════════════════════════
+
+class ThreatIngestRequest(BaseModel):
+    id: str
+    threat_type: str
+    severity: int
+    source: str = "manual"
+    indicators: List[str] = []
+    description: str = ""
+    mitre_id: str = ""
+
+
+class ThreatQueryRequest(BaseModel):
+    threat_type: Optional[str] = None
+    min_severity: int = 0
+    source: Optional[str] = None
+    limit: int = 50
+
+
+@app.post("/v1/intelligence/ingest")
+def intelligence_ingest(req: ThreatIngestRequest):
+    return ingest_threat(
+        req.id, req.threat_type, req.severity, req.source,
+        req.indicators, req.description, req.mitre_id,
+    )
+
+
+@app.post("/v1/intelligence/ingest/batch")
+def intelligence_ingest_batch(threats: List[ThreatIngestRequest]):
+    results = []
+    for t in threats:
+        r = ingest_threat(t.id, t.threat_type, t.severity, t.source, t.indicators, t.description, t.mitre_id)
+        results.append(r)
+    return {"ingested": len(results), "results": results}
+
+
+@app.post("/v1/intelligence/query")
+def intelligence_query(req: ThreatQueryRequest):
+    threats = query_threats(req.threat_type, req.min_severity, req.source, req.limit)
+    return {"count": len(threats), "threats": threats}
+
+
+@app.get("/v1/intelligence/threat/{threat_id}")
+def intelligence_get(threat_id: str):
+    threat = get_threat(threat_id)
+    if not threat:
+        return {"error": f"Threat {threat_id} not found"}
+    return threat
+
+
+@app.get("/v1/intelligence/stats")
+def intelligence_stats():
+    return get_stats()
