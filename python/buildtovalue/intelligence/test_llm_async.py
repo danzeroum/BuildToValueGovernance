@@ -14,7 +14,7 @@ from unittest.mock import Mock, AsyncMock, patch
 # Fix imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from python.buildtovalue.intelligence.llm_async_client import (
+from buildtovalue.intelligence.llm_async_client import (
     LLMAsyncClient,
     LLMRequest,
     LLMResponse,
@@ -24,7 +24,7 @@ from python.buildtovalue.intelligence.llm_async_client import (
     LLMCircuitOpenError,
     LLMTimeoutError
 )
-from python.buildtovalue.intelligence.llm_fallback import (
+from buildtovalue.intelligence.llm_fallback import (
     LLMFallbackOrchestrator,
     FallbackPriority
 )

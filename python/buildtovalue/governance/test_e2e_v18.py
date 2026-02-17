@@ -5,23 +5,23 @@ Covers: Gatekeeper → EthicalContextEngine → ContestabilityLoop → Feedback.
 
 import pytest
 import time
-from python.buildtovalue.governance.ethical_context_engine import (
+from buildtovalue.governance.ethical_context_engine import (
     EthicalContextEngineV3,
     MercyFactor,
 )
-from python.buildtovalue.governance.types import (
+from buildtovalue.governance.types import (
     ActionType,
     EthicalContext,
 )
-from python.buildtovalue.governance.contestability_loop import (
+from buildtovalue.governance.contestability_loop import (
     ContestabilityLoop,
     AppealStatus,
 )
-from python.buildtovalue.governance.trust_score import (
+from buildtovalue.governance.trust_score import (
     TrustScoreCalculator,
     UserActivity,
 )
-from python.buildtovalue.governance.mercy_algorithm import (
+from buildtovalue.governance.mercy_algorithm import (
     MercyCalculator,
 )
 
