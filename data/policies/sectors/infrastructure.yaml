@@ -1,0 +1,105 @@
+# data/policies/sectors/infrastructure.yaml
+# ═══════════════════════════════════════════════════════════════
+# Critical Infrastructure Sector Safe Patterns
+# ═══════════════════════════════════════════════════════════════
+
+_metadata:
+  sector_id: critical_infrastructure
+  version: "1.0.0"
+  eu_ai_act_annex: "III"
+  risk_classification: high_risk
+  total_patterns: 18
+  basis: "sector_safe_patterns.py v0.9.0 (INFRASTRUCTURE_SAFE_PATTERNS)"
+  philosophy: "Jonas — responsibility for critical systems; maintenance context is legitimate"
+  compliance_refs:
+    - "EU AI Act Annex III, §2 — Critical infrastructure management"
+    - "NIST SP 800-82 — ICS Security"
+    - "IEC 62443 — Industrial Cybersecurity"
+
+cross_references:
+  inherits_from: []
+  inherited_by: []
+
+safe_patterns:
+
+  # ── Legitimate system operations ───────────────────────────
+  "shutdown substation":
+    keywords: ["shutdown", "disconnect"]
+    rationale: "Maintenance shutdowns are planned operational events"
+
+  "scheduled maintenance":
+    keywords: ["shutdown", "disconnect", "disable"]
+    rationale: "Scheduled maintenance requires controlled shutdowns"
+
+  "planned outage":
+    keywords: ["shutdown", "disconnect"]
+    rationale: "Planned outages are communicated in advance"
+
+  "maintenance window":
+    keywords: ["shutdown", "disconnect", "disable"]
+    rationale: "Maintenance windows are documented change management"
+
+  # ── Load management (not sabotage) ─────────────────────────
+  "load balancing":
+    keywords: ["disconnect", "reroute"]
+    rationale: "Load balancing is standard grid operation"
+
+  "balance load":
+    keywords: ["disconnect", "reroute", "shutdown"]
+    rationale: "Dynamic load management prevents cascading failures"
+
+  "optimize distribution":
+    keywords: ["disconnect", "reroute"]
+    rationale: "Distribution optimization is efficiency, not disruption"
+
+  # ── Safety protocols ───────────────────────────────────────
+  "safety check":
+    keywords: ["override", "bypass"]
+    rationale: "Safety checks may test override capabilities"
+
+  "safety test":
+    keywords: ["override", "bypass", "disable"]
+    rationale: "Failsafe testing requires controlled disabling"
+
+  "failsafe test":
+    keywords: ["disable", "bypass"]
+    rationale: "Testing failsafes verifies safety mechanisms"
+
+  # ── Legitimate configuration changes ───────────────────────
+  "configure backup":
+    keywords: ["disable", "enable"]
+    rationale: "Backup configuration requires toggling systems"
+
+  "redundancy test":
+    keywords: ["disable", "bypass"]
+    rationale: "Redundancy testing disables primary to verify fallback"
+
+  "system update":
+    keywords: ["disable", "shutdown"]
+    rationale: "System updates require temporary service interruption"
+
+  # ── Monitoring and alerts ──────────────────────────────────
+  "alert operators":
+    keywords: ["critical", "failure"]
+    rationale: "Operator alerts on critical events are safety-essential"
+
+  "notify maintenance":
+    keywords: ["failure", "shutdown"]
+    rationale: "Maintenance notification on failure detection"
+
+  "log system":
+    keywords: ["export", "log"]
+    rationale: "System logging for audit and troubleshooting"
+
+  # ── Legitimate data operations ─────────────────────────────
+  "generate report":
+    keywords: ["export", "data"]
+    rationale: "Operational reporting for compliance and management"
+
+  "system audit":
+    keywords: ["export", "log"]
+    rationale: "System audits require data export"
+
+  "performance metrics":
+    keywords: ["export", "data"]
+    rationale: "Performance monitoring data export"

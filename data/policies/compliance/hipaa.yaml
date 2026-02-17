@@ -1,0 +1,225 @@
+# data/policies/compliance/hipaa.yaml
+# HIPAA - Health Insurance Portability and Accountability Act
+# Focus: Protected Health Information (PHI) security and privacy
+#
+# Key Rules:
+# - Privacy Rule (45 CFR Part 164, Subparts A and E)
+# - Security Rule (45 CFR Part 164, Subpart C)
+# - Breach Notification Rule (45 CFR Part 164, Subpart D)
+#
+# Penalties: $100 - $50,000+ per violation, max $1.5M/year per type
+
+_metadata:
+  framework_id: "HIPAA"
+  framework_name: "Health Insurance Portability and Accountability Act"
+  version: "1.0.0"
+  source: "legacy_migration"
+  migrated_at: "2026-02-17"
+  total_rules: 22
+  btv_actions: ["BLOCK", "ESCALATE", "LOG"]
+  reference_url: "https://www.hhs.gov/hipaa/index.html"
+
+articles:
+
+  # ===== PRIVACY RULE =====
+
+  "164.502":
+    - requirement_text: "Minimum Necessary Standard - limit PHI use to minimum required"
+      policy_name: "HIPAA: Enforce Minimum Necessary PHI Access"
+      policy_action: "BLOCK"
+      condition_template: "agent.phi_access.fields_requested > {max_fields} and justification.provided == false"
+      parameters:
+        max_fields: 5
+      confidence: 0.95
+      notes: "Block excessive PHI access without business justification"
+
+    - requirement_text: "Uses and Disclosures - PHI requires authorization or legal basis"
+      policy_name: "HIPAA: Verify Authorization for PHI Disclosure"
+      policy_action: "BLOCK"
+      condition_template: "phi.disclosure_requested == true and (patient.authorization == false and legal_basis == null)"
+      parameters: {}
+      confidence: 0.98
+      notes: "Critical - no PHI disclosure without authorization"
+
+  "164.508":
+    - requirement_text: "Valid Authorization - must contain required elements"
+      policy_name: "HIPAA: Validate Authorization Completeness"
+      policy_action: "ESCALATE"
+      condition_template: "authorization.has_expiration == false or authorization.has_signature == false or authorization.purpose_unclear == true"
+      parameters: {}
+      confidence: 0.92
+      notes: "Authorization must be specific, dated, and signed"
+
+  "164.510":
+    - requirement_text: "Incidental Disclosure Prevention"
+      policy_name: "HIPAA: Prevent Incidental PHI Disclosure"
+      policy_action: "LOG"
+      condition_template: "interaction.channel in ['public_chat', 'unencrypted_email']"
+      parameters: {}
+      confidence: 0.88
+      notes: "Monitor PHI transmission channels for compliance"
+
+  "164.512":
+    - requirement_text: "Right to Access - patient must access PHI within 30 days"
+      policy_name: "HIPAA: Track Patient Access Request SLA"
+      policy_action: "ESCALATE"
+      condition_template: "request.type == 'patient_access' and days_since(request.date) > 30"
+      parameters: {}
+      confidence: 0.95
+      notes: "Legal deadline: 30 days to provide patient access"
+
+    - requirement_text: "Right to Amendment - patient can request PHI corrections"
+      policy_name: "HIPAA: Enable PHI Amendment Process"
+      policy_action: "LOG"
+      condition_template: "request.type == 'phi_amendment' and days_since(request.date) > 60"
+      parameters: {}
+      confidence: 0.90
+      notes: "Track amendment requests (60-day response window)"
+
+  # ===== SECURITY RULE =====
+
+  "164.308(a)(1)":
+    - requirement_text: "Risk Analysis - conduct accurate and thorough assessment"
+      policy_name: "HIPAA: Require PHI Risk Assessment"
+      policy_action: "BLOCK"
+      condition_template: "agent.handles_phi == true and (agent.risk_assessment_completed == false or days_since(agent.last_risk_assessment) > 365)"
+      parameters: {}
+      confidence: 0.93
+      notes: "Annual risk assessment mandatory for PHI systems"
+
+  "164.308(a)(3)":
+    - requirement_text: "Workforce Clearance - authorization and supervision"
+      policy_name: "HIPAA: Verify Workforce PHI Authorization"
+      policy_action: "BLOCK"
+      condition_template: "user.phi_training_completed == false or user.background_check_completed == false"
+      parameters: {}
+      confidence: 0.97
+      notes: "All PHI access requires training + clearance"
+
+  "164.308(a)(4)":
+    - requirement_text: "Information Access Management - role-based access"
+      policy_name: "HIPAA: Enforce Role-Based PHI Access"
+      policy_action: "BLOCK"
+      condition_template: "user.role not in phi.authorized_roles or user.access_granted_by == null"
+      parameters: {}
+      confidence: 0.96
+      notes: "PHI access must be role-based and approved"
+
+  "164.308(a)(5)":
+    - requirement_text: "Security Awareness Training - workforce education"
+      policy_name: "HIPAA: Require Annual Security Training"
+      policy_action: "ESCALATE"
+      condition_template: "user.security_training_completion_date == null or days_since(user.security_training_completion_date) > 365"
+      parameters: {}
+      confidence: 0.90
+      notes: "Annual training requirement for all PHI users"
+
+  "164.308(a)(6)":
+    - requirement_text: "Security Incident Procedures - response and reporting"
+      policy_name: "HIPAA: Auto-Trigger Incident Response"
+      policy_action: "ESCALATE"
+      condition_template: "incident.involves_phi == true and incident.response_initiated == false"
+      parameters: {}
+      confidence: 0.98
+      notes: "Immediate response required for PHI incidents"
+
+  "164.308(b)":
+    - requirement_text: "Business Associate Agreements - third-party safeguards"
+      policy_name: "HIPAA: Block PHI to Unvetted Third Parties"
+      policy_action: "BLOCK"
+      condition_template: "transfer.destination_is_third_party == true and third_party.has_baa == false"
+      parameters: {}
+      confidence: 0.99
+      notes: "BAA mandatory before PHI sharing"
+
+  "164.312(a)(1)":
+    - requirement_text: "Access Control - unique user identification"
+      policy_name: "HIPAA: Require Unique User IDs for PHI"
+      policy_action: "BLOCK"
+      condition_template: "user.id_type == 'shared' or user.id_type == 'generic'"
+      parameters: {}
+      confidence: 0.98
+      notes: "Shared credentials prohibited for PHI systems"
+
+    - requirement_text: "Automatic Logoff - session timeout"
+      policy_name: "HIPAA: Auto-Logoff Idle PHI Sessions"
+      policy_action: "BLOCK"
+      condition_template: "session.idle_minutes > {timeout} and session.phi_accessed == true"
+      parameters:
+        timeout: 15
+      confidence: 0.94
+      notes: "15-minute idle timeout for PHI sessions"
+
+  "164.312(a)(2)(iv)":
+    - requirement_text: "Encryption and Decryption - PHI at rest and in transit"
+      policy_name: "HIPAA: Enforce PHI Encryption"
+      policy_action: "BLOCK"
+      condition_template: "(phi.at_rest == true and encryption.enabled == false) or (phi.in_transit == true and tls_version < 1.2)"
+      parameters: {}
+      confidence: 0.99
+      notes: "AES-256 at rest, TLS 1.2+ in transit"
+
+  "164.312(b)":
+    - requirement_text: "Audit Controls - record and examine activity"
+      policy_name: "HIPAA: Comprehensive PHI Audit Logging"
+      policy_action: "LOG"
+      condition_template: "phi.accessed == true or phi.modified == true or phi.disclosed == true"
+      parameters: {}
+      confidence: 1.0
+      notes: "Every PHI interaction must be logged immutably"
+
+  "164.312(c)":
+    - requirement_text: "Integrity - PHI alteration or destruction protection"
+      policy_name: "HIPAA: Detect Unauthorized PHI Modification"
+      policy_action: "BLOCK"
+      condition_template: "phi.modification_detected == true and user.has_write_permission == false"
+      parameters: {}
+      confidence: 0.97
+      notes: "Block unauthorized PHI changes"
+
+  "164.312(d)":
+    - requirement_text: "Person or Entity Authentication"
+      policy_name: "HIPAA: Require MFA for PHI Access"
+      policy_action: "BLOCK"
+      condition_template: "phi.access_attempted == true and user.mfa_verified == false"
+      parameters: {}
+      confidence: 0.96
+      notes: "Multi-factor authentication mandatory for PHI"
+
+  "164.312(e)(1)":
+    - requirement_text: "Transmission Security - guard against unauthorized access"
+      policy_name: "HIPAA: Block Unencrypted PHI Transmission"
+      policy_action: "BLOCK"
+      condition_template: "phi.in_transit == true and (encryption.enabled == false or network.type == 'public_wifi')"
+      parameters: {}
+      confidence: 0.98
+      notes: "Never transmit PHI over unencrypted channels"
+
+  # ===== BREACH NOTIFICATION RULE =====
+
+  "164.404":
+    - requirement_text: "Breach Notification - notify individuals within 60 days"
+      policy_name: "HIPAA: Auto-Escalate Breach Notification Deadline"
+      policy_action: "ESCALATE"
+      condition_template: "breach.confirmed == true and days_since(breach.discovery_date) > 50"
+      parameters: {}
+      confidence: 0.95
+      notes: "60-day legal deadline for patient notification"
+
+  "164.408":
+    - requirement_text: "Notification to HHS - breaches affecting 500+ individuals"
+      policy_name: "HIPAA: Trigger HHS Breach Reporting"
+      policy_action: "ESCALATE"
+      condition_template: "breach.affected_individuals >= 500 and breach.hhs_notified == false"
+      parameters: {}
+      confidence: 0.99
+      notes: "Immediate HHS notification for large breaches"
+
+  "164.410":
+    - requirement_text: "Notify prominent media if 500+ affected in jurisdiction"
+      policy_name: "HIPAA: Trigger Media Breach Reporting"
+      policy_action: "ESCALATE"
+      condition_template: "breach.affected_individuals >= 500 and breach.same_jurisdiction_count >= 500 and breach.media_notified == false"
+      parameters: {}
+      confidence: 0.90
+      notes: "State/jurisdiction media notification requirement"

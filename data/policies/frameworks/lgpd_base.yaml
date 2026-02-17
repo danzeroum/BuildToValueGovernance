@@ -21,11 +21,11 @@ description: |
   Transferência Internacional (Art. 46-47), Segurança (Art. 46-48).
 
 parent_id: null  # Profile raiz (outros herdam deste)
-version: 1.0.0
+version: 2.0.0
 legal_framework: LGPD
 jurisdiction: BR
 created_at: 2026-02-05
-updated_at: 2026-02-05
+updated_at: 2026-02-17
 
 # ═══════════════════════════════════════════════════════════════════════════
 # METADATA LEGAL
@@ -621,6 +621,43 @@ rules:
       
       Jonas (Responsabilidade): Transparência em crises é dever ético.
 
+  # ═══════════════════════════════════════════════════════════════
+  # GAP CLOSURE: Art. 7 Contrato + Art. 15 Termino
+  # Added: 2026-02-17 (v2.0.0)
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: LGPD_ART7_III_CONTRATO
+    name: "Base Legal: Execucao de Contrato"
+    description: "Monitora processamento baseado em contrato inexistente (Art. 7, III)"
+    action: LOG
+    priority: 60
+    severity: MEDIUM
+    validators: ["contract_validator"]
+    condition: |
+      processing.basis == 'contract' and
+      user.has_active_contract == false
+    legal_basis: "LGPD Lei 13.709/2018 Art. 7, III"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      LOG para auditoria. Se contrato expirado, DPO deve reclassificar base legal.
+
+  - id: LGPD_ART15_TERMINO
+    name: "Termino do Tratamento"
+    description: "Alerta para dados retidos alem da finalidade (Art. 15)"
+    action: LOG
+    priority: 55
+    severity: MEDIUM
+    validators: ["retention_validator"]
+    condition: |
+      data.purpose_fulfilled == true and
+      data.retention_days > max_retention
+    parameters:
+      max_retention: 30
+    legal_basis: "LGPD Lei 13.709/2018 Art. 15"
+    contestable: false
+    mercy_eligible: false
+
 # ═══════════════════════════════════════════════════════════════════════════
 # ETHICAL INTEGRATION NOTES
 # ═══════════════════════════════════════════════════════════════════════════
@@ -660,3 +697,9 @@ changelog:
       - "18 rules covering: Princípios, Bases Legais, Consentimento, Dados Sensíveis, Direitos do Titular, Transferência Internacional, Segurança"
       - "Contestability enabled for all non-binary rules"
       - "Mercy algorithm integrated where applicable"
+
+  - version: 2.0.0
+    date: 2026-02-17
+    changes:
+      - "Gap closure: added Art. 7 III (Contrato), Art. 15 (Termino)"
+      - "Total: 20 rules (was 18). Full parity with compliance/lgpd.yaml"

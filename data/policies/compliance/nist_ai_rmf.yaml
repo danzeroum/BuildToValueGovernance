@@ -1,0 +1,329 @@
+# data/policies/compliance/nist_ai_rmf.yaml
+# NIST AI Risk Management Framework (AI RMF 1.0)
+# https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf
+#
+# Structure:
+# - GOVERN: Governance and culture
+# - MAP: Context and risks
+# - MEASURE: Assessment and analysis
+# - MANAGE: Mitigation and treatment
+# - TRUSTWORTHY: Cross-cutting characteristics
+
+_metadata:
+  framework_id: "NIST_AI_RMF"
+  framework_name: "NIST AI Risk Management Framework 1.0"
+  version: "1.0.0"
+  source: "legacy_migration"
+  migrated_at: "2026-02-17"
+  total_rules: 31
+  btv_actions: ["BLOCK", "ESCALATE", "LOG"]
+  reference_url: "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf"
+
+articles:
+
+  # ===== GOVERN: GOVERNANCE AND CULTURE =====
+
+  "GOVERN-1.1":
+    - requirement_text: "Legal and regulatory requirements involving AI are understood"
+      policy_name: "NIST Gov 1.1: Documentation of Legal Requirements"
+      policy_action: "LOG"
+      condition_template: "agent.legal_compliance_documented == false"
+      parameters: {}
+      confidence: 1.0
+      notes: "Requires documentation of applicable legal requirements"
+
+  "GOVERN-1.2":
+    - requirement_text: "Organizational risk tolerances are determined and communicated"
+      policy_name: "NIST Gov 1.2: Risk Tolerance Check"
+      policy_action: "ESCALATE"
+      condition_template: "agent.risk_score > organization.risk_tolerance"
+      parameters: {}
+      confidence: 0.92
+      notes: "Escalate for review if risk exceeds tolerance"
+
+  "GOVERN-1.3":
+    - requirement_text: "Processes for third-party risk management"
+      policy_name: "NIST Gov 1.3: Third-Party AI Vendor Validation"
+      policy_action: "BLOCK"
+      condition_template: "agent.is_third_party == true and vendor.risk_assessment_completed == false"
+      parameters: {}
+      confidence: 0.88
+      notes: "Block unassessed vendor AI"
+
+  "GOVERN-2.1":
+    - requirement_text: "Roles and responsibilities for AI are documented"
+      policy_name: "NIST Gov 2.1: Role Assignment Validation"
+      policy_action: "LOG"
+      condition_template: "agent.owner_assigned == false or agent.accountability_unclear == true"
+      parameters: {}
+      confidence: 0.85
+      notes: "Every agent must have clear owner and accountability"
+
+  "GOVERN-3.1":
+    - requirement_text: "Policies for AI reflect organizational values"
+      policy_name: "NIST Gov 3.1: Value Alignment Check"
+      policy_action: "LOG"
+      condition_template: "agent.values_alignment_score < {threshold}"
+      parameters:
+        threshold: 0.7
+      confidence: 0.80
+      notes: "Score based on alignment with ethics code"
+
+  "GOVERN-4.1":
+    - requirement_text: "Organizational teams committed to AI risk management"
+      policy_name: "NIST Gov 4.1: Training Requirement"
+      policy_action: "ESCALATE"
+      condition_template: "team.ai_risk_training_completion < 0.8"
+      parameters: {}
+      confidence: 0.85
+      notes: "At least 80% of team must have training"
+
+  # ===== MAP: CONTEXT AND RISKS =====
+
+  "MAP-1.1":
+    - requirement_text: "Intended purposes of AI system are defined"
+      policy_name: "NIST Map 1.1: Purpose Documentation Required"
+      policy_action: "BLOCK"
+      condition_template: "agent.intended_purpose == null or agent.intended_purpose == ''"
+      parameters: {}
+      confidence: 0.95
+      notes: "Purpose must be explicitly documented"
+
+  "MAP-1.2":
+    - requirement_text: "AI system context documented including domain and deployment"
+      policy_name: "NIST Map 1.2: Context Documentation Check"
+      policy_action: "LOG"
+      condition_template: "agent.context_documented == false"
+      parameters: {}
+      confidence: 0.90
+      notes: "Documents operational environment and use cases"
+
+  "MAP-2.1":
+    - requirement_text: "Negative impacts of AI systems are identified"
+      policy_name: "NIST Map 2.1: Impact Assessment Required"
+      policy_action: "ESCALATE"
+      condition_template: "agent.impact_assessment_date == null or days_since(agent.impact_assessment_date) > 180"
+      parameters: {}
+      confidence: 0.88
+      notes: "Impact assessment mandatory every 6 months"
+
+  "MAP-2.2":
+    - requirement_text: "Likelihood of negative impacts is assessed"
+      policy_name: "NIST Map 2.2: Likelihood Scoring"
+      policy_action: "LOG"
+      condition_template: "agent.likelihood_score_documented == false"
+      parameters: {}
+      confidence: 0.85
+      notes: "Combine with MAP-2.1 for risk matrix"
+
+  "MAP-3.1":
+    - requirement_text: "AI system capabilities are characterized"
+      policy_name: "NIST Map 3.1: Capability Inventory"
+      policy_action: "LOG"
+      condition_template: "len(agent.capabilities) == 0"
+      parameters: {}
+      confidence: 0.90
+      notes: "Explicit list of what the agent can do"
+
+  "MAP-3.2":
+    - requirement_text: "Data quality and representativeness assessed"
+      policy_name: "NIST Map 3.2: Training Data Quality Gate"
+      policy_action: "BLOCK"
+      condition_template: "training_data.quality_score < {min_quality}"
+      parameters:
+        min_quality: 0.75
+      confidence: 0.92
+      notes: "Block deployment with low-quality data"
+
+  "MAP-4.1":
+    - requirement_text: "Demographic characteristics of impacted populations identified"
+      policy_name: "NIST Map 4.1: Demographic Impact Analysis"
+      policy_action: "ESCALATE"
+      condition_template: "agent.demographic_analysis_completed == false and agent.affects_protected_groups == true"
+      parameters: {}
+      confidence: 0.88
+      notes: "Mandatory for agents affecting decisions about people"
+
+  "MAP-5.1":
+    - requirement_text: "Feedback from AI system users is collected"
+      policy_name: "NIST Map 5.1: User Feedback Loop Active"
+      policy_action: "LOG"
+      condition_template: "agent.feedback_mechanism_enabled == false"
+      parameters: {}
+      confidence: 0.82
+      notes: "Feedback mechanism must be active"
+
+  # ===== MEASURE: ASSESSMENT AND ANALYSIS =====
+
+  "MEASURE-1.1":
+    - requirement_text: "Appropriate methods identified for measuring AI risks"
+      policy_name: "NIST Measure 1.1: Risk Metrics Defined"
+      policy_action: "LOG"
+      condition_template: "len(agent.risk_metrics) == 0"
+      parameters: {}
+      confidence: 0.87
+      notes: "E.g. fairness, performance, safety metrics"
+
+  "MEASURE-2.1":
+    - requirement_text: "Test sets representative of deployment context"
+      policy_name: "NIST Measure 2.1: Test Data Representativeness"
+      policy_action: "BLOCK"
+      condition_template: "test_data.demographic_match_score < {threshold}"
+      parameters:
+        threshold: 0.8
+      confidence: 0.90
+      notes: "Test data must reflect real deployment population"
+
+  "MEASURE-2.2":
+    - requirement_text: "Performance across demographic subgroups evaluated"
+      policy_name: "NIST Measure 2.2: Subgroup Performance Parity"
+      policy_action: "ESCALATE"
+      condition_template: "max(subgroup_performance_variance) > {max_variance}"
+      parameters:
+        max_variance: 0.15
+      confidence: 0.93
+      notes: "Detects performance disparity across groups (max 15%)"
+
+  "MEASURE-2.3":
+    - requirement_text: "AI system evaluated for harmful bias"
+      policy_name: "NIST Measure 2.3: Bias Testing Required"
+      policy_action: "BLOCK"
+      condition_template: "agent.bias_test_passed == false"
+      parameters: {}
+      confidence: 0.95
+      notes: "Mandatory before production deployment"
+
+  "MEASURE-3.1":
+    - requirement_text: "Mechanisms for ongoing monitoring implemented"
+      policy_name: "NIST Measure 3.1: Continuous Monitoring Active"
+      policy_action: "ESCALATE"
+      condition_template: "agent.monitoring_enabled == false and agent.in_production == true"
+      parameters: {}
+      confidence: 0.92
+      notes: "Production requires continuous monitoring"
+
+  "MEASURE-3.2":
+    - requirement_text: "Performance degradation is detected"
+      policy_name: "NIST Measure 3.2: Model Drift Detection"
+      policy_action: "ESCALATE"
+      condition_template: "agent.performance_drift > {threshold}"
+      parameters:
+        threshold: 0.10
+      confidence: 0.90
+      notes: "Detects model drift and data drift (10% threshold)"
+
+  "MEASURE-4.1":
+    - requirement_text: "Incidents and errors are documented"
+      policy_name: "NIST Measure 4.1: Incident Logging"
+      policy_action: "LOG"
+      condition_template: "incident.severity in ['high', 'critical']"
+      parameters: {}
+      confidence: 1.0
+      notes: "Mandatory logging of all incidents"
+
+  # ===== MANAGE: MITIGATION AND TREATMENT =====
+
+  "MANAGE-1.1":
+    - requirement_text: "Risk treatment plans developed and implemented"
+      policy_name: "NIST Manage 1.1: Risk Treatment Plan Required"
+      policy_action: "ESCALATE"
+      condition_template: "agent.risk_score > 0.7 and agent.risk_treatment_plan_exists == false"
+      parameters: {}
+      confidence: 0.88
+      notes: "High risk requires formal treatment plan"
+
+  "MANAGE-2.1":
+    - requirement_text: "Risks communicated to stakeholders"
+      policy_name: "NIST Manage 2.1: Risk Disclosure Required"
+      policy_action: "LOG"
+      condition_template: "agent.risk_disclosure_completed == false and agent.affects_external_users == true"
+      parameters: {}
+      confidence: 0.90
+      notes: "Transparency about known risks"
+
+  "MANAGE-3.1":
+    - requirement_text: "Responses to AI incidents are planned"
+      policy_name: "NIST Manage 3.1: Incident Response Plan Exists"
+      policy_action: "ESCALATE"
+      condition_template: "agent.has_incident_response_plan == false and agent.in_production == true"
+      parameters: {}
+      confidence: 0.92
+      notes: "IR plan mandatory for production systems"
+
+  "MANAGE-3.2":
+    - requirement_text: "AI systems can be deactivated or disengaged"
+      policy_name: "NIST Manage 3.2: Kill Switch Available"
+      policy_action: "BLOCK"
+      condition_template: "agent.has_kill_switch == false and agent.autonomy_level >= 4"
+      parameters: {}
+      confidence: 0.95
+      notes: "Autonomous systems must have kill switch"
+
+  "MANAGE-4.1":
+    - requirement_text: "Lessons learned from incidents documented"
+      policy_name: "NIST Manage 4.1: Post-Incident Review"
+      policy_action: "LOG"
+      condition_template: "incident.post_mortem_completed == false and days_since(incident.date) > 14"
+      parameters: {}
+      confidence: 0.87
+      notes: "Post-mortem mandatory within 14 days"
+
+  # ===== TRUSTWORTHINESS CHARACTERISTICS =====
+
+  "TRUSTWORTHY-1":
+    - requirement_text: "AI systems are valid and reliable"
+      policy_name: "NIST Trustworthy: Validation Gate"
+      policy_action: "BLOCK"
+      condition_template: "agent.validation_accuracy < {min_accuracy} or agent.test_coverage < {min_coverage}"
+      parameters:
+        min_accuracy: 0.90
+        min_coverage: 0.85
+      confidence: 0.93
+      notes: "Quality gate before production"
+
+  "TRUSTWORTHY-2":
+    - requirement_text: "AI systems are safe"
+      policy_name: "NIST Trustworthy: Safety Testing Required"
+      policy_action: "BLOCK"
+      condition_template: "agent.safety_test_passed == false"
+      parameters: {}
+      confidence: 0.95
+      notes: "Adversarial robustness, edge cases"
+
+  "TRUSTWORTHY-3":
+    - requirement_text: "AI systems are secure and resilient"
+      policy_name: "NIST Trustworthy: Security Baseline"
+      policy_action: "BLOCK"
+      condition_template: "agent.security_scan_passed == false or agent.vulnerability_count > 0"
+      parameters: {}
+      confidence: 0.92
+      notes: "Vulnerability scan before deployment"
+
+  "TRUSTWORTHY-4":
+    - requirement_text: "AI systems are accountable and transparent"
+      policy_name: "NIST Trustworthy: Explainability Required"
+      policy_action: "ESCALATE"
+      condition_template: "agent.explainability_score < {min_score} and use_case in ['credit', 'hiring', 'healthcare']"
+      parameters:
+        min_score: 0.7
+      confidence: 0.88
+      notes: "High-stakes decisions require explainability"
+
+  "TRUSTWORTHY-5":
+    - requirement_text: "AI systems are fair with harmful bias managed"
+      policy_name: "NIST Trustworthy: Fairness Metrics Monitored"
+      policy_action: "ESCALATE"
+      condition_template: "agent.fairness_metrics.demographic_parity < {min_parity}"
+      parameters:
+        min_parity: 0.8
+      confidence: 0.90
+      notes: "Monitors demographic parity, equal opportunity"
+
+  "TRUSTWORTHY-6":
+    - requirement_text: "Privacy-enhancing measures implemented"
+      policy_name: "NIST Trustworthy: Privacy Controls Active"
+      policy_action: "BLOCK"
+      condition_template: "agent.processes_pii == true and (agent.anonymization_enabled == false or agent.encryption_enabled == false)"
+      parameters: {}
+      confidence: 0.95
+      notes: "PII requires anonymization AND encryption"
