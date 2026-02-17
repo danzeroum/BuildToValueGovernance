@@ -65,7 +65,6 @@ struct GovernanceVerdict {
     appeal_deadline_hours: u32,
 }
 
-// Extracted sync data — no references, fully owned, Send-safe
 struct ScanResult {
     finding_count: u32,
     critical_count: u32,
@@ -117,10 +116,13 @@ pub async fn validate_handler(
             hard_block_term: eval.hard_block_term,
             matched_policies: eval.matched_policies,
         }
-    }; // MutexGuard dropped here
+    };
 
     // ── JUDICIÁRIO: Python governance (async) ─────────────────
-    let verdict =  {
+    let verdict = {
+        let governance_url = std::env::var("BTV_GOVERNANCE_URL")
+            .unwrap_or_else(|_| "http://localhost:8000".to_string());
+
         let gov_req = GovernanceRequest {
             finding_count: scan.finding_count,
             critical_count: scan.critical_count,
@@ -132,7 +134,7 @@ pub async fn validate_handler(
         };
 
         match state.http_client
-            .post("http://localhost:8000/v1/decide")
+            .post(format!("{}/v1/decide", governance_url))
             .json(&gov_req)
             .send()
             .await
@@ -169,6 +171,20 @@ pub async fn validate_handler(
                 if scan.hard_blocked { 0 } else { 24 },
             )
         };
+
+    // ── METRICS ───────────────────────────────────────────────
+    {
+        use crate::state::*;
+        DECISIONS_TOTAL.with_label_values(&[&final_action]).inc();
+        LATENCY_MS.observe(latency_ms);
+        if mercy_applied { MERCY_APPLIED_TOTAL.inc(); }
+        if scan.hard_blocked { HARD_BLOCKS_TOTAL.inc(); }
+        for policy in &scan.matched_policies {
+            if let Some(finding_type) = policy.split("->").next() {
+                FINDINGS_TOTAL.with_label_values(&[finding_type.trim()]).inc();
+            }
+        }
+    }
 
     let message = if scan.hard_blocked {
         format!(
