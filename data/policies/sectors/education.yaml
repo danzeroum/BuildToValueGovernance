@@ -1,0 +1,110 @@
+# data/policies/sectors/education.yaml
+# ═══════════════════════════════════════════════════════════════
+# Education Sector Safe Patterns
+# ═══════════════════════════════════════════════════════════════
+
+_metadata:
+  sector_id: education
+  version: "1.0.0"
+  eu_ai_act_annex: "III"
+  risk_classification: high_risk
+  total_patterns: 19
+  basis: "sector_safe_patterns.py v0.9.0 (EDUCATION_SAFE_PATTERNS)"
+  philosophy: "Rawls — equal educational access; Gilligan — care for student development"
+  compliance_refs:
+    - "EU AI Act Annex III, §3 — Education and vocational training"
+    - "FERPA (US) — Student education records"
+    - "LGPD Art. 14 — Processing of children's and adolescents' data"
+
+cross_references:
+  inherits_from: []
+  inherited_by: []
+
+safe_patterns:
+
+  # ── Legitimate grading operations ──────────────────────────
+  "grade essay":
+    keywords: ["score", "evaluate", "assess"]
+    rationale: "Essay grading is core educational function"
+
+  "evaluate essay":
+    keywords: ["score", "grade", "assess"]
+    rationale: "Essay evaluation with rubric-based scoring"
+
+  "assess quality":
+    keywords: ["score", "grade", "evaluate"]
+    rationale: "Quality assessment of academic work"
+
+  "score rubric":
+    keywords: ["evaluate", "grade"]
+    rationale: "Rubric-based scoring is transparent and objective"
+
+  # ── Academic integrity (not discrimination) ────────────────
+  "plagiarism detection":
+    keywords: ["detect", "flag", "check"]
+    rationale: "Plagiarism detection protects academic integrity"
+
+  "check plagiarism":
+    keywords: ["detect", "flag"]
+    rationale: "Plagiarism checks are standard academic practice"
+
+  "verify originality":
+    keywords: ["check", "detect"]
+    rationale: "Originality verification for submitted work"
+
+  # ── Student identification (not profiling) ─────────────────
+  "student identification":
+    keywords: ["identity", "verify"]
+    rationale: "Student ID verification for exam integrity"
+
+  "verify student":
+    keywords: ["identity", "verify"]
+    rationale: "Identity verification for proctored assessments"
+
+  # ── Feedback generation ────────────────────────────────────
+  "provide feedback":
+    keywords: ["evaluate", "assess"]
+    rationale: "Formative feedback supports learning (Gilligan)"
+
+  "constructive feedback":
+    keywords: ["critique", "evaluate"]
+    rationale: "Constructive critique aids student growth"
+
+  "improvement areas":
+    keywords: ["feedback", "suggest"]
+    rationale: "Identifying improvement areas is pedagogical"
+
+  # ── Legitimate demographic data (educational access) ───────
+  "student demographics":
+    keywords: ["gender", "ethnicity"]
+    rationale: "Aggregate demographics for access equity analysis (Rawls)"
+
+  "background data":
+    keywords: ["income", "family"]
+    rationale: "Socioeconomic data for scholarship/aid eligibility"
+
+  # ── Teacher oversight (not autonomous) ─────────────────────
+  "flag for teacher":
+    keywords: ["flag", "review"]
+    rationale: "Flagging for teacher review is human-in-the-loop"
+
+  "teacher review":
+    keywords: ["flag", "review", "human"]
+    rationale: "Teacher retains final decision authority"
+
+  "manual review":
+    keywords: ["teacher", "review"]
+    rationale: "Manual review ensures pedagogical judgment"
+
+  # ── Writing analysis (not personality profiling) ───────────
+  "writing style":
+    keywords: ["analyze", "evaluate"]
+    rationale: "Writing style analysis for skill development, NOT profiling"
+
+  "grammar check":
+    keywords: ["analyze", "detect"]
+    rationale: "Grammar checking is mechanical, not evaluative of person"
+
+  "coherence analysis":
+    keywords: ["analyze", "evaluate"]
+    rationale: "Coherence assessment is textual, not psychological"

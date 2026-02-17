@@ -1,0 +1,98 @@
+# data/policies/sectors/government.yaml
+# ═══════════════════════════════════════════════════════════════
+# Government & Public Services Sector Safe Patterns
+# ═══════════════════════════════════════════════════════════════
+
+_metadata:
+  sector_id: government
+  version: "1.0.0"
+  eu_ai_act_annex: "III"
+  risk_classification: high_risk
+  total_patterns: 17
+  basis: "sector_safe_patterns.py v0.9.0 (GOVERNMENT_SAFE_PATTERNS)"
+  philosophy: "Levinas — face of the citizen; automated denial requires human review"
+  compliance_refs:
+    - "EU AI Act Annex III, §5(b) — Access to essential services"
+    - "EU AI Act Annex III, §6 — Law enforcement"
+    - "EU AI Act Annex III, §7 — Migration, asylum, border control"
+    - "EU AI Act Annex III, §8 — Administration of justice"
+
+cross_references:
+  inherits_from: []
+  inherited_by: ["law_enforcement", "migration", "justice", "democratic_processes"]
+
+safe_patterns:
+
+  # ── Legitimate fraud detection ─────────────────────────────
+  "fraud detection":
+    keywords: ["detect", "flag", "suspicious"]
+    rationale: "Public fund protection is legitimate government interest"
+
+  "verify eligibility":
+    keywords: ["verify", "check"]
+    rationale: "Eligibility verification for public benefits"
+
+  "validate application":
+    keywords: ["verify", "check", "validate"]
+    rationale: "Application validation against published criteria"
+
+  "audit compliance":
+    keywords: ["check", "verify", "audit"]
+    rationale: "Regulatory compliance auditing"
+
+  # ── Identity verification (KYC for public services) ────────
+  "verify identity":
+    keywords: ["passport", "ssn", "social security"]
+    rationale: "Identity verification for benefit disbursement"
+
+  "identity verification":
+    keywords: ["passport", "ssn", "id"]
+    rationale: "KYC equivalent for government services"
+
+  "confirm identity":
+    keywords: ["passport", "ssn"]
+    rationale: "Identity confirmation for secure transactions"
+
+  # ── Legitimate data cross-checking ─────────────────────────
+  "cross-reference records":
+    keywords: ["data", "check"]
+    rationale: "Inter-agency data validation to prevent fraud"
+
+  "verify income":
+    keywords: ["bank", "financial"]
+    rationale: "Income verification for means-tested benefits"
+
+  "employment verification":
+    keywords: ["employer", "verify"]
+    rationale: "Employment status for benefit eligibility"
+
+  # ── Review processes (not automated denial) ────────────────
+  "flag for review":
+    keywords: ["flag", "review"]
+    rationale: "Flagging for human review is the safe path (Levinas)"
+
+  "manual review":
+    keywords: ["review", "human"]
+    rationale: "Human-in-the-loop for consequential decisions"
+
+  "caseworker review":
+    keywords: ["review", "flag"]
+    rationale: "Caseworker involvement ensures contextual judgment"
+
+  # ── Legitimate residency checks ────────────────────────────
+  "residency verification":
+    keywords: ["location", "address"]
+    rationale: "Residency checks for jurisdiction-based services"
+
+  "confirm address":
+    keywords: ["location", "address"]
+    rationale: "Address confirmation for service delivery"
+
+  # ── Benefit calculation (not discrimination) ───────────────
+  "calculate benefit":
+    keywords: ["income", "family"]
+    rationale: "Benefit calculation based on published formulas"
+
+  "benefit eligibility":
+    keywords: ["income", "dependents"]
+    rationale: "Eligibility based on objective criteria, not profiling"

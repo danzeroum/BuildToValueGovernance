@@ -1,0 +1,273 @@
+# data/policies/compliance/gdpr.yaml
+# GDPR - General Data Protection Regulation (EU)
+# Regulation (EU) 2016/679
+#
+# Principles: Lawfulness, fairness, transparency, purpose limitation,
+#             data minimization, accuracy, storage limitation,
+#             integrity/confidentiality, accountability
+#
+# Penalties: Up to EUR 20M or 4% annual global turnover
+
+_metadata:
+  framework_id: "GDPR"
+  framework_name: "General Data Protection Regulation"
+  version: "1.0.0"
+  source: "legacy_migration"
+  migrated_at: "2026-02-17"
+  total_rules: 24
+  btv_actions: ["BLOCK", "ESCALATE", "LOG"]
+  reference_url: "https://eur-lex.europa.eu/eli/reg/2016/679/oj"
+
+articles:
+
+  # ===== ARTICLE 5: PRINCIPLES =====
+
+  "Article 5":
+    - requirement_text: "Data minimization - adequate, relevant, limited to necessary"
+      policy_name: "GDPR: Enforce Data Minimization"
+      policy_action: "ESCALATE"
+      condition_template: "data_access.requested_fields > {threshold} and justification.provided == false"
+      parameters:
+        threshold: 10
+      confidence: 0.92
+      notes: "Challenge data collection exceeding minimum necessary"
+
+    - requirement_text: "Storage limitation - kept no longer than necessary"
+      policy_name: "GDPR: Auto-Delete After Retention Period"
+      policy_action: "LOG"
+      condition_template: "data.retention_days > purpose.max_retention_days and deletion_scheduled == false"
+      parameters: {}
+      confidence: 0.90
+      notes: "Flag data exceeding retention policy"
+
+    - requirement_text: "Integrity and confidentiality - security of processing"
+      policy_name: "GDPR: Enforce Encryption for Personal Data"
+      policy_action: "BLOCK"
+      condition_template: "data.contains_personal_data == true and (encryption.at_rest == false or transmission.encrypted == false)"
+      parameters: {}
+      confidence: 0.98
+      notes: "Personal data must be encrypted"
+
+  # ===== ARTICLE 6: LAWFULNESS =====
+
+  "Article 6":
+    - requirement_text: "Lawful basis for processing - consent, contract, legal obligation, etc."
+      policy_name: "GDPR: Verify Lawful Basis Present"
+      policy_action: "BLOCK"
+      condition_template: "processing.lawful_basis == null or processing.lawful_basis not in approved_bases"
+      parameters: {}
+      confidence: 0.96
+      notes: "Every processing operation must have lawful basis"
+
+    - requirement_text: "Consent must be freely given, specific, informed, unambiguous"
+      policy_name: "GDPR: Validate Consent Quality"
+      policy_action: "ESCALATE"
+      condition_template: "processing.basis == 'consent' and (consent.is_explicit == false or consent.is_granular == false)"
+      parameters: {}
+      confidence: 0.94
+      notes: "Pre-checked boxes or blanket consent invalid"
+
+  # ===== ARTICLE 7: CONDITIONS FOR CONSENT =====
+
+  "Article 7":
+    - requirement_text: "Controller must demonstrate consent was given"
+      policy_name: "GDPR: Consent Audit Trail Required"
+      policy_action: "ESCALATE"
+      condition_template: "processing.basis == 'consent' and consent.audit_trail_exists == false"
+      parameters: {}
+      confidence: 0.93
+      notes: "Consent must be provable and auditable"
+
+    - requirement_text: "Right to withdraw consent at any time"
+      policy_name: "GDPR: Honor Consent Withdrawal"
+      policy_action: "BLOCK"
+      condition_template: "user.consent_withdrawn == true and processing.continues == true"
+      parameters: {}
+      confidence: 1.0
+      notes: "Immediate stop upon consent withdrawal"
+
+  # ===== ARTICLE 9: SPECIAL CATEGORIES =====
+
+  "Article 9":
+    - requirement_text: "Processing of special categories (sensitive data) prohibited unless exception"
+      policy_name: "GDPR: Block Sensitive Data Without Explicit Consent"
+      policy_action: "BLOCK"
+      condition_template: "data.is_sensitive == true and (consent.explicit_for_sensitive == false and exception.documented == false)"
+      parameters: {}
+      confidence: 0.99
+      notes: "Health, biometric, genetic, racial data requires explicit consent"
+
+  # ===== ARTICLES 12-14: TRANSPARENCY =====
+
+  "Article 12":
+    - requirement_text: "Information provided in concise, transparent, intelligible form"
+      policy_name: "GDPR: Privacy Notice Readability Check"
+      policy_action: "LOG"
+      condition_template: "privacy_notice.readability_score < {min_score}"
+      parameters:
+        min_score: 60
+      confidence: 0.85
+      notes: "Privacy notices must be understandable (Flesch Reading Ease)"
+
+  "Article 13":
+    - requirement_text: "Provide identity of controller, purposes, legal basis, retention period"
+      policy_name: "GDPR: Mandatory Privacy Disclosure Elements"
+      policy_action: "ESCALATE"
+      condition_template: "data_collection.privacy_notice_shown == false or privacy_notice.missing_elements_count > 0"
+      parameters: {}
+      confidence: 0.95
+      notes: "Complete privacy notice required at collection"
+
+  # ===== ARTICLES 15-22: DATA SUBJECT RIGHTS =====
+
+  "Article 15":
+    - requirement_text: "Data subject can request copy of data and confirmation of processing"
+      policy_name: "GDPR: Subject Access Request (SAR) SLA"
+      policy_action: "ESCALATE"
+      condition_template: "request.type == 'subject_access' and days_since(request.date) > 25"
+      parameters: {}
+      confidence: 0.96
+      notes: "30-day SAR deadline (escalate at 25 days)"
+
+  "Article 17":
+    - requirement_text: "Right to be forgotten - erasure when purpose fulfilled or consent withdrawn"
+      policy_name: "GDPR: Right to Erasure Processing"
+      policy_action: "ESCALATE"
+      condition_template: "request.type == 'erasure' and (processing.has_legal_obligation == false and deletion_completed == false and days_since(request.date) > 25)"
+      parameters: {}
+      confidence: 0.93
+      notes: "30-day erasure deadline unless legal grounds to retain"
+
+  "Article 18":
+    - requirement_text: "Data subject can request restriction of processing"
+      policy_name: "GDPR: Restriction Request Handling"
+      policy_action: "BLOCK"
+      condition_template: "user.has_restriction_request == true and data_access.purpose not in ['storage_only', 'legal_claims']"
+      parameters: {}
+      confidence: 0.92
+      notes: "Restricted data can only be stored, not processed"
+
+  "Article 21":
+    - requirement_text: "Data subject can object to processing (including profiling)"
+      policy_name: "GDPR: Honor Objection to Processing"
+      policy_action: "BLOCK"
+      condition_template: "user.has_objection == true and processing.continues == true and processing.has_compelling_grounds == false"
+      parameters: {}
+      confidence: 0.94
+      notes: "Stop processing unless compelling legitimate grounds"
+
+  "Article 22":
+    - requirement_text: "Right not to be subject to solely automated decisions with legal/significant effects"
+      policy_name: "GDPR: Human Review for Automated Decisions"
+      policy_action: "ESCALATE"
+      condition_template: "decision.fully_automated == true and decision.has_significant_effect == true and human_review.available == false"
+      parameters: {}
+      confidence: 0.97
+      notes: "High-impact AI decisions require human review option"
+
+  # ===== ARTICLES 25-32: SECURITY & DESIGN =====
+
+  "Article 25":
+    - requirement_text: "Data protection by design and by default"
+      policy_name: "GDPR: Privacy by Default Settings"
+      policy_action: "LOG"
+      condition_template: "system.default_privacy_settings.score < {min_score}"
+      parameters:
+        min_score: 0.8
+      confidence: 0.88
+      notes: "Default settings must favor privacy"
+
+  "Article 30":
+    - requirement_text: "Maintain records of processing activities"
+      policy_name: "GDPR: Processing Activity Record (RoPA)"
+      policy_action: "ESCALATE"
+      condition_template: "agent.processes_personal_data == true and agent.ropa_documented == false"
+      parameters: {}
+      confidence: 0.90
+      notes: "Record of Processing Activities mandatory"
+
+  "Article 32":
+    - requirement_text: "Implement appropriate technical and organizational measures"
+      policy_name: "GDPR: Security Measures Assessment"
+      policy_action: "BLOCK"
+      condition_template: "data.risk_level in ['high', 'critical'] and security.measures_count < {min_measures}"
+      parameters:
+        min_measures: 5
+      confidence: 0.93
+      notes: "High-risk processing requires enhanced security"
+
+  # ===== ARTICLES 33-35: BREACH & IMPACT =====
+
+  "Article 33":
+    - requirement_text: "Notify supervisory authority within 72 hours of breach awareness"
+      policy_name: "GDPR: Auto-Escalate Breach to DPA"
+      policy_action: "ESCALATE"
+      condition_template: "breach.personal_data_involved == true and breach.risk_level != 'low' and hours_since(breach.awareness) > 60"
+      parameters: {}
+      confidence: 0.98
+      notes: "72-hour legal deadline to notify Data Protection Authority"
+
+  "Article 34":
+    - requirement_text: "Notify data subjects without undue delay if high risk to rights"
+      policy_name: "GDPR: Breach Notification to Individuals"
+      policy_action: "ESCALATE"
+      condition_template: "breach.risk_to_rights == 'high' and breach.subjects_notified == false and hours_since(breach.awareness) > 48"
+      parameters: {}
+      confidence: 0.97
+      notes: "Prompt notification for high-risk breaches"
+
+  "Article 35":
+    - requirement_text: "DPIA required for high-risk processing (profiling, sensitive data, large-scale)"
+      policy_name: "GDPR: DPIA Mandatory for High Risk"
+      policy_action: "BLOCK"
+      condition_template: "processing.is_high_risk == true and dpia.completed == false"
+      parameters: {}
+      confidence: 0.96
+      notes: "No high-risk processing without DPIA"
+
+  # ===== ARTICLE 44: INTERNATIONAL TRANSFERS =====
+
+  "Article 44":
+    - requirement_text: "International transfers only to adequate countries or with safeguards"
+      policy_name: "GDPR: Block Transfer to Non-Adequate Countries"
+      policy_action: "BLOCK"
+      condition_template: "transfer.destination_country not in approved_countries and (transfer.has_sccs == false and transfer.has_bcrs == false)"
+      parameters: {}
+      confidence: 0.97
+      notes: "Adequacy decision, SCCs, or BCRs required"
+
+"Article 5 - Lawfulness":
+    - requirement_text: "Processing must be lawful, fair and transparent"
+      policy_name: "GDPR: Lawfulness Fairness Transparency"
+      policy_action: "ESCALATE"
+      condition_template: "data.contains_personal_data == true and (processing.legal_basis == null or processing.transparency_provided == false)"
+      parameters: {}
+      confidence: 0.92
+      notes: "Art. 5.1.a - Foundation principle"
+
+  "Article 5 - Purpose Limitation":
+    - requirement_text: "Data collected for specified, explicit, legitimate purposes"
+      policy_name: "GDPR: Purpose Limitation Check"
+      policy_action: "ESCALATE"
+      condition_template: "processing.purpose_changed == true and processing.compatible_purpose_assessment == false"
+      parameters: {}
+      confidence: 0.90
+      notes: "Art. 5.1.b - Recital 50 compatibility test"
+
+  "Article 20":
+    - requirement_text: "Data subject can receive data in structured format"
+      policy_name: "GDPR: Data Portability Request"
+      policy_action: "LOG"
+      condition_template: "request.type == 'data_portability'"
+      parameters: {}
+      confidence: 0.91
+      notes: "JSON, CSV, XML interoperable format"
+
+  "Article 46":
+    - requirement_text: "SCCs required if no adequacy decision"
+      policy_name: "GDPR: Require SCCs for Non-Adequate Transfers"
+      policy_action: "ESCALATE"
+      condition_template: "transfer.destination_country not in approved_countries and transfer.has_sccs == false"
+      parameters: {}
+      confidence: 0.90
+      notes: "Alternative to adequacy decision"

@@ -1,0 +1,55 @@
+# data/policies/sectors/fintech.yaml
+# ═══════════════════════════════════════════════════════════════
+# Financial Services (Fintech) Sector Safe Patterns
+# ═══════════════════════════════════════════════════════════════
+
+_metadata:
+  sector_id: fintech
+  version: "1.0.0"
+  eu_ai_act_annex: "III"
+  risk_classification: high_risk
+  total_patterns: 7
+  basis: "sector_safe_patterns.py v0.9.0 (FINTECH_SAFE_PATTERNS, Gold Master)"
+  philosophy: "Rawls — equal access to credit; Jonas — proportional responsibility for financial decisions"
+  compliance_refs:
+    - "EU AI Act Annex III, §5(b) — Credit scoring"
+    - "GDPR Art. 22 — Automated decision-making in finance"
+    - "PCI-DSS v4.0 — Cardholder data protection"
+    - "LGPD Art. 20 — Right to review of automated credit decisions"
+
+cross_references:
+  inherits_from: []
+  inherited_by: ["insurance"]
+
+safe_patterns:
+
+  # ── Credit operations ──────────────────────────────────────
+  "credit score":
+    keywords: ["credit card", "credit"]
+    rationale: "Credit scoring is regulated financial activity"
+
+  "calculate credit":
+    keywords: ["credit card", "credit"]
+    rationale: "Credit calculation based on published criteria"
+
+  "check loan eligibility":
+    keywords: ["deny loan"]
+    rationale: "Loan eligibility checks use objective financial criteria"
+
+  # ── Identity & KYC ────────────────────────────────────────
+  "verify identity":
+    keywords: ["passport", "ssn", "social security"]
+    rationale: "KYC is legally mandated (AML/CFT regulations)"
+
+  "kyc compliance":
+    keywords: ["passport", "ssn", "social security", "pii"]
+    rationale: "KYC/AML compliance requires identity document verification"
+
+  # ── Transaction operations ─────────────────────────────────
+  "transaction history":
+    keywords: ["export data", "export", "credit card"]
+    rationale: "Transaction history export for account holders"
+
+  "fraud detection":
+    keywords: ["credit card", "bypass fraud"]
+    rationale: "Fraud detection is consumer protection, not surveillance"

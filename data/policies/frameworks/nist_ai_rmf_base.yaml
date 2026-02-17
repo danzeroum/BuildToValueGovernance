@@ -1,0 +1,577 @@
+# BuildToValue v3.0 - NIST AI RMF Base Compliance Profile
+# NIST AI Risk Management Framework 1.0 (AI 100-1)
+#
+# Version: 2.0.0 (gap-closed)
+# Last Updated: 2026-02-17
+
+id: nist_ai_rmf_base
+name: NIST AI RMF Base Compliance Profile
+description: |
+  NIST AI Risk Management Framework 1.0.
+  Full coverage: GOVERN (6), MAP (8), MEASURE (7),
+  MANAGE (5), Trustworthiness (6). Total: 32 rules.
+
+parent_id: null
+version: 2.0.0
+legal_framework: NIST_AI_RMF
+jurisdiction: US
+created_at: 2026-02-17
+updated_at: 2026-02-17
+
+legal_metadata:
+  standard_name: "Artificial Intelligence Risk Management Framework"
+  standard_number: "NIST AI 100-1"
+  standard_url: "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf"
+  enforcement_authority: "NIST"
+  publication_date: "2023-01-26"
+  penalties: []
+
+domain_config:
+  general:
+    risk_multiplier: 1.0
+    require_risk_assessment: true
+    require_monitoring: true
+
+  fairness_metrics:
+    - "Demographic Parity"
+    - "Equal Opportunity"
+    - "Equalized Odds"
+
+rules:
+  # ═══════════════════════════════════════════════════════════════
+  # GOVERN: GOVERNANCE AND CULTURE
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: NIST_GOVERN_1_1_LEGAL
+    name: "Documentation of Legal Requirements"
+    description: "Legal and regulatory requirements involving AI understood (GOVERN 1.1)"
+    action: LOG
+    priority: 70
+    severity: MEDIUM
+    validators: ["documentation_validator"]
+    condition: |
+      agent.legal_compliance_documented == false
+    legal_basis: "NIST AI RMF GOVERN 1.1"
+    contestable: false
+    mercy_eligible: false
+
+  - id: NIST_GOVERN_1_2_RISK_TOLERANCE
+    name: "Risk Tolerance Check"
+    description: "Risk tolerances determined and communicated (GOVERN 1.2)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+    validators: ["risk_tolerance_validator"]
+    condition: |
+      agent.risk_score > organization.risk_tolerance
+    legal_basis: "NIST AI RMF GOVERN 1.2"
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+    rationale: |
+      Jonas (Responsibility): Risk exceeding tolerance requires governance review.
+
+  - id: NIST_GOVERN_1_3_THIRD_PARTY
+    name: "Third-Party AI Vendor Validation"
+    description: "Third-party AI requires risk assessment (GOVERN 1.3)"
+    action: BLOCK
+    priority: 90
+    severity: HIGH
+    validators: ["vendor_validation_validator"]
+    condition: |
+      agent.is_third_party == true and
+      vendor.risk_assessment_completed == false
+    legal_basis: "NIST AI RMF GOVERN 1.3"
+    contestable: true
+    mercy_eligible: false
+
+  - id: NIST_GOVERN_2_1_ROLES
+    name: "Role Assignment Validation"
+    description: "Roles and responsibilities for AI documented (GOVERN 2.1)"
+    action: LOG
+    priority: 70
+    severity: MEDIUM
+    validators: ["role_assignment_validator"]
+    condition: |
+      agent.owner_assigned == false or
+      agent.accountability_unclear == true
+    legal_basis: "NIST AI RMF GOVERN 2.1"
+    contestable: false
+    mercy_eligible: false
+
+  - id: NIST_GOVERN_3_1_VALUES
+    name: "Value Alignment Check"
+    description: "AI policies reflect organizational values (GOVERN 3.1)"
+    action: LOG
+    priority: 65
+    severity: MEDIUM
+    validators: ["values_validator"]
+    condition: |
+      agent.values_alignment_score < threshold
+    parameters:
+      threshold: 0.7
+    legal_basis: "NIST AI RMF GOVERN 3.1"
+    contestable: false
+    mercy_eligible: false
+
+  - id: NIST_GOVERN_4_1_TRAINING
+    name: "AI Risk Training Requirement"
+    description: "Teams committed to AI risk management (GOVERN 4.1)"
+    action: ESCALATE
+    priority: 80
+    severity: MEDIUM
+    validators: ["training_validator"]
+    condition: |
+      team.ai_risk_training_completion < 0.8
+    legal_basis: "NIST AI RMF GOVERN 4.1"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+    rationale: |
+      At least 80% of team must have training.
+
+  # ═══════════════════════════════════════════════════════════════
+  # MAP: CONTEXT AND RISKS
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: NIST_MAP_1_1_PURPOSE
+    name: "Purpose Documentation Required"
+    description: "Intended purposes of AI system defined (MAP 1.1)"
+    action: BLOCK
+    priority: 95
+    severity: HIGH
+    validators: ["purpose_validator"]
+    condition: |
+      agent.intended_purpose == null or agent.intended_purpose == ''
+    legal_basis: "NIST AI RMF MAP 1.1"
+    contestable: false
+    mercy_eligible: false
+
+  - id: NIST_MAP_1_2_CONTEXT
+    name: "Context Documentation"
+    description: "AI system context documented (MAP 1.2)"
+    action: LOG
+    priority: 70
+    severity: MEDIUM
+    validators: ["documentation_validator"]
+    condition: |
+      agent.context_documented == false
+    legal_basis: "NIST AI RMF MAP 1.2"
+    contestable: false
+    mercy_eligible: false
+
+  - id: NIST_MAP_2_1_IMPACT
+    name: "Negative Impact Assessment"
+    description: "Negative impacts identified every 6 months (MAP 2.1)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+    validators: ["impact_assessment_validator"]
+    condition: |
+      agent.impact_assessment_date == null or
+      days_since(agent.impact_assessment_date) > 180
+    legal_basis: "NIST AI RMF MAP 2.1"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+  - id: NIST_MAP_2_2_LIKELIHOOD
+    name: "Likelihood Scoring"
+    description: "Likelihood of negative impacts assessed (MAP 2.2)"
+    action: LOG
+    priority: 65
+    severity: MEDIUM
+    validators: []
+    condition: |
+      agent.likelihood_score_documented == false
+    legal_basis: "NIST AI RMF MAP 2.2"
+    contestable: false
+    mercy_eligible: false
+
+  - id: NIST_MAP_3_1_CAPABILITIES
+    name: "Capability Inventory"
+    description: "AI system capabilities characterized (MAP 3.1)"
+    action: LOG
+    priority: 70
+    severity: MEDIUM
+    validators: ["capability_validator"]
+    condition: |
+      len(agent.capabilities) == 0
+    legal_basis: "NIST AI RMF MAP 3.1"
+    contestable: false
+    mercy_eligible: false
+
+  - id: NIST_MAP_3_2_DATA_QUALITY
+    name: "Training Data Quality Gate"
+    description: "Data quality and representativeness assessed (MAP 3.2)"
+    action: BLOCK
+    priority: 90
+    severity: HIGH
+    validators: ["data_quality_validator"]
+    condition: |
+      training_data.quality_score < min_quality
+    parameters:
+      min_quality: 0.75
+    legal_basis: "NIST AI RMF MAP 3.2"
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+    rationale: |
+      Gilligan (Care): Bad data = biased outcomes.
+
+  - id: NIST_MAP_4_1_DEMOGRAPHIC
+    name: "Demographic Impact Analysis"
+    description: "Demographics of impacted populations identified (MAP 4.1)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+    validators: ["demographic_impact_validator"]
+    condition: |
+      agent.demographic_analysis_completed == false and
+      agent.affects_protected_groups == true
+    legal_basis: "NIST AI RMF MAP 4.1"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+    rationale: |
+      Rawls (Justice): Cannot ensure fairness without knowing who is affected.
+
+  - id: NIST_MAP_5_1_FEEDBACK
+    name: "User Feedback Loop Active"
+    description: "Feedback from AI system users collected (MAP 5.1)"
+    action: LOG
+    priority: 65
+    severity: MEDIUM
+    validators: ["feedback_validator"]
+    condition: |
+      agent.feedback_mechanism_enabled == false
+    legal_basis: "NIST AI RMF MAP 5.1"
+    contestable: false
+    mercy_eligible: false
+
+  # ═══════════════════════════════════════════════════════════════
+  # MEASURE: ASSESSMENT AND ANALYSIS
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: NIST_MEASURE_1_1_METRICS
+    name: "Risk Metrics Defined"
+    description: "Methods identified for measuring AI risks (MEASURE 1.1)"
+    action: LOG
+    priority: 70
+    severity: MEDIUM
+    validators: ["metrics_validator"]
+    condition: |
+      len(agent.risk_metrics) == 0
+    legal_basis: "NIST AI RMF MEASURE 1.1"
+    contestable: false
+    mercy_eligible: false
+
+  - id: NIST_MEASURE_2_1_TEST_REPRESENTATIVENESS
+    name: "Test Data Representativeness"
+    description: "Test sets representative of deployment context (MEASURE 2.1)"
+    action: BLOCK
+    priority: 90
+    severity: HIGH
+    validators: ["data_representativeness_validator"]
+    condition: |
+      test_data.demographic_match_score < threshold
+    parameters:
+      threshold: 0.8
+    legal_basis: "NIST AI RMF MEASURE 2.1"
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+    rationale: |
+      Test data must reflect real deployment population.
+
+  - id: NIST_MEASURE_2_2_SUBGROUP_PARITY
+    name: "Subgroup Performance Parity"
+    description: "Performance across demographic subgroups evaluated (MEASURE 2.2)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+    validators: ["fairness_validator"]
+    condition: |
+      max(subgroup_performance_variance) > max_variance
+    parameters:
+      max_variance: 0.15
+    legal_basis: "NIST AI RMF MEASURE 2.2"
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.75
+    rationale: |
+      Rawls (Justice): 15% max disparity = difference principle.
+
+  - id: NIST_MEASURE_2_3_BIAS_TESTING
+    name: "Bias Testing Required"
+    description: "AI system evaluated for harmful bias (MEASURE 2.3)"
+    action: BLOCK
+    priority: 95
+    severity: CRITICAL
+    validators: ["bias_testing_validator"]
+    condition: |
+      agent.bias_test_passed == false and
+      agent.deployment_requested == true
+    legal_basis: "NIST AI RMF MEASURE 2.3"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Aligns with BuildToValue BiasDeclaration mandate (ADR-010).
+
+  - id: NIST_MEASURE_3_1_CONTINUOUS_MONITORING
+    name: "Continuous Monitoring Active"
+    description: "Ongoing monitoring mechanisms implemented (MEASURE 3.1)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+    validators: ["monitoring_validator"]
+    condition: |
+      agent.monitoring_enabled == false and
+      agent.in_production == true
+    legal_basis: "NIST AI RMF MEASURE 3.1"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+
+  - id: NIST_MEASURE_3_2_MODEL_DRIFT
+    name: "Model Drift Detection"
+    description: "Performance degradation detected (MEASURE 3.2)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+    validators: ["model_drift_validator"]
+    condition: |
+      agent.performance_drift > drift_threshold and
+      agent.in_production == true
+    parameters:
+      drift_threshold: 0.10
+    legal_basis: "NIST AI RMF MEASURE 3.2"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+  - id: NIST_MEASURE_4_1_INCIDENT_LOGGING
+    name: "Incident Logging"
+    description: "Incidents and errors documented (MEASURE 4.1)"
+    action: LOG
+    priority: 80
+    severity: HIGH
+    validators: []
+    condition: |
+      incident.severity in ['high', 'critical']
+    legal_basis: "NIST AI RMF MEASURE 4.1"
+    contestable: false
+    mercy_eligible: false
+
+  # ═══════════════════════════════════════════════════════════════
+  # MANAGE: MITIGATION AND TREATMENT
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: NIST_MANAGE_1_1_RISK_TREATMENT
+    name: "Risk Treatment Plan Required"
+    description: "Risk treatment plans developed for high-risk agents (MANAGE 1.1)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+    validators: ["risk_treatment_validator"]
+    condition: |
+      agent.risk_score > 0.7 and
+      agent.risk_treatment_plan_exists == false
+    legal_basis: "NIST AI RMF MANAGE 1.1"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+  - id: NIST_MANAGE_2_1_RISK_DISCLOSURE
+    name: "Risk Disclosure Required"
+    description: "Risks communicated to stakeholders (MANAGE 2.1)"
+    action: LOG
+    priority: 75
+    severity: MEDIUM
+    validators: ["disclosure_validator"]
+    condition: |
+      agent.risk_disclosure_completed == false and
+      agent.affects_external_users == true
+    legal_basis: "NIST AI RMF MANAGE 2.1"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Levinas (Care): Stakeholders have right to know risks.
+
+  - id: NIST_MANAGE_3_1_IR_PLAN
+    name: "Incident Response Plan Exists"
+    description: "Responses to AI incidents planned (MANAGE 3.1)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+    validators: ["incident_response_validator"]
+    condition: |
+      agent.has_incident_response_plan == false and
+      agent.in_production == true
+    legal_basis: "NIST AI RMF MANAGE 3.1"
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+
+  - id: NIST_MANAGE_3_2_KILL_SWITCH
+    name: "Kill Switch Available"
+    description: "AI systems can be deactivated (MANAGE 3.2)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+    validators: ["kill_switch_validator"]
+    condition: |
+      agent.has_kill_switch == false and
+      agent.autonomy_level >= 4
+    legal_basis: "NIST AI RMF MANAGE 3.2"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Levinas (Care): Must always protect humans from AI failure.
+
+  - id: NIST_MANAGE_4_1_POST_INCIDENT
+    name: "Post-Incident Review"
+    description: "Lessons learned documented within 14 days (MANAGE 4.1)"
+    action: LOG
+    priority: 75
+    severity: MEDIUM
+    validators: ["post_mortem_validator"]
+    condition: |
+      incident.post_mortem_completed == false and
+      days_since(incident.date) > 14
+    legal_basis: "NIST AI RMF MANAGE 4.1"
+    contestable: false
+    mercy_eligible: false
+
+  - id: NIST_MANAGE_4_2_IMPROVEMENTS
+    name: "Continuous Improvement Tracking"
+    description: "Improvements from lessons learned (MANAGE 4.2)"
+    action: LOG
+    priority: 65
+    severity: MEDIUM
+    validators: []
+    condition: |
+      count(improvements_implemented) == 0 and
+      count(incidents_last_quarter) > 5
+    legal_basis: "NIST AI RMF MANAGE 4.2"
+    contestable: false
+    mercy_eligible: false
+
+  # ═══════════════════════════════════════════════════════════════
+  # TRUSTWORTHINESS CHARACTERISTICS
+  # ═══════════════════════════════════════════════════════════════
+
+  - id: NIST_TRUSTWORTHY_1_VALIDATION
+    name: "Validation Gate"
+    description: "AI systems valid and reliable (TRUSTWORTHY)"
+    action: BLOCK
+    priority: 95
+    severity: HIGH
+    validators: ["accuracy_validator", "test_coverage_validator"]
+    condition: |
+      agent.validation_accuracy < min_accuracy or
+      agent.test_coverage < min_coverage
+    parameters:
+      min_accuracy: 0.90
+      min_coverage: 0.85
+    legal_basis: "NIST AI RMF Trustworthiness"
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.8
+
+  - id: NIST_TRUSTWORTHY_2_SAFETY
+    name: "Safety Testing Required"
+    description: "AI systems are safe (TRUSTWORTHY)"
+    action: BLOCK
+    priority: 95
+    severity: CRITICAL
+    validators: ["safety_validator"]
+    condition: |
+      agent.safety_test_passed == false and
+      agent.deployment_requested == true
+    legal_basis: "NIST AI RMF Trustworthiness"
+    contestable: false
+    mercy_eligible: false
+    rationale: |
+      Adversarial robustness, edge cases, failure modes.
+
+  - id: NIST_TRUSTWORTHY_3_SECURITY
+    name: "Security Baseline"
+    description: "AI systems secure and resilient (TRUSTWORTHY)"
+    action: BLOCK
+    priority: 90
+    severity: HIGH
+    validators: ["security_controls_validator"]
+    condition: |
+      agent.security_scan_passed == false or
+      agent.vulnerability_count > 0
+    legal_basis: "NIST AI RMF Trustworthiness"
+    contestable: true
+    mercy_eligible: false
+
+  - id: NIST_TRUSTWORTHY_4_EXPLAINABILITY
+    name: "Explainability Required"
+    description: "AI systems accountable and transparent (TRUSTWORTHY)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+    validators: ["explainability_validator"]
+    condition: |
+      agent.explainability_score < min_score and
+      use_case in ['credit', 'hiring', 'healthcare']
+    parameters:
+      min_score: 0.7
+    legal_basis: "NIST AI RMF Trustworthiness"
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+    rationale: |
+      Maps to BuildToValue explain_decision() mandate.
+
+  - id: NIST_TRUSTWORTHY_5_FAIRNESS
+    name: "Fairness Metrics Monitored"
+    description: "AI systems fair with harmful bias managed (TRUSTWORTHY)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+    validators: ["fairness_validator"]
+    condition: |
+      agent.fairness_metrics.demographic_parity < min_parity
+    parameters:
+      min_parity: 0.8
+    legal_basis: "NIST AI RMF Trustworthiness"
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+  - id: NIST_TRUSTWORTHY_6_PRIVACY
+    name: "Privacy Controls Active"
+    description: "Privacy-enhancing measures implemented (TRUSTWORTHY)"
+    action: BLOCK
+    priority: 95
+    severity: CRITICAL
+    validators: ["privacy_validator", "encryption_validator"]
+    condition: |
+      agent.processes_pii == true and
+      (agent.anonymization_enabled == false or agent.encryption_enabled == false)
+    legal_basis: "NIST AI RMF Trustworthiness"
+    contestable: false
+    mercy_eligible: false
+
+ethical_notes: |
+  NIST AI RMF v2.0 gap-closed (32 rules):
+  RAWLS: MAP 4.1 Demographics, MEASURE 2.2 Subgroup parity
+  LEVINAS: MANAGE 2.1 Risk disclosure, MANAGE 3.2 Kill switch
+  GILLIGAN: MAP 3.2 Data quality, MEASURE 2.2 Contextual disparity
+  JONAS: GOVERN functions, MANAGE 3.2 Proportional control
+
+changelog:
+  - version: 1.0.0
+    date: 2026-02-17
+    changes:
+      - "Initial NIST AI RMF base profile (13 rules)"
+  - version: 2.0.0
+    date: 2026-02-17
+    changes:
+      - "Gap closure: added GOVERN 1.1/2.1/3.1/4.1, MAP 1.2/2.1/2.2/3.1/5.1, MEASURE 1.1/2.1/3.1/4.1, MANAGE 1.1/2.1/4.1/4.2, TRUSTWORTHY 2/3/4"
+      - "Total: 32 rules (was 13). Full parity with compliance/nist_ai_rmf.yaml (+1 MANAGE 4.2)"

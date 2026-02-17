@@ -1,0 +1,206 @@
+# data/policies/compliance/lgpd.yaml
+# LGPD - Lei Geral de Protecao de Dados (Brasil)
+# Lei 13.709/2018
+#
+# Risk structure:
+# - Art. 6: Principios (HIGH)
+# - Art. 7: Bases Legais (CRITICAL)
+# - Art. 8: Consentimento (HIGH)
+# - Art. 11: Dados Sensiveis (CRITICAL)
+# - Art. 46-48: Transferencia Internacional + Seguranca (CRITICAL)
+#
+# Sancoes (Art. 52): Multa ate 2% faturamento (max R$ 50 milhoes)
+
+_metadata:
+  framework_id: "LGPD"
+  framework_name: "Lei Geral de Protecao de Dados"
+  version: "1.0.0"
+  source: "legacy_migration"
+  migrated_at: "2026-02-17"
+  total_rules: 18
+  btv_actions: ["BLOCK", "ESCALATE", "LOG"]
+  reference_url: "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm"
+
+articles:
+
+  # ===== CAPITULO II: PRINCIPIOS =====
+
+  "Art. 6":
+    - requirement_text: "Principio da Finalidade - dados tratados para propositos especificos"
+      policy_name: "LGPD: Enforce Purpose Limitation"
+      policy_action: "ESCALATE"
+      condition_template: "agent.data_access.purpose not in approved_purposes"
+      parameters: {}
+      confidence: 0.90
+      notes: "Bloqueia acesso a dados sem finalidade clara"
+
+    - requirement_text: "Principio da Necessidade - minimizacao de dados"
+      policy_name: "LGPD: Data Minimization Check"
+      policy_action: "LOG"
+      condition_template: "agent.data_access.field_count > {threshold}"
+      parameters:
+        threshold: 10
+      confidence: 0.85
+      notes: "Alerta quando agente acessa muitos campos desnecessarios"
+
+    - requirement_text: "Principio da Transparencia - informacoes claras ao titular"
+      policy_name: "LGPD: Require Transparency Disclosure"
+      policy_action: "LOG"
+      condition_template: "interaction.user_facing == true"
+      parameters: {}
+      confidence: 0.95
+      notes: "Log obrigatorio de interacoes para auditoria"
+
+    - requirement_text: "Principio da Seguranca - medidas tecnicas adequadas"
+      policy_name: "LGPD: Enforce Encryption for PII"
+      policy_action: "BLOCK"
+      condition_template: "data.contains_pii == true and transmission.encrypted == false"
+      parameters: {}
+      confidence: 1.0
+      notes: "Bloqueia transmissao de PII nao criptografada"
+
+  # ===== CAPITULO III: BASES LEGAIS =====
+
+  "Art. 7":
+    - requirement_text: "Base Legal: Consentimento do Titular"
+      policy_name: "LGPD: Verify User Consent Present"
+      policy_action: "BLOCK"
+      condition_template: "user.has_consent == false and processing.requires_consent == true"
+      parameters: {}
+      confidence: 0.95
+      notes: "Bloqueio critico - sem consentimento, sem processamento"
+
+    - requirement_text: "Base Legal: Legitimo Interesse do Controlador"
+      policy_name: "LGPD: Legitimate Interest Assessment"
+      policy_action: "ESCALATE"
+      condition_template: "processing.basis == 'legitimate_interest' and processing.lia_documented == false"
+      parameters: {}
+      confidence: 0.88
+      notes: "Requer LIA (Legitimate Interest Assessment) documentado"
+
+    - requirement_text: "Base Legal: Execucao de Contrato"
+      policy_name: "LGPD: Contract Execution Validation"
+      policy_action: "LOG"
+      condition_template: "processing.basis == 'contract' and user.has_active_contract == false"
+      parameters: {}
+      confidence: 0.92
+      notes: "Monitora processamento baseado em contrato inexistente"
+
+  # ===== SECAO III: CONSENTIMENTO =====
+
+  "Art. 8":
+    - requirement_text: "Consentimento deve ser livre, informado e inequivoco"
+      policy_name: "LGPD: Validate Consent Quality"
+      policy_action: "ESCALATE"
+      condition_template: "consent.is_explicit == false or consent.is_informed == false"
+      parameters: {}
+      confidence: 0.90
+      notes: "Consentimento via opt-out ou pre-checked e invalido"
+
+    - requirement_text: "Titular pode revogar consentimento a qualquer momento"
+      policy_name: "LGPD: Honor Consent Revocation"
+      policy_action: "BLOCK"
+      condition_template: "user.consent_revoked == true and processing.continues == true"
+      parameters: {}
+      confidence: 1.0
+      notes: "Bloqueio imediato se consentimento foi revogado"
+
+  # ===== SECAO IV: DADOS SENSIVEIS =====
+
+  "Art. 11":
+    - requirement_text: "Dados sensiveis requerem consentimento especifico"
+      policy_name: "LGPD: Sensitive Data Specific Consent"
+      policy_action: "BLOCK"
+      condition_template: "data.is_sensitive == true and consent.is_specific_for_sensitive == false"
+      parameters: {}
+      confidence: 1.0
+      notes: "Bloqueio critico para dados sensiveis (raca, saude, biometria)"
+
+  # ===== SECAO V: TERMINO DO TRATAMENTO =====
+
+  "Art. 15":
+    - requirement_text: "Termino do tratamento quando finalidade alcancada"
+      policy_name: "LGPD: Auto-Delete After Purpose Fulfilled"
+      policy_action: "LOG"
+      condition_template: "data.purpose_fulfilled == true and data.retention_days > {max_retention}"
+      parameters:
+        max_retention: 30
+      confidence: 0.85
+      notes: "Alerta para dados retidos alem da finalidade"
+
+  # ===== CAPITULO V: TRANSFERENCIA INTERNACIONAL =====
+
+  "Art. 46":
+    - requirement_text: "Transferencia internacional somente para paises adequados"
+      policy_name: "LGPD: Block Transfer to Non-Adequate Countries"
+      policy_action: "BLOCK"
+      condition_template: "transfer.destination_country not in approved_countries"
+      parameters: {}
+      confidence: 0.95
+      notes: "Lista de paises adequados: EEA, UK, Japao, Argentina"
+
+    - requirement_text: "Medidas de seguranca tecnicas e administrativas"
+      policy_name: "LGPD: Enforce Security Controls"
+      policy_action: "BLOCK"
+      condition_template: "agent.security_level < {min_security_level}"
+      parameters:
+        min_security_level: 3
+      confidence: 0.93
+      notes: "Agentes devem atender padroes minimos de seguranca (escala 1-5)"
+
+  "Art. 47":
+    - requirement_text: "Clausulas contratuais padrao necessarias"
+      policy_name: "LGPD: Require SCCs for International Transfer"
+      policy_action: "ESCALATE"
+      condition_template: "transfer.has_sccs == false and transfer.destination_country not in approved_countries"
+      parameters: {}
+      confidence: 0.90
+      notes: "SCCs (Standard Contractual Clauses) obrigatorias"
+
+  # ===== CAPITULO VI: DIREITOS DO TITULAR =====
+
+  "Art. 18":
+    - requirement_text: "Direito de acesso aos dados"
+      policy_name: "LGPD: Enable Data Access Request"
+      policy_action: "LOG"
+      condition_template: "request.type == 'data_access' and response.provided_within_15_days == false"
+      parameters: {}
+      confidence: 0.92
+      notes: "Prazo legal: 15 dias para resposta"
+
+    - requirement_text: "Direito de eliminacao de dados"
+      policy_name: "LGPD: Enable Right to Erasure"
+      policy_action: "ESCALATE"
+      condition_template: "request.type == 'data_deletion' and processing.has_legal_obligation == false"
+      parameters: {}
+      confidence: 0.88
+      notes: "Similar ao GDPR Right to be Forgotten"
+
+  # ===== CAPITULO VII: SEGURANCA =====
+
+  "Art. 48":
+    - requirement_text: "Notificacao de incidente de seguranca a ANPD"
+      policy_name: "LGPD: Auto-Notify ANPD on Breach"
+      policy_action: "ESCALATE"
+      condition_template: "incident.severity == 'critical' and incident.affects_rights == true"
+      parameters: {}
+      confidence: 1.0
+      notes: "Prazo: comunicacao em tempo razoavel (interpretacao: 72h)"
+
+  "Art. 18 - Correcao":
+    - requirement_text: "Direito de correcao de dados incompletos ou inexatos"
+      policy_name: "LGPD: Enable Data Rectification"
+      policy_action: "LOG"
+      condition_template: "request.type == 'data_correction'"
+      parameters: {}
+      confidence: 0.95
+      notes: "Titular tem direito de corrigir dados incorretos"
+
+  "Art. 18 - Portabilidade":
+    - requirement_text: "Direito de portabilidade de dados"
+      policy_name: "LGPD: Enable Data Portability"
+      policy_action: "LOG"
+      condition_template: "request.type == 'data_portability'"
+      parameters: {}
+      confidence: 0.90
+      notes: "Fornecer dados em formato estruturado e interoperavel"

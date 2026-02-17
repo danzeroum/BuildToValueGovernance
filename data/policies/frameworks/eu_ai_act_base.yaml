@@ -1,0 +1,475 @@
+# BuildToValue v3.0 - EU AI Act Base Compliance Profile
+# Regulation (EU) 2024/1689 - Artificial Intelligence Act
+#
+# Filosofia Etica Integrada:
+# - Rawls (Justica): Blind testing de praticas proibidas (Art. 5)
+# - Levinas (Cuidado): Transparencia obrigatoria (Art. 13, 52)
+# - Gilligan (Misericordia): Avaliacao contextual de risco (Art. 6 + Annex III)
+# - Jonas (Responsabilidade): Conformity assessment + EU Database (Art. 43, 71)
+#
+# Status: Production-ready
+# Version: 1.0.0
+# Last Updated: 2026-02-17
+
+id: eu_ai_act_base
+name: EU AI Act Base Compliance Profile
+description: |
+  EU Artificial Intelligence Act - Regulation (EU) 2024/1689.
+  Covers: Prohibited practices (Art. 5), High-risk classification (Art. 6),
+  Transparency (Art. 13, 52), Human oversight (Art. 14),
+  Accuracy/robustness (Art. 15), GPAI obligations (Art. 51-56).
+
+parent_id: null
+version: 1.0.0
+legal_framework: EU_AI_ACT
+jurisdiction: EU
+created_at: 2026-02-17
+updated_at: 2026-02-17
+
+# ═══════════════════════════════════════════════════════════════════
+# METADATA LEGAL
+# ═══════════════════════════════════════════════════════════════════
+
+legal_metadata:
+  law_name: "Artificial Intelligence Act"
+  law_number: "Regulation (EU) 2024/1689"
+  law_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689"
+  enforcement_authority: "AI Office (European Commission) + National Competent Authorities"
+  authority_url: "https://digital-strategy.ec.europa.eu/en/policies/ai-office"
+  effective_date: "2024-08-01"
+
+  timeline:
+    prohibited_practices: "2025-02-02"
+    gpai_obligations: "2025-08-02"
+    high_risk_annex_iii: "2026-08-02"
+    full_application: "2027-08-02"
+
+  penalties:
+    - type: "Prohibited AI practices (Art. 5)"
+      value: "Up to EUR 35 million or 7% of global annual turnover"
+    - type: "High-risk obligations breach"
+      value: "Up to EUR 15 million or 3% of global annual turnover"
+    - type: "Incorrect information to authorities"
+      value: "Up to EUR 7.5 million or 1% of global annual turnover"
+
+  definitions:
+    ai_system: "Machine-based system that generates outputs (predictions, decisions, content, recommendations) that can influence environments"
+    prohibited_practice: "AI practices that pose unacceptable risk to fundamental rights"
+    high_risk_system: "AI system in Annex III areas (biometrics, critical infrastructure, education, employment, essential services, law enforcement, justice, migration)"
+    gpai_model: "General-Purpose AI model trained with significant compute (>10^25 FLOPs = systemic risk)"
+    deployer: "Natural/legal person using AI system under its authority"
+    provider: "Natural/legal person developing AI system and placing it on market"
+
+domain_config:
+  general:
+    risk_multiplier: 2.0  # Highest penalties in global AI regulation
+    require_conformity_assessment: true
+    require_eu_database_registration: true
+    fundamental_rights_impact_assessment: true
+
+  prohibited_practices:
+    - "Subliminal manipulation beyond consciousness"
+    - "Exploitation of vulnerabilities (age, disability, socioeconomic)"
+    - "Social scoring by public authorities"
+    - "Real-time remote biometric identification in public spaces (with exceptions)"
+    - "Untargeted facial image scraping"
+    - "Emotion recognition in workplace/education"
+    - "Biometric categorization for sensitive attributes"
+    - "Predictive policing based solely on profiling"
+
+  high_risk_sectors:
+    - "Biometric identification"
+    - "Critical infrastructure (energy, transport, water, digital)"
+    - "Education and vocational training"
+    - "Employment, workers management"
+    - "Essential private/public services (credit, insurance)"
+    - "Law enforcement"
+    - "Migration, asylum, border control"
+    - "Administration of justice and democratic processes"
+
+# ═══════════════════════════════════════════════════════════════════
+# RULES
+# ═══════════════════════════════════════════════════════════════════
+
+rules:
+  # ───────────────────────────────────────────────────────────────
+  # PROHIBITED PRACTICES (Art. 5) - In force since Feb 2025
+  # ───────────────────────────────────────────────────────────────
+  - id: EUAIA_ART5_SUBLIMINAL_MANIPULATION
+    name: "Prohibited: Subliminal Manipulation"
+    description: "Block AI deploying subliminal techniques beyond consciousness (Art. 5.1.a)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["behavior_modification_validator", "transparency_validator"]
+
+    condition: |
+      agent.capabilities.contains('behavior_modification') and
+      agent.transparency_score < 0.5
+
+    legal_basis: "EU AI Act Art. 5.1.a"
+    legal_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689#art5"
+
+    contestable: true
+    mercy_eligible: false
+
+    rationale: |
+      Rawls (Justice): Manipulation violates informed consent = violates fairness.
+      EUR 35M or 7% turnover. Zero tolerance. BLOCK immediate.
+      Contestable only if system misclassified (e.g. legitimate nudging).
+
+  - id: EUAIA_ART5_VULNERABILITY_EXPLOITATION
+    name: "Prohibited: Exploitation of Vulnerabilities"
+    description: "Block AI exploiting vulnerabilities of specific groups (Art. 5.1.b)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["vulnerability_exploitation_validator"]
+
+    condition: |
+      target_demographic in ['children', 'elderly', 'disabled', 'socioeconomically_disadvantaged'] and
+      risk_score > vulnerability_threshold
+
+    parameters:
+      vulnerability_threshold: 0.7
+
+    legal_basis: "EU AI Act Art. 5.1.b"
+
+    contestable: true
+    mercy_eligible: false
+
+    rationale: |
+      Levinas (Care): Vulnerable populations deserve maximum protection.
+      Gilligan: Context matters - children in education vs children in marketing.
+      BLOCK + explain why demographic is considered vulnerable.
+
+  - id: EUAIA_ART5_SOCIAL_SCORING
+    name: "Prohibited: Social Scoring"
+    description: "Block AI-based social scoring by public authorities (Art. 5.1.c)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["social_scoring_validator"]
+
+    condition: |
+      agent.purpose == 'social_scoring' and
+      agent.operator_type == 'public_authority'
+
+    legal_basis: "EU AI Act Art. 5.1.c"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Rawls (Justice): Social scoring = structural inequality by design.
+      No contestability. No mercy. Absolute prohibition.
+
+  - id: EUAIA_ART5_BIOMETRIC_RBI
+    name: "Prohibited: Real-time Remote Biometric Identification"
+    description: "Block real-time RBI in publicly accessible spaces (Art. 5.1.h)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["biometric_validator"]
+
+    condition: |
+      agent.uses_biometric_identification == true and
+      agent.biometric_type == 'real_time_remote' and
+      agent.location_type == 'publicly_accessible'
+
+    legal_basis: "EU AI Act Art. 5.1.h"
+
+    contestable: true
+    mercy_eligible: false
+
+    rationale: |
+      Exceptions (Art. 5.2): Missing children, imminent terrorist threat,
+      serious criminal suspects. Contestable for law enforcement exceptions only.
+      Jonas (Responsibility): Surveillance power requires maximum accountability.
+
+  # ───────────────────────────────────────────────────────────────
+  # HIGH-RISK CLASSIFICATION (Art. 6)
+  # ───────────────────────────────────────────────────────────────
+  - id: EUAIA_ART6_HIGH_RISK_CLASSIFICATION
+    name: "High-Risk AI System Classification"
+    description: "Escalate AI systems in Annex III high-risk areas (Art. 6)"
+    action: ESCALATE
+    priority: 95
+    severity: HIGH
+
+    validators: ["risk_classification_validator"]
+
+    condition: |
+      agent.sector in high_risk_sectors and
+      agent.conformity_assessment_completed == false
+
+    parameters:
+      high_risk_sectors: ${domain_config.high_risk_sectors}
+
+    legal_basis: "EU AI Act Art. 6 + Annex III"
+
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+    rationale: |
+      Gilligan (Care): Classification requires contextual assessment.
+      Mercy: If sector classification uncertain (e.g. EdTech vs pure education),
+      EDUCATE provider to conduct self-assessment first.
+
+  - id: EUAIA_ART6_EMPLOYMENT_DECISIONS
+    name: "High-Risk: Employment Decision Oversight"
+    description: "Require human oversight for AI in employment decisions"
+    action: ESCALATE
+    priority: 95
+    severity: HIGH
+
+    validators: ["employment_decision_validator", "human_oversight_validator"]
+
+    condition: |
+      use_case == 'employment' and
+      decision_type in ['hiring', 'termination', 'promotion', 'task_allocation'] and
+      human_review.available == false
+
+    legal_basis: "EU AI Act Art. 6 + Annex III, point 4"
+
+    contestable: true
+    mercy_eligible: false
+
+    rationale: |
+      Rawls (Justice): Employment decisions must be fair regardless of identity.
+      No mercy: Livelihood decisions without human review = unacceptable risk.
+
+  # ───────────────────────────────────────────────────────────────
+  # TRANSPARENCY (Art. 13, 50, 52)
+  # ───────────────────────────────────────────────────────────────
+  - id: EUAIA_ART13_TRANSPARENCY_HIGH_RISK
+    name: "Transparency for High-Risk AI"
+    description: "High-risk AI must be sufficiently transparent for deployers (Art. 13)"
+    action: ESCALATE
+    priority: 90
+    severity: HIGH
+
+    validators: ["transparency_validator", "documentation_validator"]
+
+    condition: |
+      agent.risk_level == 'high' and
+      (agent.instructions_for_use_provided == false or
+       agent.limitations_disclosed == false or
+       agent.intended_purpose_documented == false)
+
+    legal_basis: "EU AI Act Art. 13"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.7
+
+    rationale: |
+      Levinas (Care): Deployers need to understand what they're deploying.
+      Mercy: If documentation in progress, EDUCATE + 30-day deadline.
+      Similar to BuildToValue BiasDeclaration (FPR, FNR, limitations).
+
+  - id: EUAIA_ART52_USER_DISCLOSURE
+    name: "Transparency: Disclose AI Interaction to Users"
+    description: "Users must be informed when interacting with AI (Art. 50)"
+    action: LOG
+    priority: 70
+    severity: MEDIUM
+
+    validators: []
+
+    condition: |
+      interaction_type == 'user_facing' and
+      ai_disclosure_shown == false
+
+    legal_basis: "EU AI Act Art. 50"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Levinas: Users have absolute right to know they're talking to AI.
+      LOG for audit trail. Repeated violations -> ESCALATE.
+
+  # ───────────────────────────────────────────────────────────────
+  # HUMAN OVERSIGHT (Art. 14)
+  # ───────────────────────────────────────────────────────────────
+  - id: EUAIA_ART14_HUMAN_OVERSIGHT
+    name: "Human Oversight for High-Risk AI"
+    description: "High-risk AI must have effective human oversight mechanisms (Art. 14)"
+    action: BLOCK
+    priority: 95
+    severity: CRITICAL
+
+    validators: ["human_oversight_validator"]
+
+    condition: |
+      agent.risk_level == 'high' and
+      agent.human_oversight_enabled == false
+
+    legal_basis: "EU AI Act Art. 14"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Gilligan (Care): Automated decisions lack context = humans must be in loop.
+      Art. 14.4: Ability to override, intervene, or stop the AI system.
+      No mercy: High-risk without oversight = deployment blocked.
+
+  # ───────────────────────────────────────────────────────────────
+  # ACCURACY, ROBUSTNESS, CYBERSECURITY (Art. 15)
+  # ───────────────────────────────────────────────────────────────
+  - id: EUAIA_ART15_ACCURACY_ROBUSTNESS
+    name: "Accuracy, Robustness, and Cybersecurity"
+    description: "High-risk AI must achieve appropriate accuracy levels (Art. 15)"
+    action: BLOCK
+    priority: 90
+    severity: HIGH
+
+    validators: ["accuracy_validator", "security_controls_validator"]
+
+    condition: |
+      agent.risk_level == 'high' and
+      (agent.validation_accuracy < min_accuracy or
+       agent.adversarial_test_passed == false or
+       agent.security_scan_passed == false)
+
+    parameters:
+      min_accuracy: 0.90
+
+    legal_basis: "EU AI Act Art. 15"
+
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.75
+
+    rationale: |
+      Jonas (Responsibility): Deploying inaccurate high-risk AI = negligence.
+      Mercy: If accuracy close to threshold and improving, EDUCATE + retest deadline.
+      Fail-secure: errors -> BLOCK (never bypass).
+
+  # ───────────────────────────────────────────────────────────────
+  # GPAI OBLIGATIONS (Art. 51-56)
+  # ───────────────────────────────────────────────────────────────
+  - id: EUAIA_ART51_GPAI_SYSTEMIC_RISK
+    name: "GPAI with Systemic Risk"
+    description: "GPAI models >10^25 FLOPs require additional obligations (Art. 51)"
+    action: ESCALATE
+    priority: 95
+    severity: HIGH
+
+    validators: ["gpai_validator"]
+
+    condition: |
+      agent.model_type == 'gpai' and
+      agent.training_compute_flops > 1e25 and
+      agent.systemic_risk_assessment_completed == false
+
+    legal_basis: "EU AI Act Art. 51"
+
+    contestable: true
+    mercy_eligible: true
+    uncertainty_threshold: 0.8
+
+    rationale: |
+      Jonas (Responsibility): Systemic risk = societal-level accountability.
+      Obligations: model evaluation, adversarial testing, incident reporting,
+      cybersecurity, energy consumption documentation.
+      Mercy: If assessment in progress, EDUCATE + 60-day deadline.
+
+  # ───────────────────────────────────────────────────────────────
+  # CONFORMITY ASSESSMENT (Art. 43)
+  # ───────────────────────────────────────────────────────────────
+  - id: EUAIA_ART43_CONFORMITY_ASSESSMENT
+    name: "Conformity Assessment for High-Risk AI"
+    description: "High-risk AI requires conformity assessment before market placement (Art. 43)"
+    action: BLOCK
+    priority: 100
+    severity: CRITICAL
+
+    validators: ["conformity_assessment_validator"]
+
+    condition: |
+      agent.risk_level == 'high' and
+      agent.conformity_assessment_completed == false and
+      agent.deployment_requested == true
+
+    legal_basis: "EU AI Act Art. 43"
+
+    contestable: false
+    mercy_eligible: false
+
+    rationale: |
+      Jonas (Responsibility): No deployment without assessment.
+      Self-assessment (most cases) or third-party (biometrics).
+      BLOCK deployment until assessment complete. Non-negotiable.
+
+  # ───────────────────────────────────────────────────────────────
+  # EU DATABASE REGISTRATION (Art. 71)
+  # ───────────────────────────────────────────────────────────────
+  - id: EUAIA_ART71_EU_DATABASE
+    name: "EU Database Registration"
+    description: "High-risk AI must be registered in EU database before deployment (Art. 71)"
+    action: ESCALATE
+    priority: 85
+    severity: HIGH
+
+    validators: ["registration_validator"]
+
+    condition: |
+      agent.risk_level == 'high' and
+      agent.eu_database_registration_id == null
+
+    legal_basis: "EU AI Act Art. 71"
+
+    contestable: false
+    mercy_eligible: true
+    uncertainty_threshold: 0.6
+
+    rationale: |
+      Public transparency through EU database.
+      Mercy: If registration submitted but pending, EDUCATE + track status.
+
+# ═══════════════════════════════════════════════════════════════════
+# ETHICAL INTEGRATION NOTES
+# ═══════════════════════════════════════════════════════════════════
+
+ethical_notes: |
+  EU AI Act compliance + ethical governance integration:
+
+  RAWLS (Justice as Fairness):
+  - Art. 5 (Prohibited practices): Blind testing = Rawls' Veil of Ignorance
+  - Art. 6 (Classification): Fair across all sectors, not just politically convenient ones
+  - Art. 10 (Training data): Representative, relevant, free from bias
+
+  LEVINAS (Duty of Care):
+  - Art. 13 (Transparency): Deployers have right to full understanding
+  - Art. 50 (User disclosure): Users have right to know about AI interaction
+  - Art. 86 (Right to explanation): Individuals affected by high-risk AI can request explanation
+
+  GILLIGAN (Ethics of Care):
+  - Art. 5.1.b (Vulnerability): Contextual protection for vulnerable groups
+  - Art. 6 + Annex III: Risk classification requires contextual assessment
+  - Art. 14 (Human oversight): Automated decisions lack human context
+
+  JONAS (Responsibility Principle):
+  - Art. 15 (Accuracy): Technical robustness = accountability for quality
+  - Art. 43 (Conformity): Assessment before deployment = precautionary principle
+  - Art. 51 (GPAI): Systemic risk = proportional responsibility
+  - Art. 71 (EU Database): Public accountability through registration
+
+changelog:
+  - version: 1.0.0
+    date: 2026-02-17
+    author: "Daniel Camargo + Ethical Committee"
+    changes:
+      - "Initial EU AI Act base profile"
+      - "14 rules: Prohibited (4), High-risk (2), Transparency (2), Oversight (1), Accuracy (1), GPAI (1), Conformity (1), Registration (1), Employment (1)"
+      - "Integrated ethical frameworks (Rawls, Levinas, Gilligan, Jonas)"
+      - "Highest penalty tier in global AI regulation (EUR 35M / 7%)"
+      - "Timeline-aware: prohibited practices already in force"
