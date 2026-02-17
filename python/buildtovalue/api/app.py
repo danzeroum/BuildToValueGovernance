@@ -1,23 +1,81 @@
 """
-BuildToValue Governance API v1.2
+BuildToValue Governance API v1.3
 Python side of the República Algorítmica (Judiciário).
-Receives evidence from Rust Gateway, returns ethical verdict.
+Trust scores persist in SQLite.
 """
 
 import time
 import uuid
 import hmac
 import hashlib
-import json
-from dataclasses import dataclass, field, asdict
-from typing import Optional, Dict, Any, List
+import sqlite3
+import os
+from typing import Optional, List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 
 # ═══════════════════════════════════════════════════════════════
-# MODELS (Pydantic - HTTP contracts)
+# DATABASE
+# ═══════════════════════════════════════════════════════════════
+
+DB_PATH = os.environ.get("BTV_DB_PATH", "data/trust.db")
+
+
+def init_db():
+    os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id TEXT PRIMARY KEY,
+            trust_score REAL NOT NULL DEFAULT 0.5,
+            offenses INTEGER NOT NULL DEFAULT 0,
+            total_requests INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def db_get_session(session_id: str) -> dict:
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT trust_score, offenses, total_requests FROM sessions WHERE session_id = ?",
+        (session_id,)
+    ).fetchone()
+    conn.close()
+    if row:
+        return {"trust_score": row[0], "offenses": row[1], "total_requests": row[2]}
+    return {"trust_score": 0.5, "offenses": 0, "total_requests": 0}
+
+
+def db_update_session(session_id: str, trust_score: float, offense_delta: int):
+    conn = sqlite3.connect(DB_PATH)
+    existing = conn.execute(
+        "SELECT session_id FROM sessions WHERE session_id = ?",
+        (session_id,)
+    ).fetchone()
+    if existing:
+        conn.execute("""
+            UPDATE sessions
+            SET trust_score = ?, offenses = offenses + ?, total_requests = total_requests + 1,
+                updated_at = datetime('now')
+            WHERE session_id = ?
+        """, (trust_score, offense_delta, session_id))
+    else:
+        conn.execute("""
+            INSERT INTO sessions (session_id, trust_score, offenses, total_requests)
+            VALUES (?, ?, ?, 1)
+        """, (session_id, trust_score, offense_delta))
+    conn.commit()
+    conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODELS
 # ═══════════════════════════════════════════════════════════════
 
 class EvidenceRequest(BaseModel):
@@ -59,14 +117,6 @@ def calculate_mercy(
     trust_score: float,
     is_first_offense: bool,
 ) -> tuple[bool, str]:
-    """
-    Misericordia Algoritmica (Gilligan):
-    - uncertainty > 0.3 (risk < 0.7)
-    - trust > 0.6
-    - critical == 0
-    - first offense
-    -> abrandar um nivel
-    """
     uncertainty = 1.0 - composite_risk
 
     if critical_count > 0:
@@ -90,7 +140,6 @@ def calculate_mercy(
 
 
 def soften_action(action: str) -> str:
-    """Abrandar um nivel (Levinas: educar antes de punir)."""
     scale = {"BLOCK": "EDUCATE", "REDACT": "LOG", "EDUCATE": "LOG", "LOG": "ALLOW"}
     return scale.get(action, action)
 
@@ -99,49 +148,40 @@ def soften_action(action: str) -> str:
 # TRUST SCORE
 # ═══════════════════════════════════════════════════════════════
 
-SESSION_TRUST: Dict[str, float] = {}
-
-
 def get_trust_score(session_id: Optional[str]) -> float:
     if not session_id:
         return 0.5
-    return SESSION_TRUST.get(session_id, 0.5)
+    return db_get_session(session_id)["trust_score"]
 
 
-def update_trust(session_id: Optional[str], action: str):
+def update_trust(session_id: Optional[str], action: str) -> float:
     if not session_id:
-        return
-    current = SESSION_TRUST.get(session_id, 0.5)
+        return 0.5
+    session = db_get_session(session_id)
+    current = session["trust_score"]
     if action in ("ALLOW", "LOG"):
         current = min(1.0, current + 0.02)
     elif action == "EDUCATE":
         current = max(0.0, current - 0.05)
     elif action == "BLOCK":
         current = max(0.0, current - 0.15)
-    SESSION_TRUST[session_id] = current
+    offense_delta = 1 if action not in ("ALLOW", "LOG") else 0
+    db_update_session(session_id, current, offense_delta)
+    return current
 
 
 # ═══════════════════════════════════════════════════════════════
 # OFFENSE TRACKER
 # ═══════════════════════════════════════════════════════════════
 
-SESSION_OFFENSES: Dict[str, int] = {}
-
-
 def is_first_offense(session_id: Optional[str]) -> bool:
     if not session_id:
         return True
-    return SESSION_OFFENSES.get(session_id, 0) == 0
-
-
-def record_offense(session_id: Optional[str], action: str):
-    if not session_id or action in ("ALLOW", "LOG"):
-        return
-    SESSION_OFFENSES[session_id] = SESSION_OFFENSES.get(session_id, 0) + 1
+    return db_get_session(session_id)["offenses"] == 0
 
 
 # ═══════════════════════════════════════════════════════════════
-# SIGN VERDICT (Jonas: responsabilidade)
+# SIGN VERDICT (Jonas)
 # ═══════════════════════════════════════════════════════════════
 
 def sign_verdict(verdict_id: str, action: str, risk: float) -> str:
@@ -150,7 +190,7 @@ def sign_verdict(verdict_id: str, action: str, risk: float) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════
-# RATIONALE (explain_decision - obrigatorio)
+# RATIONALE (explain_decision)
 # ═══════════════════════════════════════════════════════════════
 
 def build_rationale(
@@ -172,7 +212,6 @@ def build_rationale(
         parts.append(f"Mercy applied: {original_action} -> {final_action}. {mercy_reason}.")
     else:
         parts.append(f"Final action: {final_action}. {mercy_reason}.")
-
     parts.append("Decision signed (HMAC-SHA256). Contestable within 24h.")
     return " ".join(parts)
 
@@ -181,7 +220,7 @@ def build_rationale(
 # FASTAPI APP
 # ═══════════════════════════════════════════════════════════════
 
-app = FastAPI(title="BuildToValue Governance", version="1.2.0")
+app = FastAPI(title="BuildToValue Governance", version="1.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -191,6 +230,11 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def startup():
+    init_db()
+
+
 @app.post("/v1/decide", response_model=VerdictResponse)
 def decide(req: EvidenceRequest):
     start = time.perf_counter()
@@ -198,7 +242,7 @@ def decide(req: EvidenceRequest):
     verdict_id = f"verd_{uuid.uuid4().hex[:12]}"
     session_id = req.session_id
 
-    # ALLOW - just update trust, no judgment needed
+    # ALLOW - update trust, no judgment
     if req.action == "ALLOW":
         trust = get_trust_score(session_id)
         update_trust(session_id, "ALLOW")
@@ -218,10 +262,9 @@ def decide(req: EvidenceRequest):
             latency_ms=latency,
         )
 
-    # Hard blocks are non-negotiable (Rawls: justice first)
+    # Hard blocks non-negotiable (Rawls)
     if req.hard_blocked:
         update_trust(session_id, "BLOCK")
-        record_offense(session_id, "BLOCK")
         sig = sign_verdict(verdict_id, "BLOCK", req.composite_risk)
         latency = (time.perf_counter() - start) * 1000
         return VerdictResponse(
@@ -258,7 +301,6 @@ def decide(req: EvidenceRequest):
 
     # Update session state
     update_trust(session_id, final_action)
-    record_offense(session_id, final_action)
 
     latency = (time.perf_counter() - start) * 1000
 
@@ -279,18 +321,24 @@ def decide(req: EvidenceRequest):
 
 @app.get("/health")
 def health():
+    conn = sqlite3.connect(DB_PATH)
+    sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+    conn.close()
     return {
         "status": "healthy",
         "service": "btv-governance",
-        "sessions_tracked": len(SESSION_TRUST),
-        "version": "1.2.0",
+        "sessions_tracked": sessions,
+        "persistence": "sqlite",
+        "version": "1.3.0",
     }
 
 
 @app.get("/v1/trust/{session_id}")
 def get_trust(session_id: str):
+    session = db_get_session(session_id)
     return {
         "session_id": session_id,
-        "trust_score": get_trust_score(session_id),
-        "offenses": SESSION_OFFENSES.get(session_id, 0),
+        "trust_score": session["trust_score"],
+        "offenses": session["offenses"],
+        "total_requests": session["total_requests"],
     }
