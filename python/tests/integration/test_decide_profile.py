@@ -7,7 +7,7 @@ Tests the full Python governance flow:
 
 import pytest
 from fastapi.testclient import TestClient
-from buildtovalue.api.app import app, startup
+from buildtovalue.api.app import app
 
 
 @pytest.fixture(scope="module")
@@ -16,8 +16,8 @@ def client():
     import os
     os.environ.pop("BTV_API_KEYS", None)
     os.environ["BTV_ENV"] = "development"
-    startup()
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c
 
 
 # ═══════════════════════════════════════════════════════════════
