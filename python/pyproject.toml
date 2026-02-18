@@ -46,6 +46,9 @@ dev = [
     "ruff>=0.1.9",
     "mypy>=1.8.0",
 ]
+slm = [
+    "llama-cpp-python>=0.3.0",
+]
 otel = [
     "opentelemetry-api>=1.22.0",
     "opentelemetry-sdk>=1.22.0",
