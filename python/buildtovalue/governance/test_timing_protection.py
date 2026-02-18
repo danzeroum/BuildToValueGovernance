@@ -103,6 +103,27 @@ class TestConstantTimeOps:
         assert not ct_ops.constant_time_range_check(11, 1, 10)
 
 
+    def constant_time_range_check(value: int, min_val: int, max_val: int) -> bool:
+        """
+        Verifica se valor está em range (constant-time).
+
+        Args:
+            value: Valor a verificar
+            min_val: Mínimo (inclusivo)
+            max_val: Máximo (inclusivo)
+
+        Returns:
+            True se value em [min_val, max_val]
+        """
+        # Evaluate both conditions (no short-circuit)
+        above_min = value >= min_val
+        below_max = value <= max_val
+        # Force both to be evaluated by combining results
+        result_a = above_min
+        result_b = below_max
+        return result_a and result_b
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # TESTES RESPONSE TIME NORMALIZATION
 # ═══════════════════════════════════════════════════════════════════════════
