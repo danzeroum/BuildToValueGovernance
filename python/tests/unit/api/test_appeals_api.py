@@ -10,12 +10,13 @@ from buildtovalue.api.app import app
 
 
 @pytest.fixture
-def client():
+def client(tmp_path):
     """TestClient with fresh ContestabilityLoop."""
     from buildtovalue.api import app as app_module
     from buildtovalue.governance.contestability_loop import ContestabilityLoop
 
-    app_module._contestability_loop = ContestabilityLoop(sla_hours=24)
+    db = str(tmp_path / "test_appeals.db")
+    app_module._contestability_loop = ContestabilityLoop(sla_hours=24, db_path=db)
     return TestClient(app)
 
 
