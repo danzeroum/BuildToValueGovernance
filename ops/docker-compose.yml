@@ -15,9 +15,6 @@ services:
       - BTV_GOVERNANCE_URL=http://governance:8000
 
   governance:
-    environment:
-      - BTV_HMAC_KEY=${BTV_HMAC_KEY:-btv-dev-key-NOT-FOR-PRODUCTION}
-      - BTV_ENV=${BTV_ENV:-development}
     build:
       context: ..
       dockerfile: ops/Dockerfile.python
@@ -25,12 +22,22 @@ services:
       - "8000:8000"
     volumes:
       - trust_data:/app/data
+      - ./models:/app/models
+    environment:
+      - BTV_HMAC_KEY=${BTV_HMAC_KEY:-btv-dev-key-NOT-FOR-PRODUCTION!!}
+      - BTV_ENV=${BTV_ENV:-development}
+      - BTV_SLM_MODEL_PATH=/app/models/qwen2.5-3b-instruct-q4_k_m.gguf
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: "4"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 5s
-      timeout: 3s
+      interval: 10s
+      timeout: 5s
       retries: 3
-      start_period: 5s
+      start_period: 30s
 
   prometheus:
     image: prom/prometheus:latest
