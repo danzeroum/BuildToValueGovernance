@@ -30,6 +30,7 @@ page = st.sidebar.radio("Navigation", [
     "Audit Ledger",
     "Appeals",
     "Webhooks",
+    "FRIA",
     "Metrics",
 ])
 
@@ -427,6 +428,82 @@ elif page == "Webhooks":
                 st.json(resp.json())
             except Exception as e:
                 st.error(f"Error: {e}")
+
+# ═══════════════════════════════════════════════════════════════
+# FRIA — Fundamental Rights Impact Assessment
+# ═══════════════════════════════════════════════════════════════
+
+elif page == "FRIA":
+    st.title("Fundamental Rights Impact Assessment")
+    st.caption("EU AI Act Art. 27 — auto-generated with manual review sections")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        agent_id = st.text_input("Agent ID", value="my-agent")
+        sector = st.selectbox("Sector", [
+            "healthcare", "employment", "education", "banking",
+            "insurance", "law_enforcement", "justice", "migration",
+            "biometric", "critical_infrastructure", "essential_services",
+            "democratic_processes", "marketing", "general_commercial", "general",
+        ])
+    with col2:
+        caps = st.multiselect("Capabilities", [
+            "chatbot", "deepfake_generation", "synthetic_content",
+            "emotion_detection", "biometric_categorization",
+            "subliminal_manipulation", "social_scoring_public",
+            "real_time_biometric_public", "predictive_policing_profiling",
+        ])
+        safety = st.checkbox("Safety component")
+        rights = st.checkbox("Affects fundamental rights")
+
+    if st.button("Generate FRIA", type="primary"):
+        try:
+            payload = {
+                "agent_id": agent_id,
+                "sector": sector,
+                "capabilities": caps,
+                "deployment_context": {
+                    "safety_component": safety,
+                    "affects_fundamental_rights": rights,
+                },
+            }
+            resp = requests.post(
+                f"{GOVERNANCE_URL}/v1/compliance/fria/generate",
+                json=payload, timeout=10,
+            )
+            data = resp.json()
+
+            risk = data.get("risk_level", "?")
+            colors = {
+                "PROHIBITED": "red", "HIGH_RISK": "orange",
+                "LIMITED_RISK": "blue", "MINIMAL_RISK": "green",
+            }
+            st.markdown(f"### Risk: :{colors.get(risk, 'gray')}[{risk}]")
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Sections", data.get("total_sections", 0))
+            c2.metric("Auto-filled", data.get("auto_filled", 0))
+            c3.metric("Manual pending", data.get("manual_pending", 0))
+
+            st.markdown(f"**Overall risk:** {data.get('overall_risk', '?')}")
+            st.info(data.get("summary", ""))
+
+            for section in data.get("sections", []):
+                risk_ind = section.get("risk_indicator", "?")
+                sec_colors = {"LOW": "green", "MEDIUM": "orange", "HIGH": "red", "CRITICAL": "red"}
+                icon = "pencil" if section.get("manual_required") else "white_check_mark"
+                with st.expander(
+                    f":{icon}: {section['section_id']} — {section['title']} "
+                    f"(:{sec_colors.get(risk_ind, 'gray')}[{risk_ind}])"
+                ):
+                    st.markdown(f"**Question:** {section['question']}")
+                    st.markdown(f"**Auto-answer:** {section['auto_answer']}")
+                    st.caption(f"Article: {section['article_ref']}")
+                    if section.get("manual_required"):
+                        st.warning("Manual review required")
+
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 # ═══════════════════════════════════════════════════════════════
 # METRICS
