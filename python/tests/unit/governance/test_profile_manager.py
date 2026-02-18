@@ -6,7 +6,7 @@ Coverage: Herança, Override, Merge.
 
 import pytest
 from pathlib import Path
-from .profile_manager import ProfileManager, Profile, PolicyRule
+from buildtovalue.governance.profile_manager import ProfileManager, Profile, PolicyRule
 
 
 # ═══════════════════════════════════════════════════════════════════════════

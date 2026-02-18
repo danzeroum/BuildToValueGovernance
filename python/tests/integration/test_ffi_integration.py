@@ -6,6 +6,9 @@ Gate: Day 21 - Compliance Integration
 """
 
 import pytest
+
+pytestmark = pytest.mark.ffi
+
 import time
 from buildtovalue.ffi.rust_validators import get_rust_validators, Finding
 

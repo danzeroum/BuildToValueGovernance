@@ -26,7 +26,7 @@ class TestHmacKeyLoading:
 
         from buildtovalue.api.app import _load_hmac_key
         key = _load_hmac_key()
-        assert key == b"btv-dev-key-NOT-FOR-PRODUCTION"
+        assert key == b"btv-dev-key-NOT-FOR-PRODUCTION!!"
 
     def test_production_fails_without_key(self, monkeypatch):
         """Production without BTV_HMAC_KEY must fail-secure."""
@@ -45,7 +45,7 @@ class TestHmacKeyLoading:
         from buildtovalue.api.app import _load_hmac_key
         key = _load_hmac_key()
         # Empty string is falsy → falls through to dev fallback
-        assert key == b"btv-dev-key-NOT-FOR-PRODUCTION"
+        assert key == b"btv-dev-key-NOT-FOR-PRODUCTION!!"
 
 
 class TestSignatureWithEnvKey:
