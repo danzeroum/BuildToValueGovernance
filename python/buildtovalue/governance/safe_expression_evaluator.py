@@ -95,6 +95,7 @@ class SafeExpressionEvaluator:
         'upper', 'lower', 'strip', 'split',
         'startswith', 'endswith',
         'pow', 'divmod',
+        'contains', 'days_since',  # P1: compliance builtins
     }
 
     OPERATORS: Dict[type, Callable] = {
