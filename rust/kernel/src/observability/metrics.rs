@@ -1,81 +1,116 @@
-//! Prometheus metrics v1.9.0 (ADR-019)
-//! Feature-gated: only compiled with `observability` feature.
+//! Observability Metrics v1.9.0 — Kernel-level Prometheus metrics.
+//! Per-module latency, finding counts, and error tracking.
+//!
+//! Filosofia (Jonas): Monitorar é responsabilidade proporcional ao poder.
 
-use lazy_static::lazy_static;
 use prometheus::{
-    IntCounterVec, HistogramVec, Gauge,
-    register_int_counter_vec, register_histogram_vec, register_gauge,
+    register_histogram_vec, register_counter_vec, register_gauge,
+    HistogramVec, CounterVec, Gauge,
 };
+use lazy_static::lazy_static;
 
 lazy_static! {
-    pub static ref VALIDATION_REQUESTS: IntCounterVec = register_int_counter_vec!(
-        "btv_validation_requests_total",
-        "Total validation requests",
-        &["profile"]
-    ).expect("metric: validation_requests");
-
-    pub static ref FINDINGS_DETECTED: IntCounterVec = register_int_counter_vec!(
-        "btv_findings_detected_total",
-        "Findings detected by type and severity",
-        &["finding_type", "severity"]
-    ).expect("metric: findings_detected");
-
-    pub static ref VALIDATION_LATENCY: HistogramVec = register_histogram_vec!(
-        "btv_validation_duration_seconds",
-        "Validation latency in seconds",
-        &["profile"],
+    // ── Scan metrics ──────────────────────────────────────────
+    pub static ref SCAN_DURATION: HistogramVec = register_histogram_vec!(
+        "btv_kernel_scan_duration_seconds",
+        "Gatekeeper scan_for_evidence latency",
+        &["module"],
         vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1]
-    ).expect("metric: validation_latency");
+    ).unwrap();
 
-    pub static ref VALIDATOR_LATENCY: HistogramVec = register_histogram_vec!(
-        "btv_validator_duration_seconds",
-        "Per-validator latency",
-        &["validator"],
-        vec![0.0001, 0.0005, 0.001, 0.005, 0.01]
-    ).expect("metric: validator_latency");
+    pub static ref FINDINGS_TOTAL: CounterVec = register_counter_vec!(
+        "btv_kernel_findings_total",
+        "Total findings by module and severity",
+        &["module", "severity"]
+    ).unwrap();
 
-    pub static ref KERNEL_UPTIME: Gauge = register_gauge!(
-        "btv_kernel_uptime_seconds",
-        "Kernel uptime in seconds"
-    ).expect("metric: kernel_uptime");
-
-    pub static ref MERCY_APPLIED: IntCounterVec = register_int_counter_vec!(
-        "btv_mercy_applied_total",
-        "Mercy decisions applied",
-        &["reason"]
-    ).expect("metric: mercy_applied");
-
-    pub static ref APPEALS_TOTAL: IntCounterVec = register_int_counter_vec!(
-        "btv_appeals_total",
-        "Appeals by result",
-        &["result"]
-    ).expect("metric: appeals_total");
-
-    pub static ref BIAS_FP_RATE: prometheus::GaugeVec = prometheus::register_gauge_vec!(
-        "btv_bias_false_positive_rate",
-        "False positive rate by module",
+    pub static ref CRITICAL_FINDINGS: CounterVec = register_counter_vec!(
+        "btv_kernel_critical_findings_total",
+        "Critical findings by module",
         &["module"]
-    ).expect("metric: bias_fp_rate");
+    ).unwrap();
+
+    // ── Policy metrics ────────────────────────────────────────
+    pub static ref POLICY_DECISIONS: CounterVec = register_counter_vec!(
+        "btv_kernel_policy_decisions_total",
+        "Policy decisions by action",
+        &["action"]
+    ).unwrap();
+
+    pub static ref HARD_BLOCKS: CounterVec = register_counter_vec!(
+        "btv_kernel_hard_blocks_total",
+        "Hard block triggers by term",
+        &["term"]
+    ).unwrap();
+
+    // ── Deobfuscation metrics ─────────────────────────────────
+    pub static ref DEOBFUSCATION_LAYERS: CounterVec = register_counter_vec!(
+        "btv_kernel_deobfuscation_layers_total",
+        "Deobfuscation layers applied",
+        &["layer_type"]
+    ).unwrap();
+
+    // ── Session metrics ───────────────────────────────────────
+    pub static ref ACTIVE_SESSIONS: Gauge = register_gauge!(
+        "btv_kernel_active_sessions",
+        "Current tracked sessions"
+    ).unwrap();
+
+    pub static ref DRIFT_EVENTS: CounterVec = register_counter_vec!(
+        "btv_kernel_drift_events_total",
+        "Session drift events by level",
+        &["level"]
+    ).unwrap();
+
+    // ── Network metrics ───────────────────────────────────────
+    pub static ref IP_CLASSIFICATIONS: CounterVec = register_counter_vec!(
+        "btv_kernel_ip_classifications_total",
+        "IP classifications by category",
+        &["category"]
+    ).unwrap();
+
+    // ── Error metrics ─────────────────────────────────────────
+    pub static ref ERRORS_TOTAL: CounterVec = register_counter_vec!(
+        "btv_kernel_errors_total",
+        "Errors by module",
+        &["module"]
+    ).unwrap();
 }
 
-pub struct Metrics;
-pub struct MetricsGuard {
-    timer: Option<prometheus::HistogramTimer>,
+/// Record a scan duration for a specific module.
+pub fn record_scan(module: &str, duration_secs: f64) {
+    SCAN_DURATION.with_label_values(&[module]).observe(duration_secs);
 }
 
-impl Metrics {
-    #[inline]
-    pub fn start_validation_timer(profile: &str) -> MetricsGuard {
-        MetricsGuard {
-            timer: Some(VALIDATION_LATENCY.with_label_values(&[profile]).start_timer()),
-        }
+/// Record a finding.
+pub fn record_finding(module: &str, severity: &str) {
+    FINDINGS_TOTAL.with_label_values(&[module, severity]).inc();
+}
+
+/// Record a policy decision.
+pub fn record_policy_decision(action: &str) {
+    POLICY_DECISIONS.with_label_values(&[action]).inc();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_record_scan_no_panic() {
+        record_scan("gatekeeper", 0.015);
+        record_scan("validators", 0.003);
     }
-}
 
-impl Drop for MetricsGuard {
-    fn drop(&mut self) {
-        if let Some(timer) = self.timer.take() {
-            timer.observe_duration();
-        }
+    #[test]
+    fn test_record_finding_no_panic() {
+        record_finding("cpf", "critical");
+        record_finding("email", "medium");
+    }
+
+    #[test]
+    fn test_record_policy_decision_no_panic() {
+        record_policy_decision("BLOCK");
+        record_policy_decision("ALLOW");
     }
 }

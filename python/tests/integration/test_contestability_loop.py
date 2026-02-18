@@ -6,7 +6,7 @@ Coverage: SLA, Appeals, Metrics.
 
 import pytest
 import time
-from .contestability_loop import ContestabilityLoop, Appeal, AppealStatus
+from buildtovalue.governance.contestability_loop import ContestabilityLoop, Appeal, AppealStatus
 
 
 # ═══════════════════════════════════════════════════════════════════════════

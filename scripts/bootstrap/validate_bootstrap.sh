@@ -9,7 +9,7 @@ ERRORS=0
 WARNINGS=0
 
 echo "════════════════════════════════════════════════════════════════"
-echo "🔍 BuildToValue v2.2 Bootstrap Validation"
+echo "🔍 BuildToValue v1.0 Bootstrap Validation"
 echo "════════════════════════════════════════════════════════════════"
 
 # Check Rust

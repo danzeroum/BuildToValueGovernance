@@ -3,7 +3,7 @@ members = ["kernel", "bindings", "cli", "gateway"]
 resolver = "2"
 
 [workspace.package]
-version = "2.3.1"
+version = "1.0.0"
 edition = "2021"
 authors = ["BuildToValue Team <team@buildtovalue.com>"]
 license = "Apache-2.0"
@@ -23,7 +23,7 @@ thiserror = "1.0"
 tracing = "0.1"
 tokio = { version = "1.44.0", features = ["rt", "rt-multi-thread", "macros", "sync"] }
 anyhow = "1.0"
-lazy_static = "1.4"
+lazy_static = "1.5.0"
 log = "0.4"
 regex = "1.10"
 base64 = "0.22"

@@ -83,6 +83,6 @@ pub mod tracing {
 // ═══════════════════════════════════════════════════════════════════════════
 // RE-EXPORTS
 // ═══════════════════════════════════════════════════════════════════════════
-pub use metrics::Metrics;
+pub use metrics::*;
 pub use tracing::init_tracer;
 pub use threat_ingestor::ThreatIngestor;

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "buildtovalue"
-version = "2.2.0"
+version = "1.0.0"
 description = "Sovereign Trust OS - Ethical AI Governance Infrastructure"
 authors = [
     {name = "BuildToValue Team", email = "team@buildtovalue.com"}
@@ -68,7 +68,7 @@ Issues = "https://github.com/buildtovalue/sovereign-trust-os/issues"
 packages = ["buildtovalue"]
 
 [tool.pytest.ini_options]
-testpaths = ["buildtovalue", "tests"]
+testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

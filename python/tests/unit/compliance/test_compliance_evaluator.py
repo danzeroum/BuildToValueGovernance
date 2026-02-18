@@ -68,7 +68,7 @@ class TestDaysSince:
 @pytest.fixture
 def evaluator():
     """Load real compliance YAMLs from repo root."""
-    repo_root = Path(__file__).resolve().parents[3]  # python/buildtovalue/compliance/ → repo root
+    repo_root = Path(__file__).resolve().parents[4]  # python/buildtovalue/compliance/ → repo root
     compliance_dir = repo_root / "data" / "policies" / "compliance"
     return ComplianceEvaluator(compliance_dir=compliance_dir)
 

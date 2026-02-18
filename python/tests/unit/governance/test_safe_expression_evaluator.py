@@ -6,11 +6,8 @@ Simplified version - apenas testes críticos para Gate G0.
 
 import pytest
 import time
-from safe_expression_evaluator import (
-    SafeExpressionEvaluator,
-    SecurityError,
-    ExpressionTimeoutError,
-    EvaluationResult
+from buildtovalue.governance.safe_expression_evaluator import (
+    SafeExpressionEvaluator
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -170,7 +167,7 @@ class TestEdgeCases:
 # ═══════════════════════════════════════════════════════════════════════════
 # TESTES DE COMPLIANCE
 # ═══════════════════════════════════════════════════════════════════════════
-
+import builtins
 @pytest.mark.security
 class TestComplianceGateG0:
     """Testes de conformidade para Gate G0."""

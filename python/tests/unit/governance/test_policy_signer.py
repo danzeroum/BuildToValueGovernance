@@ -214,7 +214,7 @@ class TestSecurity:
         """Assinaturas devem ser únicas por timestamp."""
         signed1 = signer.sign_policy(sample_policy)
 
-        time.sleep(0.01)  # Garante timestamp diferente
+        time.sleep(1.1)  # Garante timestamp diferente
 
         signed2 = signer.sign_policy(sample_policy)
 
