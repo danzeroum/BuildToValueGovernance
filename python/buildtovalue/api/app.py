@@ -1,7 +1,9 @@
 """
-BuildToValue Governance API v2.1
+BuildToValue Governance API v2.2
 Python side of the República Algorítmica (Judiciário).
 Trust scores persist in SQLite. Appeals via ContestabilityLoop.
+SLM Classifier (ADR-027) for semantic ambiguity zone.
+EthicalContextEngine (P8) orchestrates mercy + trust + HMAC.
 """
 
 import hashlib
@@ -19,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from enum import Enum
 
+from buildtovalue.intelligence.slm_classifier import SLMClassifier
 from buildtovalue.compliance.plugin import ComplianceReport
 from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
 from buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
@@ -28,9 +31,16 @@ from buildtovalue.governance.contestability_loop import (
 )
 from buildtovalue.governance.profile_manager import ProfileManager
 from buildtovalue.governance.sector_loader import SectorLoader
+from buildtovalue.governance.context_engine import (
+    EthicalContextEngine,
+    RequestContext,
+    RustEvidence,
+)
+from buildtovalue.governance.mercy_scenarios import ACTION_SEVERITY, SEVERITY_ACTION
 from buildtovalue.api.auth import require_api_key
 from buildtovalue.api.routes.intelligence import get_ingestor, hydrate_from_sqlite
 from buildtovalue.intelligence.misp_ingestor import ThreatEvent as BridgeThreatEvent
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +59,7 @@ def _load_hmac_key() -> bytes:
             "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
         )
     logger.warning("BTV_HMAC_KEY not set — using dev fallback.")
-    return b"btv-dev-key-NOT-FOR-PRODUCTION"
+    return b"btv-dev-key-NOT-FOR-PRODUCTION!!"
 
 
 HMAC_KEY = _load_hmac_key()
@@ -119,7 +129,9 @@ def db_update_session(session_id: str, trust_score: float, offense_delta: int):
 # MODELS — Governance
 # ═══════════════════════════════════════════════════════════════
 
-class EvidenceRequest(BaseModel):
+class DecideRequest(BaseModel):
+    """Request from Rust Gateway (or direct call)."""
+    input_text: str = ""
     finding_count: int = 0
     critical_count: int = 0
     composite_risk: float = 0.0
@@ -130,14 +142,24 @@ class EvidenceRequest(BaseModel):
     trust_score: Optional[float] = None
     is_first_offense: Optional[bool] = None
     profile: Optional[str] = None
-    input_text: Optional[str] = None
+    # Evidence metadata
+    entropy: float = 0.0
+    total_chars: int = 0
+    blake3_hash: str = ""
+    max_finding_confidence: float = 0.0
+    # Context (from Rust Network/Session modules)
+    ip_risk: str = "Low"
+    ip_jurisdiction: str = "XX"
+    drift_level: str = "None"
 
 
-class VerdictResponse(BaseModel):
+class DecideResponse(BaseModel):
     verdict_id: str
     action: str
     original_action: str
     mercy_applied: bool
+    mercy_scenario: str = ""
+    mercy_score: float = 0.0
     trust_score: float
     adjusted_risk: float
     rationale: str
@@ -145,6 +167,9 @@ class VerdictResponse(BaseModel):
     appeal_deadline_hours: int
     signature: str
     latency_ms: float
+    slm_used: bool = False
+    slm_intent: Optional[str] = None
+    slm_risk: Optional[float] = None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -238,34 +263,6 @@ COMPLIANCE_PLUGINS = {
 }
 
 
-def calculate_mercy(
-    composite_risk: float,
-    critical_count: int,
-    trust_score: float,
-    is_first_offense: bool,
-) -> tuple:
-    uncertainty = 1.0 - composite_risk
-    if critical_count > 0:
-        return False, "Critical findings present - mercy denied"
-    if uncertainty > 0.3 and trust_score > 0.6 and is_first_offense:
-        return True, (
-            f"Mercy granted (Gilligan): uncertainty={uncertainty:.2f}, "
-            f"trust={trust_score:.2f}, first_offense=True, critical=0"
-        )
-    reasons = []
-    if uncertainty <= 0.3:
-        reasons.append(f"risk too high ({composite_risk:.0%})")
-    if trust_score <= 0.6:
-        reasons.append(f"trust too low ({trust_score:.2f})")
-    if not is_first_offense:
-        reasons.append("repeat offense")
-    return False, f"Mercy denied: {', '.join(reasons)}"
-
-
-def soften_action(action: str) -> str:
-    return {"BLOCK": "EDUCATE", "REDACT": "LOG", "EDUCATE": "LOG", "LOG": "ALLOW"}.get(action, action)
-
-
 def get_trust_score(session_id: Optional[str]) -> float:
     if not session_id:
         return 0.5
@@ -299,25 +296,6 @@ def sign_verdict(verdict_id: str, action: str, risk: float) -> str:
     return hmac.new(HMAC_KEY, payload.encode(), hashlib.sha256).hexdigest()
 
 
-def build_rationale(
-    original_action: str, final_action: str,
-    mercy_applied: bool, mercy_reason: str,
-    trust_score: float, risk: float,
-    findings: int, critical: int,
-) -> str:
-    parts = [
-        f"Input analysis: {findings} finding(s), {critical} critical, risk {risk:.0%}.",
-        f"Policy recommendation: {original_action}.",
-        f"Trust score: {trust_score:.2f}.",
-    ]
-    if mercy_applied:
-        parts.append(f"Mercy applied: {original_action} -> {final_action}. {mercy_reason}.")
-    else:
-        parts.append(f"Final action: {final_action}. {mercy_reason}.")
-    parts.append("Decision signed (HMAC-SHA256). Contestable within 24h.")
-    return " ".join(parts)
-
-
 def _appeal_to_response(appeal) -> AppealResponse:
     return AppealResponse(
         appeal_id=appeal.appeal_id,
@@ -334,11 +312,41 @@ def _appeal_to_response(appeal) -> AppealResponse:
     )
 
 
+def _resolve_domain(profile: Optional[str]) -> str:
+    mapping = {
+        "medical": "medical",
+        "healthcare": "medical",
+        "financial": "finance",
+        "legal": "legal",
+        "research": "research",
+        "education": "education",
+    }
+    return mapping.get(profile or "", "general")
+
+
+def _resolve_role(session_id: str) -> str:
+    """In prod: lookup from session DB. For now: anonymous."""
+    return "anonymous"
+
+
+def _load_slm_config() -> dict:
+    """Load SLM config from YAML. Returns empty dict if not found."""
+    try:
+        import yaml
+        config_path = Path(__file__).resolve().parent.parent.parent.parent / "data" / "policies" / "core" / "slm.yaml"
+        if config_path.exists():
+            with open(config_path) as f:
+                return yaml.safe_load(f).get("slm", {})
+    except Exception as e:
+        logger.warning("Failed to load SLM config: %s", e)
+    return {}
+
+
 # ═══════════════════════════════════════════════════════════════
 # FASTAPI APP + ROUTERS
 # ═══════════════════════════════════════════════════════════════
 
-app = FastAPI(title="BuildToValue Governance", version="2.1.0")
+app = FastAPI(title="BuildToValue Governance", version="2.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -347,7 +355,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Register modular routers ──────────────────────────────────
 from buildtovalue.api.routes.intelligence import router as intelligence_router
 from buildtovalue.api.routes.ledger import router as ledger_router
 from buildtovalue.api.routes.webhooks import router as webhooks_router
@@ -357,6 +364,7 @@ app.include_router(ledger_router)
 app.include_router(webhooks_router)
 app.include_router(compliance_eval_router)
 
+
 # ═══════════════════════════════════════════════════════════════
 # GLOBALS
 # ═══════════════════════════════════════════════════════════════
@@ -364,11 +372,15 @@ app.include_router(compliance_eval_router)
 _contestability_loop: Optional[ContestabilityLoop] = None
 _profile_manager: Optional[ProfileManager] = None
 _sector_loader: Optional[SectorLoader] = None
+_slm: Optional[SLMClassifier] = None
+_ethical_engine: Optional[EthicalContextEngine] = None
 
 
 @app.on_event("startup")
 def startup():
     global _contestability_loop, _profile_manager, _sector_loader
+    global _slm, _ethical_engine
+
     init_db()
 
     from buildtovalue.intelligence.threat_feed import init_threats_db
@@ -376,6 +388,10 @@ def startup():
 
     _contestability_loop = ContestabilityLoop(sla_hours=24)
 
+    # ── EthicalContextEngine (P8) ─────────────────────────────
+    _ethical_engine = EthicalContextEngine(signing_key=HMAC_KEY)
+
+    # ── Profiles ──────────────────────────────────────────────
     root = Path(__file__).resolve().parent.parent.parent.parent
     profiles_dir = root / "data" / "policies" / "agents"
     if profiles_dir.exists():
@@ -386,97 +402,173 @@ def startup():
 
     _sector_loader = SectorLoader()
     logger.info("SectorLoader initialized")
+
     hydrated = hydrate_from_sqlite()
     logger.info(f"Bridge hydration: {hydrated} threats loaded from SQLite")
+
+    # ── SLM Classifier (ADR-027) ──────────────────────────────
+    slm_config = _load_slm_config()
+    if slm_config.get("enabled", False):
+        _slm = SLMClassifier(
+            model_path=slm_config["model_path"],
+            model_id=slm_config.get("model_id", "local-slm"),
+            n_ctx=slm_config.get("n_ctx", 512),
+            n_threads=slm_config.get("n_threads", 2),
+            timeout_ms=slm_config.get("timeout_ms", 100),
+        )
+        if _slm.load_model():
+            logger.info("SLM loaded: %s", slm_config["model_path"])
+        else:
+            logger.warning("SLM failed to load — disabled")
+            _slm = None
+    else:
+        logger.info("SLM disabled (slm.enabled=false or config missing)")
+
     from buildtovalue.api.auth import init_auth
     init_auth()
 
 
 # ═══════════════════════════════════════════════════════════════
-# GOVERNANCE — /v1/decide
+# GOVERNANCE — /v1/decide (Judiciário da República Algorítmica)
 # ═══════════════════════════════════════════════════════════════
 
-@app.post("/v1/decide", response_model=VerdictResponse)
-def decide(req: EvidenceRequest, _=Depends(require_api_key)):
+@app.post("/v1/decide", response_model=DecideResponse)
+def decide(req: DecideRequest, _=Depends(require_api_key)):
+    """
+    Pipeline:
+      0. Hard block → BLOCK imediato
+      1. SLM (ambiguity zone only — ADR-027)
+      2. Profile/sector risk adjustment
+      3. EthicalContextEngine.decide() → mercy + trust + HMAC
+      4. Return signed, explainable, contestable verdict
+    """
     start = time.perf_counter()
-    verdict_id = f"verd_{uuid.uuid4().hex[:12]}"
-    session_id = req.session_id
+    session_id = req.session_id or "anonymous"
 
-    if req.action == "ALLOW":
-        trust = get_trust_score(session_id)
-        update_trust(session_id, "ALLOW")
-        sig = sign_verdict(verdict_id, "ALLOW", req.composite_risk)
-        latency = (time.perf_counter() - start) * 1000
-        return VerdictResponse(
-            verdict_id=verdict_id, action="ALLOW", original_action="ALLOW",
-            mercy_applied=False, trust_score=trust, adjusted_risk=req.composite_risk,
-            rationale="Clean input. Trust updated.",
-            contestable=False, appeal_deadline_hours=0,
-            signature=sig, latency_ms=latency,
-        )
-
+    # ── Step 0: Hard block — no governance, no mercy ──────────
     if req.hard_blocked:
         update_trust(session_id, "BLOCK")
-        sig = sign_verdict(verdict_id, "BLOCK", req.composite_risk)
-        latency = (time.perf_counter() - start) * 1000
-        return VerdictResponse(
-            verdict_id=verdict_id, action="BLOCK", original_action="BLOCK",
-            mercy_applied=False, trust_score=get_trust_score(session_id),
+        sig = sign_verdict(f"VRD-HB-{int(time.time())}", "BLOCK", req.composite_risk)
+        return DecideResponse(
+            verdict_id=f"VRD-HB-{int(time.time())}",
+            action="BLOCK", original_action="BLOCK",
+            mercy_applied=False, mercy_scenario="HARD_BLOCK",
+            mercy_score=0.0,
+            trust_score=get_trust_score(session_id),
             adjusted_risk=req.composite_risk,
-            rationale="Hard block: dangerous content detected. Non-contestable.",
-            contestable=False, appeal_deadline_hours=0,
-            signature=sig, latency_ms=latency,
+            rationale=f"Hard block triggered. Matched: {req.matched_policies}. "
+                      "No mercy applicable. Contestable within 24h.",
+            contestable=True, appeal_deadline_hours=24,
+            signature=sig,
+            latency_ms=(time.perf_counter() - start) * 1000,
         )
 
-    # Profile-aware risk adjustment (Gap #4)
-    profile_risk_multiplier = 1.0
-    sector_id = None
-    sector_note = ""
+    # ── Step 1: SLM classification (ambiguity zone) ───────────
+    slm_used = False
+    slm_intent = None
+    slm_risk = None
+    adjusted_finding_count = req.finding_count
+    adjusted_critical_count = req.critical_count
+    adjusted_risk = req.composite_risk
+    adjusted_action = req.action
 
-    if req.profile and _profile_manager:
+    if _slm is not None:
+        slm_result = _slm.classify_if_ambiguous(
+            text=req.input_text,
+            finding_count=req.finding_count,
+            max_confidence=req.max_finding_confidence,
+        )
+        if slm_result is not None:
+            slm_used = True
+            slm_intent = slm_result.intent.value
+            slm_risk = slm_result.risk
+
+            if slm_result.is_malicious:
+                adjusted_finding_count += 1
+                if slm_result.risk >= 0.8:
+                    adjusted_critical_count += 1
+                adjusted_risk = min(1.0, adjusted_risk + slm_result.risk * 0.3)
+
+                current_sev = ACTION_SEVERITY.get(adjusted_action, 0)
+                slm_sev = 2 if slm_result.risk < 0.7 else 3
+                if slm_sev > current_sev:
+                    adjusted_action = SEVERITY_ACTION.get(slm_sev, "EDUCATE")
+
+                logger.info(
+                    "SLM escalation: %s→%s (intent=%s, risk=%.2f)",
+                    req.action, adjusted_action, slm_intent, slm_result.risk,
+                )
+
+    # ── Step 2: Profile/sector risk adjustment ────────────────
+    sector_note = ""
+    if req.profile and _profile_manager and _sector_loader and req.input_text:
         try:
             loaded_profile = _profile_manager.load_profile(req.profile)
             domain_keys = [k for k in loaded_profile.domain_config.keys() if k != "general"]
             if domain_keys:
                 sector_id = domain_keys[0]
+                matched_types = [p.split(":")[0] for p in req.matched_policies]
+                multiplier = _sector_loader.apply_whitelist(
+                    input_text=req.input_text, findings=matched_types, sector_id=sector_id,
+                )
+                if multiplier < 1.0:
+                    adjusted_risk *= multiplier
+                    sector_note = (
+                        f" Sector context ({sector_id}) reduced risk "
+                        f"by {(1 - multiplier) * 100:.0f}%."
+                    )
         except ValueError:
             logger.warning("Profile not found: %s", req.profile)
 
-    if sector_id and _sector_loader and req.input_text:
-        matched_types = [p.split(":")[0] for p in req.matched_policies]
-        profile_risk_multiplier = _sector_loader.apply_whitelist(
-            input_text=req.input_text, findings=matched_types, sector_id=sector_id,
-        )
-        if profile_risk_multiplier < 1.0:
-            req.composite_risk *= profile_risk_multiplier
-            sector_note = (
-                f" Sector context ({sector_id}) reduced risk "
-                f"by {(1 - profile_risk_multiplier) * 100:.0f}%."
-            )
-
-    trust = req.trust_score if req.trust_score is not None else get_trust_score(session_id)
-    first = req.is_first_offense if req.is_first_offense is not None else is_first_offense(session_id)
-    original_action = req.action
-
-    mercy_applied, mercy_reason = calculate_mercy(
-        req.composite_risk, req.critical_count, trust, first,
+    # ── Step 3: EthicalContextEngine → EthicalVerdict ─────────
+    evidence = RustEvidence(
+        composite_risk=adjusted_risk,
+        finding_count=adjusted_finding_count,
+        critical_count=adjusted_critical_count,
+        entropy=req.entropy,
+        total_chars=req.total_chars,
+        policy_action=adjusted_action,
+        blake3_hash=req.blake3_hash,
     )
-    final_action = soften_action(original_action) if mercy_applied else original_action
 
-    rationale = build_rationale(
-        original_action, final_action, mercy_applied, mercy_reason,
-        trust, req.composite_risk, req.finding_count, req.critical_count,
-    ) + sector_note
+    context = RequestContext(
+        agent_id=req.profile or "default",
+        session_id=session_id,
+        domain=_resolve_domain(req.profile),
+        user_role=_resolve_role(session_id),
+        ip_jurisdiction=req.ip_jurisdiction,
+        ip_risk=req.ip_risk,
+        drift_level=req.drift_level,
+    )
 
-    sig = sign_verdict(verdict_id, final_action, req.composite_risk)
-    update_trust(session_id, final_action)
+    trust = get_trust_score(session_id)
+    _ethical_engine.set_trust_score(session_id, trust)
+
+    verdict = _ethical_engine.decide(evidence, context)
+
+    # ── Step 4: Update trust + respond ────────────────────────
+    update_trust(session_id, verdict.final_action)
     latency = (time.perf_counter() - start) * 1000
 
-    return VerdictResponse(
-        verdict_id=verdict_id, action=final_action, original_action=original_action,
-        mercy_applied=mercy_applied, trust_score=trust, adjusted_risk=req.composite_risk,
-        rationale=rationale, contestable=True, appeal_deadline_hours=24,
-        signature=sig, latency_ms=latency,
+    rationale = verdict.explanation + sector_note
+
+    return DecideResponse(
+        verdict_id=verdict.verdict_id,
+        action=verdict.final_action,
+        original_action=req.action,
+        mercy_applied=verdict.mercy_applied,
+        mercy_scenario=verdict.mercy_scenario,
+        mercy_score=verdict.mercy_score,
+        trust_score=verdict.trust_score,
+        adjusted_risk=adjusted_risk,
+        rationale=rationale,
+        contestable=verdict.contestable,
+        appeal_deadline_hours=24,
+        signature=verdict.hmac_signature,
+        latency_ms=latency,
+        slm_used=slm_used,
+        slm_intent=slm_intent,
+        slm_risk=slm_risk,
     )
 
 
@@ -559,9 +651,11 @@ def health():
     return {
         "status": "healthy",
         "service": "btv-governance",
-        "version": "2.1.0",
+        "version": "2.2.0",
         "sessions_tracked": sessions,
         "persistence": "sqlite",
+        "slm_loaded": _slm is not None and _slm.is_loaded,
+        "ethical_engine": _ethical_engine is not None,
         "appeals_pending": len(_contestability_loop.list_pending_appeals()) if _contestability_loop else 0,
     }
 
@@ -637,7 +731,34 @@ def compliance_report(framework: str, _=Depends(require_api_key)):
 
 
 # ═══════════════════════════════════════════════════════════════
-# INTELLIGENCE HUB — /v1/intelligence (inline, SQLite-backed)
+# SLM METRICS — /v1/slm
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/v1/slm/metrics")
+def slm_metrics(_=Depends(require_api_key)):
+    if _slm is None:
+        return {"enabled": False, "message": "SLM not loaded"}
+    return {"enabled": True, **_slm.get_metrics()}
+
+
+@app.get("/v1/slm/bias")
+def slm_bias(_=Depends(require_api_key)):
+    if _slm is None:
+        return {"enabled": False, "message": "SLM not loaded"}
+    b = _slm.get_bias_declaration()
+    return {
+        "enabled": True,
+        "fpr": b.fpr, "fnr": b.fnr,
+        "calibration_date": b.calibration_date,
+        "sample_size": b.sample_size,
+        "model_id": b.model_id,
+        "limitations": b.limitations,
+        "affected_groups": b.affected_groups,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# INTELLIGENCE HUB — /v1/intelligence (SQLite-backed)
 # ═══════════════════════════════════════════════════════════════
 
 from buildtovalue.intelligence.threat_feed import (
@@ -651,8 +772,6 @@ def intelligence_ingest(req: ThreatIngestRequest, _=Depends(require_api_key)):
         req.id, req.threat_type, req.severity, req.source,
         req.indicators, req.description, req.mitre_id,
     )
-
-    # 2. Feed bridge's in-memory ingestor (Gap #8 unification)
     try:
         get_ingestor().ingest(BridgeThreatEvent(
             id=req.id,
@@ -663,7 +782,6 @@ def intelligence_ingest(req: ThreatIngestRequest, _=Depends(require_api_key)):
         ))
     except Exception as exc:
         logger.warning("Bridge ingestor feed failed (non-blocking): %s", exc)
-
     return result
 
 
