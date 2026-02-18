@@ -26,6 +26,7 @@ from buildtovalue.intelligence.slm_classifier import SLMClassifier
 from buildtovalue.compliance.plugin import ComplianceReport
 from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
 from buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
+from buildtovalue.compliance.risk_classifier import RiskClassifier
 from buildtovalue.governance.contestability_loop import (
     ContestabilityLoop,
     AppealStatus,
@@ -41,7 +42,7 @@ from buildtovalue.governance.mercy_scenarios import ACTION_SEVERITY, SEVERITY_AC
 from buildtovalue.api.auth import require_api_key
 from buildtovalue.api.routes.intelligence import get_ingestor, hydrate_from_sqlite
 from buildtovalue.intelligence.misp_ingestor import ThreatEvent as BridgeThreatEvent
-
+from buildtovalue.compliance.risk_classifier import RiskClassifier, RiskClassification
 logger = logging.getLogger(__name__)
 
 
@@ -65,6 +66,8 @@ def _load_hmac_key() -> bytes:
 
 HMAC_KEY = _load_hmac_key()
 
+
+_risk_classifier: Optional[RiskClassifier] = RiskClassifier()
 
 # ═══════════════════════════════════════════════════════════════
 # DATABASE (SQLite trust persistence)
@@ -171,6 +174,9 @@ class DecideResponse(BaseModel):
     slm_used: bool = False
     slm_intent: Optional[str] = None
     slm_risk: Optional[float] = None
+    risk_classification: Optional[str] = None
+    compliance_violations: Optional[List[dict]] = None
+    compliance_rate: Optional[float] = None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -226,6 +232,11 @@ class AppealMetricsResponse(BaseModel):
     sla_compliance_rate: float
     appeal_success_rate: float
 
+class RiskClassifyRequest(BaseModel):
+    agent_id: str
+    sector: str
+    capabilities: List[str] = []
+    deployment_context: dict = {}
 
 # ═══════════════════════════════════════════════════════════════
 # MODELS — Compliance & Intelligence
@@ -546,6 +557,54 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
 
     verdict = _ethical_engine.decide(evidence, context)
 
+    # ── Step 3.5: Runtime Compliance (B2 — EU AI Act) ─────────
+    risk_class = None
+    compliance_violations = None
+    compliance_rate = None
+
+    if _risk_classifier is not None:
+        sector_id = _resolve_domain(req.profile) or "general"
+        caps = []
+        if req.profile and _profile_manager:
+            try:
+                loaded = _profile_manager.load_profile(req.profile)
+                caps = loaded.domain_config.get("capabilities", [])
+            except ValueError:
+                pass
+
+        rc = _risk_classifier.classify(
+            agent_id=req.profile or "unknown",
+            sector=sector_id,
+            capabilities=caps,
+        )
+        risk_class = rc.risk_level.value
+
+        if rc.risk_level.value in ("HIGH_RISK", "PROHIBITED"):
+            from buildtovalue.compliance.compliance_evaluator import ComplianceEvaluator
+            evaluator = ComplianceEvaluator()
+            agent_meta = {
+                "agent_id": req.profile or "unknown",
+                "sector": sector_id,
+                "risk_level": rc.risk_level.value,
+                "capabilities": caps,
+                "risk_score": adjusted_risk,
+                "use_case": sector_id,
+                "conformity_assessment_completed": False,
+                "transparency_score": 1.0 if verdict.explanation else 0.0,
+                "human_review": {"available": verdict.contestable},
+            }
+            eval_result = evaluator.evaluate(agent_meta)
+            compliance_violations = [
+                {
+                    "framework": v.framework,
+                    "article": v.article,
+                    "requirement": v.requirement,
+                    "action": v.action,
+                }
+                for v in eval_result.violations
+            ]
+            compliance_rate = eval_result.compliance_rate
+
     # ── Step 4: Update trust + respond ────────────────────────
     update_trust(session_id, verdict.final_action)
     latency = (time.perf_counter() - start) * 1000
@@ -569,6 +628,9 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         slm_used=slm_used,
         slm_intent=slm_intent,
         slm_risk=slm_risk,
+        risk_classification=risk_class,
+        compliance_violations=compliance_violations,
+        compliance_rate=compliance_rate,
     )
 
 
@@ -728,6 +790,19 @@ def compliance_report(framework: str, _=Depends(require_api_key)):
             for a in report.artifacts
         ],
     }
+
+
+
+
+@app.post("/v1/compliance/classify-risk")
+def classify_risk(req: RiskClassifyRequest, _=Depends(require_api_key)):
+    result = _risk_classifier.classify(
+        agent_id=req.agent_id,
+        sector=req.sector,
+        capabilities=req.capabilities,
+        deployment_context=req.deployment_context,
+    )
+    return result.to_dict()
 
 
 # ═══════════════════════════════════════════════════════════════
