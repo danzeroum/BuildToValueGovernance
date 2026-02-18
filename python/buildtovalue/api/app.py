@@ -27,6 +27,7 @@ from buildtovalue.compliance.plugin import ComplianceReport
 from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
 from buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
 from buildtovalue.compliance.risk_classifier import RiskClassifier
+from buildtovalue.compliance.fria_generator import FRIAGenerator
 from buildtovalue.governance.contestability_loop import (
     ContestabilityLoop,
     AppealStatus,
@@ -264,6 +265,11 @@ class ThreatQueryRequest(BaseModel):
     source: Optional[str] = None
     limit: int = 50
 
+class FRIARequest(BaseModel):
+    agent_id: str
+    sector: str
+    capabilities: List[str] = []
+    deployment_context: dict = {}
 
 # ═══════════════════════════════════════════════════════════════
 # BUSINESS LOGIC
@@ -804,6 +810,48 @@ def classify_risk(req: RiskClassifyRequest, _=Depends(require_api_key)):
     )
     return result.to_dict()
 
+_fria_generator = FRIAGenerator()
+
+
+@app.post("/v1/compliance/fria/generate")
+def generate_fria(req: FRIARequest, _=Depends(require_api_key)):
+    rc = _risk_classifier.classify(
+        agent_id=req.agent_id,
+        sector=req.sector,
+        capabilities=req.capabilities,
+        deployment_context=req.deployment_context,
+    )
+    viols = []
+    rate = 1.0
+    if rc.risk_level.value in ("HIGH_RISK", "PROHIBITED"):
+        from buildtovalue.compliance.compliance_evaluator import ComplianceEvaluator
+        evaluator = ComplianceEvaluator()
+        result = evaluator.evaluate({
+            "agent_id": req.agent_id,
+            "sector": req.sector,
+            "risk_level": rc.risk_level.value,
+            "capabilities": req.capabilities,
+            "risk_score": 0.5,
+            "use_case": req.sector,
+            "conformity_assessment_completed": False,
+        })
+        viols = [
+            {"framework": v.framework, "article": v.article,
+             "requirement": v.requirement, "action": v.action}
+            for v in result.violations
+        ]
+        rate = result.compliance_rate
+
+    doc = _fria_generator.generate(
+        agent_id=req.agent_id,
+        risk_level=rc.risk_level.value,
+        sector=req.sector,
+        obligations=rc.obligations,
+        violations=viols,
+        compliance_rate=rate,
+        capabilities=req.capabilities,
+    )
+    return doc.to_dict()
 
 # ═══════════════════════════════════════════════════════════════
 # SLM METRICS — /v1/slm
