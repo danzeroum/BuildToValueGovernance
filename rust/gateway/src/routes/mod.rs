@@ -4,6 +4,7 @@ pub mod health;
 pub mod metrics;
 mod policy_test;
 mod sanitize;
+mod guard;
 
 use std::sync::Arc;
 use axum::{Router, routing::{get, post}};
@@ -27,6 +28,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/policy/test", post(policy_test::policy_test_handler))
         .route("/health", get(health::health_handler))
         .route("/metrics", get(metrics::metrics_handler))
+        .route("/v1/guard", post(guard::guard_handler))
         .layer(ApiKeyLayer::from_env())
         .layer(RateLimitLayer::from_env())
         .layer(cors)

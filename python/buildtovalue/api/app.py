@@ -1,33 +1,27 @@
 """
-BuildToValue Governance API v1.4
+BuildToValue Governance API v2.1
 Python side of the República Algorítmica (Judiciário).
-Trust scores persist in SQLite. Appeals in-memory (v1.5).
+Trust scores persist in SQLite. Appeals via ContestabilityLoop.
 """
 
+import hashlib
+import hmac
+import logging
+import os
+import sqlite3
 import time
 import uuid
-import hmac
-import hashlib
-import sqlite3
-import os
-import logging
+from pathlib import Path
+from typing import List, Optional
 
-import app
-
-logger = logging.getLogger(__name__)
-
-from typing import Optional, List
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from enum import Enum
-from pathlib import Path
+
 from buildtovalue.compliance.plugin import ComplianceReport
 from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
 from buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
-from buildtovalue.intelligence.threat_feed import (
-    init_threats_db, ingest_threat, query_threats, get_threat, get_stats,
-)
 from buildtovalue.governance.contestability_loop import (
     ContestabilityLoop,
     AppealStatus,
@@ -35,25 +29,34 @@ from buildtovalue.governance.contestability_loop import (
 from buildtovalue.governance.profile_manager import ProfileManager
 from buildtovalue.governance.sector_loader import SectorLoader
 from buildtovalue.api.auth import require_api_key
-COMPLIANCE_PLUGINS = {
-    "LGPD": LGPDPlugin(),
-    "EU_AI_ACT": EUAIActPlugin(),
-}
-
-# Em python/buildtovalue/api/app.py, adicionar:
-from buildtovalue.api.routes.intelligence import router as intelligence_router
-app.include_router(intelligence_router)
-
-# Em python/buildtovalue/api/app.py, adicionar:
-from buildtovalue.api.routes.ledger import router as ledger_router
-app.include_router(ledger_router)
+from buildtovalue.api.routes.intelligence import get_ingestor, hydrate_from_sqlite
+from buildtovalue.intelligence.misp_ingestor import ThreatEvent as BridgeThreatEvent
+logger = logging.getLogger(__name__)
 
 
-# Em python/buildtovalue/api/app.py, adicionar:
-from buildtovalue.api.routes.webhooks import router as webhooks_router
-app.include_router(webhooks_router)
 # ═══════════════════════════════════════════════════════════════
-# DATABASE
+# HMAC KEY (Gap #10 — env var, fail-secure in production)
+# ═══════════════════════════════════════════════════════════════
+
+def _load_hmac_key() -> bytes:
+    key = os.environ.get("BTV_HMAC_KEY")
+    if key:
+        return key.encode("utf-8")
+    env = os.environ.get("BTV_ENV", "development")
+    if env == "production":
+        raise RuntimeError(
+            "BTV_HMAC_KEY must be set in production. "
+            "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    logger.warning("BTV_HMAC_KEY not set — using dev fallback.")
+    return b"btv-dev-key-NOT-FOR-PRODUCTION"
+
+
+HMAC_KEY = _load_hmac_key()
+
+
+# ═══════════════════════════════════════════════════════════════
+# DATABASE (SQLite trust persistence)
 # ═══════════════════════════════════════════════════════════════
 
 DB_PATH = os.environ.get("BTV_DB_PATH", "data/trust.db")
@@ -79,8 +82,9 @@ def init_db():
 def db_get_session(session_id: str) -> dict:
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute(
-        "SELECT trust_score, offenses, total_requests FROM sessions WHERE session_id = ?",
-        (session_id,)
+        "SELECT trust_score, offenses, total_requests "
+        "FROM sessions WHERE session_id = ?",
+        (session_id,),
     ).fetchone()
     conn.close()
     if row:
@@ -92,20 +96,21 @@ def db_update_session(session_id: str, trust_score: float, offense_delta: int):
     conn = sqlite3.connect(DB_PATH)
     existing = conn.execute(
         "SELECT session_id FROM sessions WHERE session_id = ?",
-        (session_id,)
+        (session_id,),
     ).fetchone()
     if existing:
-        conn.execute("""
-            UPDATE sessions
-            SET trust_score = ?, offenses = offenses + ?, total_requests = total_requests + 1,
-                updated_at = datetime('now')
-            WHERE session_id = ?
-        """, (trust_score, offense_delta, session_id))
+        conn.execute(
+            "UPDATE sessions SET trust_score = ?, offenses = offenses + ?, "
+            "total_requests = total_requests + 1, updated_at = datetime('now') "
+            "WHERE session_id = ?",
+            (trust_score, offense_delta, session_id),
+        )
     else:
-        conn.execute("""
-            INSERT INTO sessions (session_id, trust_score, offenses, total_requests)
-            VALUES (?, ?, ?, 1)
-        """, (session_id, trust_score, offense_delta))
+        conn.execute(
+            "INSERT INTO sessions (session_id, trust_score, offenses, total_requests) "
+            "VALUES (?, ?, ?, 1)",
+            (session_id, trust_score, offense_delta),
+        )
     conn.commit()
     conn.close()
 
@@ -127,6 +132,7 @@ class EvidenceRequest(BaseModel):
     profile: Optional[str] = None
     input_text: Optional[str] = None
 
+
 class VerdictResponse(BaseModel):
     verdict_id: str
     action: str
@@ -142,11 +148,10 @@ class VerdictResponse(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════
-# MODELS — Appeals (ADR-023)
+# MODELS — Appeals (ADR-017)
 # ═══════════════════════════════════════════════════════════════
 
 class AppealStatusEnum(str, Enum):
-    """Mirror of governance.contestability_loop.AppealStatus."""
     PENDING = "pending"
     UNDER_REVIEW = "under_review"
     ACCEPTED = "accepted"
@@ -156,9 +161,9 @@ class AppealStatusEnum(str, Enum):
 
 class AppealSubmitRequest(BaseModel):
     audit_trail_id: int = Field(..., description="ID da decisão contestada")
-    user_id: str = Field(..., min_length=1, description="ID do usuário")
-    reason: str = Field(..., min_length=20, description="Justificativa (min 20 chars)")
-    evidence: Optional[str] = Field(None, description="URL ou texto de evidência")
+    user_id: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=20)
+    evidence: Optional[str] = None
 
 
 class AppealResponse(BaseModel):
@@ -182,8 +187,8 @@ class AppealListResponse(BaseModel):
 
 class AppealResolveRequest(BaseModel):
     accepted: bool
-    reviewer_notes: str = Field(..., min_length=10, description="Notas do revisor (min 10 chars)")
-    reviewer_id: str = Field(..., min_length=1, description="ID do revisor")
+    reviewer_notes: str = Field(..., min_length=10)
+    reviewer_id: str = Field(..., min_length=1)
 
 
 class AppealMetricsResponse(BaseModel):
@@ -223,57 +228,30 @@ class ThreatQueryRequest(BaseModel):
     limit: int = 50
 
 
-
-
 # ═══════════════════════════════════════════════════════════════
-# HMAC KEY — Must be set via environment (Gap #10)
-# Fail-secure: refuses to start without key in production.
-# Dev fallback: allows default key with warning.
+# BUSINESS LOGIC
 # ═══════════════════════════════════════════════════════════════
 
-def _load_hmac_key() -> bytes:
-    """Load HMAC signing key from environment."""
-    key = os.environ.get("BTV_HMAC_KEY")
-    if key:
-        return key.encode("utf-8")
+COMPLIANCE_PLUGINS = {
+    "LGPD": LGPDPlugin(),
+    "EU_AI_ACT": EUAIActPlugin(),
+}
 
-    env = os.environ.get("BTV_ENV", "development")
-    if env == "production":
-        raise RuntimeError(
-            "BTV_HMAC_KEY must be set in production. "
-            "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
-        )
-
-    logger.warning(
-        "⚠️  BTV_HMAC_KEY not set — using default dev key. "
-        "Set BTV_HMAC_KEY for production."
-    )
-    return b"btv-dev-key-NOT-FOR-PRODUCTION"
-
-
-HMAC_KEY = _load_hmac_key()
-
-# ═══════════════════════════════════════════════════════════════
-# MERCY CALCULATOR (Gilligan)
-# ═══════════════════════════════════════════════════════════════
 
 def calculate_mercy(
     composite_risk: float,
     critical_count: int,
     trust_score: float,
     is_first_offense: bool,
-) -> tuple[bool, str]:
+) -> tuple:
     uncertainty = 1.0 - composite_risk
-
     if critical_count > 0:
         return False, "Critical findings present - mercy denied"
-
     if uncertainty > 0.3 and trust_score > 0.6 and is_first_offense:
         return True, (
             f"Mercy granted (Gilligan): uncertainty={uncertainty:.2f}, "
             f"trust={trust_score:.2f}, first_offense=True, critical=0"
         )
-
     reasons = []
     if uncertainty <= 0.3:
         reasons.append(f"risk too high ({composite_risk:.0%})")
@@ -281,18 +259,12 @@ def calculate_mercy(
         reasons.append(f"trust too low ({trust_score:.2f})")
     if not is_first_offense:
         reasons.append("repeat offense")
-
     return False, f"Mercy denied: {', '.join(reasons)}"
 
 
 def soften_action(action: str) -> str:
-    scale = {"BLOCK": "EDUCATE", "REDACT": "LOG", "EDUCATE": "LOG", "LOG": "ALLOW"}
-    return scale.get(action, action)
+    return {"BLOCK": "EDUCATE", "REDACT": "LOG", "EDUCATE": "LOG", "LOG": "ALLOW"}.get(action, action)
 
-
-# ═══════════════════════════════════════════════════════════════
-# TRUST SCORE
-# ═══════════════════════════════════════════════════════════════
 
 def get_trust_score(session_id: Optional[str]) -> float:
     if not session_id:
@@ -322,28 +294,16 @@ def is_first_offense(session_id: Optional[str]) -> bool:
     return db_get_session(session_id)["offenses"] == 0
 
 
-# ═══════════════════════════════════════════════════════════════
-# SIGN VERDICT (Jonas)
-# ═══════════════════════════════════════════════════════════════
-
 def sign_verdict(verdict_id: str, action: str, risk: float) -> str:
     payload = f"{verdict_id}:{action}:{risk:.4f}"
     return hmac.new(HMAC_KEY, payload.encode(), hashlib.sha256).hexdigest()
 
 
-# ═══════════════════════════════════════════════════════════════
-# RATIONALE (explain_decision)
-# ═══════════════════════════════════════════════════════════════
-
 def build_rationale(
-    original_action: str,
-    final_action: str,
-    mercy_applied: bool,
-    mercy_reason: str,
-    trust_score: float,
-    risk: float,
-    findings: int,
-    critical: int,
+    original_action: str, final_action: str,
+    mercy_applied: bool, mercy_reason: str,
+    trust_score: float, risk: float,
+    findings: int, critical: int,
 ) -> str:
     parts = [
         f"Input analysis: {findings} finding(s), {critical} critical, risk {risk:.0%}.",
@@ -358,15 +318,7 @@ def build_rationale(
     return " ".join(parts)
 
 
-# ═══════════════════════════════════════════════════════════════
-# APPEALS HELPER
-# ═══════════════════════════════════════════════════════════════
-
-_contestability_loop: Optional[ContestabilityLoop] = None
-
-
 def _appeal_to_response(appeal) -> AppealResponse:
-    """Convert internal Appeal dataclass to API response."""
     return AppealResponse(
         appeal_id=appeal.appeal_id,
         audit_trail_id=appeal.audit_trail_id,
@@ -383,10 +335,10 @@ def _appeal_to_response(appeal) -> AppealResponse:
 
 
 # ═══════════════════════════════════════════════════════════════
-# FASTAPI APP
+# FASTAPI APP + ROUTERS
 # ═══════════════════════════════════════════════════════════════
 
-app = FastAPI(title="BuildToValue Governance", version="1.5.0")
+app = FastAPI(title="BuildToValue Governance", version="2.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -394,6 +346,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Register modular routers ──────────────────────────────────
+from buildtovalue.api.routes.intelligence import router as intelligence_router
+from buildtovalue.api.routes.ledger import router as ledger_router
+from buildtovalue.api.routes.webhooks import router as webhooks_router
+
+app.include_router(intelligence_router)
+app.include_router(ledger_router)
+app.include_router(webhooks_router)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -409,23 +370,27 @@ _sector_loader: Optional[SectorLoader] = None
 def startup():
     global _contestability_loop, _profile_manager, _sector_loader
     init_db()
+
+    from buildtovalue.intelligence.threat_feed import init_threats_db
     init_threats_db()
+
     _contestability_loop = ContestabilityLoop(sla_hours=24)
 
-    # ── Profile + Sector support (Gap #4) ─────────────────────
     root = Path(__file__).resolve().parent.parent.parent.parent
     profiles_dir = root / "data" / "policies" / "agents"
     if profiles_dir.exists():
         _profile_manager = ProfileManager(profiles_dir)
-        logger.info(f"ProfileManager initialized: {profiles_dir}")
+        logger.info("ProfileManager initialized: %s", profiles_dir)
     else:
-        logger.warning(f"Profiles dir not found: {profiles_dir}")
+        logger.warning("Profiles dir not found: %s", profiles_dir)
 
     _sector_loader = SectorLoader()
     logger.info("SectorLoader initialized")
-
+    hydrated = hydrate_from_sqlite()
+    logger.info(f"Bridge hydration: {hydrated} threats loaded from SQLite")
     from buildtovalue.api.auth import init_auth
     init_auth()
+
 
 # ═══════════════════════════════════════════════════════════════
 # GOVERNANCE — /v1/decide
@@ -434,50 +399,36 @@ def startup():
 @app.post("/v1/decide", response_model=VerdictResponse)
 def decide(req: EvidenceRequest, _=Depends(require_api_key)):
     start = time.perf_counter()
-
     verdict_id = f"verd_{uuid.uuid4().hex[:12]}"
     session_id = req.session_id
 
-    # ALLOW — update trust, no judgment
     if req.action == "ALLOW":
         trust = get_trust_score(session_id)
         update_trust(session_id, "ALLOW")
         sig = sign_verdict(verdict_id, "ALLOW", req.composite_risk)
         latency = (time.perf_counter() - start) * 1000
         return VerdictResponse(
-            verdict_id=verdict_id,
-            action="ALLOW",
-            original_action="ALLOW",
-            mercy_applied=False,
-            trust_score=trust,
-            adjusted_risk=req.composite_risk,
+            verdict_id=verdict_id, action="ALLOW", original_action="ALLOW",
+            mercy_applied=False, trust_score=trust, adjusted_risk=req.composite_risk,
             rationale="Clean input. Trust updated.",
-            contestable=False,
-            appeal_deadline_hours=0,
-            signature=sig,
-            latency_ms=latency,
+            contestable=False, appeal_deadline_hours=0,
+            signature=sig, latency_ms=latency,
         )
 
-    # Hard blocks non-negotiable (Rawls)
     if req.hard_blocked:
         update_trust(session_id, "BLOCK")
         sig = sign_verdict(verdict_id, "BLOCK", req.composite_risk)
         latency = (time.perf_counter() - start) * 1000
         return VerdictResponse(
-            verdict_id=verdict_id,
-            action="BLOCK",
-            original_action="BLOCK",
-            mercy_applied=False,
-            trust_score=get_trust_score(session_id),
+            verdict_id=verdict_id, action="BLOCK", original_action="BLOCK",
+            mercy_applied=False, trust_score=get_trust_score(session_id),
             adjusted_risk=req.composite_risk,
             rationale="Hard block: dangerous content detected. Non-contestable.",
-            contestable=False,
-            appeal_deadline_hours=0,
-            signature=sig,
-            latency_ms=latency,
+            contestable=False, appeal_deadline_hours=0,
+            signature=sig, latency_ms=latency,
         )
 
-    # ── Profile-aware risk adjustment (Gap #4) ────────────────
+    # Profile-aware risk adjustment (Gap #4)
     profile_risk_multiplier = 1.0
     sector_id = None
     sector_note = ""
@@ -485,23 +436,16 @@ def decide(req: EvidenceRequest, _=Depends(require_api_key)):
     if req.profile and _profile_manager:
         try:
             loaded_profile = _profile_manager.load_profile(req.profile)
-            domain_keys = [
-                k for k in loaded_profile.domain_config.keys()
-                if k != "general"
-            ]
+            domain_keys = [k for k in loaded_profile.domain_config.keys() if k != "general"]
             if domain_keys:
                 sector_id = domain_keys[0]
         except ValueError:
-            logger.warning(
-                f"Profile not found: {req.profile}, using defaults"
-            )
+            logger.warning("Profile not found: %s", req.profile)
 
     if sector_id and _sector_loader and req.input_text:
         matched_types = [p.split(":")[0] for p in req.matched_policies]
         profile_risk_multiplier = _sector_loader.apply_whitelist(
-            input_text=req.input_text,
-            findings=matched_types,
-            sector_id=sector_id,
+            input_text=req.input_text, findings=matched_types, sector_id=sector_id,
         )
         if profile_risk_multiplier < 1.0:
             req.composite_risk *= profile_risk_multiplier
@@ -509,32 +453,15 @@ def decide(req: EvidenceRequest, _=Depends(require_api_key)):
                 f" Sector context ({sector_id}) reduced risk "
                 f"by {(1 - profile_risk_multiplier) * 100:.0f}%."
             )
-            logger.info(
-                f"Sector whitelist: sector={sector_id}, "
-                f"multiplier={profile_risk_multiplier}, "
-                f"adjusted_risk={req.composite_risk:.4f}"
-            )
 
-    # Ethical judgment
-    trust = (
-        req.trust_score
-        if req.trust_score is not None
-        else get_trust_score(session_id)
-    )
-    first = (
-        req.is_first_offense
-        if req.is_first_offense is not None
-        else is_first_offense(session_id)
-    )
+    trust = req.trust_score if req.trust_score is not None else get_trust_score(session_id)
+    first = req.is_first_offense if req.is_first_offense is not None else is_first_offense(session_id)
     original_action = req.action
 
     mercy_applied, mercy_reason = calculate_mercy(
         req.composite_risk, req.critical_count, trust, first,
     )
-
-    final_action = (
-        soften_action(original_action) if mercy_applied else original_action
-    )
+    final_action = soften_action(original_action) if mercy_applied else original_action
 
     rationale = build_rationale(
         original_action, final_action, mercy_applied, mercy_reason,
@@ -543,30 +470,22 @@ def decide(req: EvidenceRequest, _=Depends(require_api_key)):
 
     sig = sign_verdict(verdict_id, final_action, req.composite_risk)
     update_trust(session_id, final_action)
-
     latency = (time.perf_counter() - start) * 1000
 
     return VerdictResponse(
-        verdict_id=verdict_id,
-        action=final_action,
-        original_action=original_action,
-        mercy_applied=mercy_applied,
-        trust_score=trust,
-        adjusted_risk=req.composite_risk,
-        rationale=rationale,
-        contestable=True,
-        appeal_deadline_hours=24,
-        signature=sig,
-        latency_ms=latency,
+        verdict_id=verdict_id, action=final_action, original_action=original_action,
+        mercy_applied=mercy_applied, trust_score=trust, adjusted_risk=req.composite_risk,
+        rationale=rationale, contestable=True, appeal_deadline_hours=24,
+        signature=sig, latency_ms=latency,
     )
 
+
 # ═══════════════════════════════════════════════════════════════
-# APPEALS — /v1/appeals (ADR-023, Levinas)
+# APPEALS — /v1/appeals (ADR-017, Levinas)
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/v1/appeals", response_model=AppealResponse, status_code=201)
 def submit_appeal(req: AppealSubmitRequest):
-    """Submit appeal for a decision (LGPD Art. 20, EU AI Act Art. 86)."""
     try:
         appeal = _contestability_loop.submit_appeal(
             audit_trail_id=req.audit_trail_id,
@@ -581,14 +500,12 @@ def submit_appeal(req: AppealSubmitRequest):
 
 @app.get("/v1/appeals/metrics", response_model=AppealMetricsResponse)
 def appeals_metrics():
-    """Appeal system metrics (Jonas: accountability requires measurement)."""
     _contestability_loop.list_expired_appeals()
     return AppealMetricsResponse(**_contestability_loop.get_metrics())
 
 
 @app.get("/v1/appeals/{appeal_id}", response_model=AppealResponse)
 def get_appeal(appeal_id: str):
-    """Get appeal by ID."""
     appeal = _contestability_loop.get_appeal(appeal_id)
     if appeal is None:
         raise HTTPException(status_code=404, detail=f"Appeal not found: {appeal_id}")
@@ -596,41 +513,17 @@ def get_appeal(appeal_id: str):
 
 
 @app.get("/v1/appeals", response_model=AppealListResponse)
-def list_appeals(
-    status: Optional[str] = None,
-    user_id: Optional[str] = None,
-):
-    """
-    This function retrieves a list of appeals based on the given optional filters such as
-    `status` and `user_id`. Appeals data is processed and filtered according to the
-    specified criteria before being returned in the response.
-
-    :param status: Optionally filters appeals by their status. Valid status values are
-        'pending', 'accepted', 'rejected', and 'expired'.
-    :type status: Optional[str]
-    :param user_id: Optionally filters appeals by a specific user ID.
-    :type user_id: Optional[str]
-    :return: An instance of `AppealListResponse` containing the filtered list of appeals
-        and the total number of appeals that meet the criteria.
-    :rtype: AppealListResponse
-    """
+def list_appeals(status: Optional[str] = None, user_id: Optional[str] = None):
     _contestability_loop.list_expired_appeals()
-
     appeals = list(_contestability_loop.appeals.values())
-
     if status:
         try:
             target_status = AppealStatus(status)
             appeals = [a for a in appeals if a.status == target_status]
         except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid status: {status}. Valid: pending, accepted, rejected, expired",
-            )
-
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
     if user_id:
         appeals = [a for a in appeals if a.user_id == user_id]
-
     return AppealListResponse(
         appeals=[_appeal_to_response(a) for a in appeals],
         total=len(appeals),
@@ -639,27 +532,18 @@ def list_appeals(
 
 @app.post("/v1/appeals/{appeal_id}/resolve", response_model=AppealResponse)
 def resolve_appeal(appeal_id: str, req: AppealResolveRequest):
-    """Resolve appeal (human reviewer). Levinas: reviewer MUST justify."""
     existing = _contestability_loop.get_appeal(appeal_id)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"Appeal not found: {appeal_id}")
-
     if existing.status in (AppealStatus.ACCEPTED, AppealStatus.REJECTED):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Appeal already resolved: {existing.status.value}",
-        )
-
+        raise HTTPException(status_code=409, detail=f"Already resolved: {existing.status.value}")
     try:
         resolved = _contestability_loop.resolve_appeal(
-            appeal_id=appeal_id,
-            accepted=req.accepted,
-            reviewer_notes=req.reviewer_notes,
-            reviewer_id=req.reviewer_id,
+            appeal_id=appeal_id, accepted=req.accepted,
+            reviewer_notes=req.reviewer_notes, reviewer_id=req.reviewer_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
     return _appeal_to_response(resolved)
 
 
@@ -675,10 +559,10 @@ def health():
     return {
         "status": "healthy",
         "service": "btv-governance",
+        "version": "2.1.0",
         "sessions_tracked": sessions,
         "persistence": "sqlite",
         "appeals_pending": len(_contestability_loop.list_pending_appeals()) if _contestability_loop else 0,
-        "version": "1.4.0",
     }
 
 
@@ -710,13 +594,9 @@ def compliance_check(req: ComplianceRequest, _=Depends(require_api_key)):
         "compliant": compliant,
         "compliance_rate": compliant / len(artifacts) if artifacts else 0,
         "artifacts": [
-            {
-                "article": a.article,
-                "requirement": a.requirement,
-                "status": a.status.value,
-                "evidence": a.evidence,
-                "recommendation": a.recommendation,
-            }
+            {"article": a.article, "requirement": a.requirement,
+             "status": a.status.value, "evidence": a.evidence,
+             "recommendation": a.recommendation}
             for a in artifacts
         ],
     }
@@ -748,40 +628,56 @@ def compliance_report(framework: str, _=Depends(require_api_key)):
         "compliance_rate": report.compliance_rate,
         "generated_at": report.generated_at,
         "artifacts": [
-            {
-                "article": a.article,
-                "requirement": a.requirement,
-                "status": a.status.value,
-                "evidence": a.evidence,
-                "recommendation": a.recommendation,
-            }
+            {"article": a.article, "requirement": a.requirement,
+             "status": a.status.value, "evidence": a.evidence,
+             "recommendation": a.recommendation}
             for a in report.artifacts
         ],
     }
 
 
 # ═══════════════════════════════════════════════════════════════
-# INTELLIGENCE HUB — /v1/intelligence
+# INTELLIGENCE HUB — /v1/intelligence (inline, SQLite-backed)
 # ═══════════════════════════════════════════════════════════════
 
-@app.post("/v1/intelligence/ingest",)
+from buildtovalue.intelligence.threat_feed import (
+    ingest_threat, query_threats, get_threat, get_stats,
+)
+
+
+@app.post("/v1/intelligence/ingest")
 def intelligence_ingest(req: ThreatIngestRequest, _=Depends(require_api_key)):
-    return ingest_threat(
+    result = ingest_threat(
         req.id, req.threat_type, req.severity, req.source,
         req.indicators, req.description, req.mitre_id,
     )
 
+    # 2. Feed bridge's in-memory ingestor (Gap #8 unification)
+    try:
+        get_ingestor().ingest(BridgeThreatEvent(
+            id=req.id,
+            threat_type=req.threat_type,
+            severity=req.severity,
+            source=req.source,
+            indicators=req.indicators or [],
+        ))
+    except Exception as exc:
+        logger.warning("Bridge ingestor feed failed (non-blocking): %s", exc)
+
+    return result
+
 
 @app.post("/v1/intelligence/ingest/batch")
 def intelligence_ingest_batch(threats: List[ThreatIngestRequest], _=Depends(require_api_key)):
-    results = []
-    for t in threats:
-        r = ingest_threat(t.id, t.threat_type, t.severity, t.source, t.indicators, t.description, t.mitre_id)
-        results.append(r)
+    results = [
+        ingest_threat(t.id, t.threat_type, t.severity, t.source,
+                      t.indicators, t.description, t.mitre_id)
+        for t in threats
+    ]
     return {"ingested": len(results), "results": results}
 
 
-@app.post("/v1/intelligence/query" )
+@app.post("/v1/intelligence/query")
 def intelligence_query(req: ThreatQueryRequest, _=Depends(require_api_key)):
     threats = query_threats(req.threat_type, req.min_severity, req.source, req.limit)
     return {"count": len(threats), "threats": threats}

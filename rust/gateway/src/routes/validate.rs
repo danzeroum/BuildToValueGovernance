@@ -269,6 +269,21 @@ pub async fn validate_handler(
         }
     }
 
+    // ── OUTPUT GUARD: Sanitize message before returning ───────
+    let message = {
+        use buildtovalue_kernel::output_guard::OutputSanitizer;
+        let sanitizer = OutputSanitizer::new();
+        let result = sanitizer.sanitize(&message);
+        if result.masks_applied > 0 {
+            log::info!(
+                "OutputGuard masked {} PII in response message (audit_trail: {})",
+                result.masks_applied,
+                req.session_id.as_deref().unwrap_or("unknown")
+            );
+        }
+        result.output
+    };
+
     Ok(Json(ValidateResponse {
         finding_count: scan.finding_count,
         critical_count: scan.critical_count,
