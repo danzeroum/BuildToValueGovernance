@@ -27,6 +27,9 @@ page = st.sidebar.radio("Navigation", [
     "Trust Score",
     "Compliance",
     "Intelligence",
+    "Audit Ledger",
+    "Appeals",
+    "Webhooks",
     "Metrics",
 ])
 
@@ -244,6 +247,186 @@ elif page == "Intelligence":
                     st.success(f"Ingested: {resp.json()}")
                 except Exception as e:
                     st.error(f"Error: {e}")
+
+# ═══════════════════════════════════════════════════════════════
+# AUDIT LEDGER
+# ═══════════════════════════════════════════════════════════════
+
+elif page == "Audit Ledger":
+    st.title("Audit Ledger Query")
+    st.caption("Query immutable decision log (ADR-024, Jonas)")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        session_filter = st.text_input("Session ID", placeholder="Filter by session...")
+        action_filter = st.selectbox("Action", [None, "ALLOW", "LOG", "EDUCATE", "REDACT", "BLOCK"])
+    with col2:
+        verdict_filter = st.text_input("Verdict ID", placeholder="Filter by verdict...")
+        page_size = st.slider("Results per page", 10, 200, 50)
+
+    if st.button("Query Ledger", type="primary"):
+        try:
+            params = {"page_size": page_size}
+            if session_filter:
+                params["session_id"] = session_filter
+            if verdict_filter:
+                params["verdict_id"] = verdict_filter
+            if action_filter:
+                params["action"] = action_filter
+
+            resp = requests.get(
+                f"{GOVERNANCE_URL}/v1/ledger/query",
+                params=params, timeout=10,
+            )
+            data = resp.json()
+            pagination = data.get("pagination", {})
+
+            st.markdown(
+                f"**{pagination.get('total_matched', 0)} decisions** "
+                f"(page {pagination.get('page', 1)}/{pagination.get('total_pages', 1)})"
+            )
+
+            for entry in data.get("entries", []):
+                action = entry.get("final_action", "?")
+                colors = {"ALLOW": "green", "LOG": "blue", "EDUCATE": "orange", "BLOCK": "red"}
+                ts = entry.get("ts", 0)
+                ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(ts / 1000)) if ts else "?"
+                with st.expander(f":{colors.get(action, 'gray')}[{action}] — {ts_str} — {entry.get('verdict_id', '?')}"):
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Risk", f"{entry.get('risk', 0) * 100:.0f}%")
+                    c2.metric("Findings", entry.get("findings", 0))
+                    c3.metric("Critical", entry.get("critical", 0))
+                    c4.metric("Latency", f"{entry.get('latency_ms', 0):.1f}ms")
+                    if entry.get("mercy"):
+                        st.success("Mercy applied")
+                    st.json(entry)
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+    st.divider()
+    st.markdown("##### Ledger Stats")
+    try:
+        stats = requests.get(f"{GOVERNANCE_URL}/v1/ledger/stats", timeout=5).json()
+        c1, c2 = st.columns(2)
+        c1.metric("Total Entries", stats.get("entry_count", 0))
+        c2.metric("File", stats.get("ledger_file", "?"))
+    except Exception as e:
+        st.caption(f"Stats unavailable: {e}")
+
+# ═══════════════════════════════════════════════════════════════
+# APPEALS
+# ═══════════════════════════════════════════════════════════════
+
+elif page == "Appeals":
+    st.title("Contestability — Appeals")
+    st.caption("Human-in-the-loop (Levinas, LGPD Art. 20)")
+
+    tab1, tab2, tab3 = st.tabs(["Submit Appeal", "View Appeals", "Metrics"])
+
+    with tab1:
+        audit_id = st.number_input("Audit Trail ID", min_value=1, step=1)
+        user_id = st.text_input("Your User ID", placeholder="user@example.com")
+        reason = st.text_area("Reason for appeal", placeholder="Explain why this decision should be reviewed...")
+        evidence = st.text_area("Supporting evidence (optional)", placeholder="Additional context...")
+
+        if st.button("Submit Appeal", type="primary"):
+            if reason and user_id:
+                try:
+                    payload = {
+                        "audit_trail_id": int(audit_id),
+                        "user_id": user_id,
+                        "reason": reason,
+                    }
+                    if evidence:
+                        payload["evidence"] = evidence
+                    resp = requests.post(f"{GOVERNANCE_URL}/v1/appeals", json=payload, timeout=5)
+                    if resp.status_code == 201:
+                        data = resp.json()
+                        st.success(f"Appeal submitted: {data.get('appeal_id')}")
+                        st.json(data)
+                    else:
+                        st.error(f"Error {resp.status_code}: {resp.json().get('detail', resp.text)}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    with tab2:
+        status_filter = st.selectbox("Filter by status", [None, "pending", "accepted", "rejected", "expired"])
+        if st.button("Load Appeals"):
+            try:
+                params = {}
+                if status_filter:
+                    params["status"] = status_filter
+                resp = requests.get(f"{GOVERNANCE_URL}/v1/appeals", params=params, timeout=5)
+                data = resp.json()
+                st.markdown(f"**{data.get('total', 0)} appeals**")
+                for appeal in data.get("appeals", []):
+                    status = appeal.get("status", "?")
+                    icon = {"pending": "hourglass_flowing_sand", "accepted": "white_check_mark", "rejected": "x", "expired": "alarm_clock"}.get(status, "question")
+                    with st.expander(f":{icon}: {appeal.get('appeal_id')} — {status}"):
+                        st.markdown(f"**User:** {appeal.get('user_id')}")
+                        st.markdown(f"**Reason:** {appeal.get('reason')}")
+                        st.markdown(f"**SLA Deadline:** {appeal.get('sla_deadline')}")
+                        if appeal.get("reviewer_notes"):
+                            st.info(f"Reviewer: {appeal.get('reviewer_notes')}")
+                        st.json(appeal)
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    with tab3:
+        try:
+            resp = requests.get(f"{GOVERNANCE_URL}/v1/appeals/metrics", timeout=5)
+            data = resp.json()
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total", data.get("total", 0))
+            c2.metric("Pending", data.get("pending", 0))
+            c3.metric("Accepted", data.get("accepted", 0))
+            c4.metric("Rejected", data.get("rejected", 0))
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+# ═══════════════════════════════════════════════════════════════
+# WEBHOOKS
+# ═══════════════════════════════════════════════════════════════
+
+elif page == "Webhooks":
+    st.title("Webhook Status")
+    st.caption("Real-time notifications for critical decisions (Jonas)")
+
+    try:
+        resp = requests.get(f"{GOVERNANCE_URL}/v1/webhooks/status", timeout=5)
+        data = resp.json()
+
+        st.markdown(f"### Status: :{('green' if data.get('status') == 'ok' else 'red')}[{data.get('status', '?')}]")
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Targets", data.get("targets", 0))
+        c2.metric("Dispatched", data.get("dispatched", 0))
+        c3.metric("Failed", data.get("failed", 0))
+
+        with st.expander("Full Status"):
+            st.json(data)
+
+    except Exception as e:
+        st.error(f"Error: {e}")
+
+    st.divider()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Reload Config"):
+            try:
+                resp = requests.post(f"{GOVERNANCE_URL}/v1/webhooks/reload", timeout=5)
+                st.success(f"Reloaded: {resp.json()}")
+            except Exception as e:
+                st.error(f"Error: {e}")
+    with col2:
+        if st.button("Send Test Webhook"):
+            try:
+                resp = requests.post(f"{GOVERNANCE_URL}/v1/webhooks/test", timeout=5)
+                st.json(resp.json())
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 # ═══════════════════════════════════════════════════════════════
 # METRICS
