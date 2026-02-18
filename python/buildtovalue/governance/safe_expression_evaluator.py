@@ -329,9 +329,10 @@ class SafeExpressionEvaluator:
                 namespace = {'__builtins__': {}}
 
                 # Adiciona funções seguras
+                import builtins
                 for func_name in self.ALLOWED_FUNCTIONS:
-                    if hasattr(__builtins__, func_name):
-                        namespace[func_name] = getattr(__builtins__, func_name)
+                    if hasattr(builtins, func_name):
+                        namespace[func_name] = getattr(builtins, func_name)
 
                 # Executa
                 result = eval(code, namespace, context)

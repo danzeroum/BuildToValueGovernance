@@ -1,7 +1,11 @@
 """
-Shared types for governance module.
-Extracted to break circular imports.
+Governance shared types v1.0.0
+Canonical type definitions for the Judiciary branch.
+
+Used by: context_engine.py, ethical_context_engine.py, all test files.
+DO NOT redefine these types elsewhere — import from here.
 """
+
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 from enum import Enum
@@ -9,7 +13,11 @@ import time
 
 
 class ActionType(Enum):
-    """Ações possíveis."""
+    """
+    Proportional response actions (Levinas: educate before punish).
+
+    Severity order: ALLOW < LOG < EDUCATE < REDACT < BLOCK
+    """
     ALLOW = "ALLOW"
     LOG = "LOG"
     EDUCATE = "EDUCATE"
@@ -17,9 +25,23 @@ class ActionType(Enum):
     BLOCK = "BLOCK"
 
 
+ACTION_SEVERITY: Dict[ActionType, int] = {
+    ActionType.ALLOW: 0,
+    ActionType.LOG: 1,
+    ActionType.EDUCATE: 2,
+    ActionType.REDACT: 3,
+    ActionType.BLOCK: 4,
+}
+
+
 @dataclass
 class RequestMetadata:
-    """Metadados de requisição."""
+    """
+    Technical request context.
+
+    All fields have defaults to allow flexible construction
+    from both Gateway (partial data) and tests.
+    """
     agent_id: str = "unknown"
     session_id: str = "unknown"
     user_role: str = "anonymous"
@@ -32,11 +54,16 @@ class RequestMetadata:
     operation_type: Optional[str] = None
     criticality: str = "MEDIUM"
     user_history: Dict[str, Any] = field(default_factory=dict)
+    ip_address: Optional[str] = None
 
 
 @dataclass
 class EthicalContext:
-    """Contexto ético derivado de RequestMetadata."""
+    """
+    Context for ethical evaluation (Gilligan: care factors).
+
+    Used by EthicalContextEngineV3.decide() and all governance tests.
+    """
     user_id: Optional[str] = None
     session_id: Optional[str] = None
     request_id: Optional[str] = None
@@ -54,7 +81,7 @@ class EthicalContext:
 
 @dataclass
 class SimpleFinding:
-    """Minimal finding for governance layer."""
+    """Minimal finding for governance layer (duck-types Rust Finding)."""
     rule_id: str = ""
     confidence: float = 0.5
     severity: float = 0.5
@@ -77,7 +104,7 @@ class _Stats:
 @dataclass
 class SimpleTechnicalEvidence:
     """
-    Lightweight adapter matching TechnicalEvidence interface
+    Lightweight adapter matching Rust TechnicalEvidence interface
     for MercyCalculator compatibility.
 
     Duck-types: .findings, .critical, .critical_count,
@@ -92,7 +119,7 @@ class SimpleTechnicalEvidence:
     _has_pii: bool = False
 
     @property
-    def stats(self):
+    def stats(self) -> _Stats:
         return _Stats(
             entropy=self.entropy,
             total_chars=self.total_chars,
@@ -100,5 +127,5 @@ class SimpleTechnicalEvidence:
         )
 
     @property
-    def critical(self):
+    def critical(self) -> List[SimpleFinding]:
         return [f for f in self.findings if f.severity >= 0.8]

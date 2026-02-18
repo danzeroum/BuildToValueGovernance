@@ -1,5 +1,4 @@
 //! POST /v1/policy/test — Blind policy testing (Rawls)
-//! Tests policy against input without knowing author/target/auditor.
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
@@ -85,7 +84,6 @@ pub async fn policy_test_handler(
     }
 
     let total = req.test_inputs.len();
-    // Fairness: ratio of non-blocked to total (Rawls: minimize harm)
     let fairness_score = if total > 0 {
         (total - blocked) as f32 / total as f32
     } else {

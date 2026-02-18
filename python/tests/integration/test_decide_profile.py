@@ -54,7 +54,8 @@ class TestDecideBaseline:
         assert res.status_code == 200
         data = res.json()
         assert data["action"] == "BLOCK"
-        assert data["contestable"] is False
+        assert data["contestable"] is True  # Levinas: even hard blocks are contestable
+        assert data["mercy_applied"] is False  # But mercy is NOT applied
 
     def test_block_without_profile(self, client):
         """BLOCK without profile — no sector reduction."""
