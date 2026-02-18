@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from enum import Enum
 
+from contextlib import asynccontextmanager
 from buildtovalue.intelligence.slm_classifier import SLMClassifier
 from buildtovalue.compliance.plugin import ComplianceReport
 from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
@@ -341,12 +342,64 @@ def _load_slm_config() -> dict:
         logger.warning("Failed to load SLM config: %s", e)
     return {}
 
-
 # ═══════════════════════════════════════════════════════════════
-# FASTAPI APP + ROUTERS
+# LIFESPAN + FASTAPI APP + ROUTERS
 # ═══════════════════════════════════════════════════════════════
 
-app = FastAPI(title="BuildToValue Governance", version="2.2.0")
+@asynccontextmanager
+async def lifespan(application):
+    """Startup/shutdown lifecycle (replaces deprecated on_event)."""
+    global _contestability_loop, _profile_manager, _sector_loader
+    global _slm, _ethical_engine
+
+    init_db()
+
+    from buildtovalue.intelligence.threat_feed import init_threats_db
+    init_threats_db()
+
+    _contestability_loop = ContestabilityLoop(sla_hours=24)
+    _ethical_engine = EthicalContextEngine(signing_key=HMAC_KEY)
+
+    root = Path(__file__).resolve().parent.parent.parent.parent
+    profiles_dir = root / "data" / "policies" / "agents"
+    if profiles_dir.exists():
+        _profile_manager = ProfileManager(profiles_dir)
+        logger.info("ProfileManager initialized: %s", profiles_dir)
+    else:
+        logger.warning("Profiles dir not found: %s", profiles_dir)
+
+    _sector_loader = SectorLoader()
+    logger.info("SectorLoader initialized")
+
+    hydrated = hydrate_from_sqlite()
+    logger.info("Bridge hydration: %d threats loaded from SQLite", hydrated)
+
+    slm_config = _load_slm_config()
+    if slm_config.get("enabled", False):
+        _slm = SLMClassifier(
+            model_path=slm_config["model_path"],
+            model_id=slm_config.get("model_id", "local-slm"),
+            n_ctx=slm_config.get("n_ctx", 512),
+            n_threads=slm_config.get("n_threads", 2),
+            timeout_ms=slm_config.get("timeout_ms", 100),
+        )
+        if _slm.load_model():
+            logger.info("SLM loaded: %s", slm_config["model_path"])
+        else:
+            logger.warning("SLM failed to load — disabled")
+            _slm = None
+    else:
+        logger.info("SLM disabled (slm.enabled=false or config missing)")
+
+    from buildtovalue.api.auth import init_auth
+    init_auth()
+
+    yield
+
+    logger.info("Shutdown complete")
+
+
+app = FastAPI(title="BuildToValue Governance", version="2.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -374,59 +427,6 @@ _profile_manager: Optional[ProfileManager] = None
 _sector_loader: Optional[SectorLoader] = None
 _slm: Optional[SLMClassifier] = None
 _ethical_engine: Optional[EthicalContextEngine] = None
-
-
-@app.on_event("startup")
-def startup():
-    global _contestability_loop, _profile_manager, _sector_loader
-    global _slm, _ethical_engine
-
-    init_db()
-
-    from buildtovalue.intelligence.threat_feed import init_threats_db
-    init_threats_db()
-
-    _contestability_loop = ContestabilityLoop(sla_hours=24)
-
-    # ── EthicalContextEngine (P8) ─────────────────────────────
-    _ethical_engine = EthicalContextEngine(signing_key=HMAC_KEY)
-
-    # ── Profiles ──────────────────────────────────────────────
-    root = Path(__file__).resolve().parent.parent.parent.parent
-    profiles_dir = root / "data" / "policies" / "agents"
-    if profiles_dir.exists():
-        _profile_manager = ProfileManager(profiles_dir)
-        logger.info("ProfileManager initialized: %s", profiles_dir)
-    else:
-        logger.warning("Profiles dir not found: %s", profiles_dir)
-
-    _sector_loader = SectorLoader()
-    logger.info("SectorLoader initialized")
-
-    hydrated = hydrate_from_sqlite()
-    logger.info(f"Bridge hydration: {hydrated} threats loaded from SQLite")
-
-    # ── SLM Classifier (ADR-027) ──────────────────────────────
-    slm_config = _load_slm_config()
-    if slm_config.get("enabled", False):
-        _slm = SLMClassifier(
-            model_path=slm_config["model_path"],
-            model_id=slm_config.get("model_id", "local-slm"),
-            n_ctx=slm_config.get("n_ctx", 512),
-            n_threads=slm_config.get("n_threads", 2),
-            timeout_ms=slm_config.get("timeout_ms", 100),
-        )
-        if _slm.load_model():
-            logger.info("SLM loaded: %s", slm_config["model_path"])
-        else:
-            logger.warning("SLM failed to load — disabled")
-            _slm = None
-    else:
-        logger.info("SLM disabled (slm.enabled=false or config missing)")
-
-    from buildtovalue.api.auth import init_auth
-    init_auth()
-
 
 # ═══════════════════════════════════════════════════════════════
 # GOVERNANCE — /v1/decide (Judiciário da República Algorítmica)

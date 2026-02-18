@@ -5,7 +5,7 @@ Tests: API Key Authentication (Gap #6).
 import os
 import pytest
 from fastapi.testclient import TestClient
-from buildtovalue.api.app import app, startup
+from buildtovalue.api.app import app
 
 
 @pytest.fixture(scope="module")
@@ -13,8 +13,8 @@ def client_no_auth():
     """Client with auth disabled (no BTV_API_KEYS)."""
     os.environ.pop("BTV_API_KEYS", None)
     os.environ["BTV_ENV"] = "development"
-    startup()
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c
 
 
 @pytest.fixture(scope="module")
@@ -22,8 +22,8 @@ def client_with_auth():
     """Client with auth enabled."""
     os.environ["BTV_API_KEYS"] = "btv_test_key_1,btv_test_key_2"
     os.environ["BTV_ENV"] = "development"
-    startup()
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c
 
 
 class TestAuthDisabled:
