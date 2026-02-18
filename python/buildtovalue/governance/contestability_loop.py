@@ -1,16 +1,25 @@
 """
-Contestability Loop v2.0 - Human-in-the-Loop (Levinas)
+Contestability Loop v3.0 - Human-in-the-Loop (Levinas)
+T2.2: SQLite persistence — appeals survive restarts.
 
 Responsabilidades:
 - Aceita recursos de decisões (LGPD Art. 20)
 - SLA 24h para resposta humana
+- Persistência SQLite (durável)
 - Feedback loop (melhoria contínua)
 - Audit trail completo
 
 Filosofia: Levinas (Dever de Cuidado) - Sempre dar direito de recurso
-Gate: Week 4 - Day 18
+
+Mudanças v3.0:
+- [BREAKING-NONE] SQLite backend (db_path param, default=data/appeals.db)
+- [BREAKING-NONE] Cache em memória para hot path (<5ms)
+- [BREAKING-NONE] Recovery automático no startup
+- Interface pública idêntica à v2.0
 """
 
+import os
+import sqlite3
 import time
 import logging
 from enum import Enum
@@ -20,9 +29,9 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
 # APPEAL TYPES
-# ═══════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
 
 class AppealStatus(Enum):
     """Status de recurso."""
@@ -49,86 +58,187 @@ class Appeal:
     resolution_timestamp: Optional[int] = None
 
     # SLA
-    sla_deadline: int = 0  # 24h após timestamp
+    sla_deadline: int = 0
 
     def __post_init__(self):
-        """Calcula deadline SLA."""
         if self.sla_deadline == 0:
-            self.sla_deadline = self.timestamp + (24 * 3600)  # 24 horas
+            self.sla_deadline = self.timestamp + (24 * 3600)
 
     def is_overdue(self) -> bool:
-        """Verifica se SLA foi violado."""
-        return int(time.time()) > self.sla_deadline and self.status == AppealStatus.PENDING
+        return (
+            int(time.time()) > self.sla_deadline
+            and self.status == AppealStatus.PENDING
+        )
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# CONTESTABILITY LOOP
-# ═══════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+# CONTESTABILITY LOOP v3.0
+# ═══════════════════════════════════════════════════════════════
 
 class ContestabilityLoop:
     """
-    Contestability Loop v2.0 - Human-in-the-Loop.
+    Contestability Loop v3.0 - SQLite-backed.
 
-    Features:
-    - Submit appeals (user requests)
-    - SLA 24h tracking
-    - Human review workflow
-    - Feedback loop (learn from mistakes)
-    - Metrics (appeal success rate)
+    Architecture:
+    - SQLite = source of truth (durável)
+    - Dict cache = hot path (<5ms reads)
+    - Writes: cache + SQLite (sync)
+    - Startup: load pending from SQLite
 
     Philosophy: Levinas (Dever de Cuidado)
-    - Sempre permitir contestação
-    - Resposta em tempo razoável (24h)
-    - Transparência na justificativa
-
-    Performance: <5ms to submit appeal
     """
 
-    def __init__(self, sla_hours: int = 24):
-        """
-        Inicializa loop.
-
-        Args:
-            sla_hours: SLA em horas para resposta (padrão: 24h)
-        """
+    def __init__(
+        self,
+        sla_hours: int = 24,
+        db_path: Optional[str] = None,
+    ):
         self.sla_seconds = sla_hours * 3600
-        self.appeals: Dict[str, Appeal] = {}  # Em prod: DB
+        self.appeals: Dict[str, Appeal] = {}
 
-        # Metrics
+        # SQLite
+        self._db_path = db_path or os.environ.get(
+            "BTV_APPEALS_DB", "data/appeals.db"
+        )
+        self._init_db()
+        self._load_from_db()
+
+        # Metrics (recalculados do DB no startup)
         self.metrics = {
             'appeals_submitted': 0,
             'appeals_accepted': 0,
             'appeals_rejected': 0,
             'sla_violations': 0,
         }
+        self._recalculate_metrics()
+
+    # ── DATABASE ──────────────────────────────────────────────
+
+    def _init_db(self) -> None:
+        """Create appeals table if not exists."""
+        os.makedirs(os.path.dirname(self._db_path) or ".", exist_ok=True)
+        conn = sqlite3.connect(self._db_path)
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS appeals (
+                    appeal_id       TEXT PRIMARY KEY,
+                    audit_trail_id  INTEGER NOT NULL,
+                    user_id         TEXT NOT NULL,
+                    timestamp       INTEGER NOT NULL,
+                    reason          TEXT NOT NULL,
+                    evidence        TEXT,
+                    status          TEXT NOT NULL DEFAULT 'pending',
+                    reviewer_notes  TEXT,
+                    resolution_ts   INTEGER,
+                    sla_deadline    INTEGER NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_appeals_status
+                ON appeals(status)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_appeals_user
+                ON appeals(user_id)
+            """)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _load_from_db(self) -> None:
+        """Load all appeals from SQLite into cache."""
+        conn = sqlite3.connect(self._db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                "SELECT * FROM appeals ORDER BY timestamp"
+            ).fetchall()
+            for row in rows:
+                appeal = self._row_to_appeal(row)
+                self.appeals[appeal.appeal_id] = appeal
+            if rows:
+                logger.info("Loaded %d appeals from SQLite", len(rows))
+        finally:
+            conn.close()
+
+    def _save_appeal(self, appeal: Appeal) -> None:
+        """Persist appeal to SQLite."""
+        conn = sqlite3.connect(self._db_path)
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO appeals
+                (appeal_id, audit_trail_id, user_id, timestamp,
+                 reason, evidence, status, reviewer_notes,
+                 resolution_ts, sla_deadline)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                appeal.appeal_id,
+                appeal.audit_trail_id,
+                appeal.user_id,
+                appeal.timestamp,
+                appeal.reason,
+                appeal.evidence_provided,
+                appeal.status.value,
+                appeal.reviewer_notes,
+                appeal.resolution_timestamp,
+                appeal.sla_deadline,
+            ))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _recalculate_metrics(self) -> None:
+        """Rebuild metrics from cache (after DB load)."""
+        submitted = 0
+        accepted = 0
+        rejected = 0
+        sla_violations = 0
+
+        for appeal in self.appeals.values():
+            submitted += 1
+            if appeal.status == AppealStatus.ACCEPTED:
+                accepted += 1
+            elif appeal.status == AppealStatus.REJECTED:
+                rejected += 1
+            elif appeal.status == AppealStatus.EXPIRED:
+                sla_violations += 1
+
+        self.metrics = {
+            'appeals_submitted': submitted,
+            'appeals_accepted': accepted,
+            'appeals_rejected': rejected,
+            'sla_violations': sla_violations,
+        }
+
+    @staticmethod
+    def _row_to_appeal(row: sqlite3.Row) -> Appeal:
+        """Convert DB row to Appeal dataclass."""
+        return Appeal(
+            appeal_id=row["appeal_id"],
+            audit_trail_id=row["audit_trail_id"],
+            user_id=row["user_id"],
+            timestamp=row["timestamp"],
+            reason=row["reason"],
+            evidence_provided=row["evidence"],
+            status=AppealStatus(row["status"]),
+            reviewer_notes=row["reviewer_notes"],
+            resolution_timestamp=row["resolution_ts"],
+            sla_deadline=row["sla_deadline"],
+        )
+
+    # ── PUBLIC API (interface idêntica v2.0) ──────────────────
 
     def submit_appeal(
-            self,
-            audit_trail_id: int,
-            user_id: str,
-            reason: str,
-            evidence: Optional[str] = None,
+        self,
+        audit_trail_id: int,
+        user_id: str,
+        reason: str,
+        evidence: Optional[str] = None,
     ) -> Appeal:
-        """
-        Submete recurso.
-
-        Args:
-            audit_trail_id: ID da decisão contestada
-            user_id: ID do usuário
-            reason: Justificativa (min 20 chars)
-            evidence: Evidências adicionais (opcional)
-
-        Returns:
-            Appeal criado
-
-        Raises:
-            ValueError: Se reason muito curto
-        """
-        # Valida reason
+        """Submete recurso (LGPD Art. 20)."""
         if len(reason) < 20:
             raise ValueError("Reason must be at least 20 characters")
 
-        # Cria appeal
         appeal_id = f"APL-{audit_trail_id}-{int(time.time())}"
         appeal = Appeal(
             appeal_id=appeal_id,
@@ -140,163 +250,125 @@ class ContestabilityLoop:
             status=AppealStatus.PENDING,
         )
 
+        # Cache + SQLite (sync)
         self.appeals[appeal_id] = appeal
+        self._save_appeal(appeal)
         self.metrics['appeals_submitted'] += 1
 
-        logger.info(f"Appeal submitted: {appeal_id} by {user_id} for decision {audit_trail_id}")
-
-        # Notifica equipe de revisão (em prod: email/Slack)
+        logger.info(
+            "Appeal submitted: %s by %s for decision %d",
+            appeal_id, user_id, audit_trail_id,
+        )
         self._notify_review_team(appeal)
-
         return appeal
 
     def resolve_appeal(
-            self,
-            appeal_id: str,
-            accepted: bool,
-            reviewer_notes: str,
-            reviewer_id: str,
+        self,
+        appeal_id: str,
+        accepted: bool,
+        reviewer_notes: str,
+        reviewer_id: str,
     ) -> Appeal:
-        """
-        Resolve recurso (decisão humana).
-
-        Args:
-            appeal_id: ID do appeal
-            accepted: True se aceito, False se rejeitado
-            reviewer_notes: Notas do revisor
-            reviewer_id: ID do revisor
-
-        Returns:
-            Appeal atualizado
-
-        Raises:
-            ValueError: Se appeal não encontrado
-        """
+        """Resolve recurso (decisão humana)."""
         if appeal_id not in self.appeals:
             raise ValueError(f"Appeal not found: {appeal_id}")
 
         appeal = self.appeals[appeal_id]
-
-        # Atualiza status
-        appeal.status = AppealStatus.ACCEPTED if accepted else AppealStatus.REJECTED
+        appeal.status = (
+            AppealStatus.ACCEPTED if accepted else AppealStatus.REJECTED
+        )
         appeal.reviewer_notes = reviewer_notes
         appeal.resolution_timestamp = int(time.time())
 
-        # Metrics
+        # Persist
+        self._save_appeal(appeal)
+
         if accepted:
             self.metrics['appeals_accepted'] += 1
         else:
             self.metrics['appeals_rejected'] += 1
 
-        # Resolution time
         resolution_time = appeal.resolution_timestamp - appeal.timestamp
-
         logger.info(
-            f"Appeal resolved: {appeal_id} "
-            f"{'ACCEPTED' if accepted else 'REJECTED'} "
-            f"by {reviewer_id} "
-            f"(resolution time: {resolution_time / 3600:.1f}h)"
+            "Appeal resolved: %s %s by %s (%.1fh)",
+            appeal_id,
+            "ACCEPTED" if accepted else "REJECTED",
+            reviewer_id,
+            resolution_time / 3600,
         )
 
-        # Notifica usuário
         self._notify_user_decision(appeal)
-
-        # Se aceito, atualiza métricas de false positives
         if accepted:
             self._update_false_positive_metrics(appeal.audit_trail_id)
 
         return appeal
 
     def get_appeal(self, appeal_id: str) -> Optional[Appeal]:
-        """Recupera appeal por ID."""
         return self.appeals.get(appeal_id)
 
     def list_pending_appeals(self) -> List[Appeal]:
-        """Lista appeals pendentes."""
-        return [a for a in self.appeals.values() if a.status == AppealStatus.PENDING]
+        return [
+            a for a in self.appeals.values()
+            if a.status == AppealStatus.PENDING
+        ]
 
     def list_expired_appeals(self) -> List[Appeal]:
-        """Lista appeals que excederam SLA."""
+        """Marca e retorna appeals que excederam SLA."""
         now = int(time.time())
         expired = []
 
         for appeal in self.appeals.values():
             if appeal.status == AppealStatus.PENDING:
-                elapsed = now - appeal.timestamp
-                if elapsed > self.sla_seconds:
+                if now - appeal.timestamp > self.sla_seconds:
                     appeal.status = AppealStatus.EXPIRED
+                    self._save_appeal(appeal)
                     self.metrics['sla_violations'] += 1
                     expired.append(appeal)
-                    logger.warning(f"Appeal expired (SLA breach): {appeal.appeal_id} (elapsed: {elapsed / 3600:.1f}h)")
+                    logger.warning(
+                        "Appeal expired (SLA breach): %s (%.1fh)",
+                        appeal.appeal_id,
+                        (now - appeal.timestamp) / 3600,
+                    )
 
         return expired
 
     def get_sla_compliance_rate(self) -> float:
-        """
-        Calcula taxa de conformidade com SLA.
-
-        Returns:
-            Taxa de appeals resolvidos dentro do SLA (0.0-1.0)
-        """
         resolved = [
             a for a in self.appeals.values()
-            if a.status in [AppealStatus.ACCEPTED, AppealStatus.REJECTED]
+            if a.status in (AppealStatus.ACCEPTED, AppealStatus.REJECTED)
         ]
-
         if not resolved:
-            return 1.0  # Sem appeals = 100% compliance
+            return 1.0
 
-        within_sla = 0
-        for appeal in resolved:
-            resolution_time = appeal.resolution_timestamp - appeal.timestamp
-            if resolution_time <= self.sla_seconds:
-                within_sla += 1
-
+        within_sla = sum(
+            1 for a in resolved
+            if (a.resolution_timestamp - a.timestamp) <= self.sla_seconds
+        )
         return within_sla / len(resolved)
 
     def get_appeal_success_rate(self) -> float:
-        """
-        Calcula taxa de sucesso de appeals.
-
-        Returns:
-            Taxa de appeals aceitos (0.0-1.0)
-        """
         total = self.metrics['appeals_accepted'] + self.metrics['appeals_rejected']
         if total == 0:
             return 0.0
-
         return self.metrics['appeals_accepted'] / total
 
-    def _notify_review_team(self, appeal: Appeal):
-        """Notifica equipe de revisão (stub - em prod: email/Slack)."""
-        logger.info(f"NOTIFICATION: New appeal for review: {appeal.appeal_id}")
-        logger.info(f"  User: {appeal.user_id}")
-        logger.info(f"  Reason: {appeal.reason[:100]}...")
-        logger.info(f"  SLA: {self.sla_seconds / 3600}h")
-
-    def _notify_user_decision(self, appeal: Appeal):
-        """Notifica usuário sobre decisão (stub - em prod: email)."""
-        status = "aceito" if appeal.status == AppealStatus.ACCEPTED else "rejeitado"
-        logger.info(f"NOTIFICATION: Appeal decision to user {appeal.user_id}")
-        logger.info(f"  Appeal: {appeal.appeal_id}")
-        logger.info(f"  Status: {status}")
-        logger.info(f"  Notes: {appeal.reviewer_notes}")
-
-    def _update_false_positive_metrics(self, audit_trail_id: int):
-        """
-        Atualiza métricas de falsos positivos.
-
-        Appeals aceitos indicam que o sistema cometeu erro.
-        Importante para calibração futura.
-        """
-        logger.info(f"False positive detected (audit_trail_id={audit_trail_id}). Updating model calibration metrics.")
-        # Em prod: incrementar contador em Prometheus, atualizar BiasDeclaration
-
     def get_metrics(self) -> Dict[str, Any]:
-        """Retorna métricas."""
+        pending = len(self.list_pending_appeals())
         return {
             **self.metrics,
-            'pending_appeals': len(self.list_pending_appeals()),
+            'pending_appeals': pending,
             'sla_compliance_rate': self.get_sla_compliance_rate(),
             'appeal_success_rate': self.get_appeal_success_rate(),
         }
+
+    # ── STUBS (notificação) ───────────────────────────────────
+
+    def _notify_review_team(self, appeal: Appeal) -> None:
+        logger.info("NOTIFY review team: %s", appeal.appeal_id)
+
+    def _notify_user_decision(self, appeal: Appeal) -> None:
+        status = "aceito" if appeal.status == AppealStatus.ACCEPTED else "rejeitado"
+        logger.info("NOTIFY user %s: appeal %s %s", appeal.user_id, appeal.appeal_id, status)
+
+    def _update_false_positive_metrics(self, audit_trail_id: int) -> None:
+        logger.info("FP metric update for decision %d", audit_trail_id)

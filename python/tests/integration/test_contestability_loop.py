@@ -14,9 +14,10 @@ from buildtovalue.governance.contestability_loop import ContestabilityLoop, Appe
 # ═══════════════════════════════════════════════════════════════════════════
 
 @pytest.fixture
-def loop():
-    """ContestabilityLoop para testes."""
-    return ContestabilityLoop(sla_hours=24)
+def loop(tmp_path):
+    """ContestabilityLoop com SQLite temporário."""
+    db = str(tmp_path / "test_appeals.db")
+    return ContestabilityLoop(sla_hours=24, db_path=db)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -241,6 +242,59 @@ class TestMetrics:
         assert metrics['appeals_submitted'] == 2
         assert metrics['pending_appeals'] == 2
 
+class TestPersistence:
+    """T2.2: SQLite persistence tests."""
+
+    def test_survives_restart(self, tmp_path):
+        """Appeals persistem após recriação do loop."""
+        db = str(tmp_path / "persist.db")
+
+        # Instância 1: submete appeal
+        loop1 = ContestabilityLoop(sla_hours=24, db_path=db)
+        appeal = loop1.submit_appeal(
+            audit_trail_id=999,
+            user_id="persist-user",
+            reason="Testing persistence across restarts.",
+        )
+        appeal_id = appeal.appeal_id
+        del loop1  # Simula crash/restart
+
+        # Instância 2: deve encontrar o appeal
+        loop2 = ContestabilityLoop(sla_hours=24, db_path=db)
+        recovered = loop2.get_appeal(appeal_id)
+
+        assert recovered is not None
+        assert recovered.appeal_id == appeal_id
+        assert recovered.user_id == "persist-user"
+        assert recovered.status == AppealStatus.PENDING
+        assert loop2.metrics['appeals_submitted'] == 1
+
+    def test_resolve_persists(self, tmp_path):
+        """Resolução persiste após restart."""
+        db = str(tmp_path / "resolve.db")
+
+        # Instância 1: submete + resolve
+        loop1 = ContestabilityLoop(sla_hours=24, db_path=db)
+        appeal = loop1.submit_appeal(
+            audit_trail_id=888,
+            user_id="resolve-user",
+            reason="Testing resolve persistence works.",
+        )
+        loop1.resolve_appeal(
+            appeal_id=appeal.appeal_id,
+            accepted=True,
+            reviewer_notes="Approved in instance 1.",
+            reviewer_id="reviewer-1",
+        )
+        del loop1
+
+        # Instância 2: verifica estado
+        loop2 = ContestabilityLoop(sla_hours=24, db_path=db)
+        recovered = loop2.get_appeal(appeal.appeal_id)
+
+        assert recovered.status == AppealStatus.ACCEPTED
+        assert recovered.reviewer_notes == "Approved in instance 1."
+        assert loop2.metrics['appeals_accepted'] == 1
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════════════════════
