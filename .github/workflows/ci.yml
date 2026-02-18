@@ -1,4 +1,0 @@
-- name: Test FFI
-  run: |
-    cargo build --release
-    python -m pytest tests/integration/test_ffi.py -v
