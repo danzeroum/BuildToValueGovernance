@@ -2,7 +2,7 @@
 import click
 
 @click.group()
-@click.version_option(version="2.2.0")
+@click.version_option(version="1.0.0")
 def cli():
     """BuildToValue Sovereign Trust OS CLI"""
     pass

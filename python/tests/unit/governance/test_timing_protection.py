@@ -12,7 +12,7 @@ from pathlib import Path
 # Fix import
 sys.path.insert(0, str(Path(__file__).parent))
 
-from timing_protection import (
+from buildtovalue.governance.timing_protection import (
     ConstantTimeOps,
     ResponseTimeNormalizer,
     ResponseTimeConfig,

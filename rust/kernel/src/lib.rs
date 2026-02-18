@@ -1,4 +1,4 @@
-//! BuildToValue Sovereign Kernel v2.3.2
+//! BuildToValue Sovereign Kernel v1
 
 pub mod api;
 pub mod batch;
@@ -10,7 +10,6 @@ pub mod gatekeeper;
 pub mod interceptor;
 pub mod ledger;
 pub mod network;
-pub mod observability;
 pub mod output_guard;
 pub mod policy;
 pub mod security;
@@ -21,6 +20,8 @@ pub mod validators;
 #[cfg(feature = "ffi-bindings")]
 pub mod ffi;
 
+#[cfg(feature = "observability")]
+pub mod observability;
 
 // Re-exports
 pub use gatekeeper::Gatekeeper;
@@ -28,8 +29,8 @@ pub use evidence::{TechnicalEvidence, Finding};
 pub use core::types::{ValidatorModule, TechnicalSeverity, Action, RiskLevel, BiasDeclaration};
 pub use validators::Validator;
 
-pub const KERNEL_VERSION: &str = "2.3.2";
-pub const PROJECT_VERSION: &str = "3.0";
+pub const KERNEL_VERSION: &str = "1.0.0";
+pub const PROJECT_VERSION: &str = "1.0";
 pub const PROTOCOL_VERSION: u16 = 3;
 
 pub fn version_info() -> String {
@@ -48,7 +49,7 @@ mod tests {
     #[test]
     fn test_version_info() {
         let info = version_info();
-        assert!(info.contains("BuildToValue v3.0"));
-        assert!(info.contains("Kernel v2.3.2"));
+        assert!(info.contains("BuildToValue v1.0"));
+        assert!(info.contains("Kernel v1.0.0"));
     }
 }

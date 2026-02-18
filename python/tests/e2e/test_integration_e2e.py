@@ -7,7 +7,7 @@ Gate: Week 4 - Day 19
 import pytest
 import time
 from .ethical_context_engine_v3 import EthicalContextEngineV3, EthicalContext
-from .contestability_loop import ContestabilityLoop, AppealStatus
+from buildtovalue.governance.contestability_loop import ContestabilityLoop, AppealStatus
 
 @pytest.fixture
 def engine():
