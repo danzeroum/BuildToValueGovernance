@@ -50,3 +50,55 @@ class EthicalContext:
     educational_mode: bool = False
     domain: str = "general"
     user_role: str = "anonymous"
+
+
+@dataclass
+class SimpleFinding:
+    """Minimal finding for governance layer."""
+    rule_id: str = ""
+    confidence: float = 0.5
+    severity: float = 0.5
+    module: str = ""
+
+
+class _Stats:
+    """Mimics TechnicalEvidence.stats interface for MercyCalculator."""
+    def __init__(
+        self,
+        entropy: float = 0.0,
+        total_chars: int = 0,
+        has_pii: bool = False,
+    ):
+        self.entropy = entropy
+        self.total_chars = total_chars
+        self.has_pii = has_pii
+
+
+@dataclass
+class SimpleTechnicalEvidence:
+    """
+    Lightweight adapter matching TechnicalEvidence interface
+    for MercyCalculator compatibility.
+
+    Duck-types: .findings, .critical, .critical_count,
+    .composite_risk, .stats.has_pii, .stats.entropy
+    """
+    composite_risk: float = 0.0
+    finding_count: int = 0
+    critical_count: int = 0
+    entropy: float = 0.0
+    total_chars: int = 0
+    findings: List[SimpleFinding] = field(default_factory=list)
+    _has_pii: bool = False
+
+    @property
+    def stats(self):
+        return _Stats(
+            entropy=self.entropy,
+            total_chars=self.total_chars,
+            has_pii=self._has_pii or self.finding_count > 0,
+        )
+
+    @property
+    def critical(self):
+        return [f for f in self.findings if f.severity >= 0.8]
