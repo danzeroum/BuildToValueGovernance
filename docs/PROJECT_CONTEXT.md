@@ -10,19 +10,20 @@ Judiciário (Python < 10ms) → Auditivo (Ledger imutável).
 
 ## 2. ESTADO ATUAL
 
-**Versão:** v2.0.0-alpha (em desenvolvimento)
+**Versão:** v2.0.0-alpha (Fase B completa)
 **Versões completadas:** v1.5 → v1.9 (operacional end-to-end via Docker Compose)
 
 Sistema operacional com:
 - Rust Gateway (:8080) — validate, sanitize, batch, policy test, metrics
 - Python Governance (:8000) — decide, trust, appeals, ledger query, compliance, intelligence, webhooks
-- Streamlit Dashboard (:8501) — 9 páginas (Validate, Sanitize, Trust, Compliance, Intelligence, Audit Ledger, Appeals, Webhooks, Metrics)
+- Streamlit Dashboard (:8501) — 9 páginas
 - Prometheus (:9090) + Grafana (:3000) — observabilidade
 - SLM Classifier — Qwen 2.5 3B local (zona de ambiguidade, fail-open)
 - CI/CD — GitHub Actions (Rust + Python + Ethical tests)
+- Runtime Compliance Engine — RiskClassifier + ComplianceEvaluator no pipeline /v1/decide
+- FRIA Generator — Fundamental Rights Impact Assessment (Art. 27, 10 seções auto-preenchidas)
 
 Latências observadas (Docker, dev): ~10ms validate, ~6ms hard block, ~11ms mercy flow.
-
 ## 3. 10 GAPS — TODOS FECHADOS
 
 | # | Gap | Status |
@@ -49,7 +50,7 @@ Latências observadas (Docker, dev): ~10ms validate, ~6ms hard block, ~11ms merc
 
 ## 5. TESTES
 
-- 316 testes passando (unit + integration + ethical)
+- 357 testes passando (unit + integration + ethical)
 - 12 deselected (benchmarks opcionais)
 - 17 warnings restantes (httpx deprecation — cosmético)
 
@@ -65,6 +66,8 @@ Latências observadas (Docker, dev): ~10ms validate, ~6ms hard block, ~11ms merc
 | `/v1/policy/test` | POST | Policy test |
 | `/health` | GET | Health check |
 | `/metrics` | GET | Prometheus |
+| `/v1/compliance/classify-risk` | POST | EU AI Act risk classification (Annex III) |
+| `/v1/compliance/fria/generate` | POST | FRIA document generation (Art. 27) |
 
 ### Python Governance (:8000)
 
@@ -109,7 +112,6 @@ gRPC, Node.js.
 
 - FPR ~15% (adversarial, 70 amostras — não validado externamente)
 - FNR leetspeak ~12% (homoglyphs Unicode não cobertos)
-- Compliance é self-assessment (não runtime enforcement)
 - Sem TLS (HTTP plain text)
 - Ledger sem rotação de arquivo (cresce infinitamente)
 - DurableLedger S3 sync best-effort (sem bucket configurado)
