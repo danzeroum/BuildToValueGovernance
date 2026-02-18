@@ -147,13 +147,11 @@ class ConstantTimeOps:
         Returns:
             True se value em [min_val, max_val]
         """
-        # Usa operações bit-a-bit para timing constante
-        in_range_low = ((value - min_val) | (min_val - value)) >= 0
-        in_range_high = ((max_val - value) | (value - max_val)) >= 0
-
-        return in_range_low and in_range_high
-
-
+        above_min = value >= min_val
+        below_max = value <= max_val
+        result_a = above_min
+        result_b = below_max
+        return result_a and result_b
 # ═══════════════════════════════════════════════════════════════════════════
 # RESPONSE TIME NORMALIZATION
 # ═══════════════════════════════════════════════════════════════════════════
