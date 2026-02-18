@@ -1,0 +1,18 @@
+# Webhook configuration for critical decision notifications.
+# Targets receive POST with verdict metadata (never original input).
+# See ADR-026 for design rationale.
+
+webhooks:
+  # Example: Slack incoming webhook
+  # - url: "https://hooks.slack.com/services/T00/B00/xxxx"
+  #   actions: ["BLOCK", "HARD_BLOCK"]
+  #   enabled: true
+  #   timeout_seconds: 5
+  #   retry_max: 2
+
+  # Example: PagerDuty
+  # - url: "https://events.pagerduty.com/v2/enqueue"
+  #   actions: ["HARD_BLOCK"]
+  #   enabled: true
+  #   timeout_seconds: 5
+  #   retry_max: 3

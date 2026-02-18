@@ -44,7 +44,14 @@ COMPLIANCE_PLUGINS = {
 from buildtovalue.api.routes.intelligence import router as intelligence_router
 app.include_router(intelligence_router)
 
+# Em python/buildtovalue/api/app.py, adicionar:
+from buildtovalue.api.routes.ledger import router as ledger_router
+app.include_router(ledger_router)
 
+
+# Em python/buildtovalue/api/app.py, adicionar:
+from buildtovalue.api.routes.webhooks import router as webhooks_router
+app.include_router(webhooks_router)
 # ═══════════════════════════════════════════════════════════════
 # DATABASE
 # ═══════════════════════════════════════════════════════════════
