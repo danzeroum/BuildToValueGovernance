@@ -64,7 +64,7 @@ pub const MAX_FINDINGS: usize = 10;
 pub const MAX_CRITICAL_FINDINGS: usize = 3;
 pub const HASH_SIZE: usize = 32;
 pub const MAX_FINDING_SIZE: usize = 512;
-pub const EVIDENCE_SIZE: usize = 9600;          // TechnicalEvidence (v2.1)
+pub const EVIDENCE_SIZE: usize = 9632;          // TechnicalEvidence (v2.1)
 const MAX_CALIBRATION_DAYS: i64 = 90;
 
 // ---------------------------------------------------------------------
