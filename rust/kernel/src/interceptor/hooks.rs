@@ -1,6 +1,8 @@
 //! Interceptor Hooks v1.7.0 — Pre/Post processing chain (ADR-015)
 //! Chain of Responsibility: fail-secure (hook failure → BLOCK).
 
+use std::cmp::Reverse;
+
 // ---------------------------------------------------------------------
 // INTERCEPT ACTION
 // ---------------------------------------------------------------------
@@ -50,15 +52,14 @@ impl InterceptorChain {
 
     pub fn add_request_hook(&mut self, hook: Box<dyn RequestInterceptor>) {
         self.request_hooks.push(hook);
-        self.request_hooks.sort_by(|a, b| b.priority().cmp(&a.priority()));
+        self.request_hooks.sort_by_key(|b| Reverse(b.priority()));
     }
 
     pub fn add_response_hook(&mut self, hook: Box<dyn ResponseInterceptor>) {
         self.response_hooks.push(hook);
-        self.response_hooks.sort_by(|a, b| b.priority().cmp(&a.priority()));
+        self.response_hooks.sort_by_key(|b| Reverse(b.priority()));
     }
 
-    /// Run all request interceptors. Fail-secure: any error → Block.
     pub fn run_request(&self, input: &str) -> (InterceptAction, String) {
         let mut current = input.to_string();
 
@@ -88,7 +89,6 @@ impl InterceptorChain {
         (InterceptAction::Continue, current)
     }
 
-    /// Run all response interceptors. Fail-secure: any error → Block.
     pub fn run_response(&self, output: &str) -> (InterceptAction, String) {
         let mut current = output.to_string();
 
@@ -127,7 +127,7 @@ impl Default for InterceptorChain {
 }
 
 // ---------------------------------------------------------------------
-// BUILT-IN: MaxLengthHook (example)
+// BUILT-IN: MaxLengthHook
 // ---------------------------------------------------------------------
 pub struct MaxLengthHook {
     max_len: usize,
@@ -155,13 +155,13 @@ impl RequestInterceptor for MaxLengthHook {
 }
 
 // ---------------------------------------------------------------------
-// BUILT-IN: TrimHook (example)
+// BUILT-IN: TrimHook
 // ---------------------------------------------------------------------
 pub struct TrimHook;
 
 impl RequestInterceptor for TrimHook {
     fn name(&self) -> &'static str { "trim" }
-    fn priority(&self) -> u32 { 200 } // runs before max_length
+    fn priority(&self) -> u32 { 200 }
     fn intercept_request(&self, input: &str) -> InterceptResult {
         let trimmed = input.trim();
         if trimmed.len() != input.len() {
@@ -207,11 +207,10 @@ mod tests {
     #[test]
     fn test_chain_ordering_by_priority() {
         let mut chain = InterceptorChain::new();
-        chain.add_request_hook(Box::new(MaxLengthHook::new(5)));   // priority 100
-        chain.add_request_hook(Box::new(TrimHook));                 // priority 200
-        // Trim runs first (higher priority), then max_length
-        let (action, _) = chain.run_request("  hi  "); // trims to "hi" (len 2)
-        assert_eq!(action, InterceptAction::Continue); // 2 < 5, passes
+        chain.add_request_hook(Box::new(MaxLengthHook::new(5)));
+        chain.add_request_hook(Box::new(TrimHook));
+        let (action, _) = chain.run_request("  hi  ");
+        assert_eq!(action, InterceptAction::Continue);
     }
 
     #[test]
@@ -219,7 +218,6 @@ mod tests {
         let mut chain = InterceptorChain::new();
         chain.add_request_hook(Box::new(MaxLengthHook::new(3)));
         chain.add_request_hook(Box::new(TrimHook));
-        // "  abcdef  " → trim → "abcdef" (6 > 3) → BLOCK
         let (action, _) = chain.run_request("  abcdef  ");
         assert!(matches!(action, InterceptAction::Block(_)));
     }

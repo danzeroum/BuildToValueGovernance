@@ -10,6 +10,10 @@ lazy_static! {
     static ref HEX_REGEX: Regex = Regex::new(r"(?:0x)?[0-9a-fA-F]{16,}").unwrap();
 }
 
+impl Default for HexDecoder {
+    fn default() -> Self { Self::new() }
+}
+
 pub struct HexDecoder {
     rule_id: String,
 }
