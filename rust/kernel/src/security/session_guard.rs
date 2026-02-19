@@ -9,7 +9,6 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use blake3::Hasher;
-use rand::Rng;
 
 /// Token de sessão segura
 #[derive(Debug, Clone)]
@@ -72,7 +71,8 @@ impl SessionGuard {
             created_at: now,
             expires_at: now + self.session_timeout,
             user_id: user_id.to_string(),
-            nonce: rand::thread_rng().gen(),
+            nonce: rand::random(),
+
         };
 
         // Armazena sessão
@@ -154,7 +154,7 @@ impl SessionGuard {
     /// Gera token seguro usando BLAKE3
     fn generate_token(&self, user_id: &str) -> String {
         let mut hasher = Hasher::new();
-        let nonce: u64 = rand::thread_rng().gen();
+        let nonce: u64 =  rand::random();
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -165,7 +165,7 @@ impl SessionGuard {
         hasher.update(&timestamp.to_le_bytes());
 
         // Adiciona sal aleatório
-        let salt: [u8; 16] = rand::thread_rng().gen();
+        let salt: [u8; 16] =  rand::random();
         hasher.update(&salt);
 
         hex::encode(hasher.finalize().as_bytes())

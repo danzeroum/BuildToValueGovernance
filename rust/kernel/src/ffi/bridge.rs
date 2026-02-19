@@ -32,6 +32,7 @@ pub struct RustKernel {
     ledger: Arc<Mutex<DurableLedger>>,
 }
 
+#[allow(non_local_definitions)]
 #[pymethods]
 impl RustKernel {
     #[new]

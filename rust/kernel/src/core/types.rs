@@ -64,7 +64,7 @@ pub const MAX_FINDINGS: usize = 10;
 pub const MAX_CRITICAL_FINDINGS: usize = 3;
 pub const HASH_SIZE: usize = 32;
 pub const MAX_FINDING_SIZE: usize = 512;
-pub const EVIDENCE_SIZE: usize = 9600;          // TechnicalEvidence (v2.1)
+pub const EVIDENCE_SIZE: usize = 9632;          // TechnicalEvidence (v2.1)
 const MAX_CALIBRATION_DAYS: i64 = 90;
 
 // ---------------------------------------------------------------------
@@ -312,8 +312,8 @@ impl BiasDeclaration {
         }
 
         let year = (self.calibration_date / 10000) as i32;
-        let month = ((self.calibration_date / 100) % 100) as u32;
-        let day = (self.calibration_date % 100) as u32;
+        let month = (self.calibration_date / 100) % 100;
+        let day = self.calibration_date % 100;
 
         let calibration_date = match NaiveDate::from_ymd_opt(year, month, day) {
             Some(date) => date,

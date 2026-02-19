@@ -44,7 +44,7 @@ pub struct Finding {
 }
 
 // Garantia de tamanho em compile-time
-static_assertions::const_assert_eq!(std::mem::size_of::<Finding>(), 144);
+static_assertions::const_assert_eq!(size_of::<Finding>(), 144);
 
 impl Finding {
     /// Cria um novo finding com valores padrão e strings truncadas para caber nos arrays fixos
@@ -108,7 +108,7 @@ impl Finding {
         unsafe {
             let mut bytes = [0u8; 144];
             let ptr = self as *const Finding as *const u8;
-            std::ptr::copy_nonoverlapping(ptr, bytes.as_mut_ptr(), std::mem::size_of::<Finding>());
+            std::ptr::copy_nonoverlapping(ptr, bytes.as_mut_ptr(), size_of::<Finding>());
             bytes
         }
     }
@@ -147,6 +147,6 @@ mod tests {
 
     #[test]
     fn test_finding_size_invariant() {
-        assert_eq!(std::mem::size_of::<Finding>(), 144);
+        assert_eq!(size_of::<Finding>(), 144);
     }
 }

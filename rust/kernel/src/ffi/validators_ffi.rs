@@ -5,17 +5,20 @@
 //
 // Author: BuildToValue Architecture Team
 // License: Apache 2.0
+
+
+#![allow(clippy::duplicated_code)]
+
+
 #![cfg(feature = "ffi-bindings")]
 use crate::validators::{
     ConsentValidator, ConsentRevocationValidator, SensitiveDataValidator,
     CpfValidator, CnpjValidator, CreditCardValidator, Validator,
 };
 use crate::evidence::Finding;
-use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::slice;
-use serde_json;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FFI STRUCTURES (C-compatible)
@@ -74,10 +77,7 @@ pub struct FFIValidationResult {
 // HELPER: Parse metadata JSON to HashMap
 // ═══════════════════════════════════════════════════════════════════════════
 
-fn parse_metadata_json(json_str: &str) -> Result<HashMap<String, String>, String> {
-    serde_json::from_str::<HashMap<String, String>>(json_str)
-        .map_err(|e| format!("Failed to parse metadata JSON: {}", e))
-}
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FFI EXPORTS - LGPD VALIDATORS
