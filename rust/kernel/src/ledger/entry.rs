@@ -64,7 +64,7 @@ pub struct LedgerEntry {
     pub _reserved: [u8; 196],
 }
 
-static_assertions::const_assert_eq!(std::mem::size_of::<LedgerEntry>(), 384);
+static_assertions::const_assert_eq!(size_of::<LedgerEntry>(), 384);
 
 impl LedgerEntry {
     pub fn calculate_hash(&self) -> [u8; 32] {

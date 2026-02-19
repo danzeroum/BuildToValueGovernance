@@ -4,8 +4,6 @@ mod tests {
     use buildtovalue_kernel::core::module::Module;
     use buildtovalue_kernel::evidence::TechnicalEvidence;
     use buildtovalue_kernel::gatekeeper::Gatekeeper;
-    use buildtovalue_kernel::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector};
-    use buildtovalue_kernel::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer};
     use buildtovalue_kernel::validators::{
         CpfValidator, CnpjValidator, EmailValidator, PhoneValidator, CreditCardValidator,
     };
@@ -135,7 +133,7 @@ mod tests {
     #[test]
     fn test_bias_declaration_size_512_bytes() {
         assert_eq!(
-            std::mem::size_of::<BiasDeclaration>(),
+            size_of::<BiasDeclaration>(),
             512,
             "BiasDeclaration deve ter exatamente 512 bytes (ADR-010)"
         );
@@ -148,7 +146,7 @@ mod tests {
     #[test]
     fn test_technical_evidence_still_9596_bytes() {
         assert_eq!(
-            std::mem::size_of::<TechnicalEvidence>(),
+            size_of::<TechnicalEvidence>(),
             9632,
             "TechnicalEvidence deve manter 9596 bytes após expansão de BiasDeclaration"
         );

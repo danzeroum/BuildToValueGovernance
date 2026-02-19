@@ -31,16 +31,16 @@ pub struct ChainResult {
 }
 
 pub struct DeobfuscatorChain {
-    base64: Base64Detector,
-    hex: HexDecoder,
+    _base64: Base64Detector,
+    _hex: HexDecoder,
     leetspeak: LeetspeakDetector,
 }
 
 impl DeobfuscatorChain {
     pub fn new() -> Self {
         Self {
-            base64: Base64Detector::new(),
-            hex: HexDecoder::new(),
+            _base64: Base64Detector::new(),
+            _hex: HexDecoder::new(),
             leetspeak: LeetspeakDetector::new(),
         }
     }

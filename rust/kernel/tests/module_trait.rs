@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use buildtovalue_kernel::Gatekeeper;
-    use buildtovalue_kernel::core::types::ValidatorModule;
 
     #[test]
     fn test_all_modules_implement_module_trait() {
