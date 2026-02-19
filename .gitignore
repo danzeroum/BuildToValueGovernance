@@ -5,7 +5,10 @@
 /rust/data/ledger/btv.ledger
 /rust/data/ledger/btv.wal
 /rust/data/ledger/decisions.jsonl
-/rust/.idea/*
-/docs/estruturaArquivos/*
-/docs/vision/*
+/rust/.idea/
+/docs/estruturaArquivos/
+/docs/vision/
 /docs/HANDOFF_TEMPLATES.md
+/rust/.idea/
+/rust/_legacy/
+/.venv/
