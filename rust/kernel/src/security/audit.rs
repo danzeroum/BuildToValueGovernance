@@ -40,7 +40,7 @@ impl ProbingDetector {
         // Registra request
         self.request_history
             .entry(ip)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((now, response_time));
 
         // Limpa histórico antigo (fora da janela)
