@@ -31,9 +31,9 @@ pub struct PenaltyCalculatorV2;
 impl PenaltyCalculatorV2 {
     pub fn calculate_roi_batch(threats: &[(ThreatType, RegulatoryFramework)]) -> i64 {
         let penalty_table: HashMap<(ThreatType, RegulatoryFramework), i64> = [
-            ((ThreatType::PIILeakage, RegulatoryFramework::GDPR), 20_000_00),
-            ((ThreatType::PIILeakage, RegulatoryFramework::LGPD), 50_000_00),
-            ((ThreatType::PromptInjection, RegulatoryFramework::EUAIAct), 100_000_00),
+            ((ThreatType::PIILeakage, RegulatoryFramework::GDPR), 2_000_000),
+            ((ThreatType::PIILeakage, RegulatoryFramework::LGPD), 5_000_000),
+            ((ThreatType::PromptInjection, RegulatoryFramework::EUAIAct), 10_000_000),
             ((ThreatType::ShadowAI, RegulatoryFramework::GDPR), 30_000_00),
             ((ThreatType::DenialOfWallet, RegulatoryFramework::CCPA), 5_000_00),
             ((ThreatType::Toxicity, RegulatoryFramework::EUAIAct), 75_000_00),
@@ -74,9 +74,9 @@ pub fn calculate_penalties_batch(py: Python, threats: &PyList) -> PyResult<PyObj
             .map_err(|e| PyValueError::new_err(format!("Invalid framework: {}", e)))?;
 
         let threat = parse_threat_type(&threat_str)
-            .map_err(|e| PyValueError::new_err(e))?;
+            .map_err(PyValueError::new_err)?;
         let framework = parse_framework(&framework_str)
-            .map_err(|e| PyValueError::new_err(e))?;
+            .map_err(PyValueError::new_err)?;
 
         parsed_threats.push((threat, framework));
 
@@ -100,7 +100,6 @@ pub fn calculate_penalties_batch(py: Python, threats: &PyList) -> PyResult<PyObj
 
     Ok(response.into())
 }
-
 fn parse_threat_type(s: &str) -> Result<ThreatType, String> {
     match s.to_lowercase().replace("_", "").as_str() {
         "piileakage" | "pii" | "dataleak" => Ok(ThreatType::PIILeakage),

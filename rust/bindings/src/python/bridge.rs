@@ -8,6 +8,10 @@ use pyo3::types::PyBytes;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // Placeholders (substitua pelos imports reais)
+impl Default for Gatekeeper {
+    fn default() -> Self { Self::new() }
+}
+
 pub struct Gatekeeper;
 pub struct TechnicalEvidence;
 
