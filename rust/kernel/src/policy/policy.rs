@@ -138,13 +138,10 @@ impl PolicyEngine {
 
     /// Fail-secure: if YAML is invalid, returns engine that blocks everything.
     pub fn from_yaml_str_failsecure(yaml: &str) -> Self {
-        match Self::from_yaml_str(yaml) {
-            Ok(engine) => engine,
-            Err(e) => {
-                log::error!("Policy YAML invalid, fail-secure BLOCK ALL: {}", e);
-                Self::block_all_engine()
-            }
-        }
+        Self::from_yaml_str(yaml).unwrap_or_else(|e| {
+            log::error!("Policy YAML invalid, fail-secure BLOCK ALL: {}", e);
+            Self::block_all_engine()
+        })
     }
 
     pub fn new(policy_set: PolicySet) -> Result<Self> {

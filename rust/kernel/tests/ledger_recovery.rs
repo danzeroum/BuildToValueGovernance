@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use buildtovalue_kernel::ledger::durable_ledger::{ChainStatus, DurableLedger, RecoveryResult};
+    use buildtovalue_kernel::ledger::durable_ledger::{ChainStatus, DurableLedger};
     use buildtovalue_kernel::ledger::entry::LedgerEntry;
     use tempfile::tempdir;
 

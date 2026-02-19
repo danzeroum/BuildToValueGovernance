@@ -1,0 +1,4 @@
+rust/target/
+**/.git
+**/*.log
+data/ledger/*.jsonl
