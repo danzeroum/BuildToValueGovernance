@@ -160,10 +160,10 @@ impl PolicyEngine {
         for (idx, p) in policy_set.policies.iter().enumerate() {
             if p.enabled {
                 for v in &p.conditions.validators {
-                    index.entry(v.clone()).or_insert_with(Vec::new).push(idx);
+                    index.entry(v.clone()).or_default().push(idx);
                 }
                 if p.conditions.validators.is_empty() {
-                    index.entry("*".to_string()).or_insert_with(Vec::new).push(idx);
+                    index.entry("*".to_string()).or_default().push(idx);
                 }
             }
         }

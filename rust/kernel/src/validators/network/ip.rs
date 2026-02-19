@@ -31,6 +31,9 @@ lazy_static! {
 // IPV4 VALIDATOR
 // ═══════════════════════════════════════════════════════════════════════════
 
+impl Default for Ipv4Validator {
+    fn default() -> Self { Self::new() }
+}
 pub struct Ipv4Validator {
     rule_id: String,
 }
@@ -89,7 +92,9 @@ impl Ipv4Validator {
 // ═══════════════════════════════════════════════════════════════════════════
 // URL VALIDATOR
 // ═══════════════════════════════════════════════════════════════════════════
-
+impl Default for UrlValidator {
+    fn default() -> Self { Self::new() }
+}
 pub struct UrlValidator {
     rule_id: String,
 }

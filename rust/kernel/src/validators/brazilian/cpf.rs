@@ -22,6 +22,7 @@ impl CpfValidator {
 
         // Primeiro dígito verificador
         let mut sum = 0;
+        #[allow(clippy::needless_range_loop)]
         for i in 0..9 {
             sum += nums[i] * (10 - i as u32);
         }
@@ -31,6 +32,7 @@ impl CpfValidator {
 
         // Segundo dígito verificador
         sum = 0;
+        #[allow(clippy::needless_range_loop)]
         for i in 0..10 {
             sum += nums[i] * (11 - i as u32);
         }

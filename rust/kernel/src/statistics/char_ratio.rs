@@ -4,7 +4,9 @@ use crate::core::module::{Module, ScanContext};
 use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity, InputStatistics};
 use crate::evidence::Finding;
 use std::collections::HashSet;
-
+impl Default for CharRatioAnalyzer {
+    fn default() -> Self { Self::new() }
+}
 pub struct CharRatioAnalyzer;
 
 impl CharRatioAnalyzer {

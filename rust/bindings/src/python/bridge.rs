@@ -8,6 +8,10 @@ use pyo3::types::PyBytes;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // Placeholders (substitua pelos imports reais)
+impl Default for Gatekeeper {
+    fn default() -> Self { Self::new() }
+}
+
 pub struct Gatekeeper;
 pub struct TechnicalEvidence;
 
@@ -16,7 +20,7 @@ impl Gatekeeper {
         Gatekeeper
     }
 
-    pub fn scan_for_evidence(&self, input: &str, audit_trail_id: u128) -> TechnicalEvidence {
+    pub fn scan_for_evidence(&self, _input: &str, _audit_trail_id: u128) -> TechnicalEvidence {
         TechnicalEvidence
     }
 }
@@ -65,7 +69,7 @@ pub fn scan_for_evidence_batch(
         let proto_evidence = evidence_to_proto(&evidence);
 
         // Calcula tempo de processamento
-        let processing_time_us = start_time.elapsed()
+        let _processing_time_us = start_time.elapsed()
             .unwrap_or_default()
             .as_micros();
 
@@ -86,7 +90,7 @@ pub fn scan_for_evidence_batch(
 }
 
 /// Converte TechnicalEvidence para formato protobuf
-fn evidence_to_proto(evidence: &TechnicalEvidence) -> Vec<u8> {
+fn evidence_to_proto(_evidence: &TechnicalEvidence) -> Vec<u8> {
     // Placeholder - implemente serialização protobuf real aqui
     // Exemplo simplificado:
     let mut bytes = Vec::new();
