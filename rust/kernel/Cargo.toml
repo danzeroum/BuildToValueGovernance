@@ -11,6 +11,8 @@ path = "src/lib.rs"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
+base64 = { workspace = true }
+hex = { workspace = true }
 static_assertions = { workspace = true }
 blake3 = { workspace = true }
 serde = { workspace = true }
@@ -21,7 +23,6 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 lazy_static = { workspace = true }
 regex = { workspace = true }
-
 rand = { workspace = true }
 chrono = { workspace = true }
 bincode = { workspace = true }
