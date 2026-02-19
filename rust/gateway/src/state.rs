@@ -45,6 +45,10 @@ lazy_static! {
     ).unwrap();
 }
 
+
+impl Default for AppState {
+    fn default() -> Self { Self::new() }
+}
 pub struct AppState {
     pub gatekeeper: Mutex<Gatekeeper>,
     pub http_client: reqwest::Client,
