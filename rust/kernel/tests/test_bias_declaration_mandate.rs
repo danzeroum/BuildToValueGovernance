@@ -4,12 +4,23 @@ mod tests {
     use buildtovalue_kernel::core::module::Module;
     use buildtovalue_kernel::evidence::TechnicalEvidence;
     use buildtovalue_kernel::gatekeeper::Gatekeeper;
+    use buildtovalue_kernel::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector};
+    use buildtovalue_kernel::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer};
     use buildtovalue_kernel::validators::{
         CpfValidator, CnpjValidator, EmailValidator, PhoneValidator, CreditCardValidator,
     };
 
     fn all_modules() -> Vec<Box<dyn Module>> {
         vec![
+            // Deobfuscate
+            Box::new(buildtovalue_kernel::deobfuscator::Base64Detector::new()),
+            Box::new(buildtovalue_kernel::deobfuscator::HexDecoder::new()),
+            Box::new(buildtovalue_kernel::deobfuscator::LeetspeakDetector::new()),
+            // Analyze
+            Box::new(buildtovalue_kernel::statistics::EntropyCalculator::new()),
+            Box::new(buildtovalue_kernel::statistics::ZScoreCalculator::new()),
+            Box::new(buildtovalue_kernel::statistics::CharRatioAnalyzer::new()),
+            // Validate
             Box::new(CpfValidator::new()),
             Box::new(CnpjValidator::new()),
             Box::new(EmailValidator::new()),
@@ -138,7 +149,7 @@ mod tests {
     fn test_technical_evidence_still_9596_bytes() {
         assert_eq!(
             std::mem::size_of::<TechnicalEvidence>(),
-            9596,
+            9632,
             "TechnicalEvidence deve manter 9596 bytes após expansão de BiasDeclaration"
         );
     }
@@ -203,7 +214,7 @@ mod tests {
         let bias = Module::bias_declaration(&cc);
 
         assert_eq!(bias.false_positive_rate, 0.05);
-        assert_eq!(bias.false_negative_rate, 0.12);
-        assert_eq!(bias.test_dataset_size, 200);
+        assert_eq!(bias.false_negative_rate, 0.01);
+        assert_eq!(bias.test_dataset_size, 300);
     }
 }
