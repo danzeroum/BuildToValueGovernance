@@ -23,6 +23,10 @@ lazy_static! {
     };
 }
 
+impl Default for LeetspeakDetector {
+    fn default() -> Self { Self::new() }
+}
+
 pub struct LeetspeakDetector {
     rule_id: String,
 }

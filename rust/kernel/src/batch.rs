@@ -111,6 +111,7 @@ impl BatchProcessor {
             // Check batch-level deadline
             if Instant::now() >= batch_deadline {
                 // Mark remaining as timed out (fail-secure)
+                #[allow(clippy::needless_range_loop)]
                 for j in i..inputs.len() {
                     items.push(BatchItem {
                         index: j,

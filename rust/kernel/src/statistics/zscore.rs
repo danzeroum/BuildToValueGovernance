@@ -5,6 +5,9 @@ use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity, In
 use crate::evidence::Finding;
 use std::collections::HashMap;
 
+impl Default for ZScoreCalculator {
+    fn default() -> Self { Self::new() }
+}
 pub struct ZScoreCalculator {
     rule_id: String,
 }

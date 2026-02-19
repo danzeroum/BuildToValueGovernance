@@ -4,7 +4,7 @@
 //! 1. Deobfuscate: normaliza input (Base64, Hex, Leetspeak)
 //! 2. Analyze: preenche statistics (Entropy, ZScore, CharRatio)
 //! 3. Validate: detecta PII/violações (CPF, CNPJ, Email, Phone, CC)
-//! 3.5. Re-scan: deobfuscator chaining + re-validate decoded text
+//!    3.5. Re-scan: deobfuscator chaining + re-validate decoded text
 //! 4. Finalize: bias aggregation, hash, métricas
 
 use crate::core::module::{Module, ScanContext};
