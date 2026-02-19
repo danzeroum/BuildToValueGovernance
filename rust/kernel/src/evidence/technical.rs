@@ -181,7 +181,7 @@ impl TechnicalEvidence {
         unsafe {
             let mut bytes = [0u8; EVIDENCE_SIZE];
             let ptr = self as *const TechnicalEvidence as *const u8;
-            std::ptr::copy_nonoverlapping(ptr, bytes.as_mut_ptr(), std::mem::size_of::<TechnicalEvidence>());
+            std::ptr::copy_nonoverlapping(ptr, bytes.as_mut_ptr(), size_of::<TechnicalEvidence>());
             bytes
         }
     }

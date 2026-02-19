@@ -10,8 +10,6 @@ use serde::{Serialize, Deserialize};
 
 const BATCH_SIZE: usize = 100;
 const MAX_RETRIES: u32 = 3;
-const RETRY_BASE_DELAY_MS: u64 = 100;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StorageType {
     S3,
