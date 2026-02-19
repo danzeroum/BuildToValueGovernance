@@ -1,6 +1,6 @@
 //! Interceptor Hooks v1.7.0 — Pre/Post processing chain (ADR-015)
 //! Chain of Responsibility: fail-secure (hook failure → BLOCK).
-
+use std::cmp::Reverse;
 // ---------------------------------------------------------------------
 // INTERCEPT ACTION
 // ---------------------------------------------------------------------
@@ -49,13 +49,13 @@ impl InterceptorChain {
     }
 
     pub fn add_request_hook(&mut self, hook: Box<dyn RequestInterceptor>) {
-        self.request_hooks.push(hook);
-        self.request_hooks.sort_by(|a, b| b.priority().cmp(&a.priority()));
+        self.request_hooks.sort_by_key(|b| Reverse(b.priority()));
+        self.response_hooks.sort_by_key(|b| Reverse(b.priority()));
     }
 
     pub fn add_response_hook(&mut self, hook: Box<dyn ResponseInterceptor>) {
-        self.response_hooks.push(hook);
-        self.response_hooks.sort_by(|a, b| b.priority().cmp(&a.priority()));
+        self.request_hooks.sort_by_key(|b| Reverse(b.priority()));
+        self.response_hooks.sort_by_key(|b| Reverse(b.priority()));
     }
 
     /// Run all request interceptors. Fail-secure: any error → Block.
