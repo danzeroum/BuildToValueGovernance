@@ -45,7 +45,7 @@ impl S3Connector {
     /// Cria novo conector S3
     pub async fn new(config: S3Config) -> Result<Self, S3Error> {
         // Atualizado para usar load_defaults (recomendado)
-        let aws_config = aws_config::load_defaults(aws_config::BehaviorVersion::v2024_03_28()).await;
+        let aws_config = aws_config::load_defaults(aws_config::BehaviorVersion::v2026_01_12()).await;
 
         let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&aws_config)
             .region(aws_sdk_s3::config::Region::new(config.region.clone()))

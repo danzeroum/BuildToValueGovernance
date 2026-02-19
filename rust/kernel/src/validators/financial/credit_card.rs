@@ -112,7 +112,7 @@ impl Module for CreditCardValidator {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::module;
+    
     use super::*;
 
     #[test]
@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn test_bias_declaration() {
         let v = CreditCardValidator::new();
-        let bias = module::Module::bias_declaration(&v);
+        let bias = Module::bias_declaration(&v);
         assert_eq!(bias.false_positive_rate, 0.05);
     }
 }

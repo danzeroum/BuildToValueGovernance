@@ -312,8 +312,8 @@ impl BiasDeclaration {
         }
 
         let year = (self.calibration_date / 10000) as i32;
-        let month = ((self.calibration_date / 100) % 100) as u32;
-        let day = (self.calibration_date % 100) as u32;
+        let month = (self.calibration_date / 100) % 100;
+        let day = self.calibration_date % 100;
 
         let calibration_date = match NaiveDate::from_ymd_opt(year, month, day) {
             Some(date) => date,

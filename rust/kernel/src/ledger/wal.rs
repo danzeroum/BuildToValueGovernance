@@ -83,14 +83,16 @@ impl WriteAheadLog {
     }
 
     pub fn append(&self, evidence: &TechnicalEvidence) -> Result<u64> {
-        let mut seq_guard = self.current_seq.lock().unwrap();
+        let mut seq_guard = self.current_seq.lock()
+            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
         *seq_guard += 1;
         let seq = *seq_guard;
 
         let entry = WalEntry::from_evidence(seq, evidence);
         let bytes = bincode::serialize(&entry).context("Failed to serialize WAL entry")?;
 
-        let mut file_guard = self.file.lock().unwrap();
+        let mut file_guard = self.file.lock()
+            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
         file_guard.write_all(&(bytes.len() as u32).to_le_bytes())?;
         file_guard.write_all(&bytes)?;
 
@@ -102,7 +104,8 @@ impl WriteAheadLog {
     }
 
     pub fn flush(&self) -> Result<()> {
-        let mut file_guard = self.file.lock().unwrap();
+        let mut file_guard = self.file.lock()
+            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
         file_guard.flush()?;
         file_guard.get_ref().sync_all()?;
         Ok(())
