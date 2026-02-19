@@ -15,6 +15,8 @@ BuildToValue is an ethical Trust OS that sits between AI agents and users, enfor
 
 Every decision is explainable, signed (HMAC-SHA256), and contestable (24h appeal SLA).
 
+Runtime compliance enforcement evaluates every decision against EU AI Act and LGPD in real-time. High-risk AI systems are automatically classified per Annex III, with Fundamental Rights Impact Assessment (FRIA) generation.
+
 ## Architecture
 ```
 User Input
@@ -96,6 +98,8 @@ curl -s -X POST http://localhost:8080/v1/validate \
 | `/v1/compliance/report/{fw}` | GET | Compliance report |
 | `/v1/intelligence/bridge/sync` | POST | Threat→Policy sync |
 | `/v1/webhooks/status` | GET | Webhook stats |
+| `/v1/compliance/classify-risk` | POST | EU AI Act Annex III risk classification |
+| `/v1/compliance/fria/generate` | POST | Fundamental Rights Impact Assessment (Art. 27) |
 
 ## Project Structure
 ```
@@ -179,8 +183,8 @@ pip install llama-cpp-python
 | Version | Status | Scope |
 |---|---|---|
 | v1.5 — v1.9 | ✅ Complete | Kernel, Policy, Guard, Session, Mercy, Gateway, Observability |
-| v2.0 Phase A | 🚧 In progress | CI/CD, Streamlit 9 pages, Lifespan, Docs, SLM |
-| v2.0 Phase B | Planned | Runtime Compliance Engine, Risk Classification, FRIA |
+| v2.0 Phase A | ✅ Complete | CI/CD, Streamlit 9 pages, Lifespan, Docs, SLM |
+| v2.0 Phase B | ✅ Complete | Runtime Compliance Engine, Risk Classification, FRIA |
 | OSS Q3/2027 | Planned | Apache 2.0 release, 100+ stars |
 | LF Q4/2027 | Planned | LF AI & Data Sandbox submission |
 
@@ -188,7 +192,7 @@ pip install llama-cpp-python
 
 - False positive rate ~15% (adversarial testing, 70 samples, not externally validated)
 - Brazilian PII focus (CPF/CNPJ). International PII requires new modules.
-- Compliance is self-assessment (not runtime enforcement — Phase B)
+- Compliance is runtime enforcement for EU AI Act and LGPD. Other frameworks (HIPAA, PCI-DSS) are self-assessment only.
 - SLM latency on CPU-only (~500ms-5s depending on hardware)
 - No TLS (plain HTTP)
 - Ledger grows indefinitely (no rotation)

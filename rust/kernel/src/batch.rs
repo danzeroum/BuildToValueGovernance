@@ -105,7 +105,7 @@ impl BatchProcessor {
         let mut items = Vec::with_capacity(inputs.len());
         let mut succeeded = 0usize;
         let mut timed_out = 0usize;
-        let mut failed = 0usize;
+        let failed = 0usize;
 
         for (i, (input, &trail_id)) in inputs.iter().zip(audit_trail_ids.iter()).enumerate() {
             // Check batch-level deadline

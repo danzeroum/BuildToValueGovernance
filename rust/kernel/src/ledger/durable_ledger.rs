@@ -4,12 +4,12 @@
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::fs::OpenOptions;
-use std::io::{Write, Read, Seek, SeekFrom, BufReader};
+use std::io::{Write, Read, Seek, SeekFrom};
 use tokio::sync::mpsc;
 use anyhow::{Result, Context};
 
 use crate::ledger::entry::LedgerEntry;
-use crate::ledger::wal::{WriteAheadLog as WalStore, WalConfig, WalEntry};
+use crate::ledger::wal::{WriteAheadLog as WalStore, WalConfig};
 use crate::ledger::remote::S3Config;
 use crate::evidence::TechnicalEvidence;
 
@@ -18,15 +18,10 @@ use crate::evidence::TechnicalEvidence;
 // ---------------------------------------------------------------------
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChainStatus {
-    /// Chain is valid
     Valid { entry_count: u64 },
-    /// Empty ledger (no entries)
     Empty,
-    /// Hash mismatch at specific entry
     TamperedAt { entry_id: u64, expected_hash: [u8; 32], actual_hash: [u8; 32] },
-    /// Chain link broken (previous_hash mismatch)
     BrokenAt { entry_id: u64 },
-    /// Deserialization error at offset
     CorruptAt { byte_offset: u64 },
 }
 
@@ -46,7 +41,7 @@ pub struct RecoveryResult {
 // ---------------------------------------------------------------------
 pub struct DurableLedger {
     wal: WalStore,
-    disk_path: PathBuf,
+    _disk_path: PathBuf,
     disk_file: Arc<RwLock<std::fs::File>>,
     remote_tx: mpsc::UnboundedSender<LedgerEntry>,
     last_entry_id: Arc<RwLock<u64>>,
@@ -54,7 +49,7 @@ pub struct DurableLedger {
 }
 
 impl DurableLedger {
-    pub async fn new(disk_path: PathBuf, s3_config: S3Config) -> Result<Self> {
+    pub async fn new(disk_path: PathBuf, _s3_config: S3Config) -> Result<Self> {
         let file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -75,14 +70,15 @@ impl DurableLedger {
         #[cfg(feature = "remote-sync")]
         {
             use crate::ledger::remote::sync::{RemoteSyncService, RemoteConfig, StorageType};
+            use crate::ledger::wal::WalEntry;
 
             let (service_tx, service_rx) = mpsc::channel(1000);
 
             let remote_config = RemoteConfig {
                 storage_type: StorageType::S3,
-                endpoint: s3_config.endpoint.clone().unwrap_or_default(),
-                bucket: s3_config.bucket.clone(),
-                prefix: s3_config.key_prefix.clone(),
+                endpoint: _s3_config.endpoint.clone().unwrap_or_default(),
+                bucket: _s3_config.bucket.clone(),
+                prefix: _s3_config.key_prefix.clone(),
                 batch_size: 100,
                 max_retries: 3,
                 enabled: true,
@@ -107,7 +103,7 @@ impl DurableLedger {
 
         Ok(Self {
             wal,
-            disk_path,
+            _disk_path: disk_path,
             disk_file: Arc::new(RwLock::new(file)),
             remote_tx,
             last_entry_id: Arc::new(RwLock::new(last_id)),
@@ -131,13 +127,8 @@ impl DurableLedger {
 
         entry.finalize();
 
-        // Camada 1: WAL (fail-secure: se WAL falha, não persiste)
         self.wal.append(evidence)?;
-
-        // Camada 2: Disk
         self.write_to_disk(&entry)?;
-
-        // Camada 3: Remote (best-effort)
         let _ = self.remote_tx.send(entry);
 
         let mut last_hash_write = self.last_entry_hash.write()
@@ -151,16 +142,12 @@ impl DurableLedger {
     // RECOVERY (F1.5-04)
     // -----------------------------------------------------------------
 
-    /// Recover ledger from disk + WAL after crash.
-    /// Target: < 5s for 10k entries.
     pub fn recover(disk_path: &PathBuf) -> Result<RecoveryResult> {
         let start = std::time::Instant::now();
 
-        // 1. Read all entries from disk
         let disk_entries = Self::read_all_entries_from_disk(disk_path)?;
         let entries_from_disk = disk_entries.len() as u64;
 
-        // 2. Read WAL entries (evidence snapshots not yet on disk)
         let wal_path = disk_path.with_extension("wal");
         let entries_from_wal = if wal_path.exists() {
             Self::count_wal_entries(&wal_path)?
@@ -168,14 +155,12 @@ impl DurableLedger {
             0
         };
 
-        // 3. Reconstruct last state
-        let (last_id, last_hash) = if let Some(last) = disk_entries.last() {
+        let (_last_id, _last_hash) = if let Some(last) = disk_entries.last() {
             (last.entry_id, last.entry_hash)
         } else {
             (0, [0u8; 32])
         };
 
-        // 4. Verify chain integrity
         let chain_status = Self::verify_chain_from_entries(&disk_entries);
 
         let recovery_time_ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -200,7 +185,6 @@ impl DurableLedger {
         })
     }
 
-    /// Read all LedgerEntry from disk file sequentially.
     fn read_all_entries_from_disk(path: &PathBuf) -> Result<Vec<LedgerEntry>> {
         if !path.exists() {
             return Ok(Vec::new());
@@ -228,7 +212,6 @@ impl DurableLedger {
         Ok(entries)
     }
 
-    /// Count WAL entries without full deserialization of evidence.
     fn count_wal_entries(wal_path: &PathBuf) -> Result<u64> {
         let mut file = std::fs::File::open(wal_path)?;
         let file_size = file.metadata()?.len();
@@ -236,14 +219,12 @@ impl DurableLedger {
         let mut pos = 0u64;
 
         while pos < file_size {
-            // Read length prefix (u32)
             let mut len_bytes = [0u8; 4];
             if file.read_exact(&mut len_bytes).is_err() {
                 break;
             }
             let len = u32::from_le_bytes(len_bytes) as u64;
 
-            // Skip payload
             if file.seek(SeekFrom::Current(len as i64)).is_err() {
                 break;
             }
@@ -256,17 +237,14 @@ impl DurableLedger {
     }
 
     // -----------------------------------------------------------------
-    // CHAIN INTEGRITY VERIFICATION (F1.5-04)
+    // CHAIN INTEGRITY VERIFICATION
     // -----------------------------------------------------------------
 
-    /// Verify entire chain integrity from disk.
-    /// Returns ChainStatus with detail on any failure.
     pub fn verify_chain_integrity(disk_path: &PathBuf) -> Result<ChainStatus> {
         let entries = Self::read_all_entries_from_disk(disk_path)?;
         Ok(Self::verify_chain_from_entries(&entries))
     }
 
-    /// Verify chain from a Vec of entries (used by both recovery and standalone).
     fn verify_chain_from_entries(entries: &[LedgerEntry]) -> ChainStatus {
         if entries.is_empty() {
             return ChainStatus::Empty;
@@ -275,7 +253,6 @@ impl DurableLedger {
         let mut previous_hash: Option<[u8; 32]> = None;
 
         for entry in entries {
-            // 1. Verify entry self-hash
             if !entry.validate() {
                 return ChainStatus::TamperedAt {
                     entry_id: entry.entry_id,
@@ -284,7 +261,6 @@ impl DurableLedger {
                 };
             }
 
-            // 2. Verify chain link (previous_hash must match)
             if let Some(prev) = previous_hash {
                 if entry.previous_hash != prev {
                     return ChainStatus::BrokenAt {

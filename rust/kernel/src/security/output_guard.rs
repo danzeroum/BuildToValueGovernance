@@ -172,7 +172,7 @@ impl OutputGuard {
         XSS_PATTERNS.iter().any(|(re, _)| re.is_match(text))
     }
 
-    fn remove_dangerous_tags(&self, text: &str) -> Cow<str> {
+    fn remove_dangerous_tags(&self, text: &str) -> Cow<'_, str> {
         let mut result = text.to_string();
         let dangerous = [
             r"(?i)<script.*?>.*?</script>",
@@ -190,7 +190,7 @@ impl OutputGuard {
         Cow::Owned(result)
     }
 
-    fn remove_dangerous_content(&self, text: &str) -> Cow<str> {
+    fn remove_dangerous_content(&self, text: &str) -> Cow<'_, str> {
         let mut result = text.to_string();
         let suspicious = Regex::new(
             r#"(?i)<[^>]*(javascript:|data:|vbscript:|expression\(|on\w+\s*=)[^>]*>"#
