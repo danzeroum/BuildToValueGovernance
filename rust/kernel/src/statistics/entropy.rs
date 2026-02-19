@@ -4,7 +4,9 @@ use crate::core::module::{Module, ScanContext};
 use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity, InputStatistics};
 use crate::evidence::Finding;
 use std::collections::HashMap;
-
+impl Default for EntropyCalculator {
+    fn default() -> Self { Self::new() }
+}
 pub struct EntropyCalculator {
     rule_id_high: String,
     rule_id_low: String,

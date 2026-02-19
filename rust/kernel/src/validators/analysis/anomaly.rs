@@ -5,7 +5,9 @@ use crate::evidence::finding::Finding;
 use crate::core::types::{ValidatorModule, TechnicalSeverity};
 use crate::validators::Validator;
 use crate::statistics::{EntropyCalculator, ZScoreCalculator};
-
+impl Default for StatisticalValidator {
+    fn default() -> Self { Self::new() }
+}
 pub struct StatisticalValidator {
     entropy_calc: EntropyCalculator,
     zscore_calc: ZScoreCalculator,

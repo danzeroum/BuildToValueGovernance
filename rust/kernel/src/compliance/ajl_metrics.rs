@@ -10,6 +10,9 @@ pub enum DemographicGroup {
     Language(String),
 }
 
+impl Default for AJLMetricsEngine {
+    fn default() -> Self { Self::new() }
+}
 /// Bias metric result (EU AI Act Art. 10)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BiasMetric {

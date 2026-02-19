@@ -13,6 +13,9 @@ lazy_static! {
     ).unwrap();
 }
 
+impl Default for Base64Detector {
+    fn default() -> Self { Self::new() }
+}
 pub struct Base64Detector {
     rule_id: String,
 }
