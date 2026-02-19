@@ -12,13 +12,10 @@ use uuid::Uuid;
 const TRACEPARENT: &str = "traceparent";
 const VERSION: &str = "00";
 
-/// Extract or generate W3C traceparent.
-/// Format: 00-{trace_id}-{span_id}-{flags}
 pub async fn trace_propagation(
     mut req: Request<Body>,
     next: Next,
 ) -> Response<Body> {
-    // Extract existing traceparent or generate new
     let (trace_id, parent_span) = match req.headers().get(TRACEPARENT) {
         Some(val) => parse_traceparent(val),
         None => (generate_trace_id(), "0000000000000000".to_string()),
@@ -27,16 +24,14 @@ pub async fn trace_propagation(
     let span_id = generate_span_id();
     let traceparent = format!("{}-{}-{}-01", VERSION, trace_id, span_id);
 
-    // Inject into request extensions for downstream use
     req.extensions_mut().insert(TraceContext {
-        trace_id: trace_id.clone(),
-        span_id: span_id.clone(),
+        trace_id,
+        span_id,
         parent_span_id: parent_span,
     });
 
     let mut response = next.run(req).await;
 
-    // Inject traceparent into response
     if let Ok(val) = HeaderValue::from_str(&traceparent) {
         response.headers_mut().insert(TRACEPARENT, val);
     }
@@ -44,6 +39,7 @@ pub async fn trace_propagation(
     response
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct TraceContext {
     pub trace_id: String,
@@ -98,6 +94,6 @@ mod tests {
     fn test_parse_invalid_traceparent() {
         let val = HeaderValue::from_static("garbage");
         let (trace, _parent) = parse_traceparent(&val);
-        assert_eq!(trace.len(), 32); // Generated new
+        assert_eq!(trace.len(), 32);
     }
 }
