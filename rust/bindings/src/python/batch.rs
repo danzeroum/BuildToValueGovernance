@@ -34,10 +34,10 @@ impl PenaltyCalculatorV2 {
             ((ThreatType::PIILeakage, RegulatoryFramework::GDPR), 2_000_000),
             ((ThreatType::PIILeakage, RegulatoryFramework::LGPD), 5_000_000),
             ((ThreatType::PromptInjection, RegulatoryFramework::EUAIAct), 10_000_000),
-            ((ThreatType::ShadowAI, RegulatoryFramework::GDPR), 30_000_00),
-            ((ThreatType::DenialOfWallet, RegulatoryFramework::CCPA), 5_000_00),
-            ((ThreatType::Toxicity, RegulatoryFramework::EUAIAct), 75_000_00),
-            ((ThreatType::BiasViolation, RegulatoryFramework::EUAIAct), 150_000_00),
+            ((ThreatType::ShadowAI, RegulatoryFramework::GDPR), 3_000_000),
+            ((ThreatType::DenialOfWallet, RegulatoryFramework::CCPA), 500_000),
+            ((ThreatType::Toxicity, RegulatoryFramework::EUAIAct), 7_500_000),
+            ((ThreatType::BiasViolation, RegulatoryFramework::EUAIAct), 15_000_000),
         ].iter().cloned().collect();
 
         threats.iter()
