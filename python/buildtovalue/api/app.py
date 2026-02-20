@@ -348,17 +348,26 @@ def _resolve_role(session_id: str) -> str:
 
 
 def _load_slm_config() -> dict:
-    """Load SLM config from YAML. Returns empty dict if not found."""
-    try:
-        import yaml
-        config_path = Path(__file__).resolve().parent.parent.parent.parent / "data" / "policies" / "core" / "slm.yaml"
-        if config_path.exists():
-            with open(config_path) as f:
-                return yaml.safe_load(f).get("slm", {})
-    except Exception as e:
-        logger.warning("Failed to load SLM config: %s", e)
-    return {}
+    """Load SLM config from YAML. Checks /app/data first, then relative path."""
+    import yaml
+    candidates = [
+        Path("/app/data/policies/core/slm.yaml"),  # Docker
+        Path(__file__).resolve().parent.parent.parent.parent / "data" / "policies" / "core" / "slm.yaml",  # Local dev
+    ]
+    for config_path in candidates:
+        try:
+            if config_path.exists():
+                with open(config_path) as f:
+                    return yaml.safe_load(f).get("slm", {})
+        except Exception as e:
+            logger.warning("Failed to load SLM config from %s: %s", config_path, e)
 
+    # Fallback: env var
+    model_path = os.environ.get("BTV_SLM_MODEL_PATH")
+    if model_path:
+        return {"enabled": True, "model_path": model_path}
+
+    return {}
 # ═══════════════════════════════════════════════════════════════
 # LIFESPAN + FASTAPI APP + ROUTERS
 # ═══════════════════════════════════════════════════════════════

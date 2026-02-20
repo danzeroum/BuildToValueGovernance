@@ -1,15 +1,20 @@
 FROM python:3.11-slim
 WORKDIR /app
 
-# Build dependencies for llama-cpp-python
+# Build deps for llama-cpp-python
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Python package + deps
 COPY python/ ./python/
-
 RUN pip install --no-cache-dir ./python/
-RUN pip install --no-cache-dir llama-cpp-python
+
+# Install SLM runtime (may take ~5min to compile)
+RUN pip install --no-cache-dir llama-cpp-python || true
+
+# Copy data (policies, sectors, profiles)
+COPY data/ ./data/
 
 EXPOSE 8000
 VOLUME /app/models
