@@ -14,8 +14,8 @@ mod tests {
         let gk = Gatekeeper::new();
         assert_eq!(gk.stage_count(PipelineStage::Deobfuscate), 3);
         assert_eq!(gk.stage_count(PipelineStage::Analyze), 3);
-        assert_eq!(gk.stage_count(PipelineStage::Validate), 5);
-        assert_eq!(gk.module_count(), 11);
+        assert_eq!(gk.stage_count(PipelineStage::Validate), 6);
+        assert_eq!(gk.module_count(), 12);
     }
 
     // -----------------------------------------------------------------
@@ -64,7 +64,7 @@ mod tests {
                 evidence.executed_modules
         );
         // Verify total module count in pipeline is 11
-        assert_eq!(gk.module_count(), 11);
+        assert_eq!(gk.module_count(), 12);
     }
     // -----------------------------------------------------------------
     // TEST 5: CPF detection still works through pipeline
