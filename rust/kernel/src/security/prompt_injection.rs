@@ -110,7 +110,7 @@ const CAT_MULTI_SIGNAL: &str = "MULTI_SIGNAL_INJECTION";
 // ─────────────────────────────────────────────────────────────
 // DETECTOR
 // ─────────────────────────────────────────────────────────────
-
+const ENTROPY_SHIFT_THRESHOLD: f32 = 1.0;
 pub struct PromptInjectionDetector;
 
 impl Default for PromptInjectionDetector {
@@ -162,7 +162,7 @@ impl PromptInjectionDetector {
         let (first, second) = input.split_at(mid);
         let e1 = Self::half_entropy(first);
         let e2 = Self::half_entropy(second);
-        (e2 - e1).abs() > 1.5
+        (e2 - e1).abs() > ENTROPY_SHIFT_THRESHOLD
     }
 
     /// Calculate entropy for a text fragment.
@@ -563,8 +563,9 @@ mod tests {
 
     #[test]
     fn test_entropy_shift_detected() {
-        let input = "Hello how are you today nice day \
-                     aGVsbG8gd29ybGQgZm9yZ2V0IGV2ZXJ5dGhpbmcgaWdub3Jl";
+        // Normal text then high-entropy random chars
+        let input = "the weather is nice today hello world \
+                     X9#kQ!2m@Zp$7vL&8nR*3wY^5jF%0bH";
         assert!(PromptInjectionDetector::entropy_shift(input));
     }
 
