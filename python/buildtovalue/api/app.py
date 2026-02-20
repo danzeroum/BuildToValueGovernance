@@ -28,6 +28,7 @@ from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
 from buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
 from buildtovalue.compliance.risk_classifier import RiskClassifier
 from buildtovalue.compliance.fria_generator import FRIAGenerator
+from buildtovalue.governance.output_validator import OutputSchemaValidator
 from buildtovalue.governance.contestability_loop import (
     ContestabilityLoop,
     AppealStatus,
@@ -156,7 +157,7 @@ class DecideRequest(BaseModel):
     ip_risk: str = "Low"
     ip_jurisdiction: str = "XX"
     drift_level: str = "None"
-
+    llm_output: Optional[str] = None  # LLM response text for schema validation
 
 class DecideResponse(BaseModel):
     verdict_id: str
@@ -178,7 +179,7 @@ class DecideResponse(BaseModel):
     risk_classification: Optional[str] = None
     compliance_violations: Optional[List[dict]] = None
     compliance_rate: Optional[float] = None
-
+    schema_violations: Optional[list] = None
 
 # ═══════════════════════════════════════════════════════════════
 # MODELS — Appeals (ADR-017)
@@ -397,6 +398,9 @@ async def lifespan(application):
     _sector_loader = SectorLoader()
     logger.info("SectorLoader initialized")
 
+    _output_validator = OutputSchemaValidator()
+    logger.info("OutputSchemaValidator initialized")
+
     hydrated = hydrate_from_sqlite()
     logger.info("Bridge hydration: %d threats loaded from SQLite", hydrated)
 
@@ -453,6 +457,7 @@ _profile_manager: Optional[ProfileManager] = None
 _sector_loader: Optional[SectorLoader] = None
 _slm: Optional[SLMClassifier] = None
 _ethical_engine: Optional[EthicalContextEngine] = None
+_output_validator: Optional[OutputSchemaValidator] = None
 
 # ═══════════════════════════════════════════════════════════════
 # GOVERNANCE — /v1/decide (Judiciário da República Algorítmica)
@@ -619,6 +624,66 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                 for v in eval_result.violations
             ]
             compliance_rate = eval_result.compliance_rate
+        # ── Step 3.6: Output Schema Validation (Levinas) ──────────
+        schema_violations = None
+        if req.llm_output and req.profile and _profile_manager:
+            try:
+                loaded = _profile_manager.load_profile(req.profile)
+                output_schema = loaded.output_schema
+                if output_schema and _output_validator:
+                    schema_result = _output_validator.validate(req.llm_output, output_schema)
+                    if not schema_result.valid:
+                        schema_violations = [
+                            {"path": v.path, "rule": v.rule, "message": v.message}
+                            for v in schema_result.violations
+                        ]
+                        # Escalate to REDACT if schema violated
+                        if ACTION_SEVERITY.get(verdict.final_action, 0) < ACTION_SEVERITY.get("REDACT", 0):
+                            verdict = _ethical_engine.decide(
+                                RustEvidence(
+                                    composite_risk=max(adjusted_risk, 0.6),
+                                    finding_count=adjusted_finding_count + 1,
+                                    critical_count=adjusted_critical_count,
+                                    entropy=req.entropy,
+                                    total_chars=req.total_chars,
+                                    policy_action="REDACT",
+                                    blake3_hash=req.blake3_hash,
+                                ),
+                                context,
+                            )
+                            logger.info(
+                                "Output schema violation → REDACT (session=%s, violations=%d)",
+                                session_id, len(schema_result.violations),
+                            )
+            except (ValueError, Exception) as e:
+                logger.warning("Output schema validation error: %s", e)
+
+        # ── Step 4: Update trust + respond ────────────────────────
+        update_trust(session_id, verdict.final_action)
+        latency = (time.perf_counter() - start) * 1000
+        rationale = verdict.explanation + sector_note
+        return DecideResponse(
+            verdict_id=verdict.verdict_id,
+            action=verdict.final_action,
+            original_action=req.action,
+            mercy_applied=verdict.mercy_applied,
+            mercy_scenario=verdict.mercy_scenario,
+            mercy_score=verdict.mercy_score,
+            trust_score=verdict.trust_score,
+            adjusted_risk=adjusted_risk,
+            rationale=rationale,
+            contestable=verdict.contestable,
+            appeal_deadline_hours=24,
+            signature=verdict.hmac_signature,
+            latency_ms=latency,
+            slm_used=slm_used,
+            slm_intent=slm_intent,
+            slm_risk=slm_risk,
+            risk_classification=risk_class,
+            compliance_violations=compliance_violations,
+            compliance_rate=compliance_rate,
+            schema_violations=schema_violations,
+        )
 
     # ── Step 4: Update trust + respond ────────────────────────
     update_trust(session_id, verdict.final_action)
