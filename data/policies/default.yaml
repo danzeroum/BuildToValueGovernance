@@ -38,6 +38,17 @@ policies:
       min_severity: 0.8
     action: BLOCK
 
+  - id: "block-ssn"
+    name: "Block US SSN"
+    description: "Block US Social Security Numbers - critical PII"
+    enabled: true
+    priority: 100
+    conditions:
+      validators: ["ssn"]
+      min_severity: 0.5
+      min_confidence: 0.9
+    action: BLOCK
+
   # ═══════════════════════════════════════════════════════════════════════
   # L3: REDACT (Mask sensitive data)
   # ═══════════════════════════════════════════════════════════════════════
