@@ -62,7 +62,7 @@ mod tests {
                 evidence.executed_modules
         );
         assert_eq!(gk.module_count(), 13);
-    }
+    }   
 
     // -----------------------------------------------------------------
     // TEST 5: CPF detection still works through pipeline
