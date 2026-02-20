@@ -192,6 +192,7 @@ pub enum ValidatorModule {
     DataAccessRequest,
     DataErasure,
     BreachNotification,
+    PromptInjection,
 }
 
 /// Veredito ético (usado pelo Ledger)
