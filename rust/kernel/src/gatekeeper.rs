@@ -17,7 +17,7 @@ use crate::validators::communication::{EmailValidator, PhoneValidator};
 use crate::validators::financial::CreditCardValidator;
 use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer};
 use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector};
-
+use crate::security::PromptInjectionDetector;
 // ---------------------------------------------------------------------
 // PIPELINE STAGE
 // ---------------------------------------------------------------------
@@ -70,6 +70,7 @@ impl Gatekeeper {
             StageEntry { module: Box::new(EmailValidator::new()), stage: PipelineStage::Validate },
             StageEntry { module: Box::new(CreditCardValidator::new()), stage: PipelineStage::Validate },
             StageEntry { module: Box::new(PhoneValidator::new()), stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(PromptInjectionDetector::new()), stage: PipelineStage::Validate },
         ];
 
         Self {
