@@ -11,7 +11,7 @@ use crate::core::module::{Module, ScanContext};
 use crate::core::types::BiasDeclaration;
 use crate::evidence::TechnicalEvidence;
 use std::time::Instant;
-
+use crate::validators::us::SsnValidator;
 use crate::validators::brazilian::{CpfValidator, CnpjValidator};
 use crate::validators::communication::{EmailValidator, PhoneValidator};
 use crate::validators::financial::CreditCardValidator;
@@ -71,6 +71,7 @@ impl Gatekeeper {
             StageEntry { module: Box::new(CreditCardValidator::new()), stage: PipelineStage::Validate },
             StageEntry { module: Box::new(PhoneValidator::new()), stage: PipelineStage::Validate },
             StageEntry { module: Box::new(PromptInjectionDetector::new()), stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(SsnValidator::new()), stage: PipelineStage::Validate },
         ];
 
         Self {

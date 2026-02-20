@@ -174,6 +174,7 @@ pub enum ValidatorModule {
     Luhn,
     Email,
     Phone,
+    SSN,
     // Statistics
     Entropy,
     ZScore,

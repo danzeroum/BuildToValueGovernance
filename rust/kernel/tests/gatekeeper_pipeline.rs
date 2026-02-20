@@ -14,8 +14,8 @@ mod tests {
         let gk = Gatekeeper::new();
         assert_eq!(gk.stage_count(PipelineStage::Deobfuscate), 3);
         assert_eq!(gk.stage_count(PipelineStage::Analyze), 3);
-        assert_eq!(gk.stage_count(PipelineStage::Validate), 6);
-        assert_eq!(gk.module_count(), 12);
+        assert_eq!(gk.stage_count(PipelineStage::Validate), 7);
+        assert_eq!(gk.module_count(), 13);
     }
 
     // -----------------------------------------------------------------
@@ -51,21 +51,19 @@ mod tests {
     // -----------------------------------------------------------------
     // TEST 4: Clean input → no findings, all 11 modules executed
     // -----------------------------------------------------------------
+
     #[test]
     fn test_pipeline_all_modules_execute() {
         let mut gk = Gatekeeper::new();
         let evidence = gk.scan_for_evidence("clean input", 0x3456);
-
-        // Some modules share ValidatorModule variants, so unique bits < 11
-        // Verify at least 9 unique module bits are set
-        assert!(evidence.executed_modules.count_ones() >= 9,
-                "Expected 9+ module bits, got {} (bitmask: {:032b})",
+        assert!(evidence.executed_modules.count_ones() >= 10,
+                "Expected 10+ module bits, got {} (bitmask: {:032b})",
                 evidence.executed_modules.count_ones(),
                 evidence.executed_modules
         );
-        // Verify total module count in pipeline is 11
-        assert_eq!(gk.module_count(), 12);
+        assert_eq!(gk.module_count(), 13);
     }
+
     // -----------------------------------------------------------------
     // TEST 5: CPF detection still works through pipeline
     // -----------------------------------------------------------------
@@ -100,4 +98,5 @@ mod tests {
         let metrics = gk.get_metrics();
         assert_eq!(metrics.scans_total, 2);
     }
+
 }
