@@ -23,7 +23,8 @@ from buildtovalue.governance.safe_expression_evaluator import (
 
 logger = logging.getLogger("btv.compliance.evaluator")
 
-COMPLIANCE_DIR = Path("data/policies/compliance")
+import os
+COMPLIANCE_DIR = Path(os.environ.get("BTV_POLICY_DIR", "data/policies")) / "compliance"
 
 
 @dataclass(frozen=True)

@@ -1,22 +1,54 @@
-FROM python:3.11-slim
-WORKDIR /app
+# ═══════════════════════════════════════════════════════════════
+# BuildToValue — Python Governance (multi-stage)
+# ADR-009: Monolito Modular | ADR-018: Axum+Python split
+# ═══════════════════════════════════════════════════════════════
 
-# Build deps for llama-cpp-python
+# Stage 1: Build (compilar llama-cpp-python)
+FROM python:3.11-slim AS builder
+WORKDIR /build
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python package + deps
+# Install package from pyproject.toml (all core deps)
 COPY python/ ./python/
-RUN pip install --no-cache-dir ./python/
+RUN pip install --no-cache-dir --prefix=/install ./python/
 
-# Install SLM runtime (may take ~5min to compile)
-RUN pip install --no-cache-dir llama-cpp-python || true
+# SLM runtime (optional — compile C++ bindings)
+# Fails gracefully: governance works without SLM
+RUN pip install --no-cache-dir --prefix=/install llama-cpp-python 2>/dev/null || \
+    echo "WARN: llama-cpp-python build failed — SLM disabled (CPU-only needs gcc/cmake)"
 
-# Copy data (policies, sectors, profiles)
+# ───────────────────────────────────────────────────────────────
+# Stage 2: Runtime (slim, no compilers)
+# ───────────────────────────────────────────────────────────────
+FROM python:3.11-slim
+WORKDIR /app
+
+# Copy installed packages from builder (no gcc/cmake in final image)
+COPY --from=builder /install /usr/local
+
+# Copy application code (needed for uvicorn module path)
+COPY python/ ./python/
+
+# Copy policy YAMLs, sectors, profiles
 COPY data/ ./data/
+
+# OpenMP runtime for llama-cpp-python (MUST be before USER)
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user (Jonas: least privilege)
+RUN groupadd -r btv && useradd -r -g btv -d /app btv \
+    && mkdir -p /app/data/ledger /app/models /app/data/runtime /app/data/autogen-policies \
+    && chown -R btv:btv /app
+USER btv
 
 EXPOSE 8000
 VOLUME /app/models
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=15s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
 CMD ["python", "-m", "uvicorn", "buildtovalue.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

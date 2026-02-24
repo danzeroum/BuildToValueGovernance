@@ -1,15 +1,65 @@
-FROM rust:latest AS builder
+# ═══════════════════════════════════════════════════════════════
+# BuildToValue — Rust Gateway (multi-stage)
+# ADR-009: Monolito Modular | ADR-018: Axum Gateway
+# ═══════════════════════════════════════════════════════════════
+
+# Stage 1: Build
+FROM rust:1.85-slim AS builder
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cache dependencies: copy manifests first, build deps, then copy source
+COPY rust/Cargo.toml rust/Cargo.lock ./rust/
+COPY rust/kernel/Cargo.toml ./rust/kernel/Cargo.toml
+COPY rust/bindings/Cargo.toml ./rust/bindings/Cargo.toml
+COPY rust/cli/Cargo.toml ./rust/cli/Cargo.toml
+COPY rust/gateway/Cargo.toml ./rust/gateway/Cargo.toml
+
+# Create dummy source files for dependency caching
+RUN mkdir -p rust/kernel/src rust/bindings/src rust/cli/src rust/gateway/src \
+    && echo "pub fn _dummy() {}" > rust/kernel/src/lib.rs \
+    && echo "fn main() {}" > rust/cli/src/main.rs \
+    && echo "fn main() {}" > rust/gateway/src/main.rs \
+    && touch rust/bindings/src/lib.rs
+
+# Build deps only (cached layer unless Cargo.toml changes)
+WORKDIR /app/rust
+RUN cargo build --release -p btv-gateway 2>/dev/null || true
+
+# Now copy real source and data
 WORKDIR /app
 COPY rust/ ./rust/
 COPY data/ ./data/
+
+# Build for real (only recompiles BTV source, deps cached)
 WORKDIR /app/rust
-ENV PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
 RUN cargo build --release -p btv-gateway
 
+# ───────────────────────────────────────────────────────────────
+# Stage 2: Runtime (minimal)
+# ───────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user
+RUN groupadd -r btv && useradd -r -g btv -d /app btv \
+    && mkdir -p /app/data/ledger \
+    && chown -R btv:btv /app
+
 COPY --from=builder /app/rust/target/release/btv-gateway /usr/local/bin/
 COPY --from=builder /app/data/ /app/data/
+RUN chown -R btv:btv /app
+
+USER btv
 WORKDIR /app
 EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=5s \
+    CMD curl -sf http://localhost:8080/health || exit 1
+
 CMD ["btv-gateway"]

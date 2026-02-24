@@ -70,7 +70,7 @@ impl AppState {
         Self {
             gatekeeper: Mutex::new(Gatekeeper::new()),
             http_client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_millis(500))
+                .timeout(std::time::Duration::from_secs(15))
                 .build()
                 .expect("Failed to create HTTP client"),
             start_time: std::time::Instant::now(),
