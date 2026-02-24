@@ -9,6 +9,7 @@ Compliance: EU AI Act Annex III (sector-specific risk).
 
 Gate: v1.5.0 (Gap #4 — Profile-aware PolicyEngine)
 """
+import os
 
 import yaml
 import logging
@@ -68,8 +69,9 @@ class SectorLoader:
                          Auto-detected if None.
         """
         if sectors_dir is None:
-            root = Path(__file__).resolve().parent.parent.parent.parent
-            sectors_dir = root / "data" / "policies" / "sectors"
+            policy_root = Path(os.environ.get("BTV_POLICY_DIR", str(Path(
+                __file__).resolve().parent.parent.parent.parent / "data" / "policies")))
+            sectors_dir = policy_root / "sectors"
 
         self.sectors_dir = Path(sectors_dir)
         self._index: Dict[str, dict] = {}

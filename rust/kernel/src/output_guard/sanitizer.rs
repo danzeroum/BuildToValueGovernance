@@ -1,4 +1,5 @@
-//! PII Sanitizer v1.6.0 — Mask PII in AI responses, re-scan to verify.
+//! PII Sanitizer v1.6.1 — Mask PII in AI responses, re-scan to verify.
+//! Supports: CPF, CNPJ, Email, Phone, Credit Card, US SSN.
 
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -26,6 +27,10 @@ lazy_static! {
 
     static ref CREDIT_CARD_RE: Regex = Regex::new(
         r"\b(?:\d{4}[- ]?){3}\d{4}\b"
+    ).unwrap();
+
+    static ref SSN_RE: Regex = Regex::new(
+        r"\b\d{3}[-\s]\d{2}[-\s]\d{4}\b"
     ).unwrap();
 }
 
@@ -56,6 +61,7 @@ pub struct OutputSanitizer {
     mask_email: bool,
     mask_phone: bool,
     mask_credit_card: bool,
+    mask_ssn: bool,
     rescan_enabled: bool,
 }
 
@@ -67,6 +73,7 @@ impl OutputSanitizer {
             mask_email: true,
             mask_phone: true,
             mask_credit_card: true,
+            mask_ssn: true,
             rescan_enabled: true,
         }
     }
@@ -96,6 +103,11 @@ impl OutputSanitizer {
         }
         if self.mask_phone {
             let (s, n, d) = Self::apply_mask(&result, &PHONE_RE, "PHONE", Self::mask_phone_value);
+            result = s; masks_applied += n; details.extend(d);
+        }
+
+        if self.mask_ssn {
+            let (s, n, d) = Self::apply_mask(&result, &SSN_RE, "SSN", Self::mask_ssn_value);
             result = s; masks_applied += n; details.extend(d);
         }
 
@@ -139,6 +151,7 @@ impl OutputSanitizer {
             && !CNPJ_RE.is_match(output)
             && !EMAIL_RE.is_match(output)
             && !CREDIT_CARD_RE.is_match(output)
+            && !SSN_RE.is_match(output)
     }
 
     // -----------------------------------------------------------------
@@ -203,6 +216,15 @@ impl OutputSanitizer {
             .with_affected_groups(
                 "International phone formats; non-standard email formats."
             )
+    }
+
+    fn mask_ssn_value(ssn: &str) -> String {
+        let digits: String = ssn.chars().filter(|c| c.is_ascii_digit()).collect();
+        if digits.len() == 9 {
+            format!("***-**-{}", &digits[5..9])
+        } else {
+            "[SSN REDACTED]".to_string()
+        }
     }
 }
 
@@ -283,4 +305,34 @@ mod tests {
         assert_eq!(r.mask_details.len(), 1);
         assert_eq!(r.mask_details[0].pii_type, "CPF");
     }
+
+    #[test]
+    fn test_mask_ssn_formatted() {
+        let s = OutputSanitizer::new();
+        let r = s.sanitize("SSN: 123-45-6789");
+        assert_eq!(r.masks_applied, 1);
+        assert!(r.output.contains("***-**-6789"));
+        assert!(!r.output.contains("123-45"));
+        assert_eq!(r.mask_details[0].pii_type, "SSN");
+        assert!(r.rescan_clean);
+    }
+
+    #[test]
+    fn test_mask_ssn_space_separated() {
+        let s = OutputSanitizer::new();
+        let r = s.sanitize("Number: 123 45 6789");
+        assert_eq!(r.masks_applied, 1);
+        assert!(r.output.contains("***-**-6789"));
+        assert!(r.rescan_clean);
+    }
+
+    #[test]
+    fn test_mask_ssn_with_other_pii() {
+        let s = OutputSanitizer::new();
+        let r = s.sanitize("SSN 123-45-6789 CPF 123.456.789-09");
+        assert!(r.masks_applied >= 2);
+        assert!(!r.output.contains("123-45"));
+        assert!(r.rescan_clean);
+    }
+
 }

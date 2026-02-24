@@ -8,7 +8,7 @@ license.workspace = true
 [lib]
 name = "buildtovalue_kernel"
 path = "src/lib.rs"
-crate-type = ["lib", "cdylib"]
+crate-type = ["lib"]
 
 [dependencies]
 base64 = { workspace = true }
@@ -34,9 +34,9 @@ aws-sdk-s3 = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true }
 prometheus = { workspace = true, optional = true }
 
-
 [dev-dependencies]
 tempfile = { workspace = true }
+criterion = "0.5"
 
 [features]
 default = []
@@ -44,3 +44,7 @@ ffi-bindings = ["pyo3/extension-module"]
 observability = ["prometheus"]
 remote-sync = ["tokio/full"]
 s3 = ["remote-sync", "dep:aws-sdk-s3", "dep:aws-config"]
+
+[[bench]]
+name = "kernel_bench"
+harness = false
