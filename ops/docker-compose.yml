@@ -1,4 +1,18 @@
+# ops/docker-compose.yml
+# ═══════════════════════════════════════════════════════════════
+# BuildToValue Sovereign Trust OS
+# ═══════════════════════════════════════════════════════════════
+# Usage:
+#   docker compose up --build                          # core only (gateway + governance)
+#   docker compose --profile observability up --build  # + Prometheus + Grafana
+#   docker compose --profile dashboard up --build      # + Streamlit
+#   docker compose --profile full up --build           # everything
+# ═══════════════════════════════════════════════════════════════
+
 services:
+  # ─────────────────────────────────────────────────────────────
+  # CORE (always start)
+  # ─────────────────────────────────────────────────────────────
   gateway:
     build:
       context: ..
@@ -13,6 +27,7 @@ services:
     environment:
       - RUST_LOG=info
       - BTV_GOVERNANCE_URL=http://governance:8000
+    restart: unless-stopped
 
   governance:
     build:
@@ -21,48 +36,67 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - trust_data:/app/data
+      - ./runtime:/app/data/runtime
+      - ../data/policies:/app/data/policies:ro
+      - ./autogen-policies:/app/data/autogen-policies
       - ./models:/app/models
     environment:
       - BTV_HMAC_KEY=${BTV_HMAC_KEY:-btv-dev-key-NOT-FOR-PRODUCTION!!}
       - BTV_ENV=${BTV_ENV:-development}
+      - BTV_POLICY_DIR=/app/data/policies
+      - BTV_DB_PATH=/app/data/runtime/trust.db
+      - BTV_APPEALS_DB=/app/data/runtime/appeals.db
+      - BTV_THREATS_DB=/app/data/runtime/threats.db
       - BTV_SLM_MODEL_PATH=/app/models/qwen2.5-3b-instruct-q4_k_m.gguf
+      - BTV_AUTOGEN_DIR=/app/data/autogen-policies
     deploy:
       resources:
         limits:
           memory: 6G
           cpus: "4"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
 
+  # ─────────────────────────────────────────────────────────────
+  # OBSERVABILITY (--profile observability | full)
+  # ─────────────────────────────────────────────────────────────
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.51.0
+    profiles: ["observability", "full"]
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
       - gateway
+    restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.0
+    profiles: ["observability", "full"]
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=changeme
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-changeme}
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
+    restart: unless-stopped
 
+  # ─────────────────────────────────────────────────────────────
+  # DASHBOARD (--profile dashboard | full)
+  # ─────────────────────────────────────────────────────────────
   dashboard:
     build:
       context: ..
       dockerfile: ops/Dockerfile.streamlit
+    profiles: ["dashboard", "full"]
     ports:
       - "8501:8501"
     environment:
@@ -71,8 +105,8 @@ services:
     depends_on:
       - gateway
       - governance
+    restart: unless-stopped
 
 volumes:
   ledger_data:
   grafana_data:
-  trust_data:

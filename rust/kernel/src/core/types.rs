@@ -174,6 +174,7 @@ pub enum ValidatorModule {
     Luhn,
     Email,
     Phone,
+    SSN,
     // Statistics
     Entropy,
     ZScore,
@@ -192,6 +193,7 @@ pub enum ValidatorModule {
     DataAccessRequest,
     DataErasure,
     BreachNotification,
+    PromptInjection,
 }
 
 /// Veredito ético (usado pelo Ledger)

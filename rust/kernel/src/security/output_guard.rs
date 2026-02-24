@@ -27,6 +27,10 @@ lazy_static! {
         ('\'', "&#x27;"),
     ];
 
+    static ref PII_SSN: Regex = Regex::new(
+        r"\b(\d{3})[-\s](\d{2})[-\s](\d{4})\b"
+    ).unwrap();
+
     // PII patterns for masking
     static ref PII_CPF: Regex = Regex::new(r"\b(\d{3})\.?(\d{3})\.?(\d{3})-?(\d{2})\b").unwrap();
     static ref PII_CNPJ: Regex = Regex::new(r"\b(\d{2})\.?(\d{3})\.?(\d{3})/?(\d{4})-?(\d{2})\b").unwrap();
@@ -155,11 +159,15 @@ impl OutputGuard {
             masked_types.push("credit_card".to_string());
         }
 
-        PiiMaskResult {
-            sanitized_text: result,
-            masked_count,
-            masked_types,
+        if PII_SSN.is_match(&result) {
+            result = PII_SSN.replace_all(&result, |caps: &regex::Captures| {
+                format!("***-**-{}", &caps[3])
+            }).to_string();
+            masked_count += 1;
+            masked_types.push("ssn".to_string());
         }
+
+        PiiMaskResult { sanitized_text: result, masked_count, masked_types }
     }
 
     /// Full sanitization: XSS + PII masking.
@@ -348,5 +356,23 @@ mod tests {
         let r = g.mask_pii("Ola, tudo bem?");
         assert_eq!(r.masked_count, 0);
         assert_eq!(r.sanitized_text, "Ola, tudo bem?");
+    }
+
+    #[test]
+    fn test_mask_ssn() {
+        let g = OutputGuard::new();
+        let r = g.mask_pii("SSN: 123-45-6789");
+        assert_eq!(r.sanitized_text, "SSN: ***-**-6789");
+        assert_eq!(r.masked_count, 1);
+        assert!(r.masked_types.contains(&"ssn".to_string()));
+    }
+
+    #[test]
+    fn test_mask_ssn_with_cpf() {
+        let g = OutputGuard::new();
+        let r = g.mask_pii("SSN 123-45-6789 CPF 123.456.789-09");
+        assert!(r.masked_count >= 2);
+        assert!(r.masked_types.contains(&"ssn".to_string()));
+        assert!(r.masked_types.contains(&"cpf".to_string()));
     }
 }

@@ -23,8 +23,11 @@ router = APIRouter(prefix="/v1/intelligence/bridge", tags=["intelligence"])
 
 # Module-level singleton (initialized on first use)
 _ingestor = MispIngestor()
-_bridge = ThreatPolicyBridge(ingestor=_ingestor)
-
+import os
+_bridge = ThreatPolicyBridge(
+    ingestor=_ingestor,
+    policies_dir=os.environ.get("BTV_AUTOGEN_DIR", "data/policies/auto-generated"),
+)
 
 def get_ingestor() -> MispIngestor:
     """Access the shared ingestor (for ingest endpoints and hydration)."""

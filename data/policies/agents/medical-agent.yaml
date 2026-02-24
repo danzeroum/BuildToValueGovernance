@@ -46,3 +46,22 @@ domain_config:
       1. Patient authorized sharing (LGPD Art. 7, I)
       2. Data is necessary for treatment (Art. 11, II, f)
       3. Secure environment (TLS, no third parties)
+
+output_schema:
+  type: object
+  required:
+    - answer
+    - sources
+  properties:
+    answer:
+      type: string
+      maxLength: 2000
+    sources:
+      type: array
+      minItems: 1
+      items:
+        type: string
+    confidence:
+      type: number
+      minimum: 0.0
+      maximum: 1.0

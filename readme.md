@@ -32,6 +32,12 @@ User Input
 ```
 
 ## Quick Start (Docker)
+
+### Prerequisites
+- Docker Desktop (or Docker Engine + Compose v2)
+- 8GB+ RAM (16GB if using SLM)
+
+### 1. Start Core Services
 ```bash
 cd ops
 docker compose up -d
@@ -39,39 +45,95 @@ docker compose up -d
 
 | Service | Port | Purpose |
 |---|---|---|
-| Rust Gateway | 8080 | Validation + PII masking |
-| Python Governance | 8000 | Ethical judgment + Trust + Appeals |
-| Streamlit Dashboard | 8501 | Visual interface (9 pages) |
-| Prometheus | 9090 | Metrics |
-| Grafana | 3000 | Dashboard (admin/changeme) |
+| Rust Gateway | 8080 | Validation, PII masking, policy engine |
+| Python Governance | 8000 | Ethical judgment, trust, mercy, appeals, SLM |
 
-### Test It
+### 2. Verify
 ```bash
-# PII detection (BLOCK)
+curl -s http://localhost:8080/health | python -m json.tool
+# {"status":"ok","version":"1.0.0","uptime_seconds":...}
+```
+
+### 3. Demo: Full Pipeline
+
+**PII Detection → BLOCK:**
+```bash
 curl -s -X POST http://localhost:8080/v1/validate \
   -H "Content-Type: application/json" \
-  -d '{"input": "CPF 123.456.789-09"}' | python -m json.tool
+  -d '{"input": "CPF 123.456.789-09", "session_id": "demo"}' | python -m json.tool
+```
+Expected: `action: BLOCK`, `verdict_id`, `signature`, `rationale` populated.
 
-# SQL injection (HARD BLOCK)
+**SQL Injection → HARD BLOCK:**
+```bash
 curl -s -X POST http://localhost:8080/v1/validate \
   -H "Content-Type: application/json" \
-  -d '{"input": "DROP TABLE users"}' | python -m json.tool
+  -d '{"input": "DROP TABLE users", "session_id": "demo"}' | python -m json.tool
+```
 
-# PII masking
+**PII Masking:**
+```bash
 curl -s -X POST http://localhost:8080/v1/sanitize \
   -H "Content-Type: application/json" \
   -d '{"text": "email joao@empresa.com CPF 123.456.789-09"}' | python -m json.tool
+```
 
-# Mercy flow: build trust then test
+**Mercy Flow (Gilligan) — build trust, then test leniency:**
+```bash
+# Build trust (8 clean messages)
 for i in $(seq 1 8); do
   curl -s -X POST http://localhost:8080/v1/validate \
     -H "Content-Type: application/json" \
-    -d '{"input": "ola tudo bem", "session_id": "demo-user"}' > /dev/null
+    -d '{"input": "ola tudo bem", "session_id": "mercy-demo"}' > /dev/null
 done
+
+# Now test with PII — mercy may downgrade action
 curl -s -X POST http://localhost:8080/v1/validate \
   -H "Content-Type: application/json" \
-  -d '{"input": "email teste@gmail.com", "session_id": "demo-user"}' | python -m json.tool
+  -d '{"input": "email teste@gmail.com", "session_id": "mercy-demo"}' | python -m json.tool
 ```
+Expected: `mercy_applied: true` if trust threshold met.
+
+**Appeal Flow (Contestability — 24h SLA):**
+```bash
+# Submit appeal against a verdict
+curl -s -X POST http://localhost:8000/v1/appeals \
+  -H "Content-Type: application/json" \
+  -d '{"audit_trail_id": "VRD-XXXXXXXXXX-000001", "user_id": "user1", "reason": "False positive"}' | python -m json.tool
+
+# Resolve appeal (human reviewer)
+curl -s -X POST http://localhost:8000/v1/appeals/APL-XXXXXXXXXX-000001/resolve \
+  -H "Content-Type: application/json" \
+  -d '{"reviewer_notes": "Confirmed false positive", "new_action": "ALLOW"}' | python -m json.tool
+```
+
+**Trust Score Lookup:**
+```bash
+curl -s http://localhost:8000/v1/trust/demo | python -m json.tool
+```
+
+**Compliance Report:**
+```bash
+curl -s http://localhost:8000/v1/compliance/report/EU_AI_ACT | python -m json.tool
+```
+
+### 4. Optional Services
+```bash
+# + Prometheus (:9090) + Grafana (:3000, admin/changeme)
+docker compose --profile observability up -d
+
+# + Streamlit Dashboard (:8501)
+docker compose --profile dashboard up -d
+
+# Everything
+docker compose --profile full up -d
+```
+
+### 5. Stop
+```bash
+docker compose --profile full down
+```
+The ledger is persisted in `data/ledger/decisions.jsonl`.
 
 ## API Endpoints
 

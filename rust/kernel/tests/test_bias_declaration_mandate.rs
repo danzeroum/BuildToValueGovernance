@@ -24,6 +24,8 @@ mod tests {
             Box::new(EmailValidator::new()),
             Box::new(PhoneValidator::new()),
             Box::new(CreditCardValidator::new()),
+            // Security
+            Box::new(buildtovalue_kernel::security::PromptInjectionDetector::new()),
         ]
     }
 
