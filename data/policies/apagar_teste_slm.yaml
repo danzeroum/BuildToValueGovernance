@@ -1,5 +1,5 @@
 slm:
-  enabled: true
+  enabled: false
   model_path: /app/models/qwen2.5-3b-instruct-q4_k_m.gguf
   model_id: qwen2.5-3b-instruct
   n_ctx: 512
