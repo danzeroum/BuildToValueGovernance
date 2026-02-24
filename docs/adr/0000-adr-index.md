@@ -48,6 +48,10 @@ tomadas no projeto.
 |:---|:---|:---:|:---:|:---|:---|
 | **0010** | **Bias Declaration Mandate** | 🚧 Impl. | v1.5 | [Ver Detalhes](./0010-bias-declaration-mandate.md) | Todo `Validator` deve declarar FPR/FNR (Jonas). `bias_declaration()` obrigatório no trait. |
 | **0016** | **Ethical Context Engine v4** | 🔒 Futuro | v1.8 | [Ver Detalhes](./0016-ethical-context-engine-v4.md) | Pipeline ético completo (Rawls→Levinas→Jonas→Gilligan). `explain_decision()` obrigatório. |
+| **0036** | **Red-team Formal e Bias Guardian** | 🔒 Planejado | v1.7.0 | [Ver Detalhes](./0036-redteam-bias-guardian.md) | Protocolo formal de red-team com cadência CI obrigatória. `BiasGuardian` Python verifica divergência FPR/FNR declarado vs medido. Thresholds: warning 5pp / block 15pp (FNR). Fecha loop de ADR-010. |
+| **0038** | **EthicalContextEngine v4.0 — Pipeline Filosófico Explícito** | 🔒 Planejado | v1.8.0 | [Ver Detalhes](./0038-ethical-context-engine-v4.md) | 4 estágios nomeados: Rawls→Levinas→Jonas→Gilligan. `ExplainDecision` estruturado (EU AI Act Art. 13). `pipeline_trace` auditável. Integração AppealEngine. Substitui esboço ADR-016. |
+| **0039** | **TrustScoreCalculator v2.0** | 🔒 Planejado | v1.8.0 | [Ver Detalhes](./0039-trust-score-calculator-v2.md) | Fórmula 5 componentes (ADR-007) com TrustStore Protocol (InMemory\|SQLite\|Redis-ready). Fix decay overflow. `adjust()` para AppealEngine (+0.1/−0.05). `TrustExplain` estruturado. Substitui esboço ADR-007. |
+
 
 ---
 
@@ -85,7 +89,7 @@ tomadas no projeto.
 | ID | Título | Status | Versão | Link | Resumo |
 |:---|:---|:---:|:---:|:---|:---|
 | **0017** | **Contestability Loop** | ✅ Ativo | v1.8 | [Ver Detalhes](./0017-contestability-loop.md) | Appeals HTTP: submit, status, resolve. SLA 24h. Levinas. Trust score feedback. |
-
+| **0037** | **Contestability Loop — AppealEngine v2.0 + SLA 24h Enforcement** | 🔒 Planejado | v1.8.0 | [Ver Detalhes](./0037-contestability-loop-appeal-engine.md) | Judiciário de segundo grau. HMAC verify antes de aceitar appeal. SLAMonitor worker ativo (Jonas). Trust bidirecional: +0.1 aceito / −0.05 rejeitado (Gilligan). Toda appeal no Ledger. Substitui esboço ADR-017. |
 ---
 
 ## 🌐 Grupo F: API & Observability (v1.9 – v2.0)
@@ -99,6 +103,9 @@ tomadas no projeto.
 | **0023** | **Appeals HTTP Endpoint** | ✅ Ativo | v2.0 | [Ver Detalhes](./0023-appeals-http-endpoint.md) | Expõe ContestabilityLoop via 5 endpoints REST. LGPD Art. 20 + EU AI Act Art. 86. |
 | **0025** | **Ledger Query API** | ✅ Ativo | v2.1 | [Ver Detalhes](./0025-ledger-query-api.md) | API de consulta ao DurableLedger por `evidence_id`, janela temporal e `agent_id`. |
 | **0026** | **Webhook Notifications** | 🔒 Futuro | v2.1 | [Ver Detalhes](./0026-webhook-notifications.md) | Notificações push para eventos de BLOCK, appeal e deploy. Payload HMAC-assinado. |
+| **0040** | **Axum Gateway v2.0 — Extensões República Algorítmica** | 🔒 Planejado | v1.9.0 | [Ver Detalhes](./0040-axum-gateway-v2-extensions.md) | +3 rotas: /v1/decide, /v1/appeals (proxy), /health/bias. Rate limit per-tenant (BLAKE3 hash). X-BTV-Jurisdiction → jurisdiction_bitmask. Estende ADR-018. |
+| **0041** | **Observability v2.0 — Métricas da República Algorítmica** | 🔒 Planejado | v1.9.0 | [Ver Detalhes](./0041-observability-v2-republic-metrics.md) | +17 métricas: pipeline filosófico por estágio, SLA compliance rate, BiasDeclaration divergência em tempo real, mercy scenarios. 5 alerting rules. Dashboard Grafana 4 poderes. Estende ADR-019. |
+
 
 ---
 
@@ -242,7 +249,7 @@ em `docs/integrations/` (perfis prontos para copy-paste):
 | 🔮 Visão (sem ADR formal) | 2 |
 | Última entrada | ADR-0031 |
 | Próximo disponível | ADR-0032 |
-```
+
 
 ***
 
