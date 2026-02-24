@@ -12,3 +12,4 @@
 /rust/.idea/
 /rust/_legacy/
 /.venv/
+/ops/models/qwen2.5-0.5b-instruct-q4_k_m.gguf

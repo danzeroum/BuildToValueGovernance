@@ -1,11 +1,55 @@
-FROM python:3.11-slim
-WORKDIR /app
+# ═══════════════════════════════════════════════════════════════
+# BuildToValue — Python Governance (multi-stage CUDA)
+# ═══════════════════════════════════════════════════════════════
+
+# Stage 1: Build
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04 AS builder
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3.11-dev python3-pip \
+    build-essential cmake \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY python/ ./python/
-RUN pip install --no-cache-dir ./python/
-RUN pip install --no-cache-dir streamlit requests
+RUN pip3 install --no-cache-dir ./python/
+
+# Compilar llama-cpp-python com CUDA
+RUN CMAKE_ARGS="-DGGML_CUDA=on" pip3 install --no-cache-dir llama-cpp-python || \
+    echo "WARN: llama-cpp-python CUDA build failed"
+
+# Exportar site-packages para copiar no runtime
+RUN cp -r /usr/local/lib/python3.11/dist-packages /packages || \
+    cp -r /usr/lib/python3/dist-packages /packages || true
+RUN pip3 list --format=freeze > /packages-list.txt
+
+# ───────────────────────────────────────────────────────────────
+# Stage 2: Runtime
+# ───────────────────────────────────────────────────────────────
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3-pip libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Reinstalar dependências diretamente no runtime (mais confiável que copiar)
+COPY python/ ./python/
+RUN pip3 install --no-cache-dir ./python/
+RUN CMAKE_ARGS="-DGGML_CUDA=on" pip3 install --no-cache-dir llama-cpp-python || \
+    pip3 install --no-cache-dir llama-cpp-python
 
 COPY data/ ./data/
 
-EXPOSE 8501
-CMD ["streamlit", "run", "python/buildtovalue/dashboard/app.py", "--server.address", "0.0.0.0", "--server.headless", "true"]
+RUN groupadd -r btv && useradd -r -g btv -d /app btv \
+    && mkdir -p /app/data/ledger /app/models /app/data/runtime /app/data/autogen-policies \
+    && chown -R btv:btv /app
+USER btv
+
+EXPOSE 8000
+VOLUME /app/models
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=60s \
+    CMD python3.11 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+
+CMD ["python3.11", "-m", "uvicorn", "buildtovalue.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
