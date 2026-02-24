@@ -12,6 +12,7 @@ ADR: 0026-webhook-notifications.md
 """
 
 import logging
+import os
 import time
 import threading
 from dataclasses import dataclass, field
@@ -30,7 +31,7 @@ logger = logging.getLogger("btv.webhook")
 
 DEFAULT_TIMEOUT = 5.0
 DEFAULT_RETRY_MAX = 2
-CONFIG_PATH = "data/policies/webhooks.yaml"
+CONFIG_PATH = os.environ.get("BTV_POLICY_DIR", "data/policies") + "/webhooks.yaml"
 
 
 @dataclass(frozen=True)
@@ -103,33 +104,27 @@ class WebhookDispatcher:
 
     def load_config(self) -> None:
         """Load webhook targets from YAML config."""
-        self._targets = []
-        if not self._config_path.is_file():
-            logger.info("No webhook config at %s", self._config_path)
+        if not self._config_path.exists():
+            logger.warning("Webhook config not found: %s", self._config_path)
             return
 
         try:
-            with open(self._config_path, encoding="utf-8") as f:
-                doc = yaml.safe_load(f)
-            if not doc or "webhooks" not in doc:
+            raw = yaml.safe_load(self._config_path.read_text())
+            if not raw or "webhooks" not in raw:
+                logger.warning("Webhook config empty or missing 'webhooks' key")
                 return
-            for entry in doc["webhooks"]:
-                target = WebhookTarget(
-                    url=entry["url"],
-                    actions=[a.upper() for a in entry.get("actions", [])],
-                    enabled=entry.get("enabled", True),
-                    timeout_seconds=entry.get(
-                        "timeout_seconds", DEFAULT_TIMEOUT
-                    ),
-                    retry_max=entry.get("retry_max", DEFAULT_RETRY_MAX),
-                )
-                if target.enabled:
-                    self._targets.append(target)
-            logger.info(
-                "Loaded %d webhook targets", len(self._targets)
-            )
-        except Exception as exc:
-            logger.error("Failed to load webhook config: %s", exc)
+
+            for w in (raw.get("webhooks") or []):
+                self._targets.append(WebhookTarget(
+                    url=w["url"],
+                    actions=w.get("actions", ["BLOCK"]),
+                    enabled=w.get("enabled", True),
+                    timeout_seconds=w.get("timeout_seconds", DEFAULT_TIMEOUT),
+                    retry_max=w.get("retry_max", DEFAULT_RETRY_MAX),
+                ))
+            logger.info("Loaded %d webhook targets", len(self._targets))
+        except Exception as e:
+            logger.warning("Failed to load webhook config: %s", e)
 
     @property
     def target_count(self) -> int:

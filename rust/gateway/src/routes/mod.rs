@@ -34,7 +34,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .layer(RateLimitLayer::from_env())
         .layer(middleware::from_fn(trace_propagation))
         .layer(cors)
-        .layer(TimeoutLayer::new(Duration::from_millis(5000)))
+        .layer(TimeoutLayer::new(Duration::from_secs(20)))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

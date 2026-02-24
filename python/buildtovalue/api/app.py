@@ -349,11 +349,16 @@ def _resolve_role(session_id: str) -> str:
 
 
 def _load_slm_config() -> dict:
-    """Load SLM config from YAML. Checks /app/data first, then relative path."""
+    """Load SLM config. Env var overrides YAML."""
     import yaml
+    # Env var takes priority (Docker/CI override)
+    env_path = os.environ.get("BTV_SLM_MODEL_PATH")
+    if env_path:
+        return {"enabled": True, "model_path": env_path}
+    # Fallback: YAML config
     candidates = [
-        Path("/app/data/policies/core/slm.yaml"),  # Docker
-        Path(__file__).resolve().parent.parent.parent.parent / "data" / "policies" / "core" / "slm.yaml",  # Local dev
+        Path("/app/data/policies/core/slm.yaml"),
+        Path(__file__).resolve().parent.parent.parent.parent / "data" / "policies" / "core" / "slm.yaml",
     ]
     for config_path in candidates:
         try:
@@ -362,12 +367,6 @@ def _load_slm_config() -> dict:
                     return yaml.safe_load(f).get("slm", {})
         except Exception as e:
             logger.warning("Failed to load SLM config from %s: %s", config_path, e)
-
-    # Fallback: env var
-    model_path = os.environ.get("BTV_SLM_MODEL_PATH")
-    if model_path:
-        return {"enabled": True, "model_path": model_path}
-
     return {}
 # ═══════════════════════════════════════════════════════════════
 # LIFESPAN + FASTAPI APP + ROUTERS
@@ -387,8 +386,10 @@ async def lifespan(application):
     _contestability_loop = ContestabilityLoop(sla_hours=24)
     _ethical_engine = EthicalContextEngine(signing_key=HMAC_KEY)
 
-    root = Path(__file__).resolve().parent.parent.parent.parent
-    profiles_dir = root / "data" / "policies" / "agents"
+    import os
+    policy_root = Path(os.environ.get("BTV_POLICY_DIR", "data/policies"))
+    profiles_dir = policy_root / "agents"
+
     if profiles_dir.exists():
         _profile_manager = ProfileManager(profiles_dir)
         logger.info("ProfileManager initialized: %s", profiles_dir)
