@@ -114,13 +114,14 @@ class SLMClassifier:
     """
 
     def __init__(
-        self,
-        model_path: Optional[str] = None,
-        model_id: str = "local-slm",
-        n_ctx: int = 512,
-        n_threads: int = 2,
-        timeout_ms: int = 100,
-        max_input_tokens: int = 256,
+            self,
+            model_path: Optional[str] = None,
+            model_id: str = "local-slm",
+            n_ctx: int = 512,
+            n_threads: int = 2,
+            timeout_ms: int = 100,
+            max_input_tokens: int = 256,
+            n_gpu_layers: int = 0,
     ):
         self._model_path = model_path
         self._model_id = model_id
@@ -128,10 +129,9 @@ class SLMClassifier:
         self._n_threads = n_threads
         self._timeout_ms = timeout_ms
         self._max_input_tokens = max_input_tokens
+        self._n_gpu_layers = n_gpu_layers
         self._llm = None
         self._loaded = False
-
-        # Metrics
         self._metrics = {
             "classifications": 0,
             "malicious_detected": 0,
@@ -140,7 +140,6 @@ class SLMClassifier:
             "timeouts": 0,
             "total_latency_ms": 0.0,
         }
-
         self._bias = SLMBiasDeclaration(
             fpr=0.0, fnr=0.0,
             calibration_date=0,
@@ -149,27 +148,39 @@ class SLMClassifier:
         )
 
     def load_model(self) -> bool:
-        """
-        Load GGUF model into memory (mmap, lazy).
-        Call at startup. Returns True if successful.
-        """
         if self._model_path is None:
             logger.warning("No model path configured — SLM disabled")
             return False
-
         try:
             from llama_cpp import Llama
+
+            # Auto-detect GPU availability
+            gpu_layers = self._n_gpu_layers
+            if gpu_layers > 0:
+                try:
+                    import subprocess
+                    result = subprocess.run(
+                        ["nvidia-smi"], capture_output=True, timeout=3
+                    )
+                    if result.returncode != 0:
+                        logger.warning("GPU requested but nvidia-smi not found — falling back to CPU")
+                        gpu_layers = 0
+                except (FileNotFoundError, subprocess.TimeoutExpired):
+                    logger.warning("GPU requested but not available — falling back to CPU")
+                    gpu_layers = 0
+
             self._llm = Llama(
                 model_path=self._model_path,
                 n_ctx=self._n_ctx,
                 n_threads=self._n_threads,
+                n_gpu_layers=gpu_layers,
                 use_mmap=True,
                 verbose=False,
             )
             self._loaded = True
             logger.info(
-                "SLM loaded: %s (ctx=%d, threads=%d)",
-                self._model_path, self._n_ctx, self._n_threads,
+                "SLM loaded: %s (ctx=%d, threads=%d, gpu_layers=%d)",
+                self._model_path, self._n_ctx, self._n_threads, gpu_layers,
             )
             return True
         except ImportError:
@@ -178,7 +189,6 @@ class SLMClassifier:
         except Exception as e:
             logger.error("Failed to load SLM: %s", e)
             return False
-
     @property
     def is_loaded(self) -> bool:
         return self._loaded
@@ -195,9 +205,16 @@ class SLMClassifier:
         if not self._loaded or self._llm is None:
             return self._fail_open("model_not_loaded", start)
 
+        # Guard: inputs fora do range causam GGML_ASSERT no llama_decode
+        text_stripped = text.strip()
+        if len(text_stripped) < 3:
+            return self._fail_open("input_too_short", start)
+
+        # Truncar hard em 256 chars (~64 tokens) para evitar batch overflow
+        safe_input = text_stripped[:256]
+
         try:
-            truncated = text[:self._max_input_tokens * 4]  # ~4 chars/token
-            prompt = CLASSIFICATION_PROMPT.format(input_text=truncated)
+            prompt = CLASSIFICATION_PROMPT.format(input_text=safe_input)
 
             result = self._llm(
                 prompt,

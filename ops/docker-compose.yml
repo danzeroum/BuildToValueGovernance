@@ -47,19 +47,23 @@ services:
       - BTV_DB_PATH=/app/data/runtime/trust.db
       - BTV_APPEALS_DB=/app/data/runtime/appeals.db
       - BTV_THREATS_DB=/app/data/runtime/threats.db
-      - BTV_SLM_MODEL_PATH=/app/models/qwen2.5-3b-instruct-q4_k_m.gguf
       - BTV_AUTOGEN_DIR=/app/data/autogen-policies
     deploy:
       resources:
         limits:
           memory: 6G
           cpus: "4"
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      test: [ "CMD", "python3.11", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 45s
+      start_period: 60s
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────

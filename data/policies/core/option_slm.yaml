@@ -1,0 +1,8 @@
+slm:
+  enabled: true
+  model_path: "/app/models/qwen2.5-3b-instruct-q4_k_m.gguf"
+  model_id: "qwen2.5-3b-q4"
+  n_ctx: 512
+  n_threads: 2
+  timeout_ms: 2000
+  max_input_tokens: 256
