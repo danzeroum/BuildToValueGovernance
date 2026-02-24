@@ -66,6 +66,19 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  nginx:
+      image: nginx:1.25-alpine
+      ports:
+        - "8443:8443"   # Gateway TLS
+        - "9443:9443"   # Governance TLS
+      volumes:
+        - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+        - ./nginx/btv-dev.crt:/etc/nginx/certs/btv-dev.crt:ro
+        - ./nginx/btv-dev.key:/etc/nginx/certs/btv-dev.key:ro
+      depends_on:
+        governance:
+          condition: service_healthy
+      restart: unless-stopped
   # ─────────────────────────────────────────────────────────────
   # OBSERVABILITY (--profile observability | full)
   # ─────────────────────────────────────────────────────────────
