@@ -133,3 +133,11 @@ gRPC, Node.js.
 Humano → Arquiteta (ADR+traits) → Dev Rust/Python → Reviewer → Humano integra.
 Max 3 iterações Dev↔Reviewer. Compilar antes de review.
 Handoff templates em `docs/HANDOFF_TEMPLATES.md`.
+
+## Premissas de Produção — TLS/Segurança de Rede
+
+- Nginx como reverse proxy terminando TLS (já implementado em dev com self-signed)
+- Let's Encrypt + Certbot para certificado válido (requer domínio DNS)
+- Portas internas apenas: gateway e governance sem `ports:` expostos — só `expose:`
+- mTLS entre serviços internos
+- Zero mudança de código — 100% configuração de infraestrutura
