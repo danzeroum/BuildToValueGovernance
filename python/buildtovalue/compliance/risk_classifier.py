@@ -17,8 +17,8 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("btv.compliance.risk_classifier")
 
-SECTORS_INDEX = Path(__file__).resolve().parent.parent.parent.parent / "data" / "policies" / "sectors" / "_index.yaml"
-
+import os
+SECTORS_INDEX = Path(os.environ.get("BTV_POLICY_DIR", str(Path(__file__).resolve().parent.parent.parent.parent / "data" / "policies"))) / "sectors" / "_index.yaml"
 
 class RiskLevel(str, Enum):
     PROHIBITED = "PROHIBITED"

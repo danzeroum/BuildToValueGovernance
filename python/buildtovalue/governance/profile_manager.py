@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Dict, Optional, List, Any
 from dataclasses import dataclass, field
 import logging
-
+from typing import Any
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -72,6 +72,8 @@ class Profile:
     version: str = "1.0.0"
     created_at: str = ""
     updated_at: str = ""
+    output_schema: Optional[Dict[str, Any]] = None
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PROFILE MANAGER
@@ -191,6 +193,7 @@ class ProfileManager:
             version=data.get('version', '1.0.0'),
             created_at=data.get('created_at', ''),
             updated_at=data.get('updated_at', ''),
+            output_schema=data.get('output_schema'),
         )
 
     def _resolve_inheritance(self, profile_id: str, visited: Optional[set] = None):
