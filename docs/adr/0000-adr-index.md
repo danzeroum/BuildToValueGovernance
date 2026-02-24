@@ -136,6 +136,16 @@ tomadas no projeto.
 | **0030** | **Chatbot — LLM Self-Hosted** | 🔒 Proposto | v2.0 | [Ver Detalhes](./0030-internal-chatbot-selfhosted-llm.md) | Perfil de integração BTV para chatbot com Llama 70B/vLLM. 5 gates: mensagem, indexação, RAG, training batch, LoRA deploy (`Irreversible`). Evidence LGPD. BiasDeclaration em treino. |
 | **0031** | **Chatbot — LLM Vendor Externo** | 🔒 Proposto | v2.0 | [Ver Detalhes](./0031-external-chatbot-vendor-llm.md) | Delta do ADR-0030 para vendors externos (OpenAI, Anthropic, Google, Azure). Toda mensagem é `Irreversible`. `/v1/sanitize` obrigatório antes de cada envio. Gate de aprovação de vendor por `sector_id`. LGPD Art. 33. |
 
+
+### Grupo J: v1.6 — Multilingual & Multi-tenant Foundation (ADR-0032 a ADR-0036)
+
+| ID | Título | Status | Versão | Link | Resumo |
+|:---|:---|:---:|:---:|:---|:---|
+| **0032** | **ScanContextFlags** | 🚧 Impl. | v1.6.0 | [Ver Detalhes](./0032-scan-context-flags.md) | Substitui `_reserved: [u8; 64]` por struct nomeado de 64 bytes exatos. Fundação para language detection, jurisdição, capability mask e multi-tenant. |
+| **0033** | **PatternRegistry (Tier 0/1/2)** | 🔒 Planejado | v1.6.0 | [Ver Detalhes](./0033-pattern-registry-tiers.md) | Substitui lazy_static por 3 tiers: Tier 0 hardcoded, Tier 1 build-time YAML, Tier 2 runtime ArcSwap. Epoch versionado para auditoria forense. |
+| **0034** | **Language Detection Strategy** | 🔒 Planejado | v1.6.1 | [Ver Detalhes](./0034-language-detection-strategy.md) | whatlang-rs no Stage 1 do pipeline. Preenche `lang_bitmask` e `lang_scores` em ScanContextFlags. Threshold 0.75 + min 20 chars. Inputs ambíguos → undetermined → apenas Tier 0. |
+| **0035** | **Multi-jurisdiction PII Validators** | 🔒 Planejado | v1.7.0 | [Ver Detalhes](./0035-multi-jurisdiction-pii-validators.md) | NHS Number (Mod 11), EU VAT (DE/FR/IT/ES/PT), IBAN (Mod 97). Dispatcher por `jurisdiction_bitmask`. Novos `ValidatorModule` entries. |
+
 ---
 
 ## 📐 Mapa de Dependências entre ADRs
