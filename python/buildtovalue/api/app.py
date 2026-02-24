@@ -413,6 +413,7 @@ async def lifespan(application):
             n_ctx=slm_config.get("n_ctx", 512),
             n_threads=slm_config.get("n_threads", 2),
             timeout_ms=slm_config.get("timeout_ms", 100),
+            n_gpu_layers=slm_config.get("n_gpu_layers", 0),
         )
         if _slm.load_model():
             logger.info("SLM loaded: %s", slm_config["model_path"])
