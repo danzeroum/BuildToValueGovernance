@@ -1,3 +1,6 @@
+from .contestability_loop import ContestabilityLoop
+from .bias_guardian import BiasGuardian
+
 """
 Ethical Context Engine v1.0.0 — Unified Technical-Juridical Engine
 BuildToValue Governance Layer — Algorithmic Republic
@@ -38,6 +41,9 @@ from .mercy_algorithm import MercyCalculator
 from .profile_manager import Profile, ProfileManager
 from .policy_signer import PolicySigner, PolicySigningError
 from .ffi_client import TechnicalEvidence, Finding
+
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +174,8 @@ class EthicalContextEngine:
         profile_manager: Optional[ProfileManager] = None,
         policy_signer: Optional[PolicySigner] = None,
         safe_evaluator: Optional[SafeExpressionEvaluator] = None,
+        contestability_loop: Optional[ContestabilityLoop] = None,
+        bias_guardian: Optional[Any] = None,
     ):
         self.trust_calculator = trust_calculator or TrustScoreCalculator()
         self.mercy_calculator = mercy_calculator or MercyCalculator()
@@ -178,6 +186,8 @@ class EthicalContextEngine:
             max_depth=10,
         )
         self.policy_signer = policy_signer or PolicySigner()
+        self.contestability_loop = contestability_loop or ContestabilityLoop()
+        self.bias_guardian = bias_guardian or BiasGuardian()
 
         self.bias_declaration = {
             'model_version': '1.0.0-unified',
