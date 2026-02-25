@@ -280,3 +280,158 @@ def start_metrics_server(port: int = 9090):
     from prometheus_client import start_http_server
     start_http_server(port)
     print(f"Prometheus metrics server started on port {port}")
+
+# ═══════════════════════════════════════════════════════════════
+# ADR-041: Métricas da República Algorítmica
+# Pipeline filosófico por estágio + BiasGuardian + SLA + Trust
+# ═══════════════════════════════════════════════════════════════
+
+from prometheus_client import Summary
+
+# ── Judiciário: pipeline por estágio filosófico ───────────────
+
+PIPELINE_STAGE_DURATION = Histogram(
+    "btv_pipeline_stage_duration_seconds",
+    "Duração de cada estágio filosófico do pipeline ético",
+    ["stage"],  # rawls | levinas | jonas | gilligan
+    buckets=[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05]
+)
+
+RAWLS_ANOMALIES_TOTAL = Counter(
+    "btv_rawls_anomalies_total",
+    "Anomalias de equidade detectadas pelo estágio Rawls (blind test divergência)"
+)
+
+LEVINAS_CARE_OVERRIDES_TOTAL = Counter(
+    "btv_levinas_care_overrides_total",
+    "Decisões suavizadas pelo dever de cuidado (Levinas) — BLOCK→EDUCATE"
+)
+
+JONAS_RISK_ESCALATIONS_TOTAL = Counter(
+    "btv_jonas_risk_escalations_total",
+    "Escalações de risco pelo princípio de responsabilidade (Jonas)",
+    ["reason"]  # ip_risk | bias_expired | critical_finding
+)
+
+JONAS_BIAS_EXPIRED_TOTAL = Counter(
+    "btv_jonas_bias_expired_total",
+    "BiasDeclarations expiradas detectadas pelo estágio Jonas (> 90 dias)"
+)
+
+GILLIGAN_SCENARIOS_TOTAL = Counter(
+    "btv_gilligan_scenarios_total",
+    "Cenários de misericórdia avaliados pelo estágio Gilligan",
+    ["scenario"]  # S1_FIRST_OFFENSE | S2_HIGH_TRUST_VETERAN | S3_LOW_RISK | S4_CRITICAL_BLOCK | S5_EXPIRED_BIAS | S6_UNCERTAINTY
+)
+
+# ── Auditivo: SLA compliance appeals ─────────────────────────
+
+APPEAL_SLA_COMPLIANCE = Gauge(
+    "btv_appeal_sla_compliance_rate",
+    "Taxa de appeals resolvidos dentro do SLA de 24h (0.0-1.0)"
+)
+
+APPEAL_SLA_BREACHES_TOTAL = Counter(
+    "btv_appeal_sla_breaches_total",
+    "Total de appeals que expiraram sem resolução (breach de SLA)"
+)
+
+APPEAL_TRUST_ADJUSTMENTS_TOTAL = Counter(
+    "btv_appeal_trust_adjustments_total",
+    "Ajustes de trust score via appeals",
+    ["direction"]  # increment | decrement
+)
+
+# ── Legislativo: BiasGuardian divergência ─────────────────────
+
+BIAS_FNR_DIVERGENCE = Gauge(
+    "btv_bias_fnr_divergence_pct",
+    "Divergência entre FNR declarado e medido em pontos percentuais",
+    ["validator_id"]
+)
+
+BIAS_FPR_DIVERGENCE = Gauge(
+    "btv_bias_fpr_divergence_pct",
+    "Divergência entre FPR declarado e medido em pontos percentuais",
+    ["validator_id"]
+)
+
+BIAS_GATE_STATUS = Gauge(
+    "btv_bias_gate_status",
+    "Status do gate de viés: 1=OK, 0=WARNING, -1=BLOCK ou inacessível",
+    ["validator_id"]
+)
+
+# ── Trust Score v2.0 (ADR-039) ────────────────────────────────
+
+TRUST_SCORE_ADJUSTMENTS_TOTAL = Counter(
+    "btv_trust_score_adjustments_total",
+    "Ajustes de trust score por tipo",
+    ["type"]  # appeal_accepted | appeal_rejected | decay | violation
+)
+
+TRUST_SCORE_CURRENT = Gauge(
+    "btv_trust_score_current",
+    "Trust score atual por sessão (amostragem — não expõe session_id real)",
+    ["bucket"]  # low_0_0.3 | medium_0.3_0.6 | high_0.6_1.0
+)
+
+
+# ═══════════════════════════════════════════════════════════════
+# Helpers ADR-041
+# ═══════════════════════════════════════════════════════════════
+
+from contextlib import contextmanager
+
+@contextmanager
+def measure_pipeline_stage(stage: str):
+    """Mede duração de estágio filosófico. Uso: with measure_pipeline_stage('rawls'): ..."""
+    import time
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        PIPELINE_STAGE_DURATION.labels(stage=stage).observe(time.perf_counter() - start)
+
+
+def record_bias_evaluation(validator_id: str, declared_fnr: float, measured_fnr: float,
+                            declared_fpr: float, measured_fpr: float) -> str:
+    """
+    Registra resultado de avaliação BiasGuardian.
+    Retorna nível: 'OK' | 'WARNING' | 'BLOCK'.
+    Thresholds ADR-036: warning=5pp, block=15pp (FNR).
+    """
+    fnr_div = abs(measured_fnr - declared_fnr)
+    fpr_div = abs(measured_fpr - declared_fpr)
+
+    BIAS_FNR_DIVERGENCE.labels(validator_id=validator_id).set(fnr_div)
+    BIAS_FPR_DIVERGENCE.labels(validator_id=validator_id).set(fpr_div)
+
+    if fnr_div >= 15.0:
+        level = "BLOCK"
+        BIAS_GATE_STATUS.labels(validator_id=validator_id).set(-1)
+    elif fnr_div >= 5.0:
+        level = "WARNING"
+        BIAS_GATE_STATUS.labels(validator_id=validator_id).set(0)
+    else:
+        level = "OK"
+        BIAS_GATE_STATUS.labels(validator_id=validator_id).set(1)
+
+    return level
+
+
+def record_trust_bucket(score: float):
+    """Registra trust score em bucket (privacy-preserving — sem session_id)."""
+    if score < 0.3:
+        bucket = "low_0_0.3"
+    elif score < 0.6:
+        bucket = "medium_0.3_0.6"
+    else:
+        bucket = "high_0.6_1.0"
+    TRUST_SCORE_CURRENT.labels(bucket=bucket).set(score)
+
+
+def record_sla_compliance(total_resolved: int, within_sla: int):
+    """Atualiza gauge de SLA compliance após cada resolução ou expiração."""
+    rate = within_sla / total_resolved if total_resolved > 0 else 1.0
+    APPEAL_SLA_COMPLIANCE.set(rate)
