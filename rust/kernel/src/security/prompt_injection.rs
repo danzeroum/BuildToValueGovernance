@@ -8,7 +8,7 @@
 
 use lazy_static::lazy_static;
 use regex::Regex;
-
+use crate::security::pattern_registry::REGISTRY;
 use crate::core::module::{Module, ScanContext};
 use crate::core::types::{
     BiasDeclaration, TechnicalSeverity, ValidatorModule,
@@ -129,14 +129,6 @@ impl PromptInjectionDetector {
         Self
     }
 
-    fn count_pattern_matches(input: &str) -> (u32, u32, u32, u32) {
-        let en = EN_PATTERNS.iter().filter(|p| p.is_match(input)).count() as u32;
-        let pt = PT_PATTERNS.iter().filter(|p| p.is_match(input)).count() as u32;
-        let delim = DELIMITER_PATTERNS.iter().filter(|p| p.is_match(input)).count() as u32;
-        let structural = STRUCTURAL_PATTERNS.iter().filter(|p| p.is_match(input)).count() as u32;
-        (en, pt, delim, structural)
-    }
-
     fn instruction_density(input: &str) -> f32 {
         let words: Vec<&str> = input.split_whitespace().collect();
         if words.is_empty() {
@@ -187,6 +179,7 @@ impl PromptInjectionDetector {
             .sum()
     }
 
+    #[cfg(test)]
     fn determine_category(en: u32, pt: u32, delim: u32, structural: u32) -> &'static str {
         if delim > 0 {
             CAT_DELIMITER_INJECTION
@@ -241,18 +234,36 @@ impl Module for PromptInjectionDetector {
             return Vec::new();
         }
 
-        let (en, pt, delim, structural) = Self::count_pattern_matches(input);
-        let pattern_count = en + pt + delim;
+        // ADR-033: carregar snapshot atômico + registrar epoch para auditoria.
+        let snap = REGISTRY.load();
+        ctx.flags.pattern_epoch = snap.epoch;
+
+        // Tier 0 (universal) sempre executa. Tier 1/2 só se idioma detectado.
+        let (t0, t1, t2) = snap.count_by_tier(input, ctx.flags.lang_bitmask);
+        let pattern_count = t0 + t1 + t2;
+
+        // Manter contagem de delimiters para determine_category.
+        let delim_count = snap
+            .patterns
+            .iter()
+            .filter(|p| p.category == "DELIMITER_INJECTION" && p.regex.is_match(input))
+            .count() as u32;
+
+        let structural_count = snap
+            .patterns
+            .iter()
+            .filter(|p| p.category == "STRUCTURAL_INJECTION" && p.regex.is_match(input))
+            .count() as u32;
+
         let density = Self::instruction_density(input);
         let has_entropy_shift = Self::entropy_shift(input);
 
-        // Fix #1: use letter_ratio, not alpha_ratio
         let ctx_entropy = ctx.stats.entropy;
         let ctx_letter_ratio = ctx.stats.letter_ratio;
 
         let Some((severity, confidence)) = Self::assess_severity(
             pattern_count,
-            structural,
+            structural_count,
             density,
             has_entropy_shift,
             ctx_entropy,
@@ -261,8 +272,15 @@ impl Module for PromptInjectionDetector {
             return Vec::new();
         };
 
-        // Fix #5: threat_category is fixed string (32B), matched_text gets masked input
-        let category = Self::determine_category(en, pt, delim, structural);
+        let category = if delim_count > 0 {
+            CAT_DELIMITER_INJECTION
+        } else if structural_count > 0 && (t1 + t2) > 0 {
+            CAT_MULTI_SIGNAL
+        } else if structural_count > 0 {
+            CAT_STRUCTURAL_INJECTION
+        } else {
+            CAT_INSTRUCTION_OVERRIDE
+        };
 
         vec![
             Finding::new(
@@ -330,7 +348,7 @@ mod tests {
         stats.letter_ratio = letter_ratio;
         ScanContext {
             stats,
-            _reserved: [0u8; 64],
+            flags: Default::default(),
         }
     }
 

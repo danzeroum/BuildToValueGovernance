@@ -1,0 +1,61 @@
+# Alerting rules — ADR-041: República Algorítmica
+# Aplicar via: kubectl apply -f ops/prometheus-rules.yaml
+# Ou: promtool check rules ops/prometheus-rules.yaml
+
+groups:
+  - name: btv_republic_alerts
+    interval: 30s
+    rules:
+
+      # ── Legislativo: BiasDeclaration ─────────────────────────
+      - alert: BiasDeclarationWarning
+        expr: btv_bias_fnr_divergence_pct > 5
+        for: 5m
+        labels:
+          severity: warning
+          poder: legislativo
+        annotations:
+          summary: "BiasDeclaration divergência WARNING — {{ $labels.validator_id }}"
+          description: "FNR divergência {{ $value }}pp > threshold 5pp (ADR-036)"
+
+      - alert: BiasDeclarationBlock
+        expr: btv_bias_fnr_divergence_pct > 15
+        for: 1m
+        labels:
+          severity: critical
+          poder: legislativo
+        annotations:
+          summary: "BiasDeclaration divergência BLOCK — {{ $labels.validator_id }}"
+          description: "FNR divergência {{ $value }}pp > threshold 15pp. Deploy bloqueado (ADR-036)"
+
+      # ── Auditivo: SLA Appeals ────────────────────────────────
+      - alert: AppealSLABreach
+        expr: rate(btv_appeal_sla_breaches_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          poder: auditivo
+        annotations:
+          summary: "Appeal SLA breach detectado"
+          description: "Appeal expirou sem resolução. LGPD Art. 20 requer resolução em 24h"
+
+      - alert: AppealSLAComplianceLow
+        expr: btv_appeal_sla_compliance_rate < 0.9
+        for: 15m
+        labels:
+          severity: critical
+          poder: auditivo
+        annotations:
+          summary: "SLA compliance abaixo de 90%"
+          description: "Taxa atual: {{ $value | humanizePercentage }}. Ethical Committee requer ação"
+
+      # ── Executivo: Latência ───────────────────────────────────
+      - alert: DecideLatencyHigh
+        expr: histogram_quantile(0.99, rate(btv_decide_latency_ms_bucket[5m])) > 50
+        for: 5m
+        labels:
+          severity: warning
+          poder: executivo
+        annotations:
+          summary: "Latência /v1/decide p99 acima de 50ms"
+          description: "p99 atual: {{ $value }}ms. SLA: <50ms (ADR-001)"

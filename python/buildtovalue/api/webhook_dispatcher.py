@@ -115,6 +115,8 @@ class WebhookDispatcher:
                 return
 
             for w in (raw.get("webhooks") or []):
+                if not w.get("enabled", True):
+                    continue
                 self._targets.append(WebhookTarget(
                     url=w["url"],
                     actions=w.get("actions", ["BLOCK"]),
@@ -142,7 +144,7 @@ class WebhookDispatcher:
         """Check if any target wants this action."""
         action_upper = action.upper()
         return any(
-            action_upper in t.actions
+            action_upper in [a.upper() for a in t.actions]
             for t in self._targets
         )
 

@@ -273,3 +273,23 @@ class TrustScoreCalculator:
         ]
 
         return "\n".join(lines)
+
+    def adjust(self, user_id: str, delta: float) -> float:
+        """
+        Ajusta trust score de user_id por delta (ADR-039).
+        Usado por adjust_trust_after_appeal() do AppealEngine.
+        Retorna novo score clampado em [0.0, 1.0].
+        """
+        import time
+
+        current = self.calculate(user_id, "anonymous")
+        new_score = max(0.0, min(1.0, current + delta))
+        # Registrar como atividade para persistência no histórico
+        activity = UserActivity(
+            session_id=user_id,
+            timestamp=int(time.time()),
+            action="appeal",
+            result="appeal_success" if delta > 0 else "appeal_fail",
+        )
+        self.record_activity(activity)
+        return new_score
