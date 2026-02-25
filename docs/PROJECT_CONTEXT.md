@@ -1,143 +1,144 @@
-# BuildToValue — PROJECT_CONTEXT.md
-# Versão: 4.0 | Atualizado: 18 fev 2026
+# PROJECT_CONTEXT.md — BuildToValue v2.1
 
-## 1. O QUE É
+> Documento de contexto para AI Squad. Colar no início de cada chat de IA.
+> Última atualização: 25 fevereiro 2026.
 
-Sovereign Trust OS — infraestrutura de governança ética para agentes de IA.
-Rust kernel (fatos técnicos) + Python governance (julgamentos éticos).
-República Algorítmica: Legislativo (Policy-as-Code) → Executivo (Rust < 30ms) →
-Judiciário (Python < 10ms) → Auditivo (Ledger imutável).
+## O que é
 
-## 2. ESTADO ATUAL
+BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust (fatos técnicos) + Python (julgamentos éticos), organizada como "República Algorítmica" com separação de poderes.
 
-**Versão:** v2.0.0-alpha (Fase B completa)
-**Versões completadas:** v1.5 → v1.9 (operacional end-to-end via Docker Compose)
+## Estado Real do Código
 
-Sistema operacional com:
-- Rust Gateway (:8080) — validate, sanitize, batch, policy test, metrics
-- Python Governance (:8000) — decide, trust, appeals, ledger query, compliance, intelligence, webhooks
-- Streamlit Dashboard (:8501) — 9 páginas
-- Prometheus (:9090) + Grafana (:3000) — observabilidade
-- SLM Classifier — Qwen 2.5 3B local (zona de ambiguidade, fail-open)
-- CI/CD — GitHub Actions (Rust + Python + Ethical tests)
-- Runtime Compliance Engine — RiskClassifier + ComplianceEvaluator no pipeline /v1/decide
-- FRIA Generator — Fundamental Rights Impact Assessment (Art. 27, 10 seções auto-preenchidas)
+### Rust Kernel (rust/kernel/src/)
 
-Latências observadas (Docker, dev): ~10ms validate, ~6ms hard block, ~11ms mercy flow.
-## 3. 10 GAPS — TODOS FECHADOS
+**Pipeline do Gatekeeper v2.6.1 — 15 módulos registrados:**
 
-| # | Gap | Status |
-|---|---|---|
-| 1 | Appeals endpoint | ✅ ContestabilityLoop + SQLite persistence |
-| 2 | Compliance YAML mappings (7 frameworks) | ✅ `data/policies/compliance/` |
-| 3 | Sector patterns (6 setores) | ✅ `data/policies/sectors/` |
-| 4 | Profiles no `/v1/validate` | ✅ ProfileManager + SectorLoader |
-| 5 | Penalty schedules | ✅ `data/policies/penalties.yaml` |
-| 6 | Rate limiting + API Key Auth | ✅ `X-API-Key` header |
-| 7 | Webhooks | ✅ WebhookDispatcher + YAML config |
-| 8 | Threat→Policy Bridge | ✅ ThreatPolicyBridge + SQLite hydration |
-| 9 | Ledger Query API | ✅ LedgerReader + pagination |
-| 10 | Key management | ✅ Env var + rotation scripts |
+| Estágio | Módulos | Qtd |
+|:---|:---|:---:|
+| Deobfuscate | Base64Detector, HexDecoder, LeetspeakDetector | 3 |
+| Analyze | EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, LanguageDetector (ADR-034) | 4 |
+| Validate | CpfValidator, CnpjValidator, EmailValidator, CreditCardValidator, PhoneValidator, PromptInjectionDetector (ADR-028), SsnValidator | 7 |
+| **Não wired** | NhsValidator, VatValidator, IbanValidator (ADR-035 — código existe, falta integrar) | 3 |
 
-## 4. CLEANUP REALIZADO (T3)
+**Structs canônicos (tamanhos verificados compile-time):**
 
-- 14 scripts legados arquivados em `docs/legacy/`
-- `database.py` removido (código inseguro educacional)
-- 3 `requirements*.txt` removidos (pyproject.toml é fonte única)
-- 4 workflows CI/CD quebrados substituídos por `ci.yml` funcional
-- FastAPI `on_event` migrado para `lifespan`
-- `test_profile_manager.py` movido de produção para `tests/unit/`
+| Struct | Tamanho | Arquivo |
+|:---|:---|:---|
+| TechnicalEvidence | 9632 bytes | evidence/technical.rs |
+| ScanContextFlags | 64 bytes | core/module.rs |
+| Finding | 144 bytes | evidence/finding.rs |
+| LedgerEntry | 384 bytes | ledger/entry.rs |
 
-## 5. TESTES
+**ScanContextFlags (ADR-032):**
+- `lang_bitmask` (u64): idiomas detectados (EN=bit0, PT=bit1, ES=bit2...)
+- `jurisdiction_bitmask` (u64): jurisdições (BR=bit0, US=bit1, EU=bit2, UK=bit3)
+- `capability_mask` (u64): features ativas (CAP_PII, CAP_INJECTION, CAP_DEOBFUSC, CAP_OUTPUT)
+- `tenant_key` ([u8;16]): BLAKE3-128 do tenant_id (placeholder [0;16] até multi-tenant)
+- `pattern_epoch` (u64): versão do PatternRegistry, escrito em `_reserved_metadata[0..8]`
+- `lang_scores` ([u16;4]): confiança top-4 idiomas (fixed-point u16)
 
-- 357 testes passando (unit + integration + ethical)
-- 12 deselected (benchmarks opcionais)
-- 17 warnings restantes (httpx deprecation — cosmético)
+**PatternRegistry (ADR-033):**
+- ArcSwap global, lock-free no hot path
+- Tier 0: Universal (delimiters, structural) — sempre executa
+- Tier 1: Primary (EN, PT) — executa se `lang_bitmask` ativo
+- Tier 2: Secondary — confiança > 0.3 (reservado)
+- `epoch` incrementa em `reload()`, rastreável no TechnicalEvidence
 
-## 6. ENDPOINTS
+**Security:**
+- PromptInjectionDetector: 3 camadas (regex + structural + cross-signal)
+- PatternRegistry integrado: `REGISTRY.load()` → `snap.epoch` → `ctx.flags.pattern_epoch`
+- OutputGuard: sanitização XSS/injection + PII masking
+- SessionGuard: proteção hijacking (30min timeout)
 
-### Rust Gateway (:8080)
+### Python Governance (python/buildtovalue/)
 
-| Endpoint | Método | Função |
-|---|---|---|
-| `/v1/validate` | POST | Scan + Policy + Governance |
-| `/v1/validate/batch` | POST | Batch scan |
-| `/v1/sanitize` | POST | PII masking |
-| `/v1/policy/test` | POST | Policy test |
-| `/health` | GET | Health check |
-| `/metrics` | GET | Prometheus |
-| `/v1/compliance/classify-risk` | POST | EU AI Act risk classification (Annex III) |
-| `/v1/compliance/fria/generate` | POST | FRIA document generation (Art. 27) |
+**EthicalContextEngine — duas versões coexistem:**
 
-### Python Governance (:8000)
+| Arquivo | Versão | Uso |
+|:---|:---|:---|
+| `context_engine.py` | v1.8 (pipeline Mercy) | `app.py` via `EthicalContextEngine(signing_key=...)` |
+| `ethical_context_engine.py` | v1.0 (unified technical+governance) | `EthicalContextEngineV3` alias, testes v3 |
 
-| Endpoint | Método | Função |
-|---|---|---|
-| `/v1/decide` | POST | Ethical judgment (SLM + mercy + trust + HMAC) |
-| `/v1/trust/{id}` | GET | Trust score |
-| `/v1/appeals` | POST/GET | Submit/list appeals |
-| `/v1/appeals/{id}` | GET | Appeal status |
-| `/v1/appeals/{id}/resolve` | POST | Resolve appeal |
-| `/v1/appeals/metrics` | GET | Appeal metrics |
-| `/v1/ledger/query` | GET | Query decisions (filtros + paginação) |
-| `/v1/ledger/stats` | GET | Ledger stats |
-| `/v1/compliance/report/{fw}` | GET | Compliance report |
-| `/v1/compliance/check` | POST | Check verdict vs framework |
-| `/v1/intelligence/ingest` | POST | Ingest threat |
-| `/v1/intelligence/bridge/sync` | POST | Threat→Policy sync |
-| `/v1/intelligence/stats` | GET | Threat stats |
-| `/v1/webhooks/status` | GET | Webhook stats |
-| `/health` | GET | Health check |
+**Pipeline filosófico (ADR-038, spec — integração parcial):**
+- RawlsStage: Blind testing, detecta anomalias policy/evidence
+- LevinasStage: Dever de cuidado, gera `appeal_hint`
+- JonasStage: Responsabilidade proporcional, escala riscos, verifica BiasDeclaration expirada
+- GilliganStage: 6 cenários calibrados (S1-S6), mercy NUNCA escala severidade
 
-## 7. INVARIANTES (Violação = REJECT)
+**Componentes ativos:**
+- BiasGuardian (ADR-036): `DivergenceLevel.OK/WARNING/BLOCK`, thresholds FNR 5/8pp, FPR 3/6pp
+- ContestabilityLoop: submit/status/resolve/expire, SLA 24h
+- TrustScoreCalculator: get/set/adjust, decay temporal, cache TTL
+- MercyCalculator: mercy_score baseado em trust + first_offense + risk
+- PolicySigner: HMAC-SHA256 em todo EthicalVerdict
+- AppealEngine: via endpoints FastAPI (submit, resolve, metrics, pending)
 
-- TechnicalEvidence: 9596 bytes fixos (`size_of` assert)
-- Hot path: ZERO heap allocations
-- Hash: BLAKE3 (nunca SHA-256 para evidence)
-- Ring buffer: [Finding; 10] + [Finding; 3] critical
-- Fail-secure: erro/timeout → BLOCK
-- BiasDeclaration obrigatório em todo Validator
-- `explain_decision()` obrigatório em decisões éticas
-- HMAC-SHA256 em todo EthicalVerdict
-- `contestable: true` + `appeal_deadline: 24h` em todo verdict
-- SLM é fail-open (nunca bloqueia pipeline)
+**Observability (ADR-041):**
+- 21+ famílias de métricas Prometheus
+- Pipeline: `btv_pipeline_stage_duration_seconds{stage=rawls|levinas|jonas|gilligan}`
+- Appeals: `btv_appeal_sla_compliance_rate`, `btv_appeal_sla_breaches_total`
+- Bias: `btv_bias_fnr_divergence_pct{validator_id}`, `btv_bias_gate_status`
+- Trust: `btv_trust_score_adjustments_total{type}`
 
-## 8. ANTI-PADRÕES PROIBIDOS
+### Gateway Axum v2.0 (ADR-040)
 
-`.unwrap()` em lib, `.clone()` sem justificativa, `any` em Python,
-`DefaultHasher`, heap no hot path, lógica em `bindings/`, microserviços,
-gRPC, Node.js.
+**Rotas:**
+- v1.9: `/v1/validate`, `/v1/sanitize`, `/v1/policy/test`, `/v1/guard`, `/health`, `/metrics`
+- v2.0: `/v1/decide`, `/v1/appeals` (CRUD + metrics), `/health/bias`, `/v1/trust/:session`
+- Middleware: ApiKeyLayer, RateLimitLayer (per-IP, per-tenant), CORS, Timeout 20s
 
-## 9. LIMITAÇÕES CONHECIDAS
+### Testes
 
-- FPR ~15% (adversarial, 70 amostras — não validado externamente)
-- FNR leetspeak ~12% (homoglyphs Unicode não cobertos)
-- Sem TLS (HTTP plain text)
-- Ledger sem rotação de arquivo (cresce infinitamente)
-- DurableLedger S3 sync best-effort (sem bucket configurado)
-- MISP ingest via API (sem pull automático de servidores externos)
-- SLM timeout agressivo em CPU-only (~500ms-5s real vs 2s config)
+- Rust: `cargo test --workspace` — 357+ testes
+- Python: `pytest tests/ -v`
+- E2E: `ops/e2e-tests.sh` — 27 testes (21 pass, 4 fail, 2 skip — mercy/compliance gaps conhecidos)
+- Red-team: `ops/red-team/run-all.sh` — RT-001..RT-008
 
-## 10. ROADMAP
+### ADRs (42 total)
 
-| Versão | Estado | Escopo |
-|---|---|---|
-| v1.5 — v1.9 | ✅ Completo | Kernel, Policy, Guard, Session, Mercy, Gateway, Observability |
-| v2.0 Fase A | 🚧 Em andamento | CI/CD ✅, Streamlit 9 páginas ✅, Lifespan ✅, Docs, SLM config |
-| v2.0 Fase B | 🔒 Planejado | Runtime Compliance Engine, Risk Classification (Annex III), FRIA |
-| OSS Q3/2027 | 🔒 | Apache 2.0, 100+ stars, 10+ contributors |
-| LF Q4/2027 | 🔒 | LF AI & Data Sandbox |
+| Grupo | IDs | Status |
+|:---|:---|:---|
+| A: Fundamentos | 001-009 | ✅ 8 ativos, 002 obsoleto |
+| B: Governança | 010, 016 | ✅ 010 ativo, 016→038 |
+| C: Segurança | 011-015 | 🔒 Planejados v1.6-v1.7 |
+| D: API/Obs | 017-019 | ✅ Ativos |
+| E: Intel/Compliance | 020-022 | ✅ Ativos |
+| F: Gap Implementations | 023-026 | ✅ Ativos |
+| G: Prompt Injection | 028 | ✅ Ativo |
+| H: Integration Profiles | 029-031 | ✅ Ativos |
+| J: Multi-lang Foundation | 032-035 | ✅ Implementados (035 sem wiring) |
+| K: Red-team & Governance | 036-039 | ✅ Implementados |
+| L: Gateway & Obs v2.0 | 040-041 | ✅ Implementados |
+| M: Policy Automation | 042 | 📝 ADR only (v1.9) |
 
-## 11. AI SQUAD WORKFLOW
+### Débitos Técnicos Ativos
 
-Humano → Arquiteta (ADR+traits) → Dev Rust/Python → Reviewer → Humano integra.
-Max 3 iterações Dev↔Reviewer. Compilar antes de review.
-Handoff templates em `docs/HANDOFF_TEMPLATES.md`.
+| # | Débito | Prioridade | Estimativa |
+|:---|:---|:---:|:---:|
+| DT-001 | NHS/VAT/IBAN não wired no Gatekeeper pipeline | Alta | 1-2h |
+| DT-002 | `bias_guardian` tipado como `Any` no ethical_context_engine.py | Baixa | 5min |
+| DT-003 | ADR-036.md enum values minúsculas vs código maiúsculas | Baixa | 5min |
+| DT-004 | e2e mercy/compliance (4 fails) — schema mismatch governance | Média | 2-4h |
+| DT-005 | `ethical_context_engine.py` excede 200 linhas | Média | Decomposição T1.3 |
+| DT-006 | `bridge.rs` em bindings/ tem placeholder Gatekeeper (não usa real) | Média | 1h |
+| DT-007 | Trait `Validator` legado coexiste com `Module` | Baixa | Cleanup |
 
-## Premissas de Produção — TLS/Segurança de Rede
+### Anti-padrões Proibidos
 
-- Nginx como reverse proxy terminando TLS (já implementado em dev com self-signed)
-- Let's Encrypt + Certbot para certificado válido (requer domínio DNS)
-- Portas internas apenas: gateway e governance sem `ports:` expostos — só `expose:`
-- mTLS entre serviços internos
-- Zero mudança de código — 100% configuração de infraestrutura
+- `.unwrap()` em lib code (usar `?` ou `expect` com mensagem)
+- `.clone()` sem justificativa documentada
+- `any` como type hint em Python (usar tipo concreto)
+- `DefaultHasher` (usar BLAKE3)
+- Heap allocations no hot path
+- Lógica de negócio em `bindings/`
+- Microserviços, gRPC, Node.js
+- Referência a 9596 bytes (valor correto: 9632)
+- `lazy_static!` para patterns que podem usar `PatternRegistry` (ADR-033)
+
+### Dependências Principais
+
+**Rust (Cargo.toml workspace):**
+blake3, arc_swap, whatlang, regex, lazy_static, static_assertions, phf, pyo3, serde, axum, tower-http, prometheus, reqwest
+
+**Python (pyproject.toml):**
+fastapi, uvicorn, pyyaml, prometheus-client, httpx, pydantic, llama-cpp-python (optional)
