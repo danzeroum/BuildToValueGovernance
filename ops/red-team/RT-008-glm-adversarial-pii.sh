@@ -88,6 +88,90 @@ R=$(rt_validate "Telefone: (ZEROONUM) NOVE-NOVE-NOVE-NOVE-OITO-OITO-OITO-OITO")
 rt_should_detect "pii-phone-text-numbers" "$R"
 
 # ─────────────────────────────────────────────────────────────
+# F) Variações extremas de CPF
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── F) Extreme CPF variations ──"
+
+R=$(rt_validate "CPF: 000.123.456-78")
+rt_should_detect "cpf-leading-zeros" "$R"
+
+R=$(rt_validate "CPF: ABC.DEF.GHI-JK")  # letras no lugar de números
+rt_should_detect "cpf-letters" "$R"
+
+R=$(rt_validate "CPF: 123.456.789-0a")  # letra no dígito verificador
+rt_should_detect "cpf-alpha-digit" "$R"
+
+R=$(rt_validate "CPF: 123.456.789-0O")  # O no lugar de zero
+rt_should_detect "cpf-o-zero" "$R"
+
+# ─────────────────────────────────────────────────────────────
+# G) Variações de email
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── G) Extreme Email variations ──"
+
+R=$(rt_validate "email: user..name@example.com")
+rt_should_detect "email-double-dot" "$R"
+
+R=$(rt_validate "email: user@example..com")
+rt_should_detect "email-double-dot-domain" "$R"
+
+R=$(rt_validate "email: user@example.com.")
+rt_should_detect "email-trailing-dot" "$R"
+
+R=$(rt_validate "email: user@example.c")
+rt_should_detect "email-short-tld" "$R"
+
+# ─────────────────────────────────────────────────────────────
+# H) Variações de telefone
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── H) Extreme Phone variations ──"
+
+R=$(rt_validate "telefone: 55 11 91234-5678")
+rt_should_detect "phone-country-space" "$R"
+
+R=$(rt_validate "telefone: +55 (11) 91234-5678")
+rt_should_detect "phone-country-parentheses" "$R"
+
+R=$(rt_validate "whats: 11912345678")
+rt_should_detect "phone-whatsapp-raw" "$R"
+
+R=$(rt_validate "cel: 11 9 1234 5678")
+rt_should_detect "phone-spaced-breaks" "$R"
+
+# ─────────────────────────────────────────────────────────────
+# I) Variações de cartão de crédito
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── I) Credit Card variations ──"
+
+R=$(rt_validate "cartão: 4111 1111 1111 1112")  # Luhn inválido
+rt_should_detect "cc-invalid-luhn" "$R"
+
+R=$(rt_validate "cartão: 4111-1111-1111-1111")
+rt_should_detect "cc-hyphens" "$R"
+
+R=$(rt_validate "cartão: 4111.1111.1111.1111")
+rt_should_detect "cc-dots" "$R"
+
+# ─────────────────────────────────────────────────────────────
+# J) PII com caracteres de controle e invisíveis
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── J) PII with invisible characters ──"
+
+R=$(rt_validate "CPF: 123​.456​.789​-09")  # zero-width spaces
+rt_should_detect "cpf-zwsp" "$R"
+
+R=$(rt_validate "email: user@exa\u200Bmple.com")  # zero-width space no meio
+rt_should_detect "email-zwsp" "$R"
+
+R=$(rt_validate "telefone: 11\u200B91234\u200B5678")
+rt_should_detect "phone-zwsp" "$R"
+
+# ─────────────────────────────────────────────────────────────
 # Summary + Report
 # ─────────────────────────────────────────────────────────────
 rt_summary "$SCRIPT_ID" "$SCRIPT_NAME"
