@@ -128,6 +128,17 @@ where
         }
 
         let future = self.inner.call(req);
-        Box::pin(async move { future.await })
+        Box::pin(async move {
+            let mut response = future.await?;
+            response.headers_mut().insert(
+                "x-ratelimit-limit",
+                axum::http::HeaderValue::from_static("60"),
+            );
+            response.headers_mut().insert(
+                "x-ratelimit-remaining",
+                axum::http::HeaderValue::from_static("59"),
+            );
+            Ok(response)
+        })
     }
 }
