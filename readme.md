@@ -1,220 +1,72 @@
 # BuildToValue — Sovereign Trust OS
 
-**Ethical governance infrastructure for AI agents. Rust kernel (facts) + Python governance (judgment).**
-
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![CI](https://github.com/buildtovalue/sovereign-trust-os/actions/workflows/ci.yml/badge.svg)](https://github.com/buildtovalue/sovereign-trust-os/actions/workflows/ci.yml)
-
----
-
-## What It Does
-
-BuildToValue is an ethical Trust OS that sits between AI agents and users, enforcing governance through a "República Algorítmica" (Algorithmic Republic):
-
-**Legislative** (Policy-as-Code) → **Executive** (Rust Kernel < 30ms) → **Judiciary** (Python Governance < 10ms) → **Auditory** (Immutable Ledger)
-
-Every decision is explainable, signed (HMAC-SHA256), and contestable (24h appeal SLA).
-
-Runtime compliance enforcement evaluates every decision against EU AI Act and LGPD in real-time. High-risk AI systems are automatically classified per Annex III, with Fundamental Rights Impact Assessment (FRIA) generation.
+Ethical trust infrastructure for AI agents. Hybrid Rust + Python architecture implementing the **Algorithmic Republic** — separation of powers between technical fact-finding (Rust) and ethical judgment (Python).
 
 ## Architecture
 ```
-User Input
-  → Rust Gateway (:8080)
-    → Kernel: validators, entropy, deobfuscator, policy engine
-    → TechnicalEvidence (9596 bytes, BLAKE3)
-  → Python Governance (:8000)
-    → SLM Classifier (ambiguity zone only, fail-open)
-    → EthicalContextEngine: trust + mercy + profile + sector
-    → Signed EthicalVerdict (HMAC-SHA256)
-  → Immutable Ledger (decisions.jsonl)
-  → Webhook notification (BLOCK/HARD_BLOCK)
+┌─────────────────────────────────────────────────────────┐
+│                    Axum Gateway v2.0                     │
+│  /v1/validate  /v1/decide  /v1/appeals  /health/bias    │
+├─────────────┬───────────────────────────┬───────────────┤
+│  EXECUTIVE  │        JUDICIARY          │   AUDITORY    │
+│  Rust Kernel│   Python Governance       │   Ledger +    │
+│  <30ms p99  │   <10ms p99              │   Prometheus  │
+│             │                           │               │
+│ 15 modules: │ Pipeline v4.0:           │ WAL + BLAKE3  │
+│ Deobfuscate │  Rawls → Levinas →       │ HMAC-SHA256   │
+│ Analyze     │  Jonas → Gilligan        │ 21+ metrics   │
+│ Validate    │                           │ SLA 24h       │
+│ +Language   │ BiasGuardian (ADR-036)   │               │
+│ +Security   │ AppealEngine (ADR-037)   │               │
+│             │ TrustScore v2 (ADR-039)  │               │
+├─────────────┴───────────────────────────┴───────────────┤
+│                    LEGISLATIVE                           │
+│            Policy-as-Code (YAML + Git)                  │
+│         PatternRegistry (Tier 0/1/2 + Epoch)            │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start (Docker)
+## Key Properties
 
-### Prerequisites
-- Docker Desktop (or Docker Engine + Compose v2)
-- 8GB+ RAM (16GB if using SLM)
-
-### 1. Start Core Services
-```bash
-cd ops
-docker compose up -d
-```
-
-| Service | Port | Purpose |
-|---|---|---|
-| Rust Gateway | 8080 | Validation, PII masking, policy engine |
-| Python Governance | 8000 | Ethical judgment, trust, mercy, appeals, SLM |
-
-### 2. Verify
-```bash
-curl -s http://localhost:8080/health | python -m json.tool
-# {"status":"ok","version":"1.0.0","uptime_seconds":...}
-```
-
-### 3. Demo: Full Pipeline
-
-**PII Detection → BLOCK:**
-```bash
-curl -s -X POST http://localhost:8080/v1/validate \
-  -H "Content-Type: application/json" \
-  -d '{"input": "CPF 123.456.789-09", "session_id": "demo"}' | python -m json.tool
-```
-Expected: `action: BLOCK`, `verdict_id`, `signature`, `rationale` populated.
-
-**SQL Injection → HARD BLOCK:**
-```bash
-curl -s -X POST http://localhost:8080/v1/validate \
-  -H "Content-Type: application/json" \
-  -d '{"input": "DROP TABLE users", "session_id": "demo"}' | python -m json.tool
-```
-
-**PII Masking:**
-```bash
-curl -s -X POST http://localhost:8080/v1/sanitize \
-  -H "Content-Type: application/json" \
-  -d '{"text": "email joao@empresa.com CPF 123.456.789-09"}' | python -m json.tool
-```
-
-**Mercy Flow (Gilligan) — build trust, then test leniency:**
-```bash
-# Build trust (8 clean messages)
-for i in $(seq 1 8); do
-  curl -s -X POST http://localhost:8080/v1/validate \
-    -H "Content-Type: application/json" \
-    -d '{"input": "ola tudo bem", "session_id": "mercy-demo"}' > /dev/null
-done
-
-# Now test with PII — mercy may downgrade action
-curl -s -X POST http://localhost:8080/v1/validate \
-  -H "Content-Type: application/json" \
-  -d '{"input": "email teste@gmail.com", "session_id": "mercy-demo"}' | python -m json.tool
-```
-Expected: `mercy_applied: true` if trust threshold met.
-
-**Appeal Flow (Contestability — 24h SLA):**
-```bash
-# Submit appeal against a verdict
-curl -s -X POST http://localhost:8000/v1/appeals \
-  -H "Content-Type: application/json" \
-  -d '{"audit_trail_id": "VRD-XXXXXXXXXX-000001", "user_id": "user1", "reason": "False positive"}' | python -m json.tool
-
-# Resolve appeal (human reviewer)
-curl -s -X POST http://localhost:8000/v1/appeals/APL-XXXXXXXXXX-000001/resolve \
-  -H "Content-Type: application/json" \
-  -d '{"reviewer_notes": "Confirmed false positive", "new_action": "ALLOW"}' | python -m json.tool
-```
-
-**Trust Score Lookup:**
-```bash
-curl -s http://localhost:8000/v1/trust/demo | python -m json.tool
-```
-
-**Compliance Report:**
-```bash
-curl -s http://localhost:8000/v1/compliance/report/EU_AI_ACT | python -m json.tool
-```
-
-### 4. Optional Services
-```bash
-# + Prometheus (:9090) + Grafana (:3000, admin/changeme)
-docker compose --profile observability up -d
-
-# + Streamlit Dashboard (:8501)
-docker compose --profile dashboard up -d
-
-# Everything
-docker compose --profile full up -d
-```
-
-### 5. Stop
-```bash
-docker compose --profile full down
-```
-The ledger is persisted in `data/ledger/decisions.jsonl`.
-
-## API Endpoints
-
-### Rust Gateway (:8080)
-
-| Endpoint | Method | Function |
-|---|---|---|
-| `/v1/validate` | POST | Scan + Policy + Governance |
-| `/v1/validate/batch` | POST | Batch scan |
-| `/v1/sanitize` | POST | PII masking |
-| `/v1/policy/test` | POST | Policy test |
-| `/health` | GET | Health check |
-| `/metrics` | GET | Prometheus |
-
-### Python Governance (:8000)
-
-| Endpoint | Method | Function |
-|---|---|---|
-| `/v1/decide` | POST | Ethical judgment (SLM + mercy + trust + HMAC) |
-| `/v1/trust/{session_id}` | GET | Trust score |
-| `/v1/appeals` | POST/GET | Submit/list appeals |
-| `/v1/appeals/{id}/resolve` | POST | Resolve appeal (human reviewer) |
-| `/v1/ledger/query` | GET | Query audit ledger (filters + pagination) |
-| `/v1/compliance/report/{fw}` | GET | Compliance report |
-| `/v1/intelligence/bridge/sync` | POST | Threat→Policy sync |
-| `/v1/webhooks/status` | GET | Webhook stats |
-| `/v1/compliance/classify-risk` | POST | EU AI Act Annex III risk classification |
-| `/v1/compliance/fria/generate` | POST | Fundamental Rights Impact Assessment (Art. 27) |
-
-## Project Structure
-```
-buildtovalue/
-├── rust/                              # Rust Hemisphere (facts)
-│   ├── kernel/src/                    # buildtovalue-kernel
-│   │   ├── lib.rs, core/, evidence/, gatekeeper.rs
-│   │   ├── validators/               # CPF, CNPJ, email, phone, credit card
-│   │   ├── statistics/               # entropy, zscore, char ratio
-│   │   ├── deobfuscator/             # base64, hex, leetspeak, chain
-│   │   ├── policy/                   # engine.rs (YAML -> runtime)
-│   │   ├── security/                 # hmac, output_guard, session_guard
-│   │   ├── ledger/                   # wal, chain, durable
-│   │   └── compliance/, ffi/, batch.rs, observability/
-│   ├── gateway/src/                   # Axum HTTP gateway
-│   ├── bindings/                      # PyO3/Maturin bridge
-│   └── cli/                           # btv command-line tool
-├── python/buildtovalue/               # Python Hemisphere (judgment)
-│   ├── api/                           # FastAPI + routes (ledger, webhooks, intelligence, compliance)
-│   ├── governance/                    # EthicalContextEngine, mercy, trust, contestability, profiles
-│   ├── intelligence/                  # SLM classifier, MISP ingestor, threat bridge
-│   ├── compliance/                    # Framework evaluator, translator
-│   └── dashboard/                     # Streamlit MVP (9 pages)
-├── data/
-│   ├── policies/                      # YAML (core, compliance, sectors, agents, penalties, webhooks)
-│   └── ledger/decisions.jsonl         # Forensic audit log
-├── ops/                               # Docker Compose + Dockerfiles
-├── docs/                              # ADRs (26), PROJECT_CONTEXT.md
-└── .github/workflows/ci.yml          # CI: Rust + Python + Ethical tests
-```
-
-## Technical Invariants
-
-| Invariant | Rationale |
+| Property | Implementation |
 |---|---|
-| TechnicalEvidence = 9596 bytes (fixed) | Zero heap allocation in hot path |
-| BLAKE3 for all evidence hashing | Faster than SHA-256, collision-resistant |
-| Ring buffer: [Finding; 10] + [Finding; 3] critical | Bounded memory, critical preserved |
-| Any error/timeout → BLOCK | Fail-secure (Levinas: protect the user) |
-| BiasDeclaration per validator | Transparency (Jonas: declare limitations) |
-| explain_decision() on every verdict | Explainability (LGPD Art. 20) |
-| HMAC-SHA256 on every EthicalVerdict | Non-repudiation |
-| contestable: true on every verdict | 24h appeal SLA |
-| SLM is fail-open | Never blocks pipeline on model failure |
+| TechnicalEvidence | 9632 bytes fixed, BLAKE3 hash, compile-time verified |
+| ScanContextFlags | 64 bytes: lang, jurisdiction, capability, tenant, epoch |
+| Zero-heap hot path | Stack-only in evidence/gatekeeper |
+| Fail-secure | Any error → BLOCK, never bypass |
+| BiasDeclaration | Mandatory on every Module, calibration < 90 days |
+| HMAC-SHA256 | Every EthicalVerdict signed |
+| Contestability | `contestable: true` + 24h appeal SLA on every verdict |
+| SLM | Supplementary, fail-open (never blocks pipeline) |
+
+## Pipeline
+
+**Rust Kernel — 15 modules across 4 stages:**
+
+| Stage | Modules |
+|---|---|
+| Deobfuscate | Base64, Hex, Leetspeak |
+| Analyze | Entropy, ZScore, CharRatio, LanguageDetector (whatlang) |
+| Validate | CPF, CNPJ, Email, CreditCard, Phone, PromptInjection, SSN |
+| Available | NHS, EU VAT, IBAN (ADR-035, pending pipeline integration) |
+
+**Python Governance — Philosophical Pipeline (ADR-038):**
+
+| Stage | Philosopher | Role |
+|---|---|---|
+| Rawls | John Rawls (1971) | Blind testing, anomaly detection |
+| Levinas | Emmanuel Levinas (1961) | Duty of care, appeal hints |
+| Jonas | Hans Jonas (1979) | Proportional responsibility, bias expiry check |
+| Gilligan | Carol Gilligan (1982) | Mercy (6 calibrated scenarios S1–S6) |
 
 ## Philosophical Foundations
 
 | Philosopher | Principle | Implementation |
 |---|---|---|
-| **Rawls** (1971) | Justice as fairness | Blind policy testing: evaluate without knowing identity |
-| **Levinas** (1961) | Duty of care | Fail-secure: errors protect the user. Educate before punish. |
-| **Gilligan** (1982) | Ethics of care | Mercy: uncertainty + trust + no critical → soften action |
-| **Jonas** (1979) | Proportional responsibility | BiasDeclaration + immutable ledger + SLM data sovereignty |
+| **Rawls** | Justice as fairness | Blind policy testing, PatternRegistry epoch tracking |
+| **Levinas** | Duty of care | Fail-secure, educate before punish, appeal_hint |
+| **Gilligan** | Ethics of care | Mercy: trust + first_offense + low_risk → soften |
+| **Jonas** | Proportional responsibility | BiasDeclaration, BiasGuardian divergence enforcement, immutable ledger |
 
 ## Local Development
 
@@ -222,8 +74,9 @@ buildtovalue/
 ```bash
 cd rust
 cargo build --workspace
-cargo test --workspace
+cargo test --workspace      # 357+ tests
 cargo clippy --workspace -- -D warnings
+cargo bench --bench kernel_benchmark  # Criterion
 ```
 
 ### Python
@@ -233,46 +86,76 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-### SLM (optional)
+### Docker (full stack)
 ```bash
-pip install llama-cpp-python
-# Place GGUF model in ops/models/
-# Configure data/policies/core/slm.yaml
+cd ops
+docker compose up
+# Gateway: http://localhost:3000
+# Governance: http://localhost:8000
+# Streamlit: http://localhost:8501
 ```
+
+### E2E Tests
+```bash
+cd ops && bash e2e-tests.sh
+# 27 tests: 21 pass, 4 fail (known), 2 skip
+```
+
+## ADRs
+
+42 ADRs in `docs/adr/`, organized by group:
+
+| Group | IDs | Scope |
+|---|---|---|
+| Foundations | 001–009 | Hybrid arch, Evidence, Mercy, Ledger, Policy, Monolith |
+| Governance | 010, 016 | BiasDeclaration mandate, EthicalContextEngine |
+| Security | 011–015 | PolicyEngine, OutputGuard, Deobfuscator, Network, Interceptor |
+| API & Obs | 017–019 | ContestabilityLoop, Axum Gateway, Observability |
+| Intelligence | 020–022 | Intelligence Hub, Compliance Plugins, Streamlit |
+| Gap Impl | 023–026 | Appeals HTTP, Threat→Policy, Ledger Query, Webhooks |
+| Prompt Injection | 028 | Heuristic detector (3-layer: regex+structural+cross-signal) |
+| Integrations | 029–031 | External Agent PDP, Internal LLM, External LLM |
+| Multi-lang | 032–035 | ScanContextFlags, PatternRegistry, Language Detection, Multi-jurisdiction PII |
+| Red-team & Gov | 036–039 | BiasGuardian, AppealEngine v2, ECE v4, TrustScore v2 |
+| Gateway & Obs v2 | 040–041 | Gateway extensions, República metrics |
+| Policy Automation | 042 | PolicyTester (Rawls Blind Testing, planned v1.9) |
+
+See `docs/adr/0000-adr-index.md` for full catalog with dependency map.
 
 ## Roadmap
 
 | Version | Status | Scope |
 |---|---|---|
-| v1.5 — v1.9 | ✅ Complete | Kernel, Policy, Guard, Session, Mercy, Gateway, Observability |
-| v2.0 Phase A | ✅ Complete | CI/CD, Streamlit 9 pages, Lifespan, Docs, SLM |
-| v2.0 Phase B | ✅ Complete | Runtime Compliance Engine, Risk Classification, FRIA |
-| OSS Q3/2027 | Planned | Apache 2.0 release, 100+ stars |
+| v1.5 – v1.9 | ✅ Complete | Kernel, Policy, Guard, Session, Mercy, Gateway, Observability |
+| v2.0 Phase A | ✅ Complete | CI/CD, Streamlit, Lifespan, SLM, Docs |
+| v2.0 Phase B | ✅ Complete | Runtime Compliance, Risk Classification, FRIA |
+| v2.1 | ✅ Complete | ADRs 032–041: ScanContextFlags, PatternRegistry, Language, Multi-PII, BiasGuardian, AppealEngine v2, ECE v4, TrustScore v2, Gateway v2, Observability v2 |
+| v2.2 | 🚧 Current | ADR-042 PolicyTester, pipeline wiring ADR-035, debt cleanup |
+| OSS Q3/2027 | Planned | Apache 2.0, 100+ stars, 10+ contributors |
 | LF Q4/2027 | Planned | LF AI & Data Sandbox submission |
 
 ## Known Limitations
 
-- False positive rate ~15% (adversarial testing, 70 samples, not externally validated)
-- Brazilian PII focus (CPF/CNPJ). International PII requires new modules.
-- Compliance is runtime enforcement for EU AI Act and LGPD. Other frameworks (HIPAA, PCI-DSS) are self-assessment only.
-- SLM latency on CPU-only (~500ms-5s depending on hardware)
-- No TLS (plain HTTP)
+- FPR ~15% adversarial (70 samples, not externally validated)
+- FNR leetspeak ~12% (Unicode homoglyphs not covered)
+- SSN bare (9 digits no separator) FPR ~25%
+- PromptInjection is heuristic (regex + structural), not ML
+- NHS/VAT/IBAN validators exist but not yet in Gatekeeper pipeline
 - Ledger grows indefinitely (no rotation)
-- No ML detection — validators are rule-based (SLM is supplementary)
+- No TLS (plain HTTP)
+- SLM latency on CPU-only (~500ms-5s)
+- Two EthicalContextEngine versions coexist (debt: decomposition planned)
 
 ## Contributing
 
-We welcome contributions, especially:
+We welcome contributions:
 
-- Validators for other jurisdictions (US SSN, UK NHS, EU VAT)
+- Multi-jurisdiction validators (integration + red-team scripts)
 - Compliance framework mappings
 - SLM model benchmarks
+- Pattern contributions for PatternRegistry (new languages)
 - Documentation improvements
 
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
-
-## ADRs
-
-26 ADRs in `docs/adr/`, covering foundations, transparency, policy, governance, observability, intelligence, compliance, and gap implementations. See `docs/ARCHITECTURE_ATLAS.md` for the complete catalog.
