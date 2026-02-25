@@ -149,9 +149,9 @@ from pathlib import Path
 from datetime import datetime
 
 class DivergenceLevel(Enum):
-    OK      = "ok"       # dentro da tolerância
-    WARNING = "warning"  # acima da tolerância de aviso; permite merge com PR label
-    BLOCK   = "block"    # acima da tolerância de bloqueio; impede merge
+    OK      = "OK"       # dentro da tolerância
+    WARNING = "WARNING"  # acima da tolerância de aviso; permite merge com PR label
+    BLOCK   = "BLOCK"    # acima da tolerância de bloqueio; impede merge
 
 @dataclass
 class ModuleBiasReport:
@@ -397,7 +397,7 @@ def main() -> int:
     print()
 
     for mr in result.module_reports:
-        icon = {"ok": "✅", "warning": "⚠️", "block": "🚫"}[mr.divergence_level.value]
+        icon = {"OK": "✅", "WARNING": "⚠️", "BLOCK": "🚫"}[mr.divergence_level.value]
         print(f"  {icon} {mr.module_id}: FNR Δ{mr.fnr_divergence_pp:+.1f}pp "
               f"| FPR Δ{mr.fpr_divergence_pp:+.1f}pp")
         if mr.violation_reason:

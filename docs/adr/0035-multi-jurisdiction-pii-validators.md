@@ -1,6 +1,6 @@
 # ADR-0035: Multi-jurisdiction PII Validators
 
-**Status:** 🔒 Planejado
+**Status:** ✅ Implementado (v1.7.0)
 **Data:** 24 de fevereiro de 2026
 **Autores:** BuildToValue AI Squad (Arquiteta + Staff Engineer)
 **Versão Alvo:** v1.7.0

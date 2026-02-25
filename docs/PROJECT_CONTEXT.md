@@ -115,7 +115,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 
 | # | Débito | Prioridade | Estimativa |
 |:---|:---|:---:|:---:|
-| DT-001 | NHS/VAT/IBAN não wired no Gatekeeper pipeline | Alta | 1-2h |
+| DT-001 | NHS/VAT/IBAN wired no Gatekeeper pipeline (Stage 3.5a) | ✅ Fechado v1.7.0 | — |
 | DT-002 | `bias_guardian` tipado como `Any` no ethical_context_engine.py | Baixa | 5min |
 | DT-003 | ADR-036.md enum values minúsculas vs código maiúsculas | Baixa | 5min |
 | DT-004 | e2e mercy/compliance (4 fails) — schema mismatch governance | Média | 2-4h |
