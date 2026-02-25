@@ -363,6 +363,41 @@ class ContestabilityLoop:
 
     # ── STUBS (notificação) ───────────────────────────────────
 
+    def expire_overdue(self) -> int:
+        """Expira appeals além do SLA. Retorna quantidade expirada."""
+        now = int(time.time())
+        expired = 0
+        for appeal in list(self.appeals.values()):
+            sla_seconds = self.sla_seconds
+            overdue = int(time.time()) > (appeal.timestamp + sla_seconds)
+            if appeal.status == AppealStatus.PENDING and overdue:
+                appeal.status = AppealStatus.EXPIRED
+                appeal.resolution_timestamp = now
+                self._save_appeal(appeal)
+                expired += 1
+                logger.info("Appeal %s expired (SLA breach)", appeal.appeal_id)
+        if expired:
+            self._recalculate_metrics()
+        return expired
+
+    def adjust_trust_after_appeal(self, appeal_id: str, trust_store: object) -> bool:
+        """
+        Ajusta trust score quando appeal é aceito (Gilligan: cuidado contínuo).
+        trust_store deve implementar adjust(user_id, delta).
+        Retorna True se ajuste foi aplicado.
+        """
+        appeal = self.get_appeal(appeal_id)
+        if not appeal or appeal.status != AppealStatus.ACCEPTED:
+            return False
+        try:
+            trust_store.adjust(appeal.user_id, delta=+0.1)
+            logger.info("Trust adjusted for %s after accepted appeal %s",
+                        appeal.user_id, appeal_id)
+            return True
+        except Exception as exc:
+            logger.warning("Trust adjustment failed: %s", exc)
+            return False
+
     def _notify_review_team(self, appeal: Appeal) -> None:
         logger.info("NOTIFY review team: %s", appeal.appeal_id)
 

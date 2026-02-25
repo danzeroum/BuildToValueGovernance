@@ -15,7 +15,7 @@ use crate::validators::us::SsnValidator;
 use crate::validators::brazilian::{CpfValidator, CnpjValidator};
 use crate::validators::communication::{EmailValidator, PhoneValidator};
 use crate::validators::financial::CreditCardValidator;
-use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer};
+use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, LanguageDetector};
 use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector};
 use crate::security::PromptInjectionDetector;
 // ---------------------------------------------------------------------
@@ -64,6 +64,7 @@ impl Gatekeeper {
             StageEntry { module: Box::new(EntropyCalculator::new()), stage: PipelineStage::Analyze },
             StageEntry { module: Box::new(ZScoreCalculator::new()), stage: PipelineStage::Analyze },
             StageEntry { module: Box::new(CharRatioAnalyzer::new()), stage: PipelineStage::Analyze },
+            StageEntry { module: Box::new(LanguageDetector::new()), stage: PipelineStage::Analyze },
             // Stage 3: Validate
             StageEntry { module: Box::new(CpfValidator::new()), stage: PipelineStage::Validate },
             StageEntry { module: Box::new(CnpjValidator::new()), stage: PipelineStage::Validate },
@@ -137,6 +138,26 @@ impl Gatekeeper {
             }
         }
 
+        // Stage 3.5a: Jurisdiction-gated validators (ADR-035)
+        {
+            use crate::validators::{NhsValidator, VatValidator, IbanValidator};
+            let mut jv: Vec<Box<dyn crate::core::module::Module>> = Vec::new();
+            if ctx.flags.has_jurisdiction(crate::core::module::ScanContextFlags::JURISDICTION_UK) {
+                jv.push(Box::new(NhsValidator::new()));
+            }
+            if ctx.flags.has_jurisdiction(crate::core::module::ScanContextFlags::JURISDICTION_EU) {
+                jv.push(Box::new(VatValidator::new()));
+                jv.push(Box::new(IbanValidator::new()));
+            }
+            for v in &jv {
+                let findings = v.scan(input, &mut ctx);
+                for finding in findings { evidence.add_finding(finding); }
+                let bias = v.bias_declaration();
+                max_fpr = max_fpr.max(bias.false_positive_rate);
+                max_fnr = max_fnr.max(bias.false_negative_rate);
+            }
+        }
+
         // Stage 3.5: Re-scan decoded content (Deobfuscator Chaining)
         let deob_chain = crate::deobfuscator::chain::DeobfuscatorChain::new();
         let chain_result = deob_chain.deobfuscate(input);
@@ -174,6 +195,8 @@ impl Gatekeeper {
         }
 
         evidence.processing_time_us = start.elapsed().as_micros() as u64;
+        evidence._reserved_metadata[0..8].copy_from_slice(&ctx.flags.pattern_epoch.to_le_bytes());
+        evidence._reserved_metadata[8..24].copy_from_slice(&ctx.flags.tenant_key);
         evidence.finalize().expect("Failed to finalize evidence");
         self.update_metrics(start.elapsed().as_secs_f32() * 1000.0, &evidence);
 

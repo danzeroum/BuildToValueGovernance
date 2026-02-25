@@ -1,201 +1,143 @@
-//! Rate Limiting Middleware — Gap #9
-//! Sliding window, per-IP, with Prometheus metrics.
+//! Rate limiting middleware (ADR-040).
 //!
-//! Design: tower Layer/Service pattern for Axum.
-//! Default: 100 req/min per IP. Configurable via env.
-//! Philosophy: Jonas — protect system resources proportionally.
+//! v1.9: per-IP
+//! v2.0: per-tenant (X-BTV-Tenant-Key → BLAKE3 hash, nunca valor original)
+//!
+//! Invariante: X-BTV-Tenant-Key nunca aparece em logs.
+//! Hash BLAKE3 (16 chars hex) é usado como chave — sem reversibilidade.
 
-use axum::{body::Body, http::{Request, Response}};
+use axum::{
+    body::Body,
+    http::{Request, Response, StatusCode},
+    response::IntoResponse,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tower::{Layer, Service};
+use std::task::{Context, Poll};
+use std::future::Future;
+use std::pin::Pin;
 
-// ── CONFIG ────────────────────────────────────────────────────
+use crate::state::RATE_LIMITED_TOTAL;
 
 #[derive(Clone)]
-pub struct RateLimitConfig {
-    pub max_requests: u32,
-    pub window: Duration,
+pub struct RateLimitLayer {
+    max_requests: u32,
+    window: Duration,
 }
 
-impl Default for RateLimitConfig {
-    fn default() -> Self {
-        let max = std::env::var("BTV_RATE_LIMIT_MAX")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(100);
-        let window_secs = std::env::var("BTV_RATE_LIMIT_WINDOW_SECS")
+impl RateLimitLayer {
+    pub fn from_env() -> Self {
+        let max = std::env::var("BTV_RATE_LIMIT_RPM")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(60);
         Self {
             max_requests: max,
-            window: Duration::from_secs(window_secs),
+            window: Duration::from_secs(60),
         }
-    }
-}
-
-// ── SLIDING WINDOW STATE ──────────────────────────────────────
-
-#[derive(Clone)]
-struct WindowEntry {
-    timestamps: Vec<Instant>,
-}
-
-impl WindowEntry {
-    fn new() -> Self {
-        Self {
-            timestamps: Vec::with_capacity(128),
-        }
-    }
-
-    fn prune(&mut self, window: Duration) {
-        let cutoff = Instant::now() - window;
-        self.timestamps.retain(|t| *t > cutoff);
-    }
-
-    fn count(&self) -> u32 {
-        self.timestamps.len() as u32
-    }
-
-    fn record(&mut self) {
-        self.timestamps.push(Instant::now());
-    }
-
-    fn retry_after(&self, window: Duration) -> u64 {
-        if let Some(oldest) = self.timestamps.first() {
-            let elapsed = oldest.elapsed();
-            if elapsed < window {
-                return (window - elapsed).as_secs() + 1;
-            }
-        }
-        0
-    }
-}
-
-type WindowMap = Arc<Mutex<HashMap<String, WindowEntry>>>;
-
-// ── LAYER ─────────────────────────────────────────────────────
-
-#[derive(Clone)]
-pub struct RateLimitLayer {
-    config: RateLimitConfig,
-    windows: WindowMap,
-}
-
-impl RateLimitLayer {
-    pub fn new(config: RateLimitConfig) -> Self {
-        Self {
-            config,
-            windows: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
-    pub fn from_env() -> Self {
-        Self::new(RateLimitConfig::default())
     }
 }
 
 impl<S> Layer<S> for RateLimitLayer {
-    type Service = RateLimitService<S>;
-
+    type Service = RateLimitMiddleware<S>;
     fn layer(&self, inner: S) -> Self::Service {
-        RateLimitService {
+        RateLimitMiddleware {
             inner,
-            config: self.config.clone(),
-            windows: self.windows.clone(),
+            max_requests: self.max_requests,
+            window: self.window,
+            buckets: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
 
-// ── SERVICE ───────────────────────────────────────────────────
-
 #[derive(Clone)]
-pub struct RateLimitService<S> {
+pub struct RateLimitMiddleware<S> {
     inner: S,
-    config: RateLimitConfig,
-    windows: WindowMap,
+    max_requests: u32,
+    window: Duration,
+    buckets: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
 }
 
-impl<S> Service<Request<Body>> for RateLimitService<S>
+impl<S> RateLimitMiddleware<S> {
+    /// Extrai chave de rate limit.
+    /// Prioridade: X-BTV-Tenant-Key (BLAKE3) > X-Forwarded-For > "unknown"
+    /// INVARIANTE: valor do header nunca é logado.
+    fn extract_key(req: &Request<Body>) -> String {
+        if let Some(tenant) = req.headers().get("X-BTV-Tenant-Key") {
+            if let Ok(val) = tenant.to_str() {
+                let hash = blake3::hash(val.as_bytes());
+                return format!("tenant:{}", &hash.to_hex()[..16]);
+            }
+        }
+        req.headers()
+            .get("X-Forwarded-For")
+            .and_then(|v| v.to_str().ok())
+            .map(|ip| format!("ip:{}", ip.split(',').next().unwrap_or("unknown").trim()))
+            .unwrap_or_else(|| "ip:unknown".to_string())
+    }
+}
+
+impl<S> Service<Request<Body>> for RateLimitMiddleware<S>
 where
-    S: Service<Request<Body>, Response = Response<Body>> + Clone + Send + 'static,
+    S: Service<Request<Body>, Response = Response<Body>> + Send + Clone + 'static,
     S::Future: Send + 'static,
 {
     type Response = Response<Body>;
     type Error = S::Error;
-    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let ip = req
-            .headers()
-            .get("x-forwarded-for")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.split(',').next())
-            .map(|s| s.trim().to_string())
-            .unwrap_or_else(|| "unknown".to_string());
+        let key = Self::extract_key(&req);
+        let max = self.max_requests;
+        let window = self.window;
 
-        let config = self.config.clone();
-        let windows = self.windows.clone();
-        let mut inner = self.inner.clone();
+        let allowed = {
+            let mut buckets = self.buckets.lock().unwrap();
+            let now = Instant::now();
+            let entry = buckets.entry(key.clone()).or_insert((0, now));
 
-        Box::pin(async move {
-            let (allowed, remaining, retry_after) = {
-                let mut map = windows.lock().unwrap_or_else(|e| e.into_inner());
-                let entry = map.entry(ip.clone()).or_insert_with(WindowEntry::new);
-                entry.prune(config.window);
-
-                if entry.count() >= config.max_requests {
-                    let retry = entry.retry_after(config.window);
-                    (false, 0u32, retry)
-                } else {
-                    entry.record();
-                    let remaining = config.max_requests - entry.count();
-                    (true, remaining, 0)
-                }
-            };
-
-            if !allowed {
-                crate::state::RATE_LIMITED_TOTAL.inc();
-
-                let body = serde_json::json!({
-                    "error": "RATE_LIMIT_EXCEEDED",
-                    "message": format!(
-                        "Rate limit exceeded: {} requests per {} seconds",
-                        config.max_requests,
-                        config.window.as_secs()
-                    ),
-                    "retry_after_seconds": retry_after,
-                });
-
-                let response = Response::builder()
-                    .status(axum::http::StatusCode::TOO_MANY_REQUESTS)
-                    .header("Content-Type", "application/json")
-                    .header("Retry-After", retry_after.to_string())
-                    .header("X-RateLimit-Limit", config.max_requests.to_string())
-                    .header("X-RateLimit-Remaining", "0")
-                    .body(Body::from(serde_json::to_string(&body).unwrap()))
-                    .unwrap();
-
-                return Ok(response);
+            if now.duration_since(entry.1) >= window {
+                *entry = (1, now);
+                true
+            } else if entry.0 < max {
+                entry.0 += 1;
+                true
+            } else {
+                false
             }
+        };
 
-            let mut response = inner.call(req).await?;
-            let headers = response.headers_mut();
-            headers.insert(
-                "X-RateLimit-Limit",
-                config.max_requests.to_string().parse().unwrap(),
-            );
-            headers.insert(
-                "X-RateLimit-Remaining",
-                remaining.to_string().parse().unwrap(),
-            );
+        if !allowed {
+            RATE_LIMITED_TOTAL.inc();
+            tracing::warn!("Rate limit exceeded for key prefix: {}",
+                &key[..key.find(':').map(|i| i + 4).unwrap_or(key.len()).min(key.len())]);
 
+            return Box::pin(async move {
+                Ok((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    [("Retry-After", "60"), ("X-RateLimit-Limit", "60")],
+                    "Rate limit exceeded",
+                ).into_response())
+            });
+        }
+
+        let future = self.inner.call(req);
+        Box::pin(async move {
+            let mut response = future.await?;
+            response.headers_mut().insert(
+                "x-ratelimit-limit",
+                axum::http::HeaderValue::from_static("60"),
+            );
+            response.headers_mut().insert(
+                "x-ratelimit-remaining",
+                axum::http::HeaderValue::from_static("59"),
+            );
             Ok(response)
         })
     }
