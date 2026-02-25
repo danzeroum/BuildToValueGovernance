@@ -43,6 +43,25 @@ lazy_static! {
     pub static ref AUTH_REJECTED_TOTAL: IntCounter = register_int_counter!(
         "btv_auth_rejected_total", "Total rejected auth attempts"
     ).unwrap();
+
+    pub static ref DECIDE_TOTAL: IntCounterVec = register_int_counter_vec!(
+        opts!("btv_decide_total", "Total /v1/decide requests by action (ADR-040)"),
+        &["action"]
+    ).unwrap();
+
+    pub static ref DECIDE_LATENCY_MS: Histogram = register_histogram!(
+        HistogramOpts::new("btv_decide_latency_ms", "/v1/decide latency in milliseconds")
+            .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0])
+    ).unwrap();
+
+    pub static ref APPEALS_SUBMITTED_TOTAL: IntCounter = register_int_counter!(
+        "btv_appeals_submitted_total", "Total appeals submitted (ADR-037)"
+    ).unwrap();
+
+    pub static ref APPEALS_RESOLVED_TOTAL: IntCounter = register_int_counter!(
+        "btv_appeals_resolved_total", "Total appeals resolved (ADR-037)"
+    ).unwrap();
+
 }
 
 
@@ -67,6 +86,10 @@ impl AppState {
         lazy_static::initialize(&SANITIZE_MASKED_TOTAL);
         lazy_static::initialize(&RATE_LIMITED_TOTAL);
         lazy_static::initialize(&AUTH_REJECTED_TOTAL);
+        lazy_static::initialize(&DECIDE_TOTAL);
+        lazy_static::initialize(&DECIDE_LATENCY_MS);
+        lazy_static::initialize(&APPEALS_SUBMITTED_TOTAL);
+        lazy_static::initialize(&APPEALS_RESOLVED_TOTAL);
         Self {
             gatekeeper: Mutex::new(Gatekeeper::new()),
             http_client: reqwest::Client::builder()
