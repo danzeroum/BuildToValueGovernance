@@ -99,7 +99,8 @@ fn test_reserved_metadata_epoch_and_tenant_written() {
     let evidence = gk.scan_for_evidence("hello world", 0xABCD);
 
     // epoch = 0 (PatternRegistry inativo até ADR-033): bytes 0-7 = zeros
-    assert_eq!(&evidence._reserved_metadata[0..8], &[0u8; 8]);
+    let epoch = u64::from_le_bytes(evidence._reserved_metadata[0..8].try_into().unwrap());
+    assert!(epoch >= 1, "epoch deve ser >= 1 após REGISTRY inicializar");
     // tenant_key = zeros (single-tenant default): bytes 8-24 = zeros
     assert_eq!(&evidence._reserved_metadata[8..24], &[0u8; 16]);
 }

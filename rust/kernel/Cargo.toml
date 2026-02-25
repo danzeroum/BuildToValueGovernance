@@ -33,6 +33,7 @@ tokio = { workspace = true }
 aws-sdk-s3 = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true }
 prometheus = { workspace = true, optional = true }
+arc-swap = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
