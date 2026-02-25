@@ -175,7 +175,7 @@ class EthicalContextEngine:
         policy_signer: Optional[PolicySigner] = None,
         safe_evaluator: Optional[SafeExpressionEvaluator] = None,
         contestability_loop: Optional[ContestabilityLoop] = None,
-        bias_guardian: Optional[Any] = None,
+        bias_guardian: Optional[BiasGuardian] = None,
     ):
         self.trust_calculator = trust_calculator or TrustScoreCalculator()
         self.mercy_calculator = mercy_calculator or MercyCalculator()
