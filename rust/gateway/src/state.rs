@@ -62,6 +62,26 @@ lazy_static! {
         "btv_appeals_resolved_total", "Total appeals resolved (ADR-037)"
     ).unwrap();
 
+    pub static ref PIPELINE_RAWLS_DURATION: Histogram = register_histogram!(
+        HistogramOpts::new("btv_gateway_rawls_duration_ms", "Rawls stage proxy latency ms")
+            .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0])
+    ).unwrap();
+
+    pub static ref PIPELINE_GILLIGAN_DURATION: Histogram = register_histogram!(
+        HistogramOpts::new("btv_gateway_gilligan_duration_ms", "Gilligan stage proxy latency ms")
+            .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0])
+    ).unwrap();
+
+    pub static ref TRUST_ADJUSTMENTS_TOTAL: IntCounterVec = register_int_counter_vec!(
+        opts!("btv_gateway_trust_adjustments_total", "Trust adjustments via gateway"),
+        &["direction"]
+    ).unwrap();
+
+    pub static ref BIAS_GATE_VIOLATIONS_TOTAL: IntCounter = register_int_counter!(
+        "btv_gateway_bias_gate_violations_total",
+        "BiasGuardian gate violations detected via /health/bias"
+    ).unwrap();
+
 }
 
 
@@ -90,6 +110,10 @@ impl AppState {
         lazy_static::initialize(&DECIDE_LATENCY_MS);
         lazy_static::initialize(&APPEALS_SUBMITTED_TOTAL);
         lazy_static::initialize(&APPEALS_RESOLVED_TOTAL);
+        lazy_static::initialize(&PIPELINE_RAWLS_DURATION);
+        lazy_static::initialize(&PIPELINE_GILLIGAN_DURATION);
+        lazy_static::initialize(&TRUST_ADJUSTMENTS_TOTAL);
+        lazy_static::initialize(&BIAS_GATE_VIOLATIONS_TOTAL);
         Self {
             gatekeeper: Mutex::new(Gatekeeper::new()),
             http_client: reqwest::Client::builder()
