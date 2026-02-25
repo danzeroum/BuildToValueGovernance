@@ -13,4 +13,5 @@ pub use zscore::ZScoreCalculator;
 
 // Re-exports para uso externo
 pub use crate::core::types::InputStatistics;
-pub use crate::evidence::Finding;
+pub use crate::evidence::Finding;pub mod language;
+pub use language::LanguageDetector;
