@@ -330,7 +330,7 @@ mod tests {
         stats.letter_ratio = letter_ratio;
         ScanContext {
             stats,
-            _reserved: [0u8; 64],
+            flags: Default::default(),
         }
     }
 
