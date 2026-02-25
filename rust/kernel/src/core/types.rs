@@ -193,6 +193,7 @@ pub enum ValidatorModule {
     DataAccessRequest,
     DataErasure,
     BreachNotification,
+    LanguageDetector,
     PromptInjection,
 }
 
@@ -346,6 +347,7 @@ impl Default for BiasDeclaration {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ThreatType {
     PIILeakage,
+    LanguageDetector,
     PromptInjection,
     ShadowAI,
     DenialOfWallet,
