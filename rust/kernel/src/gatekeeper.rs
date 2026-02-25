@@ -138,6 +138,26 @@ impl Gatekeeper {
             }
         }
 
+        // Stage 3.5a: Jurisdiction-gated validators (ADR-035)
+        {
+            use crate::validators::{NhsValidator, VatValidator, IbanValidator};
+            let mut jv: Vec<Box<dyn crate::core::module::Module>> = Vec::new();
+            if ctx.flags.has_jurisdiction(crate::core::module::ScanContextFlags::JURISDICTION_UK) {
+                jv.push(Box::new(NhsValidator::new()));
+            }
+            if ctx.flags.has_jurisdiction(crate::core::module::ScanContextFlags::JURISDICTION_EU) {
+                jv.push(Box::new(VatValidator::new()));
+                jv.push(Box::new(IbanValidator::new()));
+            }
+            for v in &jv {
+                let findings = v.scan(input, &mut ctx);
+                for finding in findings { evidence.add_finding(finding); }
+                let bias = v.bias_declaration();
+                max_fpr = max_fpr.max(bias.false_positive_rate);
+                max_fnr = max_fnr.max(bias.false_negative_rate);
+            }
+        }
+
         // Stage 3.5: Re-scan decoded content (Deobfuscator Chaining)
         let deob_chain = crate::deobfuscator::chain::DeobfuscatorChain::new();
         let chain_result = deob_chain.deobfuscate(input);

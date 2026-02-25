@@ -194,6 +194,9 @@ pub enum ValidatorModule {
     DataErasure,
     BreachNotification,
     LanguageDetector,
+    NhsNumber,
+    EuVat,
+    Iban,
     PromptInjection,
 }
 
@@ -348,6 +351,9 @@ impl Default for BiasDeclaration {
 pub enum ThreatType {
     PIILeakage,
     LanguageDetector,
+    NhsNumber,
+    EuVat,
+    Iban,
     PromptInjection,
     ShadowAI,
     DenialOfWallet,
