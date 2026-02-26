@@ -114,6 +114,9 @@ struct GovernanceDecideRequest {
     verdict_id: String,
     /// Confiança máxima entre findings (0.0-1.0).
     max_finding_confidence: f32,
+    entropy: f32,
+    total_chars: u32,
+    blake3_hash: String,
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -156,7 +159,8 @@ pub async fn decide_handler(
 
     // ── EXECUTIVO ─────────────────────────────────────────────
     let (finding_count, critical_count, composite_risk, policy_action,
-         hard_blocked, hard_block_term, matched_policies, max_finding_confidence) = {
+         hard_blocked, hard_block_term, matched_policies, max_finding_confidence,
+         entropy, total_chars, blake3_hash) = {
         let mut gk = state.gatekeeper.lock()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -193,6 +197,9 @@ pub async fn decide_handler(
             eval.hard_block_term,
             eval.matched_policies,
             max_conf,
+            evidence.stats.entropy,
+            evidence.stats.total_chars,
+            format!("{:016x}", evidence.original_request_hash),
         )
     };
 
@@ -216,6 +223,9 @@ pub async fn decide_handler(
             pipeline_stage: "ethical".to_string(),
             verdict_id: verdict_id.clone(),  // ADR-043
             max_finding_confidence,
+            entropy,
+            total_chars,
+            blake3_hash,
         };
 
         match state.http_client
@@ -300,6 +310,9 @@ pub async fn decide_handler(
     // Suppress unused warning for hard_block_term (kept for future ledger use)
     let _ = hard_block_term;
     let _ = max_finding_confidence;
+    let _ = entropy;
+    let _ = total_chars;
+    let _ = blake3_hash;
     let _ = trust_score;
     let _ = mercy_score;
 
