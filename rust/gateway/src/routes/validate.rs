@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
 use ulid::Ulid;
+use buildtovalue_kernel::network::IpRisk;
+use buildtovalue_kernel::session_guard::SessionTracker;
 
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
@@ -66,6 +68,10 @@ struct GovernanceRequest {
     entropy: f32,
     total_chars: u32,
     blake3_hash: String,
+    /// ADR-044: contexto de rede e sessão
+    ip_risk: String,
+    ip_jurisdiction: String,
+    drift_level: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -98,19 +104,52 @@ struct ScanResult {
     entropy: f32,
     total_chars: u32,
     blake3_hash: String,
+    drift_level: String,  // ADR-044
+}
+
+// ── HELPERS ADR-044 ──────────────────────────────────────────────
+
+fn extract_client_ip(headers: &axum::http::HeaderMap) -> String {
+    headers.get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .or_else(|| headers.get("X-Real-IP")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string()))
+        .unwrap_or_else(|| "0.0.0.0".to_string())
+}
+
+fn ip_risk_to_str(risk: IpRisk) -> &'static str {
+    match risk {
+        IpRisk::Low      => "Low",
+        IpRisk::Medium   => "Medium",
+        IpRisk::High     => "High",
+        IpRisk::Critical => "Critical",
+    }
 }
 
 // ── HANDLER ───────────────────────────────────────────────────
 
 pub async fn validate_handler(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<ValidateRequest>,
 ) -> Result<Json<ValidateResponse>, StatusCode> {
     let start = Instant::now();
 
     // ADR-043: Rust gera verdict_id antes de qualquer processamento.
-    // ID imutável percorre todo o pipeline: scan → ledger → cliente → appeal.
     let verdict_id = format!("VRD-{}", Ulid::new());
+
+    // ADR-044: classificar IP e jurisdição antes do scan
+    let client_ip = extract_client_ip(&headers);
+    let ip_class = state.ip_classifier.classify(&client_ip);
+    let ip_risk_str = ip_risk_to_str(ip_class.risk).to_string();
+    let ip_jurisdiction = match ip_class.category {
+        buildtovalue_kernel::network::IpCategory::Private |
+        buildtovalue_kernel::network::IpCategory::Loopback => "XX".to_string(),
+        _ => "XX".to_string(), // TODO(ADR-044): JurisdictionMapper
+    };
 
     // ── EXECUTIVO: Rust scan + policy (sync block) ────────────
     let scan = {
@@ -142,6 +181,25 @@ pub async fn validate_handler(
             .map(|f| f.confidence as f32 / 255.0)
             .fold(0.0_f32, f32::max);
 
+        // ADR-044: drift calculado dentro do bloco onde evidence existe
+        let drift_level = {
+            use buildtovalue_kernel::session_guard::SessionTracker;
+            let sid: u128 = req.session_id
+                .as_deref().and_then(|s| s.parse().ok()).unwrap_or(0);
+            if let Ok(mut tracker) = state.session_tracker.lock() {
+                let result = tracker.track(sid, &evidence);
+                match result.level {
+                    buildtovalue_kernel::session_guard::DriftLevel::None   => "None",
+                    buildtovalue_kernel::session_guard::DriftLevel::Low    => "LOW",
+                    buildtovalue_kernel::session_guard::DriftLevel::Medium => "MEDIUM",
+                    buildtovalue_kernel::session_guard::DriftLevel::High     => "HIGH",
+                    buildtovalue_kernel::session_guard::DriftLevel::Critical => "CRITICAL",
+                }.to_string()
+            } else {
+                "None".to_string()
+            }
+        };
+
         ScanResult {
             finding_count: evidence.finding_count as u32,
             critical_count: evidence.critical_count as u32,
@@ -154,6 +212,7 @@ pub async fn validate_handler(
             entropy: evidence.stats.entropy,
             total_chars: evidence.stats.total_chars,
             blake3_hash: format!("{:016x}", evidence.original_request_hash),
+            drift_level,
         }
     };
 
@@ -177,6 +236,9 @@ pub async fn validate_handler(
             entropy: scan.entropy,
             total_chars: scan.total_chars,
             blake3_hash: scan.blake3_hash.clone(),
+            ip_risk: ip_risk_str,
+            ip_jurisdiction,
+            drift_level: scan.drift_level.clone(),
         };
 
         match state.http_client
