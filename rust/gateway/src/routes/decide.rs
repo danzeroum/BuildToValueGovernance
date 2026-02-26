@@ -186,7 +186,7 @@ pub async fn decide_handler(
     let client_ip = extract_client_ip(&headers);
     let ip_class = state.ip_classifier.classify(&client_ip);
     let ip_risk_str = ip_risk_to_str(ip_class.risk).to_string();
-    let ip_jurisdiction = "XX".to_string(); // TODO(ADR-044): JurisdictionMapper
+    let ip_jurisdiction = state.jurisdiction_mapper.classify(&client_ip).country_code.to_string();
 
     let jurisdiction_bitmask = parse_jurisdiction_bitmask(&headers);
 
