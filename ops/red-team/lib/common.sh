@@ -80,6 +80,7 @@ rt_save_report() {
     [[ $RT_DETECTIONS -gt 0 ]] && detection_rate=$(python -c "print(round($RT_DETECTIONS/max($RT_TOTAL,1)*100,1))")
     [[ $RT_FP -gt 0 ]] && fpr=$(python -c "print(round($RT_FP/max($RT_TOTAL,1)*100,1))")
 
+    mkdir -p "$(dirname "$report_file")"
     cat > "$report_file" << EOF
 {
     "script_id": "$script_id",

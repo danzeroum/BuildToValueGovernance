@@ -47,10 +47,10 @@ tomadas no projeto.
 | ID | Título | Status | Versão | Link | Resumo |
 |:---|:---|:---:|:---:|:---|:---|
 | **0010** | **Bias Declaration Mandate** | 🚧 Impl. | v1.5 | [Ver Detalhes](./0010-bias-declaration-mandate.md) | Todo `Validator` deve declarar FPR/FNR (Jonas). `bias_declaration()` obrigatório no trait. |
-| **0016** | **Ethical Context Engine v4** | 🔒 Futuro | v1.8 | [Ver Detalhes](./0016-ethical-context-engine-v4.md) | Pipeline ético completo (Rawls→Levinas→Jonas→Gilligan). `explain_decision()` obrigatório. |
-| **0036** | **Red-team Formal e Bias Guardian** | 🔒 Planejado | v1.7.0 | [Ver Detalhes](./0036-redteam-bias-guardian.md) | Protocolo formal de red-team com cadência CI obrigatória. `BiasGuardian` Python verifica divergência FPR/FNR declarado vs medido. Thresholds: warning 5pp / block 15pp (FNR). Fecha loop de ADR-010. |
-| **0038** | **EthicalContextEngine v4.0 — Pipeline Filosófico Explícito** | 🔒 Planejado | v1.8.0 | [Ver Detalhes](./0038-ethical-context-engine-v4.md) | 4 estágios nomeados: Rawls→Levinas→Jonas→Gilligan. `ExplainDecision` estruturado (EU AI Act Art. 13). `pipeline_trace` auditável. Integração AppealEngine. Substitui esboço ADR-016. |
-| **0039** | **TrustScoreCalculator v2.0** | 🔒 Planejado | v1.8.0 | [Ver Detalhes](./0039-trust-score-calculator-v2.md) | Fórmula 5 componentes (ADR-007) com TrustStore Protocol (InMemory\|SQLite\|Redis-ready). Fix decay overflow. `adjust()` para AppealEngine (+0.1/−0.05). `TrustExplain` estruturado. Substitui esboço ADR-007. |
+| **0016** | **Ethical Context Engine v4** | ✅ Futuro | v1.8 | [Ver Detalhes](./0016-ethical-context-engine-v4.md) | Pipeline ético completo (Rawls→Levinas→Jonas→Gilligan). `explain_decision()` obrigatório. |
+| **0036** | **Red-team Formal e Bias Guardian** | ✅ Planejado | v1.7.0 | [Ver Detalhes](./0036-redteam-bias-guardian.md) | Protocolo formal de red-team com cadência CI obrigatória. `BiasGuardian` Python verifica divergência FPR/FNR declarado vs medido. Thresholds: warning 5pp / block 15pp (FNR). Fecha loop de ADR-010. |
+| **0038** | **EthicalContextEngine v4.0 — Pipeline Filosófico Explícito** | ✅ Planejado | v1.8.0 | [Ver Detalhes](./0038-ethical-context-engine-v4.md) | 4 estágios nomeados: Rawls→Levinas→Jonas→Gilligan. `ExplainDecision` estruturado (EU AI Act Art. 13). `pipeline_trace` auditável. Integração AppealEngine. Substitui esboço ADR-016. |
+| **0039** | **TrustScoreCalculator v2.0** | ✅ Planejado | v1.8.0 | [Ver Detalhes](./0039-trust-score-calculator-v2.md) | Fórmula 5 componentes (ADR-007) com TrustStore Protocol (InMemory\|SQLite\|Redis-ready). Fix decay overflow. `adjust()` para AppealEngine (+0.1/−0.05). `TrustExplain` estruturado. Substitui esboço ADR-007. |
 
 
 ---
@@ -61,11 +61,11 @@ tomadas no projeto.
 
 | ID | Título | Status | Versão | Link | Resumo |
 |:---|:---|:---:|:---:|:---|:---|
-| **0011** | **Policy Engine Design** | 🔒 Futuro | v1.6 | [Ver Detalhes](./0011-policy-engine.md) | Compilação de YAML para Runtime Rust (phf). Lookup O(1) para Hard Blocks. |
-| **0012** | **Output Guard** | 🔒 Futuro | v1.6 | [Ver Detalhes](./0012-output-guard.md) | Sanitização de PII nas respostas da IA antes de entregar ao usuário. |
-| **0013** | **Deobfuscator Chain v2** | 🔒 Futuro | v1.6 | [Ver Detalhes](./0013-deobfuscator-chaining-v2.md) | Loop de decodificação (max 3 níveis) anti-evasão. CRITICAL_RISK após 3 tentativas. |
-| **0014** | **IP & Session Drift** | 🔒 Futuro | v1.7 | [Ver Detalhes](./0014-ip-classifier-session-drift.md) | Classificação de origem (Tor/VPN). Cosseno de similaridade → IdentityChallenge. |
-| **0015** | **Interceptor Hooks** | 🔒 Futuro | v1.7 | [Ver Detalhes](./0015-interceptor-hooks.md) | Traits `RequestInterceptor`/`ResponseInterceptor`. Chain of Responsibility + fail-secure. |
+| **0011** | **Policy Engine Design** | ✅ Futuro | v1.6 | [Ver Detalhes](./0011-policy-engine.md) | Compilação de YAML para Runtime Rust (phf). Lookup O(1) para Hard Blocks. |
+| **0012** | **Output Guard** | ✅ Futuro | v1.6 | [Ver Detalhes](./0012-output-guard.md) | Sanitização de PII nas respostas da IA antes de entregar ao usuário. |
+| **0013** | **Deobfuscator Chain v2** | ✅ Futuro | v1.6 | [Ver Detalhes](./0013-deobfuscator-chaining-v2.md) | Loop de decodificação (max 3 níveis) anti-evasão. CRITICAL_RISK após 3 tentativas. |
+| **0014** | **IP & Session Drift** | ✅ Futuro | v1.7 | [Ver Detalhes](./0014-ip-classifier-session-drift.md) | Classificação de origem (Tor/VPN). Cosseno de similaridade → IdentityChallenge. |
+| **0015** | **Interceptor Hooks** | ✅ Futuro | v1.7 | [Ver Detalhes](./0015-interceptor-hooks.md) | Traits `RequestInterceptor`/`ResponseInterceptor`. Chain of Responsibility + fail-secure. |
 | **0028** | **Heuristic Prompt Injection Detector** | ✅ Ativo | v2.2 | [Ver Detalhes](./0028-heuristic-prompt-injection-detector.md) | Detecção heurística de prompt injection sem ML. Padrões PTBR + EN. Integra Gate 3 de RAG. |
 
 ---
@@ -102,9 +102,9 @@ tomadas no projeto.
 | **0019** | **Observability** | ✅ Ativo | v1.9 | [Ver Detalhes](./0019-observability.md) | Prometheus + Grafana. 7 famílias de métricas. Scrape 5s. |
 | **0023** | **Appeals HTTP Endpoint** | ✅ Ativo | v2.0 | [Ver Detalhes](./0023-appeals-http-endpoint.md) | Expõe ContestabilityLoop via 5 endpoints REST. LGPD Art. 20 + EU AI Act Art. 86. |
 | **0025** | **Ledger Query API** | ✅ Ativo | v2.1 | [Ver Detalhes](./0025-ledger-query-api.md) | API de consulta ao DurableLedger por `evidence_id`, janela temporal e `agent_id`. |
-| **0026** | **Webhook Notifications** | 🔒 Futuro | v2.1 | [Ver Detalhes](./0026-webhook-notifications.md) | Notificações push para eventos de BLOCK, appeal e deploy. Payload HMAC-assinado. |
-| **0040** | **Axum Gateway v2.0 — Extensões República Algorítmica** | 🔒 Planejado | v1.9.0 | [Ver Detalhes](./0040-axum-gateway-v2-extensions.md) | +3 rotas: /v1/decide, /v1/appeals (proxy), /health/bias. Rate limit per-tenant (BLAKE3 hash). X-BTV-Jurisdiction → jurisdiction_bitmask. Estende ADR-018. |
-| **0041** | **Observability v2.0 — Métricas da República Algorítmica** | 🔒 Planejado | v1.9.0 | [Ver Detalhes](./0041-observability-v2-republic-metrics.md) | +17 métricas: pipeline filosófico por estágio, SLA compliance rate, BiasDeclaration divergência em tempo real, mercy scenarios. 5 alerting rules. Dashboard Grafana 4 poderes. Estende ADR-019. |
+| **0026** | **Webhook Notifications** | ✅ Futuro | v2.1 | [Ver Detalhes](./0026-webhook-notifications.md) | Notificações push para eventos de BLOCK, appeal e deploy. Payload HMAC-assinado. |
+| **0040** | **Axum Gateway v2.0 — Extensões República Algorítmica** | ✅ Planejado | v1.9.0 | [Ver Detalhes](./0040-axum-gateway-v2-extensions.md) | +3 rotas: /v1/decide, /v1/appeals (proxy), /health/bias. Rate limit per-tenant (BLAKE3 hash). X-BTV-Jurisdiction → jurisdiction_bitmask. Estende ADR-018. |
+| **0041** | **Observability v2.0 — Métricas da República Algorítmica** | ✅ Planejado | v1.9.0 | [Ver Detalhes](./0041-observability-v2-republic-metrics.md) | +17 métricas: pipeline filosófico por estágio, SLA compliance rate, BiasDeclaration divergência em tempo real, mercy scenarios. 5 alerting rules. Dashboard Grafana 4 poderes. Estende ADR-019. |
 
 
 ---
@@ -128,7 +128,7 @@ tomadas no projeto.
 
 | ID | Título | Status | Versão | Link | Resumo |
 |:---|:---|:---:|:---:|:---|:---|
-| **0027** | **Local SLM Strategy** | 🔒 Futuro | v2.1 | [Ver Detalhes](./0027-local-slm-strategy.md) | Phi-4 Mini via `btv-slm` (mmap, CPU-only, zero GPU). Contexto de governança local sem vendor. Alternativa soberana ao vendor externo. |
+| **0027** | **Local SLM Strategy** | ✅ Futuro | v2.1 | [Ver Detalhes](./0027-local-slm-strategy.md) | Phi-4 Mini via `btv-slm` (mmap, CPU-only, zero GPU). Contexto de governança local sem vendor. Alternativa soberana ao vendor externo. |
 
 ---
 
@@ -141,7 +141,7 @@ tomadas no projeto.
 |:---|:---|:---:|:---:|:---|:---|
 | **0029** | **External Agent PDP** | 🔒 Proposto | v2.0 | [Ver Detalhes](./0029-external-agent-pdp.md) | Contrato canônico para qualquer agente externo usar o BTV como Policy Decision Point. `AgentDecisionRequest` / `VerdictEnvelope` / `ActionImpact`. Base de todos os perfis de integração. |
 | **0030** | **Chatbot — LLM Self-Hosted** | 🔒 Proposto | v2.0 | [Ver Detalhes](./0030-internal-chatbot-selfhosted-llm.md) | Perfil de integração BTV para chatbot com Llama 70B/vLLM. 5 gates: mensagem, indexação, RAG, training batch, LoRA deploy (`Irreversible`). Evidence LGPD. BiasDeclaration em treino. |
-| **0031** | **Chatbot — LLM Vendor Externo** | 🔒 Proposto | v2.0 | [Ver Detalhes](./0031-external-chatbot-vendor-llm.md) | Delta do ADR-0030 para vendors externos (OpenAI, Anthropic, Google, Azure). Toda mensagem é `Irreversible`. `/v1/sanitize` obrigatório antes de cada envio. Gate de aprovação de vendor por `sector_id`. LGPD Art. 33. |
+| **0031** | **Chatbot — LLM Vendor Externo** | ✅ Proposto | v2.0 | [Ver Detalhes](./0031-external-chatbot-vendor-llm.md) | Delta do ADR-0030 para vendors externos (OpenAI, Anthropic, Google, Azure). Toda mensagem é `Irreversible`. `/v1/sanitize` obrigatório antes de cada envio. Gate de aprovação de vendor por `sector_id`. LGPD Art. 33. |
 
 
 ### Grupo J: v1.6 — Multilingual & Multi-tenant Foundation (ADR-0032 a ADR-0036)
@@ -149,9 +149,9 @@ tomadas no projeto.
 | ID | Título | Status | Versão | Link | Resumo |
 |:---|:---|:---:|:---:|:---|:---|
 | **0032** | **ScanContextFlags** | 🚧 Impl. | v1.6.0 | [Ver Detalhes](./0032-scan-context-flags.md) | Substitui `_reserved: [u8; 64]` por struct nomeado de 64 bytes exatos. Fundação para language detection, jurisdição, capability mask e multi-tenant. |
-| **0033** | **PatternRegistry (Tier 0/1/2)** | 🔒 Planejado | v1.6.0 | [Ver Detalhes](./0033-pattern-registry-tiers.md) | Substitui lazy_static por 3 tiers: Tier 0 hardcoded, Tier 1 build-time YAML, Tier 2 runtime ArcSwap. Epoch versionado para auditoria forense. |
-| **0034** | **Language Detection Strategy** | 🔒 Planejado | v1.6.1 | [Ver Detalhes](./0034-language-detection-strategy.md) | whatlang-rs no Stage 1 do pipeline. Preenche `lang_bitmask` e `lang_scores` em ScanContextFlags. Threshold 0.75 + min 20 chars. Inputs ambíguos → undetermined → apenas Tier 0. |
-| **0035** | **Multi-jurisdiction PII Validators** | 🔒 Planejado | v1.7.0 | [Ver Detalhes](./0035-multi-jurisdiction-pii-validators.md) | NHS Number (Mod 11), EU VAT (DE/FR/IT/ES/PT), IBAN (Mod 97). Dispatcher por `jurisdiction_bitmask`. Novos `ValidatorModule` entries. |
+| **0033** | **PatternRegistry (Tier 0/1/2)** | ✅ Planejado | v1.6.0 | [Ver Detalhes](./0033-pattern-registry-tiers.md) | Substitui lazy_static por 3 tiers: Tier 0 hardcoded, Tier 1 build-time YAML, Tier 2 runtime ArcSwap. Epoch versionado para auditoria forense. |
+| **0034** | **Language Detection Strategy** | ✅ Planejado | v1.6.1 | [Ver Detalhes](./0034-language-detection-strategy.md) | whatlang-rs no Stage 1 do pipeline. Preenche `lang_bitmask` e `lang_scores` em ScanContextFlags. Threshold 0.75 + min 20 chars. Inputs ambíguos → undetermined → apenas Tier 0. |
+| **0035** | **Multi-jurisdiction PII Validators** | ✅ Planejado | v1.7.0 | [Ver Detalhes](./0035-multi-jurisdiction-pii-validators.md) | NHS Number (Mod 11), EU VAT (DE/FR/IT/ES/PT), IBAN (Mod 97). Dispatcher por `jurisdiction_bitmask`. Novos `ValidatorModule` entries. |
 
 ---
 
@@ -261,7 +261,7 @@ em `docs/integrations/` (perfis prontos para copy-paste):
 | **0023** | Resumo preenchido (estava vazio) |
 | **0024** | Resumo preenchido (estava vazio); versão corrigida para v2.1 |
 | **Grupo C** | Adicionado ADR-0028 (Heuristic Prompt Injection Detector) |
-| **Grupo D** | ADR-0027 (Local SLM) promovido de Visão `---` para entrada com ID, mantido como 🔒 Futuro |
+| **Grupo D** | ADR-0027 (Local SLM) promovido de Visão `---` para entrada com ID, mantido como ✅ Futuro |
 | **Grupo F** | Adicionados ADR-0025 (Ledger Query API) e ADR-0026 (Webhook Notifications) |
 | **Grupo H** | Novo grupo: Local Intelligence com ADR-0027 formal |
 | **Grupo I** | Novo grupo: Integrações de Agentes IA — ADR-0029, 0030, 0031 |
