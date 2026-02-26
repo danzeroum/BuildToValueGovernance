@@ -61,6 +61,8 @@ struct GovernanceRequest {
     input_text: String,
     /// ADR-043: ID gerado pelo Rust, passado ao Python para uso sem modificação.
     verdict_id: String,
+    /// Confiança máxima entre findings (0.0-1.0).
+    max_finding_confidence: f32,
 }
 
 #[derive(Deserialize, Default)]
@@ -89,6 +91,7 @@ struct ScanResult {
     hard_blocked: bool,
     hard_block_term: Option<String>,
     matched_policies: Vec<String>,
+    max_finding_confidence: f32,
 }
 
 // ── HANDLER ───────────────────────────────────────────────────
@@ -129,6 +132,10 @@ pub async fn validate_handler(
             PolicyAction::Allow => "ALLOW",
         };
 
+        let max_conf = findings.iter()
+            .map(|f| f.confidence as f32 / 255.0)
+            .fold(0.0_f32, f32::max);
+
         ScanResult {
             finding_count: evidence.finding_count as u32,
             critical_count: evidence.critical_count as u32,
@@ -137,6 +144,7 @@ pub async fn validate_handler(
             hard_blocked: eval.hard_blocked,
             hard_block_term: eval.hard_block_term,
             matched_policies: eval.matched_policies,
+            max_finding_confidence: max_conf,
         }
     };
 
@@ -156,6 +164,7 @@ pub async fn validate_handler(
             profile: req.profile.clone(),
             input_text: req.input.clone(),
             verdict_id: verdict_id.clone(),  // ADR-043
+            max_finding_confidence: scan.max_finding_confidence,
         };
 
         match state.http_client
