@@ -1,10 +1,12 @@
 //! POST /v1/validate — Scan + Policy + Governance (República Algorítmica).
 //! Gap #4: Profile-aware governance (sector whitelist via Python).
+//! ADR-043: verdict_id gerado pelo Rust antes do scan, imutável até o cliente.
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
+use ulid::Ulid;
 
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
@@ -57,6 +59,8 @@ struct GovernanceRequest {
     profile: Option<String>,
     /// Full input text for sector trigger matching (Opção A).
     input_text: String,
+    /// ADR-043: ID gerado pelo Rust, passado ao Python para uso sem modificação.
+    verdict_id: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -94,6 +98,10 @@ pub async fn validate_handler(
     Json(req): Json<ValidateRequest>,
 ) -> Result<Json<ValidateResponse>, StatusCode> {
     let start = Instant::now();
+
+    // ADR-043: Rust gera verdict_id antes de qualquer processamento.
+    // ID imutável percorre todo o pipeline: scan → ledger → cliente → appeal.
+    let verdict_id = format!("VRD-{}", Ulid::new());
 
     // ── EXECUTIVO: Rust scan + policy (sync block) ────────────
     let scan = {
@@ -147,6 +155,7 @@ pub async fn validate_handler(
             session_id: req.session_id.clone(),
             profile: req.profile.clone(),
             input_text: req.input.clone(),
+            verdict_id: verdict_id.clone(),  // ADR-043
         };
 
         match state.http_client
@@ -165,22 +174,25 @@ pub async fn validate_handler(
     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     // ── MERGE: Executivo + Judiciário ─────────────────────────
-    let (final_action, mercy_applied, verdict_id, rationale, signature, contestable, appeal_hours) =
+    // ADR-043: verdict_id gerado pelo Rust é o fallback garantido.
+    // Python devolve o mesmo ID; se vier vazio (erro), usa o local.
+    let (final_action, mercy_applied, final_verdict_id, rationale, signature, contestable, appeal_hours) =
         if let Some(ref v) = verdict {
             (
                 v.action.clone(),
                 v.mercy_applied,
-                v.verdict_id.clone(),
+                if v.verdict_id.is_empty() { verdict_id.clone() } else { v.verdict_id.clone() },
                 v.rationale.clone(),
                 v.signature.clone(),
                 v.contestable,
                 v.appeal_deadline_hours,
             )
         } else {
+            // Python indisponível: ID local garante ledger + appeal funcionais.
             (
                 scan.policy_action.clone(),
                 false,
-                String::new(),
+                verdict_id.clone(),
                 String::new(),
                 String::new(),
                 !scan.hard_blocked,
@@ -256,7 +268,7 @@ pub async fn validate_handler(
             scan.finding_count,
             scan.critical_count,
             scan.hard_blocked,
-            verdict_id,
+            final_verdict_id,
             latency_ms,
         );
         let _ = std::fs::create_dir_all("data/ledger");
@@ -297,7 +309,7 @@ pub async fn validate_handler(
         message,
         hard_blocked: scan.hard_blocked,
         matched_policies: scan.matched_policies,
-        verdict_id,
+        verdict_id: final_verdict_id,
         signature,
         rationale,
     }))
