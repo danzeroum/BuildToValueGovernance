@@ -1,12 +1,5 @@
 //! POST /v1/decide — Pipeline ético completo (ADR-040).
-//!
-//! Alias semântico de /v1/validate com:
-//! - Header X-BTV-Pipeline-Stage: ethical injetado no governance
-//! - X-BTV-Jurisdiction → jurisdiction_bitmask (stub até ADR-032)
-//! - Retorna explain_decision estruturado
-//!
-//! Filosofia: /v1/validate = scan técnico. /v1/decide = decisão ética.
-//! Novos clientes devem usar /v1/decide. /v1/validate preservado para compat.
+//! ADR-043: verdict_id gerado pelo Rust antes do scan, imutável até o cliente.
 
 use axum::{
     extract::State,
@@ -16,18 +9,16 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
+use ulid::Ulid;
 
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
 
 // ── JURISDICTION BITMASK (stub ADR-032) ──────────────────────
 
-/// Converte header X-BTV-Jurisdiction em bitmask.
-/// Valores: BR=0x01, US=0x02, EU=0x04, UK=0x08
-/// TODO(ADR-032): mover para ScanContextFlags quando implementado.
 fn parse_jurisdiction_bitmask(headers: &HeaderMap) -> u32 {
     let Some(val) = headers.get("X-BTV-Jurisdiction") else {
-        return 0x01; // default: BR
+        return 0x01;
     };
     let Ok(s) = val.to_str() else { return 0x01 };
     let mut mask: u32 = 0;
@@ -75,7 +66,6 @@ pub struct DecideResponse {
     pub latency_ms: f64,
 }
 
-/// Justificativa estruturada (EU AI Act Art. 13).
 #[derive(Serialize, Default)]
 pub struct ExplainDecision {
     pub summary: String,
@@ -120,6 +110,8 @@ struct GovernanceDecideRequest {
     input_text: String,
     jurisdiction_bitmask: u32,
     pipeline_stage: String,
+    /// ADR-043: ID gerado pelo Rust, passado ao Python para uso sem modificação.
+    verdict_id: String,
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -154,6 +146,9 @@ pub async fn decide_handler(
     Json(req): Json<DecideRequest>,
 ) -> Result<Json<DecideResponse>, StatusCode> {
     let start = Instant::now();
+
+    // ADR-043: Rust gera verdict_id antes de qualquer processamento.
+    let verdict_id = format!("VRD-{}", Ulid::new());
 
     let jurisdiction_bitmask = parse_jurisdiction_bitmask(&headers);
 
@@ -212,6 +207,7 @@ pub async fn decide_handler(
             input_text: req.input.clone(),
             jurisdiction_bitmask,
             pipeline_stage: "ethical".to_string(),
+            verdict_id: verdict_id.clone(),  // ADR-043
         };
 
         match state.http_client
@@ -230,7 +226,8 @@ pub async fn decide_handler(
     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     // ── MERGE ─────────────────────────────────────────────────
-    let (final_action, mercy_applied, verdict_id, rationale, signature,
+    // ADR-043: verdict_id gerado pelo Rust é o fallback garantido.
+    let (final_action, mercy_applied, final_verdict_id, rationale, signature,
          contestable, appeal_hours, trust_score, mercy_score, explain) =
         if let Some(ref v) = verdict {
             let ex = v.explain.as_ref().map(|e| ExplainDecision {
@@ -243,11 +240,19 @@ pub async fn decide_handler(
                 trust_score: v.trust_score,
                 mercy_score: v.mercy_score,
             }).unwrap_or_default();
-            (v.action.clone(), v.mercy_applied, v.verdict_id.clone(),
-             v.rationale.clone(), v.signature.clone(), v.contestable,
-             v.appeal_deadline_hours, v.trust_score, v.mercy_score, ex)
+            (
+                v.action.clone(),
+                v.mercy_applied,
+                if v.verdict_id.is_empty() { verdict_id.clone() } else { v.verdict_id.clone() },
+                v.rationale.clone(),
+                v.signature.clone(),
+                v.contestable,
+                v.appeal_deadline_hours,
+                v.trust_score,
+                v.mercy_score,
+                ex,
+            )
         } else {
-            // Fail-secure: governance indisponível → manter policy action
             let ex = ExplainDecision {
                 summary: "Governance unavailable — kernel decision applied".to_string(),
                 rawls_rationale: "Policy applied uniformly (Rawls)".to_string(),
@@ -258,9 +263,19 @@ pub async fn decide_handler(
                 trust_score: 0.0,
                 mercy_score: 0.0,
             };
-            (policy_action.clone(), false, String::new(), String::new(),
-             String::new(), !hard_blocked, if hard_blocked { 0 } else { 24 },
-             0.0, 0.0, ex)
+            // Python indisponível: ID local garante ledger + appeal funcionais.
+            (
+                policy_action.clone(),
+                false,
+                verdict_id.clone(),
+                String::new(),
+                String::new(),
+                !hard_blocked,
+                if hard_blocked { 0 } else { 24 },
+                0.0_f32,
+                0.0_f32,
+                ex,
+            )
         };
 
     // ── METRICS ───────────────────────────────────────────────
@@ -274,6 +289,11 @@ pub async fn decide_handler(
         if hard_blocked  { HARD_BLOCKS_TOTAL.inc(); }
     }
 
+    // Suppress unused warning for hard_block_term (kept for future ledger use)
+    let _ = hard_block_term;
+    let _ = trust_score;
+    let _ = mercy_score;
+
     Ok(Json(DecideResponse {
         action: final_action,
         original_action: policy_action,
@@ -284,7 +304,7 @@ pub async fn decide_handler(
         hard_blocked,
         contestable,
         appeal_deadline_hours: appeal_hours,
-        verdict_id,
+        verdict_id: final_verdict_id,
         signature,
         rationale,
         explain,
