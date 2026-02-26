@@ -49,6 +49,7 @@ impl ScanContextFlags {
     pub const JURISDICTION_US: u64 = 1 << 1;
     pub const JURISDICTION_EU: u64 = 1 << 2;
     pub const JURISDICTION_UK: u64 = 1 << 3;
+    pub const JURISDICTION_ALL: u64 = Self::JURISDICTION_BR | Self::JURISDICTION_US | Self::JURISDICTION_EU | Self::JURISDICTION_UK;
 
     // ── Capabilities ─────────────────────────────────────────────
     pub const CAP_PII: u64       = 1 << 0;
