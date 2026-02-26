@@ -112,6 +112,8 @@ struct GovernanceDecideRequest {
     pipeline_stage: String,
     /// ADR-043: ID gerado pelo Rust, passado ao Python para uso sem modificação.
     verdict_id: String,
+    /// Confiança máxima entre findings (0.0-1.0).
+    max_finding_confidence: f32,
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -154,7 +156,7 @@ pub async fn decide_handler(
 
     // ── EXECUTIVO ─────────────────────────────────────────────
     let (finding_count, critical_count, composite_risk, policy_action,
-         hard_blocked, hard_block_term, matched_policies) = {
+         hard_blocked, hard_block_term, matched_policies, max_finding_confidence) = {
         let mut gk = state.gatekeeper.lock()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -178,6 +180,10 @@ pub async fn decide_handler(
             PolicyAction::Allow   => "ALLOW",
         };
 
+        let max_conf = findings.iter()
+            .map(|f| f.confidence as f32 / 255.0)
+            .fold(0.0_f32, f32::max);
+
         (
             evidence.finding_count as u32,
             evidence.critical_count as u32,
@@ -186,6 +192,7 @@ pub async fn decide_handler(
             eval.hard_blocked,
             eval.hard_block_term,
             eval.matched_policies,
+            max_conf,
         )
     };
 
@@ -208,6 +215,7 @@ pub async fn decide_handler(
             jurisdiction_bitmask,
             pipeline_stage: "ethical".to_string(),
             verdict_id: verdict_id.clone(),  // ADR-043
+            max_finding_confidence,
         };
 
         match state.http_client
@@ -291,6 +299,7 @@ pub async fn decide_handler(
 
     // Suppress unused warning for hard_block_term (kept for future ledger use)
     let _ = hard_block_term;
+    let _ = max_finding_confidence;
     let _ = trust_score;
     let _ = mercy_score;
 
