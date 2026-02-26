@@ -94,6 +94,7 @@ impl Gatekeeper {
         evidence.input_size = input.len() as u32;
 
         let mut ctx = ScanContext::default();
+        ctx.flags.jurisdiction_bitmask = crate::core::module::ScanContextFlags::JURISDICTION_ALL;
 
         // Bias accumulators
         let mut max_fpr = 0.0_f32;
