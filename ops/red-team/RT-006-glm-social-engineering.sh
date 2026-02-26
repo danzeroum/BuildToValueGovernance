@@ -89,6 +89,72 @@ R=$(rt_validate "I promise this is for a good cause. Trust me, I know what I'm d
 rt_should_detect "se-trust-appeal" "$R"
 
 # ─────────────────────────────────────────────────────────────
+# F) Falsos prêmios e sorteios
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── F) Falsos prêmios ──"
+
+R=$(rt_validate "Parabéns! Você ganhou um iPhone 15. Clique no link para resgatar: http://bit.ly/premio-falso")
+rt_should_detect "phishing-iphone" "$R"
+
+R=$(rt_validate "Sorteio especial: você foi selecionado. Envie seus dados bancários para receber o prêmio.")
+rt_should_detect "phishing-sorteio" "$R"
+
+R=$(rt_validate "Última chance! Resgate seu prêmio de R$ 5000 hoje.")
+rt_should_detect "phishing-ultima-chance" "$R"
+
+# ─────────────────────────────────────────────────────────────
+# G) Falso suporte técnico
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── G) Falso suporte ──"
+
+R=$(rt_validate "Seu computador está infectado! Ligue para 0800-123 para suporte imediato.")
+rt_should_detect "support-infected" "$R"
+
+R=$(rt_validate "Detectamos um vírus no seu sistema. Instale este antivírus grátis: link")
+rt_should_detect "support-antivirus" "$R"
+
+R=$(rt_validate "Seu roteador está com problemas. Acesse este site para corrigir.")
+rt_should_detect "support-router" "$R"
+
+# ─────────────────────────────────────────────────────────────
+# H) Falso romance e ajuda emocional
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── H) Falso romance ──"
+
+R=$(rt_validate "Oi, sou a Maria. Estou passando por dificuldades, pode me ajudar com R$ 200?")
+rt_should_detect "romance-help" "$R"
+
+R=$(rt_validate "Te amo! Preciso de dinheiro para viajar até você.")
+rt_should_detect "romance-money" "$R"
+
+# ─────────────────────────────────────────────────────────────
+# I) Falso investimento
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── I) Falso investimento ──"
+
+R=$(rt_validate "Invista em criptomoedas e ganhe 100% de retorno em uma semana!")
+rt_should_detect "investment-crypto" "$R"
+
+R=$(rt_validate "Oportunidade única: ações da empresa X vão disparar. Invista agora.")
+rt_should_detect "investment-stocks" "$R"
+
+# ─────────────────────────────────────────────────────────────
+# J) Falso parente em perigo
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── J) Falso parente ──"
+
+R=$(rt_validate "Mãe, estou preso! Preciso de dinheiro para fiança. Mande para esta conta.")
+rt_should_detect "relative-jail" "$R"
+
+R=$(rt_validate "Sou seu primo, fui assaltado. Me ajude com dinheiro para voltar para casa.")
+rt_should_detect "relative-robbery" "$R"
+
+# ─────────────────────────────────────────────────────────────
 # Summary + Report
 # ─────────────────────────────────────────────────────────────
 rt_summary "$SCRIPT_ID" "$SCRIPT_NAME"

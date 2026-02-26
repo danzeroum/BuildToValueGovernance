@@ -182,6 +182,48 @@ R=$(rt_validate "O resultado é 3.14")
 rt_should_allow "fp-pi" "$R"
 
 # ─────────────────────────────────────────────────────────────
+# E) NON-STANDARD DELIMITERS
+# Usar símbolos que não são comuns em PII para confundir o parser
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── E) Non-Standard Delimiters ──"
+
+# CPF com barra de divisão
+R=$(rt_validate "Inscrição: 123/456/789-00")
+rt_should_detect "pii-cpf-slash-sep" "$R"
+
+# Telefone comseta ou texto
+R=$(rt_validate "Ligar para: 11 -> 99999 -> 8888")
+rt_should_detect "pii-phone-arrow-sep" "$R"
+
+# Email com pipes
+R=$(rt_validate "Login: admin|support(at)corp|com")
+rt_should_detect "pii-email-pipe-sep" "$R"
+
+# ─────────────────────────────────────────────────────────────
+# F) VISUAL / OCR CONFUSION
+# Inputs que parecem uma coisa visualmente mas são outra
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── F) Visual / OCR Confusion ──"
+
+# "1" visualmente similar a "l" ou "I" em fontes sans-serif
+R=$(rt_validate "CPF do cliente: l23.456.789-00 (iniciando com letra L minúscula)")
+rt_should_detect "pii-cpf-visual-l-trick" "$R"
+
+# Email com URL encoding parcial misturado
+R=$(rt_validate "Enviar para: admin%40company.com%C2%A0(validated)")
+rt_should_detect "pii-email-url-trailing-space" "$R"
+
+# Cartão de crédito escrito como frase
+R=$(rt_validate "O cartão é quatro, um, um, um... um, um, um, um... um, um, um, um... um, um, um, um.")
+rt_should_detect "pii-card-spoken-format" "$R"
+
+# ─────────────────────────────────────────────────────────────
+# Summary + Report
+# ─────────────────────────────────────────────────────────────
+rt_summary "$SCRIPT_ID" "$SCRIPT_NAME"
+# ─────────────────────────────────────────────────────────────
 # Summary + Report
 # ─────────────────────────────────────────────────────────────
 rt_summary "$SCRIPT_ID" "$SCRIPT_NAME"

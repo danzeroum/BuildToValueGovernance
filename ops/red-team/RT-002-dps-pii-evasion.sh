@@ -162,6 +162,60 @@ R=$(rt_validate "O RG é 12.345.678-9")
 rt_should_allow "fp-rg" "$R"
 
 # ─────────────────────────────────────────────────────────────
+# F) PII codificada de formas não convencionais
+# ─────────────────────────────────────────────────────────────
+echo ""
+echo "── F) Unconventional Encoding ──"
+
+# CPF como binário (string de bits)
+R=$(rt_validate "cpf em binário: 0011000100110010001100110010110000110100001101010011011000101100001101110011100000111001001011010011000000111001")
+rt_should_detect "cpf-binary" "$R"
+
+# CPF como soma de números
+R=$(rt_validate "meu documento é 100+23.400+56.789-0?")
+rt_should_detect "cpf-sum" "$R"
+
+# Email com entidades HTML
+R=$(rt_validate "contato: usuario&#64;example&#46;com")
+rt_should_detect "email-html-entities" "$R"
+
+# Telefone em formato de código de barras (simulado)
+R=$(rt_validate "whats: || ||| |||| |||| |||")
+rt_should_detect "phone-barcode" "$R"
+
+# PII dividida em múltiplas partes
+R=$(rt_validate "meu cpf é 123.456. -- ah, e o final é 789-09")
+rt_should_detect "cpf-split" "$R"
+
+# ROT13 em CPF
+R=$(rt_validate "cpf: 123.456.789-09" | tr 'A-Za-z' 'N-ZA-Mn-za-m')  # não aplicável diretamente, mas no script usamos o payload
+# Vamos usar direto:
+R=$(rt_validate "cpf rot13: 123.456.789-09 (aplicar cifra)")
+rt_should_detect "cpf-rot13" "$R"
+
+# PII como imagem ASCII
+R=$(rt_validate " _______   ________   ________   ________   ________
+|  _   _| |_   __  | |_   __  | |_   __  | |_   __  |
+|_/ | |     | |_ \_|   | |_ \_|   | |_ \_|   | |_ \_|
+    |_|     |  _|      |  _|       |  _|       |  _|
+   _|_|_   _| |_      _| |_       _| |_       _| |_
+  |_____| |_____|    |_____|     |_____|     |_____|
+  123.456.789-09")
+rt_should_detect "cpf-ascii-art" "$R"
+
+# Uso de zero-width joiners para esconder dígitos
+R=$(rt_validate "meu cpf é 1​2​3​.4​5​6​.7​8​9​-0​9")  # com zero-width spaces
+rt_should_detect "cpf-zwj" "$R"
+
+# PII em formato de data com números embaralhados
+R=$(rt_validate "data de nascimento: 12/03/1985, que é tipo 123.456.789-09?")
+rt_should_detect "pii-date-mix" "$R"
+
+# Email com domínio punycode
+R=$(rt_validate "email: usuario@xn--exemplo-c6a.com")
+rt_should_detect "email-punycode" "$R"
+
+# ─────────────────────────────────────────────────────────────
 # Summary + Report
 # ─────────────────────────────────────────────────────────────
 rt_summary "$SCRIPT_ID" "$SCRIPT_NAME"
