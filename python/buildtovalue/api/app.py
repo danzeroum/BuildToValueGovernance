@@ -158,6 +158,8 @@ class DecideRequest(BaseModel):
     ip_jurisdiction: str = "XX"
     drift_level: str = "None"
     llm_output: Optional[str] = None  # LLM response text for schema validation
+    # ADR-043: ID gerado pelo Rust; None = modo legado (deprecado)
+    verdict_id: Optional[str] = None
 
 class DecideResponse(BaseModel):
     verdict_id: str
@@ -577,7 +579,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
     trust = get_trust_score(session_id)
     _ethical_engine.set_trust_score(session_id, trust)
 
-    verdict = _ethical_engine.decide(evidence, context)
+    verdict = _ethical_engine.decide(evidence, context, external_verdict_id=req.verdict_id)
 
     # ── Step 3.5: Runtime Compliance (B2 — EU AI Act) ─────────
     risk_class = None
