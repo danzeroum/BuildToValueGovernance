@@ -113,7 +113,8 @@ def evaluate_scenarios(
     if (mercy_score >= 0.6
             and finding_count <= 2
             and is_first_offense
-            and critical_count == 0):
+            and critical_count == 0
+            and action not in ("ALLOW", "LOG")):  # ADR-043 fix
         return MercyScenarioResult(
             original_action=action,
             final_action=downgrade_action(action, 1),
