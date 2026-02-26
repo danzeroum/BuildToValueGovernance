@@ -1,5 +1,5 @@
 use buildtovalue_kernel::gatekeeper::Gatekeeper;
-use buildtovalue_kernel::network::IpClassifier;
+use buildtovalue_kernel::network::{IpClassifier, JurisdictionMapper};
 use buildtovalue_kernel::session_guard::SessionTracker;
 use std::sync::Mutex;
 use prometheus::{IntCounterVec, IntCounter, Histogram, HistogramOpts, opts, register_int_counter_vec, register_int_counter, register_histogram};
@@ -93,6 +93,7 @@ impl Default for AppState {
 pub struct AppState {
     pub gatekeeper: Mutex<Gatekeeper>,
     pub ip_classifier: IpClassifier,           // ADR-044: stateless, sem Mutex
+    pub jurisdiction_mapper: JurisdictionMapper,  // ADR-044: IP→jurisdição
     pub session_tracker: Mutex<SessionTracker>, // ADR-044: stateful, por sessão
     pub http_client: reqwest::Client,
     pub start_time: std::time::Instant,
@@ -121,6 +122,7 @@ impl AppState {
         Self {
             gatekeeper: Mutex::new(Gatekeeper::new()),
             ip_classifier: IpClassifier::new(),
+            jurisdiction_mapper: JurisdictionMapper::new(),
             session_tracker: Mutex::new(SessionTracker::new()),
             http_client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
