@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
 use ulid::Ulid;
+use buildtovalue_kernel::network::IpRisk;
+use buildtovalue_kernel::session_guard::SessionTracker;
 
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
@@ -117,6 +119,9 @@ struct GovernanceDecideRequest {
     entropy: f32,
     total_chars: u32,
     blake3_hash: String,
+    ip_risk: String,
+    ip_jurisdiction: String,
+    drift_level: String,
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -143,6 +148,28 @@ struct GovernanceExplain {
     #[serde(default)] pipeline_trace: Vec<String>,
 }
 
+// ── HELPERS ADR-044 ─────────────────────────────────────────────
+
+fn extract_client_ip(headers: &HeaderMap) -> String {
+    headers.get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .or_else(|| headers.get("X-Real-IP")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string()))
+        .unwrap_or_else(|| "0.0.0.0".to_string())
+}
+
+fn ip_risk_to_str(risk: IpRisk) -> &'static str {
+    match risk {
+        IpRisk::Low      => "Low",
+        IpRisk::Medium   => "Medium",
+        IpRisk::High     => "High",
+        IpRisk::Critical => "Critical",
+    }
+}
+
 // ── HANDLER ───────────────────────────────────────────────────
 
 pub async fn decide_handler(
@@ -155,12 +182,18 @@ pub async fn decide_handler(
     // ADR-043: Rust gera verdict_id antes de qualquer processamento.
     let verdict_id = format!("VRD-{}", Ulid::new());
 
+    // ADR-044: classificar IP antes do scan
+    let client_ip = extract_client_ip(&headers);
+    let ip_class = state.ip_classifier.classify(&client_ip);
+    let ip_risk_str = ip_risk_to_str(ip_class.risk).to_string();
+    let ip_jurisdiction = "XX".to_string(); // TODO(ADR-044): JurisdictionMapper
+
     let jurisdiction_bitmask = parse_jurisdiction_bitmask(&headers);
 
     // ── EXECUTIVO ─────────────────────────────────────────────
     let (finding_count, critical_count, composite_risk, policy_action,
          hard_blocked, hard_block_term, matched_policies, max_finding_confidence,
-         entropy, total_chars, blake3_hash) = {
+         entropy, total_chars, blake3_hash, drift_level) = {
         let mut gk = state.gatekeeper.lock()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -188,6 +221,19 @@ pub async fn decide_handler(
             .map(|f| f.confidence as f32 / 255.0)
             .fold(0.0_f32, f32::max);
 
+        // ADR-044: drift dentro do bloco onde evidence existe
+        let drift_str = if let Ok(mut tracker) = state.session_tracker.lock() {
+            let sid: u128 = req.session_id.as_deref().and_then(|s| s.parse().ok()).unwrap_or(0);
+            let result = tracker.track(sid, &evidence);
+            match result.level {
+                buildtovalue_kernel::session_guard::DriftLevel::None     => "None",
+                buildtovalue_kernel::session_guard::DriftLevel::Low      => "LOW",
+                buildtovalue_kernel::session_guard::DriftLevel::Medium   => "MEDIUM",
+                buildtovalue_kernel::session_guard::DriftLevel::High     => "HIGH",
+                buildtovalue_kernel::session_guard::DriftLevel::Critical => "CRITICAL",
+            }.to_string()
+        } else { "None".to_string() };
+
         (
             evidence.finding_count as u32,
             evidence.critical_count as u32,
@@ -200,6 +246,7 @@ pub async fn decide_handler(
             evidence.stats.entropy,
             evidence.stats.total_chars,
             format!("{:016x}", evidence.original_request_hash),
+            drift_str,
         )
     };
 
@@ -226,6 +273,9 @@ pub async fn decide_handler(
             entropy,
             total_chars,
             blake3_hash,
+            ip_risk: ip_risk_str,
+            ip_jurisdiction,
+            drift_level,
         };
 
         match state.http_client
@@ -310,6 +360,7 @@ pub async fn decide_handler(
     // Suppress unused warning for hard_block_term (kept for future ledger use)
     let _ = hard_block_term;
     let _ = max_finding_confidence;
+    let _ = drift_level;
     let _ = entropy;
     let _ = total_chars;
     let _ = blake3_hash;
