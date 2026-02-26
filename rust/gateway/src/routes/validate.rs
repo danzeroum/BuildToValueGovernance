@@ -145,11 +145,7 @@ pub async fn validate_handler(
     let client_ip = extract_client_ip(&headers);
     let ip_class = state.ip_classifier.classify(&client_ip);
     let ip_risk_str = ip_risk_to_str(ip_class.risk).to_string();
-    let ip_jurisdiction = match ip_class.category {
-        buildtovalue_kernel::network::IpCategory::Private |
-        buildtovalue_kernel::network::IpCategory::Loopback => "XX".to_string(),
-        _ => "XX".to_string(), // TODO(ADR-044): JurisdictionMapper
-    };
+    let ip_jurisdiction = state.jurisdiction_mapper.classify(&client_ip).country_code.to_string();
 
     // ── EXECUTIVO: Rust scan + policy (sync block) ────────────
     let scan = {
