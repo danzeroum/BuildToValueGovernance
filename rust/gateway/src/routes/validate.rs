@@ -63,6 +63,9 @@ struct GovernanceRequest {
     verdict_id: String,
     /// Confiança máxima entre findings (0.0-1.0).
     max_finding_confidence: f32,
+    entropy: f32,
+    total_chars: u32,
+    blake3_hash: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -92,6 +95,9 @@ struct ScanResult {
     hard_block_term: Option<String>,
     matched_policies: Vec<String>,
     max_finding_confidence: f32,
+    entropy: f32,
+    total_chars: u32,
+    blake3_hash: String,
 }
 
 // ── HANDLER ───────────────────────────────────────────────────
@@ -145,6 +151,9 @@ pub async fn validate_handler(
             hard_block_term: eval.hard_block_term,
             matched_policies: eval.matched_policies,
             max_finding_confidence: max_conf,
+            entropy: evidence.stats.entropy,
+            total_chars: evidence.stats.total_chars,
+            blake3_hash: format!("{:016x}", evidence.original_request_hash),
         }
     };
 
@@ -165,6 +174,9 @@ pub async fn validate_handler(
             input_text: req.input.clone(),
             verdict_id: verdict_id.clone(),  // ADR-043
             max_finding_confidence: scan.max_finding_confidence,
+            entropy: scan.entropy,
+            total_chars: scan.total_chars,
+            blake3_hash: scan.blake3_hash.clone(),
         };
 
         match state.http_client
