@@ -210,6 +210,22 @@ fn build_default_patterns() -> Vec<CompiledPattern> {
         (r"(?i)\bdesconsidere\s+(tudo|as|todas)\b",                     "INSTRUCTION_OVERRIDE"),
         (r"(?i)\baja\s+como\s+(um|uma)?\b",                             "INSTRUCTION_OVERRIDE"),
         (r"(?i)\bmodo\s+(sem\s+restri[çc][õo]es|desenvolvedor|irrestrito)\b", "INSTRUCTION_OVERRIDE"),
+        // ── Social Engineering (RT-006) ──────────────────────────────
+        (r"(?i)\bconfirme?\s+(sua|seu|your)\s+(senha|password|credenciais?|credentials?)\b", "SOCIAL_ENGINEERING"),
+        (r"(?i)\b(aqui\s+[eé]|sou\s+d[oa]|here\s+is|this\s+is)\s+(o\s+suporte|a\s+microsoft|o\s+banco|the\s+bank|police|polic[íi]a)\b", "SOCIAL_ENGINEERING"),
+        (r"(?i)\b(sua\s+conta|your\s+account)\s+(ser[áa]\s+)?(suspensa|bloqueada|deletada|suspended|blocked|deleted)\b", "SOCIAL_ENGINEERING"),
+        (r"(?i)\b(urgente|urgent|aten[çc][ãa]o|warning)[!:]\s*.{0,30}(senha|password|cpf|dados|credentials?)\b", "SOCIAL_ENGINEERING"),
+        (r"(?i)\b(polic[íi]a\s+federal|receita\s+federal|interpol)\s*.{0,20}(intima[çc][ãa]o|intimation|dados|cpf)\b", "SOCIAL_ENGINEERING"),
+        (r"(?i)\bclique\s+(no\s+link|aqui)\s+(para\s+)?verific", "SOCIAL_ENGINEERING"),
+        (r"(?i)\b(forneça|provide|envie|send)\s+(seu|your)\s+(cpf|ssn|senha|password|dados\s+banc)", "SOCIAL_ENGINEERING"),
+
+        // ── Data Exfiltration indireto (RT-007) ───────────────────────
+        (r"(?i)\b(liste?|list|show|mostre?)\s+(os\s+)?(arquivos?|files?|diret[oó]rio|directory)\b", "DATA_EXFILTRATION"),
+        (r"(?i)\b(acesse?|access|leia?|read|abra?|open)\s+.{0,20}\.(env|json|config|yaml|yml|ini|cfg)\b", "DATA_EXFILTRATION"),
+        (r"(?i)\bquais?\s+(t[eé]cnicas?|m[eé]todos?|regras?)\s+(de\s+)?(safety|seguran[çc]a|detec[çc][ãa]o)\b", "DATA_EXFILTRATION"),
+        (r"(?i)\bcomo\s+(voc[êe]\s+)?(detecta?|funciona\s+internamente|foi\s+programad)", "DATA_EXFILTRATION"),
+        (r"(?i)\b(quais?\s+s[ãa]o\s+)?(seus?|your)\s+(par[âa]metros?|parameters?|configura[çc][õo]es?)\b", "DATA_EXFILTRATION"),
+        (r"(?i)\b(qual\s+[eé]\s+o\s+seu|what\s+is\s+your)\s+(prompt|sistema|system)\b", "DATA_EXFILTRATION"),
     ];
     for (pat, cat) in &universal {
         if let Some(cp) = CompiledPattern::new(pat, PatternTier::Universal, 0, cat) {
