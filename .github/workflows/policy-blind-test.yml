@@ -1,0 +1,73 @@
+name: Rawls Blind Policy Testing (ADR-042)
+
+on:
+  push:
+    paths:
+      - 'data/policies/**/*.yaml'
+      - 'python/buildtovalue/governance/policy_tester.py'
+      - 'python/buildtovalue/governance/synthetic_dataset.py'
+  workflow_dispatch:
+    inputs:
+      force_rerun:
+        description: 'Forçar re-execução mesmo sem mudança de epoch'
+        default: 'false'
+        type: boolean
+
+jobs:
+  blind-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -e "python/[dev]"
+
+      - name: Fetch current PatternRegistry epoch
+        id: epoch
+        run: |
+          EPOCH=$(python -c "
+          from buildtovalue.governance.pattern_registry_client import get_current_epoch
+          print(get_current_epoch())
+          ")
+          echo "epoch=$EPOCH" >> $GITHUB_OUTPUT
+          echo "Epoch atual: $EPOCH"
+
+      - name: Prepare epoch state file
+        run: |
+          echo '{"epoch": ${{ steps.epoch.outputs.epoch }}, "last_test_epoch": -1}' \
+            > /tmp/epoch_state.json
+
+      - name: Run Blind Policy Tests (Equity Gate >= 95% por grupo)
+        run: |
+          FAILED=0
+          for policy in data/policies/**/*.yaml; do
+            echo "--- Testando: $policy ---"
+            python -m buildtovalue.governance.policy_tester_runner \
+              --policy "$policy" \
+              --epoch-file /tmp/epoch_state.json \
+              --fail-on-gate-fail \
+              --cases 200 \
+              --gateway "${{ vars.BTV_GATEWAY_URL || 'http://localhost:8080' }}" \
+              --output "/tmp/report_$(basename $policy .yaml).json" \
+            || FAILED=$((FAILED + 1))
+          done
+          if [ $FAILED -gt 0 ]; then
+            echo "❌ $FAILED policy(ies) falharam no equity gate"
+            exit 1
+          fi
+        env:
+          BTV_PATTERN_EPOCH: ${{ steps.epoch.outputs.epoch }}
+          BTV_HMAC_KEY:      ${{ secrets.BTV_HMAC_KEY }}
+
+      - name: Upload relatórios como artefatos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-test-reports-epoch-${{ steps.epoch.outputs.epoch }}
+          path: /tmp/report_*.json
+          retention-days: 90
