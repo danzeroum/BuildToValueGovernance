@@ -52,7 +52,7 @@ class TestSignatureWithEnvKey:
 
     def test_verdict_signed_with_env_key(self, monkeypatch):
         """Verdicts should use the env-loaded key."""
-        monkeypatch.setenv("BTV_HMAC_KEY", "test-key-for-signing")
+        monkeypatch.setenv("BTV_HMAC_KEY", "test-key-for-signing-padded!!")
 
         from buildtovalue.api.app import sign_verdict, _load_hmac_key
         import buildtovalue.api.app as app_module

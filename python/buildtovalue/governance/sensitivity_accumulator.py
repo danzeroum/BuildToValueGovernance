@@ -18,7 +18,7 @@ Limite de linhas: ≤ 200 (invariante AI Squad)
 import time
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 from collections import defaultdict
 
 logger = logging.getLogger("btv.governance.sensitivity")
@@ -72,7 +72,7 @@ MAX_SESSIONS:           int   = 10_000 # cap de sessões simultâneas
 @dataclass
 class SensitivityState:
     """Estado de sensibilidade acumulado por sessão."""
-    tags: set = field(default_factory=set)
+    tags: Set[str] = field(default_factory=set)
     tag_counts: Dict[str, int] = field(
         default_factory=lambda: defaultdict(int)
     )
