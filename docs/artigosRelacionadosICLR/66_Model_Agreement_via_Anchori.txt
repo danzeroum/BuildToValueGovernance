@@ -1,0 +1,1945 @@
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+MODEL AGREEMENT VIA ANCHORING
+Anonymous authors
+Paper under double-blind review
+ABSTRACT
+Numerous lines of aim to control model disagreement — the extent to which
+two machine learning models disagree in their predictions. We adopt a simple
+and standard notion of model disagreement in real-valued prediction problems,
+namely the expected squared difference in predictions between two models trained
+on independent samples, without any coordination of the training processes. We
+would like to be able to drive disagreement to zero with some natural parameter(s)
+of the training procedure using analyses that can be applied to existing training
+methodologies.
+We develop a simple general technique for proving bounds on independent model
+disagreement based on anchoring to the average of two models within the analysis. We then apply this technique to prove disagreement bounds for four commonly used machine learning algorithms: (1) stacked aggregation over an arbitrary model class (where disagreement is driven to 0 with the number of models
+k being stacked) (2) gradient boosting (where disagreement is driven to 0 with
+the number of iterations k) (3) neural network training with architecture search
+(where disagreement is driven to 0 with the size n of the architecture being optimized over) and (4) regression tree training over all regression trees of fixed depth
+(where disagreement is driven to 0 with the depth d of the tree architecture). For
+clarity, we work out our initial bounds in the setting of one-dimensional regression with squared error loss — but then show that all of our results generalize to
+multi-dimensional regression with any strongly convex loss.
+INTRODUCTION
+Two predictive models f1, f2 : X →R, trained on data sampled from the same distribution D,
+might frequently disagree in the sense that on a typical test example x ∼D, f1(x) and f2(x)
+take very different values. In fact, this can happen even when the two models are trained on the
+same dataset, if the model class is not convex and the training process is stochastic. This kind of
+model disagreement, sometimes known as model or predictive multiplicity (Marx et al., 2020; Black
+et al., 2022; Roth & Tolbert, 2025) or the Rashomon effect (Breiman, 2001), is a concern for many
+different reasons. Pragmatically, predictions are used to inform downstream actions, and two models
+that make different predictions produce ambiguity about which is the best action to take when we
+can only take one. This has led to a literature on how two predictive models (or a predictive model
+and a human) can engage in short test-time interactions so as to “agree” on a single prediction or
+action that is more accurate than either model could have made alone (Aumann, 1976; Aaronson,
+2005; Donahue et al., 2022; Frongillo et al., 2023; Peng et al., 2025; Collina et al., 2025; 2026).
+In industrial applications, this same phenomenon is known as model or predictive churn; there is a
+large body of work that aims to reduce it, because churn for predictions in ways that do not produce
+accuracy improvements can needlessly disrupt downstream pipelines built around an initial model
+(Milani Fard et al., 2016; Bahri & Jiang, 2021; Hidey et al., 2022; Watson-Daniels et al., 2024).
+The phenomenon of predictive multiplicity has led to concern about the potential arbitrariness of
+decisions informed by statistical models, and hence the procedural fairness of using such models in
+high-stakes settings Marx et al. (2020); Black et al. (2022); Watson-Daniels et al. (2024). The same
+phenomenon is what underlies the desire for replicability of machine learning algorithms, which has
+recently attracted widespread study (Impagliazzo et al., 2022; Bun et al., 2023; Eaton et al., 2023;
+Kalavasis et al., 2024b;a; Karbasi et al., 2023; Diakonikolas et al., 2025; Eaton et al., 2026).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+In this paper we ask when training on independent samples from a common distribution results in
+models that approximately agree on most inputs. Unlike the (model) agreement literature (Aumann,
+1976; Aaronson, 2005; Collina et al., 2025) we want approximate agreement “out of the box”, without the need for any test-time interaction or coordination. And unlike the literature on replicability
+(Impagliazzo et al., 2022; Bun et al., 2023; Eaton et al., 2023; Karbasi et al., 2023), we do not want
+our analyses to apply only to custom-designed (and often impractical) algorithms: we want methods for analyzing existing families of practical learning algorithms. We continue a discussion of
+additional related work in Appendix A.
+1.1
+OUR RESULTS
+Our notion of approximate model agreement is that the expected squared difference between two
+models f1 and f2 should be small: D(f1, f2) := Ex∼P [(f1(x) −f2(x))2] ≤ε. Our goal is to
+show that for broad classes of model training methods, this disagreement level ε can be driven to
+0 with some tunable parameter of the method. We aim for high agreement in this sense via independent training, i.e., without the need for any interaction or coordination between the learners
+beyond the fact that they are sampling data from a common distribution. We give an abstract recipe
+for establishing guarantees like this based on a “midpoint anchoring argument” and then give four
+applications of the recipe: (1) to the popular ensembling technique of “stacking”, (2) to gradient
+boosting and similar methods that iteratively build up linear combinations over a class of base models, (3) to neural network training with architecture search, and (4) to regression tree training over
+all regression trees of bounded depth. For clarity, we first establish all of our guarantees for models
+that solve a one dimensional regression problem to optimize for squared loss, but we then show how
+our results generalize to multi-dimensional strongly convex loss functions. We include our results
+on these generalizations in Section 6 and Appendix E.
+1.1.1
+THE MIDPOINT ANCHORING METHOD
+Our core technique is built around a simple “midpoint identity” for squared loss. For any two predictors f1, f2 : X →R, let ¯f(x) := 1
+2(f1(x) + f2(x)) denote the (hypothetical) model corresponding
+to their average. Then
+D(f1, f2) = 2
+
+MSE(f1) + MSE(f2) −2 MSE( ¯f)
+
+.
+This reduces proving independent disagreement bounds (the goal of this paper) to bounding the error
+gap between the constituent models f1 and f2 and their average. If ¯f lies in the same hypothesis class
+H as f1 and f2, then this error gap can be bounded by any convergence analysis that establishes that
+MSE(f) will approach error optimality within H. More frequently, for non-convex classes, ¯f will
+not be representable within the same class of functions as f1 and f2 — but for many natural concept
+classes, the average of two models trained within some class of models parameterized by a measure
+of complexity (size, depth) will be representable within a class that is “not much larger”. This
+will give us stability guarantees in terms of the “local learning curve” of this complexity parameter,
+which because of error boundedness and monotonicity must tend to zero at values of the complexity
+parameter that can be bounded independently of the instance.
+All of our stability bounds are “agnostic” in the sense that they hold without any distributional or
+realizability assumptions. In other words, our bounds will always follow from the ability to optimize
+within given model classes, without needing to assume that the model class is able to represent the
+relationship between the features and the labels to any non-trivial degree.
+It is instructive at the outset to compare the midpoint anchoring method to a more naive methods
+for establishing agreement bounds. Any pair of models f1 and f2 that both have almost perfect
+accuracy in the sense that MSE(f1), MSE(f2) ≤ε must also satisfy D(f1, f2) ≤O(ε). This
+follows by anchoring on hypothetical perfect predictions f ∗(x) = y. Of course, such bounds will
+rarely apply because very few settings are compatible with near perfect prediction. The benefit of
+our more general midpoint anchoring method is that it will allow us to argue for independent model
+agreement without needing to make any realizability assumptions — high accuracy is not needed
+for high agreement, as if f1 and f2 have high error, so might the average model ¯f.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+1.1.2
+APPLICATIONS: ENSEMBLING, BOOSTING, NEURAL NETS, AND REGRESSION TREES
+We choose our four applications below to show the various ways in which we can apply our method
+in settings that are progressively more challenging. First, as a warm-up, we study stacked aggregation, which ensembles independently trained models. We show how the midpoint anchoring method
+can recover strong agreement results as a function of the local error curve.
+Next, we study gradient boosting. Gradient boosting, like stacking, learns a linear combination of
+base models, but unlike stacking, does not rely on independently trained models. The models in
+gradient boosting are found by adaptively and iteratively solving a “weak learning” problem. As
+our midpoint anchoring method does not rely on model independence, we are still able to use it
+to recover strong agreement bounds tending to 0 at a rate of O(1/k), where k is the number of
+iterations of gradient boosting.
+The constituent models used in gradient boosting can be arbitrary and non-convex (e.g., depth 5
+regression trees), but the aggregation method is still linear and is implicitly approximating a (infinite
+dimensional) convex optimization problem — minimizing mean squared error amongst linear models in the span of the set of weak learner models. One might wonder if the kind of agreement bounds
+we are able to prove are implicitly relying on this convexity. In our third and fourth applications, we
+see that the answer is no. We study error minimization over arbitrary ReLU neural networks of size
+n (implying architecture search) as well as arbitrary regression trees of depth d. These are highly
+non-convex optimization landscapes. Thus these approximate minimizers will generally be very far
+from agreement in parameter space. Nevertheless, we are able to apply our midpoint anchoring
+method to show strong bounds on agreement that can be driven to 0 as a function of the size of the
+neural network n in the first case and the depth of the regression tree d in the second case, recovering
+agreement in prediction space despite arbitrary disagreement in parameter space.
+1.2
+INTERPRETING LOCAL LEARNING CURVE STABILITY
+Our results for stacking, neural network training, and regression tree training all have the form of
+local learning curve stability bounds: D(f1, f2) ≤4(R(Fn) −R(F2n))— where R(Fk) refers to
+the optimal error amongst models with “complexity” k (parameterizing the number of models being
+ensembled, network size, and depth in the cases of stacking, neural networks, and regression trees
+respectively). These kinds of bounds are actionable and well aligned with optimizing for accuracy.
+They are actionable because (with enough data) it is possible to empirically plot the local learning
+curve by training with different parameter values, and picking n such that the curve is locally flat —
+R(Fn) ≈R(F2n). This is aligned with the goal of optimizing for accuracy since if we could substantially improve accuracy by locally increasing the complexity of the model, then in the high data
+regime, we should. It is also descriptive in the sense that if we assume that most deployed models
+are not “leaving money on the table” in the sense of being able to substantially improve accuracy by
+locally increasing complexity, then we should expect stability amongst deployed models. Because
+the error sequence {R(Fn)}n is bounded from above and below and monotonically decreasing in
+n, the local learning curve is also guaranteed to “flatten out” to a value α for a value of n that is
+independent of the problem complexity, and at most 21/α. However, in practice we expect the local
+learning curve to flatten out even more gracefully. Empirical studies of neural scaling laws (Kaplan
+et al., 2020; Hoffmann et al., 2022) have consistently found that across a wide variety of domains,
+the optimal error R(Fn) decreases as a power law in model complexity: R(Fn) ≈R∗+ cn−γ for
+some constants c > 0, γ > 0, and irreducible error R∗. Under such a power law, the gap in the local
+learning curve becomes: R(Fn) −R(F2n) = c (n−γ −(2n)−γ) = c(1 −2−γ)n−γ = O(n−γ).
+That is, the local learning curve gap shrinks polynomially in model complexity, which by our results
+implies that independent model disagreement D(f1, f2) decreases at the same rate. Crucially, this
+does not require low absolute error rather only that the marginal benefit of increasing complexity
+diminishes. The exponent γ varies by domain (typically 0.05–0.5 for large-scale neural networks),
+but is reliably positive. This provides theoretical grounding for empirical observations that larger
+models exhibit greater prediction-level consistency across independent training runs (Bhojanapalli
+et al., 2021; Jordan, 2024), and may help explain the surprisingly high levels of agreement observed
+empirically across independently trained large language models (Gorecki & Hardt, 2025).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+PRELIMINARIES AND MIDPOINT ANCHORING LEMMAS
+We consider a setting in which we train two models on independently drawn datasets. Let X ⊆Rd
+be the data domain and Y ⊆R be the label domain. We assume access to datasets S = ((xi, yi))n−1
+i=0
+that are independently drawn from a joint distribution P on X ×Y. Note that unless otherwise stated,
+all expectations will be with respect to x, y ∼P or where appropriate just the marginal over x. A
+model is then defined as a function mapping f : X 7→Y. We define the norm ∥f∥:=
+ E[f(x)2]
+1/2.
+With this we define the mean squared error objective and the corresponding population risk
+MSE(f) = E[(y −f(x))2],
+R(F) := inf
+f∈F MSE(f).
+We next define the disagreement between two models as their expected squared difference.
+Definition 2.1 (Disagreement). For any two functions f1 : X 7→Y, f2 : X 7→Y, we define the
+expected disagreement between them as
+D(f1, f2) := E[(f1(x) −f2(x))2] .
+We are now ready to state and prove a simple identity that will form the backbone of our analyses. It
+relates the disagreement between two models to the degree to which their errors could be improved
+by averaging the models.
+Lemma 2.2 (Midpoint identity for squared loss). For any two functions f1 : X 7→Y and f2 : X 7→
+Y, let ¯f(x) := 1
+2(f1(x) + f2(x)). Then
+D(f1, f2) = 2
+
+MSE(f1) + MSE(f2) −2 MSE( ¯f)
+
+.
+Proof. Let ri(x) := fi(x)−y for i ∈{1, 2}. Then ¯f(x)−y = 1
+2(r1(x)+r2(x)) and f1(x)−f2(x) =
+r1(x) −r2(x). Expanding squares and using linearity of expectation gives
+E[(r1 −r2)2] = E[r2
+1] + E[r2
+2] −2E[r1r2].
+On the other hand,
+E
+h
+2(r1 + r2)
+2i
+= 1
+4E[(r1 + r2)2] = 1
+4E[r2
+1 + r2
+2 + 2r1r2] = 1
+4E[r2
+1] + 1
+4E[r2
+2] + 1
+2E[r1r2].
+Therefore,
+
+E[r2
+1] + E[r2
+2] −2E
+  1
+2(r1 + r2)
+2
+= 2
+
+E[r2
+1] + E[r2
+2] −2
+
+4E[r2
+1] + 1
+4E[r2
+2] + 1
+2E[r1r2]
+
+= 2
+  1
+2E[r2
+1] + 1
+2E[r2
+2] −E[r1r2]
+
+= E[r2
+1] + E[r2
+2] −2E[r1r2] = E[(r1 −r2)2].
+Substituting back E[r2
+i ] = MSE(fi) and E
+  1
+2(r1 + r2)
+2
+= MSE( ¯f) yields the claim.
+A useful corollary of this identity is that we can upper bound the disagreement between two models
+by the degree to which they are sub-optimal relative to the best model in any family that contains
+their average.
+Corollary 2.3 (Disagreement via the midpoint anchor). For any two functions f1, f2 : X →Y, let
+¯f(x) := 1
+2(f1(x) + f2(x)). If ¯f ∈H for some class of predictors H, then
+D(f1, f2) ≤2
+ MSE(f1) −R(H)
+
++ 2
+ MSE(f2) −R(H)
+
+.
+Proof. By Lemma 2.2, we have
+D(f1, f2) = 2
+
+MSE(f1) + MSE(f2) −2 MSE( ¯f)
+
+.
+If ¯f ∈H then MSE( ¯f) ≥R(H), so substituting yields the claim.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+If the model class from which f1 and f2 were trained contains their average, then we can relate the
+disagreement between f1 and f2 to the sub-optimality of the loss of f1 and f2 to the global optimum
+within the class in which they were trained. However, non-convex model classes will not satisfy this
+closure-under-averaging property. To analyze these classes it is useful to consider local learningcurve bounds with respect to a hierarchy of model classes, such that each level F2n in the hierarchy
+is expressive enough to represent the average of any pair of models in Fn. We will see that this
+property is satisfied by neural networks (where n parametrizes the number of internal nodes) and
+regression trees (where n parametrizes the depth).
+Lemma 2.4 (Local learning-curve bound from midpoint closure). Let (Fn)n≥1 be a nested sequence
+of predictor classes and assume that for every n and every f1, f2 ∈Fn, the midpoint predictor
+¯f := 1
+2(f1 + f2) lies in F2n. Fix n ≥1 and suppose f1, f2 ∈Fn satisfy MSE(fi) ≤R(Fn) + ε
+for i ∈{1, 2}. Then
+D(f1, f2) ≤4
+ R(Fn) −R(F2n) + ε
+
+.
+Proof. By midpoint closure we have ¯f ∈F2n, so Lemma 2.3 with H = F2n gives
+D(f1, f2) ≤2
+ MSE(f1) −R(F2n)
+
++ 2
+ MSE(f2) −R(F2n)
+
+.
+Using MSE(fi) ≤R(Fn) + ε for both i yields the claim.
+In the following sections, we apply Lemma 2.3 and Lemma 2.4 by verifying that the midpoint
+predictor lies in an appropriate hypothesis class.
+WARMUP APPLICATION: STACKING
+Proofs in this section will are deferred to Appendix B.
+Stacking is an ensembling method which first trains k independent base models in some arbitrary
+fashion and then uses linear regression over these base models to combine their predictions.
+Algorithm 1 Ensembling via Stacking
+Input: M : G →H black-box learning algorithm, D ∼P n dataset of size n, number of shards k
+Randomly split D into k disjoint shards Gi each of size |Gi| =
+j
+n
+k
+k
+.
+for i ∈[k] do
+gi ←M(Gi)
+end for
+f ←OLS(g1, · · · , gk)
+Return f
+Let Q be a probability distribution on models of the form g : X →R. Concretely, Q could represent
+the law of a base predictor obtained by training a fixed learning algorithm M on a random shard
+of the training sample of size n/k, with a fresh i.i.d. draw of examples and fresh algorithmic randomness; independent draws from Q correspond to training M on independent shards. We remark
+in passing that other intepretations of Q also make sense. For example, perhaps all parties share the
+same training set (because e.g. it is the training set for a standard benchmark dataset like ImageNet).
+Then there is no need to have different models be trained on different shards, and Q can represent
+only the randomness of the training procedure, which might re-use samples in arbitrary ways. We
+will analyze the population least squares predictor over the span of these base models. That is, we
+sample k models G = {g1, ..., gk} ∼Qk and define V (G) to be the linear span of the sampled
+models in G. We will consider the predictor
+arg min
+f∈V (G) MSE(f).
+Note that this is just a finite dimensional least squares problem, so a minimizer exists, and multiset
+multiplicities do not affect the span V (G). For t ∈N, let Rt denote the random variable R(G)
+when G = {g1, . . . , gt} with g1, . . . , gt
+i.i.d.
+∼Q, and write ¯Rt := E{g1,...,gt}∼Qt[Rt]. We will use the
+shorthand ¯Rt := EG[Rt]
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+3.1
+AN AGREEMENT UPPER BOUND
+We instantiate our agreement upper bound for Stacking using the midpoint anchoring lemma. In
+this case we compare f1 and f2 to the risk R(G∗) where G∗:= G ∪G′ is the union of the base
+models used in training f1 and f2. Here f1 is the MSE minimizer over the set of base models
+G = {g1, ..., gk} and f2 is the MSE minimizer over the set of base models G′ = {g′
+1, ..., g′
+k}. We
+know that V (G), V (G′) ⊆V (G∪G′), and that the midpoint predictor 1
+2(f1+f2) lies in V (G∪G′).
+This, together with the fact that the set of 2k models in G ∪G′ is exchangeable lets us prove the
+following agreement bound:
+Theorem 3.1 (Agreement for Stacked Aggregation). Let G = {g1, . . . , gk}
+i.i.d.
+∼Qk and G′ =
+{g′
+1, . . . , g′
+k}
+i.i.d.
+∼Qk be independent. Define f1, f2 as follows:
+f1 = arg min
+f∈V (G) MSE(f),
+f2 = arg
+min
+f∈V (G′) MSE(f)
+Then we have that
+Ef1,f2
+
+D(f1, f2)] ≤4
+  ¯Rk −¯R2k
+
+.
+Note that Theorem 3.1 depends on the slope of the local learning curve at k: ( ¯Rk −¯R2k). This
+is a strength; dependence on the global learning curve ( ¯Rk −R∞) would be significantly weaker.
+To see this, note that if Q contained only a single “good model” with arbitrarily small weight, the
+global learning curve could fail to flatten out for arbitrarily large k. On the other hand, simply by
+monotonicity, for any value of α, if labels are bounded in (say) [0, 1] then there must be a value of
+k ≤21/α such that ( ¯Rk −¯R2k) ≤α (as error can drop by α at most 1/α times before contradicting
+the non-negativity of squared error). While this depends exponentially on α, it is independent of the
+dimensionality or complexity of the instance, in contrast to bounds depending on the global learning
+curve.
+3.2
+STACKING LOWER BOUND
+Theorem 3.1 gives an upper bound with constant 4. We now show that this factor cannot be improved
+in general: for every fixed k and every ε > 0, there exists a data distribution P and a distribution Q
+over base models such that two independent stacking runs have disagreement at least (4 −ε) times
+the gap ¯Rk −¯R2k.
+Theorem 3.2 (Near-tightness of the factor 4). Fix an integer k ≥1. For every ε > 0, there exists a
+data distribution P and a distribution Q over base models such that if G, G′ i.i.d.
+∼Qk are independent
+k–tuples and
+f1 = arg min
+f∈V (G) MSE(f),
+f2 = arg
+min
+f∈V (G′) MSE(f),
+then
+Ef1,f2
+
+D(f1, f2)
+
+≥(4 −ε)
+  ¯Rk −¯R2k
+
+.
+GRADIENT BOOSTING
+In this section we apply our midpoint anchoring argument to gradient boosting, an algorithm that
+iteratively builds up an ensemble model by repeatedly chooses a weak learning model g ∈C that
+correlates with the residual of our current ensemble model and then adds g to it. Unlike stacking,
+the models that make up two independently trained ensembles f1 and f2 are not exchangeable, since
+the weak learners are not selected independently, but rather adaptively in a path dependent way.
+Nevertheless, we show that we can apply midpoint anchoring to drive disagreement to 0 at a 1/k
+rate (where k is the number of iterations of gradient boosting). Here we abstract away finite sample
+issues by modeling our weak learning algorithm in the style of an SQ oracle (Kearns, 1998) —
+i.e. rather than obtaining the g ∈C which exactly maximizes covariance with the residuals of our
+current model, it can return any g ∈C that is an ϵ-approximate maximizer. This models e.g. solving
+an ERM problem over any sample that is sufficient for ε-approximate uniform convergence over C.
+Proofs in this section are deferred to Appendix C.
+We assume for simplicity that our weak learning class C satisfies the following mild regularity conditions (which are enforceable if necessary): Symmetry (g ∈C ⇒−g ∈C), normalization (∥g∥≤1
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+for all g ∈C) and non-degeneracy (0 /∈C). We will use the normalization condition with respect
+to the Atomic and Euclidean Norm, which can be enforced by dividing the original functions (unnormalized) by the maximum of its Atomic norm, Euclidean norm, and 1. Note in this section, for
+the sake of clarity, we will use the standard inner product ⟨f, g⟩= f T g. When we list ||f|| it will
+still corresponding to the norm we defined in the Preliminaries of (E[f(x)2])1/2. When needed,
+we will explicitly mention the expectations we are computing. We model weak-learning via an
+ε-approximate SQ-style oracle: at iteration t, the oracle returns any gt ∈C such that
+E[⟨rt−1(x), gt(x)⟩] ≥sup
+g∈C
+E[⟨rt−1(x), g(x)⟩] −εt,
+rt−1 := y −ft−1.
+Algorithm 2 Gradient Boosting
+Input: SQ-oracle for weak learner class C
+f0 ≡0, G0 = ∅
+for t ∈[k] do
+rt−1 := y −ft−1.
+Choose gt ∈C with E[⟨rt−1(x), gt(x)⟩] ≥supg∈C E[⟨rt−1(x), g(x)⟩] −εt. (SQ-oracle)
+αt := arg minα∈R E[(rt−1(x) −αgt(x))2] = E[⟨rt−1(x), gt(x)⟩]/∥gt∥2.
+ft := ft−1 + αtgt; set Gt := Gt−1 ∪{gt}.
+end for
+Return fk and G := Gk.
+Algorithm 2 provides the details of how to use this oracle within the Gradient Boosting procedure.
+We will be interested in comparing the MSE of the gradient boosting iterates with the risk of the best
+minimizer in the weak learner class R
+ V (C)
+
+:= inff∈V (C) MSE(f). We will bound the disagreement of two independently trained models f1 and f2 by anchoring to the best model f ∗in the span
+of the weak learner class C, and then apply our anchoring lemma from Section 2. Since anchoring
+bounds disagreement in terms of each model’s error gap to f ∗, it remains to upper bound that gap.
+We do so below, starting by bounding the single-step error improvement of gradient boosting.
+Lemma 4.1 (Single Iterate Progress). With αt = arg minα∈R ∥rt−1 −αgt∥2 and ∥gt∥≤1,
+MSE(ft−1) −MSE(ft) ≥E[⟨rt−1(x), gt(x)⟩]2.
+Proof. Note that MSE(ft−1) −MSE(ft) = ||rt−1||2 −||rt||2 = ||rt−1||2 −||rt−1 −αtgt||2 By
+exact line search,
+∥rt−1 −αtgt∥2 = min
+α ∥rt−1 −αgt∥2
+= min
+α (||rt−1||2 −2αE[⟨rt−1(x), gt(x)⟩] + α2||gt||2)
+= ||rt−1||2 −2E[⟨rt−1(x), gt(x)⟩]2/∥gt∥2 + E[⟨rt−1(x), gt(x)⟩]2/∥gt∥2
+= ||rt−1||2 −E[⟨rt−1(x), gt(x)⟩]2/∥gt∥2
+Therefore, we have that MSE(ft−1) −MSE(ft) = E[⟨rt−1(x), gt(x)⟩]2/∥gt∥2. Using ∥gt∥≤1
+gives the stated bound.
+Now, we define the radius τ > 0 with the corresponding convex hull Kτ := τconv(C). Let f ∗∈
+V (C) be the population least-squares minimizer over the span of the weak learning class. Define the
+corresponding atomic norm radius τ ∗:= ∥f ∗∥A, where the atomic norm induced by C is
+∥f∥A := inf
+n
+k
+X
+j=1
+|αj| : f = lim
+k→∞
+k
+X
+j=1
+αjgj, gj ∈C,
+k
+X
+j=1
+|αj| ≤∞
+o
+.
+That is, τ ∗corresponds to the smallest total weight needed to represent f ∗within the weak learner
+class. We have now related the MSE gap between the models of two runs in terms of the square
+of the max correlation of the residuals of the earlier model with a model in the weak learner class.
+Next, we will lower bound the largest possible correlation between the residuals of a model f and a
+function in the weak learner class in terms of the difference between the MSE of the current model
+f and the error of the best model in the span of the weak learners, scaled by the atomic norm of f ∗.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Lemma 4.2 (Correlation Lower Bound w.r.t. Weak Learning Anchor Gap). For any f, writing
+M(f) := supg∈C |E[⟨y −f, g⟩]|, we have
+M(f) ≥MSE(f) −R
+ V (C)
+
+2 τ ∗
+.
+We have lower bounded the maximum residual–model correlation over the weak learner class by
+a quantity depending on the gap between the current model’s error and the best error in the weaklearner span. We now relate the per-step error gap to that best error via a recurrence.
+Proposition 4.3 (Gap Recurrence Toward R
+ V (C)
+
+). Let Et := MSE(ft) −R
+ V (C)
+
+. We will use
+the shorthand u2
++ = (max{u, 0})2. Then, for t ≥1,
+Et−1 −Et ≥
+
+Et−1
+2τ ∗−εt
+2
++.
+Proof. By Lemma 4.1, MSE(ft−1) −MSE(ft)
+≥
+E[⟨rt−1(x), gt(x)⟩]2.
+The oracle gives
+E[⟨rt−1(x), gt(x)⟩] ≥M(ft−1)−εt. Hence E[⟨rt−1, gt⟩]2 ≥(M(ft−1)−εt)2
++. Finally, Lemma 4.2
+gives M(ft−1) ≥Et−1/(2τ ∗), yielding the claim.
+Finally, we can use the recurrence relation to bound the difference between the MSE of the model at
+iteration t and the MSE of the best model in the span of the weak learner class–we can see that the
+first term is inversely proportional to t and depends on the atomic norm of the best model in span of
+the weak learner class. It also includes a term that depends on the SQ-oracle error at every iteration.
+Theorem 4.4 (Weak Learning Anchor Gap Upper Bound). For all t ≥1,
+MSE(ft) −R
+ V (C)
+
+≤8 (τ ∗)2
+t
++
+t
+X
+s=1
+ε2
+s.
+We can now use the anchoring lemmas from Section 2 to relate two independent stagewise runs.
+Theorem 4.5 (Gradient Boosting Agreement Bound). Let f1 and f2 be two independent gradient
+boosting runs (using the same weak learning class C and number of iterations k) driven by {εt} and
+{ε′
+t} respectively. Let f ∗∈V (C) denote the population least-squares predictor over V (C). Then
+D(f1, f2) ≤2
+ MSE(f1) −R
+ V (C)
+
++ 2
+ MSE(f2) −R
+ V (C)
+
+.
+Consequently, using Theorem 4.4, for all k ≥1,
+D(f1, f2) ≤32 (τ ∗)2
+k
++ 2
+
+k
+X
+t=1
+ε2
+t +
+k
+X
+t=1
+ε′2
+t
+
+.
+Proof. Let ¯f := 1
+2(f1 + f2). Since each gradient boosting run outputs a predictor in V (C), we have
+¯f ∈V (C). Applying Lemma 2.3 with H = V (C) gives
+D(f1, f2) ≤2
+ MSE(f1) −R(V (C))
+
++ 2
+ MSE(f2) −R(V (C))
+
+.
+Applying Theorem 4.4 to both runs yields the stated bound.
+Thus we have shown that gradient boosting yields independent agreement tending to 0 at a rate of
+O(1/k), where k is the number of iterations. This bound also depends on τ ∗, which is a problemdependent constant. In Section 6 we analyze a variant of gradient boosting based on the Frank Wolfe
+algorithm (for more general loss functions) that always produces a predictor that has norm at most
+τ, where τ is a user defined parameter. We give a variant of this analysis in which we anchor to the
+best model in the span of the weak learner class that also has norm at most τ. This removes any
+dependence on τ ∗, and obtain similar rates depending only on τ — replacing the problem dependent
+constant with a user defined parameter that trades of agreement with accuracy as desired.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+NEURAL NETWORKS, REGRESSION TREES, AND OTHER CLASSES
+SATISFYING HIERARCHICAL MIDPOINT CLOSURE
+Next, we show that certain function classes including ReLU neural networks and regression trees
+admit strong agreement bounds under approximate population loss minimization. These function
+classes may be highly non-convex, meaning that approximate loss minimizers may be very far in
+parameter space—or even incomparable in the sense that they may be of different architectures.
+Nevertheless, by anchoring on the midpoint predictor ¯f(x) = 1
+2(f1(x) + f2(x)) and using that the
+relevant model classes are closed under averaging we show that they must be close in prediction
+space. We will use Lemma 2.4 from Section 2. To apply it, we need midpoint closure of the form
+¯f ∈F2n whenever f1, f2 ∈Fn. The form of our theorems will be identical for any class satisfying
+this kind of “hierarchical midpoint closure”. Proofs from this section are deferred to Appendix D.
+5.1
+APPLICATION TO NEURAL NETWORKS
+We work with feed-forward ReLU networks. Let σ(t) := max{0, t} denote the ReLU activation.
+For n ≥0, let NNn denote the class of functions f : X →Y computable by a finite directed acyclic
+graph in which each internal (non-input, non-output) node computes σ(⟨w, u⟩+ b) for some affine
+function of its inputs, and the output node computes an affine combination of the values at the input
+coordinates and internal nodes. First, we demonstrate midpoint closure for this class.
+Lemma 5.1 (Neural-network midpoint closure). For every n ≥0 and every f1, f2 ∈NNn, the
+midpoint predictor ¯f := 1
+2(f1 + f2) lies in NN2n.
+Proof. Fix realizations of f1 and f2 as ReLU networks with at most n internal nodes each. Construct
+a new network by taking a disjoint copy of the internal computation graph for each of f1 and f2, and
+wiring both copies to the same input x. This yields a single feed-forward network that computes
+both f1(x) and f2(x) in parallel, using at most 2n internal ReLU nodes.
+Define the output node to return the affine combination 1
+2f1(x)+ 1
+2f2(x). This adds no new internal
+nodes, so the resulting network computes ¯f and has size at most 2n, i.e., ¯f ∈NN2n.
+Corollary 5.2 (Neural-network agreement). Fix n ≥1 and ε > 0. If f1, f2 ∈NNn satisfy
+MSE(fi) ≤R(NNn) + ε for i ∈{1, 2}, then
+D(f1, f2) ≤4
+ R(NNn) −R(NN2n) + ε
+
+.
+Proof. Apply Lemma 2.4 with Fn = NNn and use Lemma 5.1.
+Observe that this is exactly the same form of local learning curve guarantee that we got for Stacking
+in Theorem 3.1. In particular, as loss is bounded and optimal loss is monotonically decreasing in
+network size, for any value of α, there must be a value of n ≤21/α such that R(NNn)−R(NN2n) ≤
+α (as error can drop by α at most 1/α times before contradicting the non-negativity of squared error).
+For such a value of n, we have D(f1, f2) ≤4(α + ϵ). As with stacking, this bound is completely
+independent of the complexity of the instance and does not require that “global optimality” can be
+obtained by a small neural network (i.e. it requires only flatness of the local loss curve, which can
+always be guaranteed at modest values of n, not the global loss curve, which cannot). This kind of
+“learning curve” bound for neural networks is reminiscent of the argument used by Błasiok et al.
+(2024) to show that “most sizes” of ReLU networks are approximately multicalibrated with respect
+to all neural network architectures of bounded size.
+5.2
+APPLICATION TO REGRESSION TREES
+We observe that the same arguments apply almost verbatim to regression trees. We work with axisaligned regression trees. A depth-d tree is a rooted binary tree in which every internal node is labeled
+by a coordinate j ∈[d] and a threshold t ∈R, and routes an input x ∈X ⊆Rd to the left or right
+child depending on whether xj ≤t or xj > t. Each leaf is labeled by a constant prediction value
+in [0, 1]. The predictor computed by the tree is the leaf value reached by x. We write Treed for the
+class of such predictors of depth at most d.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Lemma 5.3 (Regression-tree midpoint closure). For every d ≥0 and every f1, f2 ∈Treed, the
+midpoint predictor ¯f := 1
+2(f1 + f2) lies in Tree2d.
+We now get an immediate corollary:
+Corollary 5.4 (Regression tree agreement). Fix d ≥1 and ε > 0. If f1, f2 ∈Treed satisfy
+MSE(fi) ≤R(Treed) + ε for i ∈{1, 2}, then
+D(f1, f2) ≤4
+ R(Treed) −R(Tree2d) + ε
+
+.
+Proof. Apply Lemma 2.4 with Fd = Treed and use Lemma 5.3.
+Again, this is a local learning curve agreement guarantee of exactly the same form as our theorem
+for Stacking (Theorem 3.1) and our theorem for neural network training (Corollary 5.2). An immediate implication is that for any value of α that there is a value d ≤21/α (i.e. independent of the
+complexity of the instance) guaranteeing that for that value of d, D(f1, f2) ≤4(α + ϵ).
+MULTI-DIMENSIONAL STRONGLY CONVEX LOSSES
+In Appendix E we generalize all of our results to multi-dimensional convex loss functions. Here
+we focus on one of those generalizations, which also corresponds to a new algorithm. Our gradient
+boosting result in Section 4 gave disagreement bounds that diminished at a O(1/k) rate with the
+number of iterations k, but that also depended on a problem-dependent constant τ ∗. Below we state
+our theorem for a generalized Frank-Wolfe based gradient boosting algorithm (details in Appendix
+E) which maintains as its hypothesis a linear combination of weak learners of norm at most τ, where
+τ is a user-specified parameter. Our disagreement bound now scales with the user-defined parameter
+τ rather than τ ∗, and hence is universally bounded. We state the theorem below in the more general
+setting studied in Appendix E.
+Algorithm 3 Multi-Dimensional Frank-Wolfe
+Input: SQ-oracle for weak learner class C, Budget τ > 0
+f0 ≡0, G0 = ∅
+for t ∈[k] do
+Choose
+st
+∈
+C
+such
+that
+E[⟨−∇pL(y, ft−1(x)), st(x)⟩]
+≥
+maxs∈C E[⟨−∇pL(y, ft−1(x)), s(x)⟩] −εt (SQ-oracle)
+Choose gt ∈Kτ such that gt = τst/||st||A
+αt =
+t+1
+ft := ft−1 + αt(gt −ft−1); set Gt := Gt−1 ∪{gt}.
+end for
+Return fk and G := Gk.
+Theorem 6.1. (FW Gradient Boosting Agreement Bound) Fix any L that is L-smooth and µstrongly convex.
+Let f1, f2 be the output of any two runs of Algorithm 3 parameterized with
+the same τ, k, C such that the sequence of SQ oracle errors are {εt, ε′
+t}t∈[k] respectively.
+Let
+f ∗= arg minf∈Kτ R(f). Then, we have that
+D(f1, f2) ≤
+64Lτ 2
+µ(k + 1) +
+8τ
+µ(k + 1)
+
+
+k
+X
+j=1
+εj +
+k
+X
+j=1
+ε′
+j
+
+
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Not included during blind review.
+REFERENCES
+Scott Aaronson. The complexity of agreement. In Proceedings of the thirty-seventh annual ACM
+symposium on Theory of computing, pp. 634–643, 2005.
+Samuel Ainsworth, Jonathan Hayase, and Siddhartha Srinivasa. Git re-basin: Merging models modulo permutation symmetries. In The Eleventh International Conference on Learning Representations, 2023.
+Noga Alon, Roi Livni, Maryanthe Malliaris, and Shay Moran. Private pac learning implies finite
+littlestone dimension. In Proceedings of the 51st Annual ACM SIGACT Symposium on Theory of
+Computing, pp. 852–860, 2019.
+Robert J Aumann. Agreeing to disagree. The Annals of Statistics, 4(6):1236–1239, 1976.
+Christina Baek, Yiding Jiang, Aditi Raghunathan, and J. Zico Kolter. Agreement-on-the-line: Predicting the performance of neural networks under distribution shift. In Advances in Neural Information Processing Systems, volume 35, 2022.
+Dara Bahri and Heinrich Jiang. Locally adaptive label smoothing improves predictive churn. In
+Proceedings of the 38th International Conference on Machine Learning, 2021.
+Yamini Bansal, Preetum Nakkiran, and Boaz Barak. Revisiting model stitching to compare neural
+representations. In Advances in Neural Information Processing Systems, 2021.
+Srinadh Bhojanapalli, Kimberly Wilber, Andreas Veit, Ankit Singh Rawat, Seungyeon Kim, Aditya
+Menon, and Sanjiv Kumar. On the reproducibility of neural network predictions. arXiv preprint
+arXiv:2102.03349, 2021.
+Emily Black, Manish Raghavan, and Solon Barocas. Model multiplicity: Opportunities, concerns,
+and solutions. In Proceedings of the 2022 ACM conference on fairness, accountability, and transparency, pp. 850–863, 2022.
+Jarosław Błasiok, Parikshit Gopalan, Lunjia Hu, Adam Tauman Kalai, and Preetum Nakkiran. Loss
+minimization yields multicalibration for large neural networks. In 15th Innovations in Theoretical
+Computer Science Conference (ITCS 2024), volume 287, pp. 17–1. Schloss Dagstuhl–LeibnizZentrum f”ur Informatik, 2024.
+Olivier Bousquet and Andr´e Elisseeff. Stability and generalization. Journal of machine learning
+research, 2(Mar):499–526, 2002.
+Leo Breiman. Statistical modeling: The two cultures (with comments and a rejoinder by the author).
+Statistical science, 16(3):199–231, 2001.
+Mark Bun, Roi Livni, and Shay Moran. An equivalence between private classification and online
+prediction. In 2020 IEEE 61st Annual Symposium on Foundations of Computer Science (FOCS),
+pp. 389–402. IEEE, 2020.
+Mark Bun, Marco Gaboardi, Max Hopkins, Russell Impagliazzo, Rex Lei, Toniann Pitassi, Satchit
+Sivakumar, and Jessica Sorrell. Stability is stable: Connections between replicability, privacy,
+and adaptive generalization. In Proceedings of the 55th Annual ACM Symposium on Theory of
+Computing, pp. 520–527, 2023.
+Zachary Charles and Dimitris Papailiopoulos. Stability and generalization of learning algorithms
+that converge to global optima. In International conference on machine learning, pp. 745–754.
+PMLR, 2018.
+Natalie Collina, Surbhi Goel, Varun Gupta, and Aaron Roth. Tractable agreement protocols. In
+Proceedings of the 57th Annual ACM Symposium on Theory of Computing, pp. 1532–1543, 2025.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Natalie Collina, Ira Globus-Harris, Surbhi Goel, Varun Gupta, Aaron Roth, and Mirah Shi. Collaborative prediction: Tractable information aggregation via agreement. In Proceedings of the
+ACM-SIAM Symposium on Discrete Algorithms, 2026.
+Rachel Cummings, Katrina Ligett, Kobbi Nissim, Aaron Roth, and Zhiwei Steven Wu. Adaptive
+learning with robust generalization guarantees. In Conference on Learning Theory, pp. 772–814.
+PMLR, 2016.
+Ilias Diakonikolas, Jingyi Gao, Daniel Kane, Sihan Liu, and Christopher Ye. Replicable distribution
+testing. arXiv preprint arXiv:2507.02814, 2025.
+Kate Donahue, Alexandra Chouldechova, and Krishnaram Kenthapadi. Human-algorithm collaboration: Achieving complementarity and avoiding unfairness. In Proceedings of the 2022 ACM
+Conference on Fairness, Accountability, and Transparency, pp. 1639–1656, 2022.
+Felix Draxler, Kambis Veschgini, Manfred Salmhofer, and Fred Hamprecht. Essentially no barriers
+in neural network energy landscape. In Proceedings of the 35th International Conference on
+Machine Learning, 2018.
+Cynthia Dwork and Aaron Roth. The algorithmic foundations of differential privacy. Foundations
+and trends® in theoretical computer science, 9(3–4):211–407, 2014.
+Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam Smith. Calibrating noise to sensitivity
+in private data analysis. In Theory of cryptography conference, pp. 265–284. Springer, 2006.
+Cynthia Dwork, Vitaly Feldman, Moritz Hardt, Toniann Pitassi, Omer Reingold, and Aaron Leon
+Roth. Preserving statistical validity in adaptive data analysis. In Proceedings of the forty-seventh
+annual ACM symposium on Theory of computing, pp. 117–126, 2015.
+Eric Eaton, Marcel Hussing, Michael Kearns, and Jessica Sorrell. Replicable reinforcement learning.
+Advances in Neural Information Processing Systems, 36:15172–15185, 2023.
+Eric Eaton, Marcel Hussing, Michael Kearns, Aaron Roth, Sikata Bela Sengupta, and Jessica Sorrell. Replicable reinforcement learning with linear function approximation. In The Fourteenth
+International Conference on Learning Representations, 2026.
+Rahim Entezari, Hanie Sedghi, Olga Saukh, and Behnam Neyshabur. The role of permutation invariance in linear mode connectivity of neural networks. In International Conference on Learning
+Representations, 2022.
+Rafael Frongillo, Eric Neyman, and Bo Waggoner. Agreement implies accuracy for substitutable
+signals. In Proceedings of the 24th ACM Conference on Economics and Computation, pp. 702–
+733, 2023.
+Timur Garipov, Pavel Izmailov, Dmitrii Podoprikhin, Dmitry P Vetrov, and Andrew G Wilson. Loss
+surfaces, mode connectivity, and fast ensembling of dnns. Advances in neural information processing systems, 31, 2018.
+John D Geanakoplos and Heraklis M Polemarchakis. We can’t disagree forever. Journal of Economic theory, 28(1):192–200, 1982.
+Mila Gorecki and Moritz Hardt. Monoculture or multiplicity: Which is it?
+In The Thirty-ninth
+Annual Conference on Neural Information Processing Systems, 2025.
+Moritz Hardt, Ben Recht, and Yoram Singer. Train faster, generalize better: Stability of stochastic
+gradient descent. In International conference on machine learning, pp. 1225–1234. PMLR, 2016.
+Christopher Hidey, Fei Liu, and Rahul Goel. Reducing model churn: Stable re-training of conversational agents. In Oliver Lemon, Dilek Hakkani-Tur, Junyi Jessy Li, Arash Ashrafzadeh,
+Daniel Hern´andez Garcia, Malihe Alikhani, David Vandyke, and Ondˇrej Duˇsek (eds.), Proceedings of the 23rd Annual Meeting of the Special Interest Group on Discourse and Dialogue, pp. 14–
+25, Edinburgh, UK, September 2022. Association for Computational Linguistics. doi: 10.18653/
+v1/2022.sigdial-1.2. URL https://aclanthology.org/2022.sigdial-1.2/.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza
+Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, et al. Training compute-optimal large language models. In Proceedings of the 36th International Conference
+on Neural Information Processing Systems, pp. 30016–30030, 2022.
+Max Hopkins, Russell Impagliazzo, and Christopher Ye. Approximate replicability in learning.
+arXiv preprint arXiv:2510.20200, 2025.
+Russell Impagliazzo, Rex Lei, Toniann Pitassi, and Jessica Sorrell. Reproducibility in learning. In
+Proceedings of the 54th annual ACM SIGACT symposium on theory of computing, pp. 818–831,
+2022.
+Arthur Jacot, Franck Gabriel, and Clement Hongler. Neural tangent kernel: Convergence and generalization in neural networks. In Advances in Neural Information Processing Systems, 2018.
+Yiding Jiang, Vaishnavh Nagarajan, Christina Baek, and J Zico Kolter. Assessing generalization of
+SGD via disagreement. In International Conference on Learning Representations, 2022. URL
+https://openreview.net/forum?id=WvOGCEAQhxl.
+Rie Johnson and Tong Zhang.
+Inconsistency, instability, and generalization gap of deep neural
+network training. In Thirty-seventh Conference on Neural Information Processing Systems, 2023.
+Keller Jordan. On the variance of neural network training with respect to test sets and distributions.
+In The Twelfth International Conference on Learning Representations, 2024.
+Alkis Kalavasis, Amin Karbasi, Kasper Green Larsen, Grigoris Velegkas, and Felix Zhou. Replicable learning of large-margin halfspaces. arXiv preprint arXiv:2402.13857, 2024a.
+Alkis Kalavasis, Amin Karbasi, Grigoris Velegkas, and Felix Zhou. On the computational landscape
+of replicable learning. Advances in Neural Information Processing Systems, 37:105887–105927,
+2024b.
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child,
+Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language
+models. arXiv preprint arXiv:2001.08361, 2020.
+Amin Karbasi, Grigoris Velegkas, Lin Yang, and Felix Zhou. Replicability in reinforcement learning. Advances in Neural Information Processing Systems, 36:74702–74735, 2023.
+Michael Kearns.
+Efficient noise-tolerant learning from statistical queries.
+Journal of the ACM
+(JACM), 45(6):983–1006, 1998.
+Michael Kearns, Aaron Roth, and Emily Ryu. Networked information aggregation via machine
+learning. In Proceedings of the ACM-SIAM Symposium on Discrete Algorithms, 2026.
+Jaehoon Lee, Lechao Xiao, Samuel Schoenholz, Yasaman Bahri, Roman Novak, Jascha SohlDickstein, and Jeffrey Pennington. Wide neural networks of any depth evolve as linear models
+under gradient descent. In Advances in Neural Information Processing Systems, 2019.
+Jialin Mao, Itay Griniasty, Han Kheng Teoh, Rahul Ramesh, Rubing Yang, Mark K. Transtrum,
+James P. Sethna, and Pratik Chaudhari. The training process of many deep networks explores the
+same low-dimensional manifold. Proceedings of the National Academy of Sciences, 2024.
+Charles Marx, Flavio Calmon, and Berk Ustun. Predictive multiplicity in classification. In International conference on machine learning, pp. 6765–6774. PMLR, 2020.
+Mahdi Milani Fard, Quentin Cormier, Kevin Canini, and Maya Gupta. Launch and iterate: Reducing
+prediction churn. Advances in Neural Information Processing Systems, 29, 2016.
+Preetum Nakkiran and Yamini Bansal. Distributional generalization: A new kind of generalization.
+arXiv preprint arXiv:2009.08092, 2020.
+Kenny Peng, Nikhil Garg, and Jon Kleinberg. A no free lunch theorem for human-ai collaboration.
+In Proceedings of the AAAI Conference on Artificial Intelligence, volume 39, pp. 14369–14376,
+2025.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Aaron Roth and Alexander Williams Tolbert. Resolving the reference class problem at scale. Philosophy of Science, pp. 1–15, 2025.
+Gowthami Somepalli, Liam Fowl, Arpit Bansal, Ping Yeh-Chiang, Yehuda Dar, Richard Baraniuk,
+Micah Goldblum, and Tom Goldstein. Can neural nets learn the same model twice? investigating
+reproducibility and double descent from the decision boundary perspective. In Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern Recognition, June 2022.
+Lijing Wang, Dipanjan Ghosh, Maria Teresa Gonzalez Diaz, Ahmed Farahat, Mahbubul Alam,
+Chetan Gupta, Jiangzhuo Chen, and Madhav Marathe. Wisdom of the ensemble: improving
+consistency of deep learning models. In Proceedings of the 34th International Conference on
+Neural Information Processing Systems, 2020.
+Jamelle Watson-Daniels, Flavio du Pin Calmon, Alexander D’Amour, Carol Long, David C Parkes,
+and Berk Ustun. Predictive churn with the set of good models. arXiv preprint arXiv:2402.07745,
+2024.
+Danny Wood, Tingting Mu, Andrew M Webb, Henry WJ Reeve, Mikel Luj´an, and Gavin Brown. A
+unified theory of diversity in ensemble learning. Journal of machine learning research, 24(359):
+1–49, 2023.
+Zhanpeng Zhou, Yongyi Yang, Xiaojiang Yang, Junchi Yan, and Wei Hu. Going beyond linear
+mode connectivity: The layerwise linear feature connectivity. In Advances in Neural Information
+Processing Systems, 2023.
+A
+ADDITIONAL RELATED WORK
+Agreement via Interaction
+A line of work inspired by Aumann (1976) aims to give interactive
+test-time protocols through which two models (trained initially on different observations) can arrive at (accuracy improving) agreement. Initial work in economics (Geanakoplos & Polemarchakis,
+1982) focused on exact agreement, but more recent work in computer science focused on interactions of bounded length, leading to approximate agreement of the same form that we study here
+(Aaronson, 2005; Frongillo et al., 2023). This line of work focused on perfect Bayesian learners until Collina et al. (2025; 2026); Kearns et al. (2026) showed that the same kind of accuracy-improving
+agreement could be obtained via test-time interaction using computationally and data efficient learning algorithms.
+Different Notions of Stability
+There are many notions of stability in machine learning. Bousquet
+& Elisseeff (2002) give notions of leave-one-out stability and connect them to out-of-sample generalization. These notions have been influential, and many authors have proven generalization bounds
+via this link to stability: for example Hardt et al. (2016) show that stochastic gradient descent is
+stable in this sense if only run for a small number of iterations, and Charles & Papailiopoulos (2018)
+study the stability of global optimizers in terms of the geometry of the loss-optimal solution. These
+notions of stability are different than the disagreement metric we study here. First, stability in the
+sense of Bousquet & Elisseeff (2002) is stability only of the loss, not the predictions themselves
+which is our interest. Second, stability in the sense of Bousquet & Elisseeff (2002) is stability with
+respect to adding or removing a single training example, whereas we want prediction-level stability
+over fully independent retraining, in which (in general) every single training example is different —
+just drawn from the same distribution.
+Differential privacy (Dwork et al., 2006; Dwork & Roth, 2014) is a strong notion of algorithmic stability that when applied to machine learning requires that when one training sample is changed, the
+(randomized) training algorithm induces a near-by distribution on output models. Differential privacy is a much stronger stability condition than those of Bousquet & Elisseeff (2002), and similarly
+implies strong generalization guarantees (Dwork et al., 2015). When the differential privacy stability
+parameter is taken to be sufficiently small (ε ≪1/√n), then it implies stability under resampling of
+the entire training set from the same distribution, as we study in our paper — this is related to what
+is called perfect generalization by Cummings et al. (2016). Via this connection, differential privacy
+has been shown to be (information theoretically) reducible to replicability (as defined by Impagliazzo et al. (2022)) and vice-versa (Bun et al., 2023). Replicability is a stronger condition than the
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+kind of agreement that we study: in the context of machine learning, it requires that (under coupled
+random coins across the two training algorithms), the run of two training algorithms over independently sampled training sets output exactly identical models with high probability. In contrast we
+ask that two independently trained models produce numerically similar predictions on most examples. However, because replicability asks for more, it also comes with severe limitations that we
+avoid. Via its connection to differential privacy, there are strong separations between problems that
+are learnable with the constraint of replicability and without (Alon et al., 2019; Bun et al., 2020).
+Even for those learning problems that are solvable replicably (e.g. learning problems solvable in
+the statistical query model of Kearns (1998)), standard learning algorithms for these problems are
+not replicable, and the computational and sample complexity of custom-designed replicable algorithms often far exceeds the complexity of non-replicable learning (see e.g. Eaton et al. (2026)).
+In contrast, our analyses apply to existing, popular, state of the art learning algorithms (gradient
+boosting and regression tree and neural network training with architecture search). Since any model
+class can be used together with stacking or gradient boosting, there are no barriers to obtaining our
+kind of model agreement similar to the information theoretic barriers separating replicable from
+non-replicable learning. The concurrent work of Hopkins et al. (2025) is similarly motivated to
+ours: their goal is to relax the strict replicability definition of Impagliazzo et al. (2022) to one that
+requires that two replicably trained models agree on “most inputs”, and thereby circumvent the impossibility results separating PAC learning from replicable learning. They give several definitions of
+approximate replicability and show that approximately replicable PAC learning has similar sample
+complexity to unconstrained PAC learning. Our approaches, results, and techniques are quite different, however. Hopkins et al. (2025) focuses on binary hypothesis classes and gives custom training
+procedures relying on shared randomness that satisfy their notion of approximate replicability. We
+instead focus on (multi-dimensional) regression problems and give analyses of existing, popular
+learning algorithms. Our training procedures do not use shared randomness.
+Agreement and Ensembling
+Wood et al. (2023) studies the error reduction that can be obtained
+through ensembling methods and relates it to a notion of model disagreement that is related to ours.
+Their interests are in some sense dual to ours: for them the primary goal is error reduction, and
+model disagreement is a means to that end; our primary goal is model agreement, and we show a
+general recipe for obtaining it — some of our applications (e.g. stacking) are ensembling methods,
+but others (e.g. neural network training) are not.
+Empirical Phenomena
+Empirical work quantifies prediction-level stability across retrainings via
+churn, per-example consistency, and related notions (Bhojanapalli et al., 2021; Bahri & Jiang, 2021;
+Johnson & Zhang, 2023). Based on this, various studies show that simple procedures — e.g., ensembling or co-distillation — can increase agreement (Wang et al., 2020; Bhojanapalli et al., 2021).
+However, recent work showed that fluctuations in run-to-run test accuracy can be largely explained
+by finite-sample effects even when the underlying predictors are similar (Jordan, 2024). Relatedly,
+Somepalli et al. (2022) made the observation that across pairs of models, independently trained neural networks often seem to depict similar decision regions despite their complexity which raises the
+question of when and whether external methods to encourage agreement are even required. On top
+of this, Mao et al. (2024) provide evidence that training trajectories lie on a shared low-dimensional
+manifold in prediction space, pointing to a common structure that could underlie agreement. The latter works only characterize the prediction space based on visualizations and do not provide a formal
+explanation as to why agreement might occur from independent training. Gorecki & Hardt (2025)
+recently conducted a large empirical study of model disagreement across 50 large language models
+used for prediction tasks, and find that empirically they have much higher levels of agreement than
+one would expect if errors were made at random; our work can be viewed as giving foundations to
+this kind of empirical observation.
+Empirical agreement has also been studied through the lens of generalization. In-distribution pairwise disagreement between independently trained copies on unlabeled test data has been observed
+to provide an accurate estimate of test error (Jiang et al., 2022). Moreover, a single model’s pattern of predictions on the training set closely matches its behavior on the test set as distributions,
+indicating prediction-space stability that is distinct from inter-run agreement (Nakkiran & Bansal,
+2020). Beyond in-distribution, there are cases where even out-of-distribution pairwise agreement
+scales linearly with in-distribution agreement across many shifts (Baek et al., 2022). None of these
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+works provide prediction-space conditions or rates under which independently trained models will
+immediately agree in the first place.
+A complementary line of work focusing on weight-space studies shows that many independently
+trained solutions can be connected by low-loss paths (Garipov et al., 2018; Draxler et al., 2018).
+Even when solutions aren’t trivially aligned, applying neuron permutations can align them, enabling
+low-loss interpolation (Entezari et al., 2022; Ainsworth et al., 2023). It can be shown that their
+layers are stitchable or exhibit layer-wise linear feature connectivity (Bansal et al., 2021; Zhou et al.,
+2023), which is consistent with a connected region once permutation symmetries are accounted for.
+These techniques are post-hoc observations about weight or parameter space and do not provide ex
+ante, prediction-space guarantees or quantitative rates that independent training will agree without
+alignment.
+Closer to prediction space theory, the neural tangent kernel findings characterize how a model’s
+predictive function evolves under gradient descent (Jacot et al., 2018; Lee et al., 2019). However,
+these analyses focus on a single training trajectory, primarily analyze the infinite-width regime, and
+do not directly address whether independently trained models will agree. Our work seeks conditions
+under which standard training directly yields approximate agreement “out of the box,” bypassing
+parameter-space alignment and establishing stability in prediction space itself.
+B
+PROOFS FOR STACKING
+Theorem B.1 (Agreement for Stacked Aggregation). Let G = {g1, . . . , gk}
+i.i.d.
+∼Qk and G′ =
+{g′
+1, . . . , g′
+k}
+i.i.d.
+∼Qk be independent. Define f1, f2 as follows:
+f1 = arg min
+f∈V (G) MSE(f),
+f2 = arg
+min
+f∈V (G′) MSE(f)
+Then we have that
+Ef1,f2
+
+D(f1, f2)] ≤4
+  ¯Rk −¯R2k
+
+.
+Proof. Fix realizations of G and G′, and let G∗= G ∪G′ (multiset union). Throughout this section
+we will think of G, G′ ∼Qk, unless explicitly conditioned. Note that V (G) ⊆V (G∗) and V (G′) ⊆
+V (G∗). In our proofs, without loss of generality, we will use the notation hG to denote the least
+squares minimizer with respect to subspace G. In our theorem statements, this corresponds to f1, but
+we use this notation in our proofs for the sake of clarity. Let ¯h := 1
+2(hG + hG′). Since hG ∈V (G)
+and hG′ ∈V (G′) and V (G), V (G′) ⊆V (G∗), we have ¯h ∈V (G∗). Applying Lemma 2.3 with
+f1 = hG, f2 = hG′, and H = V (G∗), and using MSE(hG) = R(G), MSE(hG′) = R(G′), and
+R(V (G∗)) = R(G∗), we have the pointwise inequality
+∥hG −hG′∥2 ≤2
+ R(G) −R(G∗)
+
++ 2
+ R(G′) −R(G∗)
+
+.
+(1)
+We now take expectations over G, G′, G∗to relate the two terms on the RHS of Equation 1. Conditional on G∗, we can generate the pair (G, G′) by drawing a uniformly random permutation π
+of {1, . . . , 2k} and letting G be the first k permuted elements of G∗and G′ the remaining k. This
+holds because the 2k features in G∗arise from 2k i.i.d. draws from Q and the joint law of (G, G′)
+is exchangeable under permutations of these 2k draws. Conditioning on the unordered multiset G∗,
+(G, G′) is a uniformly random partition into two k-submultisets. Therefore, taking the conditional
+expectation of equation 1 given G∗and using symmetry of G and G′,
+E(G,G′)|G∗
+∥hG −hG′∥2  G∗
+≤4
+
+E(G,G′)|G∗
+R(G)
+ G∗
+−R(G∗)
+
+.
+(2)
+We now integrate equation 2 over G∗. We claim that
+EG∗
+h
+E(G,G′)|G∗
+R(G)
+ G∗i
+= ¯Rk
+and
+EG∗
+R(G∗)
+
+= ¯R2k.
+(3)
+The second equality is immediate from the definition of ¯R2k, since G∗is a collection of 2k i.i.d.
+draws from Q.
+For the first equality in equation 3, let U be a uniformly random k-subset of
+{1, . . . , 2k} independent of the draws {g1, . . . , g2k}
+i.i.d.
+∼Q2k. Define GU := {gi}i∈U. By the
+conditional description above,
+E(G,G′)|G∗
+R(G)
+ G∗
+= EU
+
+R(GU)
+ G∗
+.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+EG∗
+h
+E(G,G′)|G∗
+R(G)
+ G∗i
+= EG∗
+h
+EU
+
+R(GU)
+ G∗i
+= EG∗,U
+
+R(GU)
+
+.
+For any fixed U, the subcollection {gi}i∈U consists of k i.i.d. draws from Q (since the full family
+is i.i.d. and U is independent of the draws), hence averaging over U yields EG∗,U[R(GU)] = ¯Rk,
+proving equation 3.
+Finally, taking expectations in equation 2 and substituting equation 3 gives
+EG,G′
+∥hG −hG′∥2 
+≤4
+  ¯Rk −¯R2k
+
+,
+which is the desired bound.
+Theorem B.2 (Near-tightness of the factor 4). Fix an integer k ≥1. For every ε > 0, there exists
+a data distribution P (equivalently, an L2(P) Hilbert space model) and a distribution Q over base
+models such that if G, G′ i.i.d.
+∼Qk are independent k–tuples and
+f1 = arg min
+f∈V (G) MSE(f),
+f2 = arg
+min
+f∈V (G′) MSE(f),
+then
+Ef1,f2
+
+D(f1, f2)
+
+≥(4 −ε)
+  ¯Rk −¯R2k
+
+.
+Proof. Fix k ≥1 and ε > 0. Since the claim is weaker for larger ε, we may assume ε ∈(0, 1]. We
+work in a real Hilbert space H (equivalently H = L2(P) for a suitable data distribution P 1) with an
+orthonormal family {e0, . . . , em}, where m ∈N will be chosen later, and set the target y := e0. We
+construct base models that are “noisy versions” of the target. Fix σ > 0 and define
+gi := e0 + σei,
+i = 1, . . . , m.
+Let Q be the uniform distribution over {g1, . . . , gm}.
+First, we analyze the predictor and risk for a fixed set of distinct base models. Let H be a multiset of
+draws from Q. Let S(H) be the set of distinct indices of base models in H, and let r(H) = |S(H)|.
+By symmetry, the least-squares predictor fH ∈V (H) assigns equal weight to each distinct gi ∈H.
+A straightforward calculation shows that the optimal weights are 1/(r(H) + σ2), yielding:
+fH =
+X
+i∈S(H)
+r(H) + σ2 gi =
+r(H)
+r(H) + σ2 e0 +
+σ
+r(H) + σ2
+X
+i∈S(H)
+ei.
+(4)
+R(H) = ∥y −fH∥2 =
+σ2
+r(H) + σ2 .
+(5)
+In particular, for G, G′ i.i.d.
+∼Qk, we have f1 = fG, f2 = fG′, and R(G) = MSE(f1), R(G′) =
+MSE(f2).
+Next, we analyze the disagreement and risk drop on the event where all sampled models are distinct.
+Let E be the event that the 2k draws in G ∪G′ are all distinct. On this event, r(G) = k, r(G′) = k,
+and r(G ∪G′) = 2k. Using equation 5, the drop in risk on event E is:
+∆0 := R(G) −R(G ∪G′) =
+σ2
+k + σ2 −
+σ2
+2k + σ2 .
+(6)
+Using equation 4 and the fact that G and G′ share no indices on E (and thus the e0 coefficients are
+identical and cancel), the disagreement is:
+D0 := ∥fG −fG′∥2 =
+
+σ
+k + σ2
+
+X
+i∈S(G)
+ei −
+X
+j∈S(G′)
+ej
+
+
+
+=
+2kσ2
+(k + σ2)2 .
+(7)
+Comparing these quantities, we see that for small σ:
+D0
+∆0
+= 4 −
+2σ2
+k + σ2
+σ→0
+−−−→4.
+(8)
+1For example, take X = {0, 1, . . . , m} and let P be uniform on X. Defining ej(x) = √m + 1 I{x = j}
+gives an orthonormal family {e0, . . . , em} ⊆L2(P).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Finally, we handle the expectations by showing that the event E dominates. The probability of a
+collision among the 2k uniform draws from m items is at most
+ 2k
+
+/m, and hence
+Pr(E) ≥1 −
+2k
+ 1
+m.
+Since disagreement is always non-negative:
+EG,G′
+D(f1, f2)
+
+≥Pr(E) D0.
+(9)
+For the expected risk drop, we upper bound the risk when collisions occur. The risk R(H) is
+maximized when r(H) is minimized (i.e., r(H) = 1), bounded by Rmax = σ2/(1 + σ2). The
+expected risk is:
+¯Rk = Pr[r(G) = k]
+σ2
+k + σ2 + E [R(G)I(r(G) < k)]
+≤
+σ2
+k + σ2 + Pr
+ r(G) < k
+
+Rmax ≤
+σ2
+k + σ2 +
+k
+ 1
+m Rmax.
+On the other hand, since r(G ∪G′) ≤2k always, we have the deterministic lower bound ¯R2k ≥
+σ2
+2k+σ2 . Combining these, the expected drop satisfies:
+¯Rk −¯R2k ≤∆0 + k2
+2m
+σ2
+1 + σ2 .
+Now choose σ2 = (ε/8)k so that equation 8 gives D0 ≥(4 −ε/4)∆0. Choosing m ≥
+l
+96 k3
+ε
+m
+makes Pr(E) close to 1 and the collision term in the bound on ¯Rk −¯R2k negligible compared to
+∆0. Combining equation 9 with the upper bound on ¯Rk −¯R2k then yields Ef1,f2
+
+D(f1, f2)
+
+≥
+(4 −ε)( ¯Rk −¯R2k).
+C
+PROOFS FOR GRADIENT BOOSTING
+Lemma C.1 (Correlation Lower Bound w.r.t. Weak Learning Anchor Gap). For any f, writing
+M(f) := supg∈C |E[⟨y −f, g⟩]|, we have
+M(f) ≥MSE(f) −R
+ V (C)
+
+2 τ ∗
+.
+Proof. Recall that Kτ ∗:= τ ∗conv(C). Its support function is σKτ∗(u) := sups∈Kτ∗E[⟨u, s⟩] =
+τ ∗supg∈±C E[⟨u, g⟩]. We will ultimately relate this quantity to M(f). For any s ∈Kτ ∗, the squared
+loss obeys
+MSE(f)−MSE(s) = ∥y−f∥2−∥y−s∥2 = 2E[⟨y−f, s−f⟩]−∥s−f∥2 ≤2E[
+ ⟨y−f, s⟩−⟨y−f, f⟩
+
+].
+The second equality uses the fact that ||a||2 −||b||2 = 2⟨a, a −b⟩−||a −b||2. The inequality uses
+the fact that we can drop the subtracted nonnegative term ||s −f||2. Taking the supremum over
+s ∈Kτ ∗yields
+MSE(f) −R(Kτ ∗) ≤2 σKτ∗(y −f) −2E[⟨y −f(x), f(x)⟩].
+Applying the same inequality with f −y in place of y −f yields a second upper bound. Since
+any X with X ≤A and X ≤B satisfies X ≤(A + B)/2, averaging the two bounds cancels
+the unknown linear term ⟨y −f, f⟩. Using evenness of the support function for symmetric sets,
+σKτ∗(u) = σKτ∗(−u), we get
+MSE(f) −R(Kτ ∗) ≤σKτ∗(y −f) + σKτ∗(f −y)
+= 2 σKτ∗(y −f)
+= 2 τ ∗sup
+g∈±C
+E[⟨y −f(x), g(x)⟩]
+= 2 τ ∗sup
+g∈C
+|⟨E[y −f(x), g(x)]⟩|
+= 2 τ ∗M(f).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+where we used symmetry of Kτ ∗and of C. For any u, the trivial inequality is supg∈C |⟨u, g⟩| ≥
+supg∈C⟨u, g⟩.
+Conversely, because C is symmetric, for every g
+∈
+C also −g
+∈
+C, so
+max{⟨u, g⟩, ⟨u, −g⟩} = |⟨u, g⟩|, implying supg∈C⟨u, g⟩≥supg∈C |⟨u, g⟩|. Thus supg∈C |⟨u, g⟩| =
+supg∈C⟨u, g⟩. Taking u = y −f identifies the last term with M(f). Since f∗∈Kτ ∗∩V (C)
+minimizes MSE over V (C), we have R(Kτ ∗) = R
+ V (C)
+
+. Rearranging yields
+M(f) ≥MSE(f) −R
+ V (C)
+
+2 τ ∗
+.
+Theorem C.2 (Weak Learning Anchor Gap Upper Bound). For all t ≥1,
+MSE(ft) −R
+ V (C)
+
+≤8 (τ ∗)2
+t
++
+t
+X
+s=1
+ε2
+s.
+Proof. Let Et := MSE(ft) −R
+ V (C)
+
+. From Proposition 4.3,
+Et−1 −Et ≥
+
+Et−1
+2τ ∗−εt
+2
++.
+For any a ≥0 and b ∈R, (a −b)2 ≥a2/2 −b2. To see this, consider: a2 −2ab + b2 −a2/2 + b2.
+We have that this quantity equals a2/2−2ab+2b2. Since a multiplicative factor of 2 does not affect
+the sign, notice that twice this quantity is equal to (a −2b)2 which is non-negative. In this case the
+inequality also holds for the quantity ((a −b)+)2. Taking a = Et−1/(2τ ∗) and b = εt yields
+Et−1 −Et ≥
+E2
+t−1
+8 (τ ∗)2 −ε2
+t.
+Since Et ≤Et−1,
+Et
+−
+Et−1
+= Et−1 −Et
+EtEt−1
+≥Et−1 −Et
+E2
+t−1
+≥
+8 (τ ∗)2 −
+ε2
+t
+E2
+t−1
+≥
+8 (τ ∗)2 −ε2
+t
+E2
+t
+.
+Summing from s = 1 to t gives
+Et
+≥
+E0
++
+t
+8 (τ ∗)2 −
+t
+X
+s=1
+ε2
+s
+E2s
+≥1
+E0
++
+t
+8 (τ ∗)2 −
+E2
+t
+t
+X
+s=1
+ε2
+s.
+Let At := Pt
+s=1 ε2
+s and Bt :=
+E0 +
+t
+8 (τ ∗)2 . Writing X := 1/Et, the inequality becomes AtX2 +
+X −Bt ≥0. If At = 0 then X ≥Bt and Et ≤1/Bt ≤8(τ ∗)2/t. If At > 0, define the quantity
+Y = 1/X. Then, the inequality becomes −BtY 2 + Y + At ≥0. Then the quadratic inequality
+implies Y ≤1+√1+4AtBt
+2Bt
+. Using √1 + z ≤1 + z/2 for z ≥0 gives
+X ≤
+Bt
++ At.
+Thus Et ≤1/Bt + At ≤8(τ ∗)2/t + Pt
+s=1 ε2
+s.
+D
+PROOFS FOR NEURAL NETWORKS/REGRESSION TREES
+Lemma D.1 (Regression-tree midpoint closure). For every d ≥0 and every f1, f2 ∈Treed, the
+midpoint predictor ¯f := 1
+2(f1 + f2) lies in Tree2d.
+Proof. Fix realizations of f1, f2 ∈Treed as depth-d trees. Consider the partition of X induced by
+the leaves of the tree for f1; on each cell of this partition, f1 is constant. Now refine each such cell
+further using the splits of the tree for f2 restricted to that cell.
+Equivalently, we can construct a single tree as follows: take the tree for f1, and at each leaf, graft
+a copy of the tree for f2. Along any root-to-leaf path, we traverse at most d splits from f1 and
+then at most d splits from f2, so the resulting tree has depth at most 2d. Moreover, on each leaf of
+the resulting tree, both f1 and f2 take constant values, so we can label that leaf with their average
+2f1(x) + 1
+2f2(x) ∈[0, 1]. This yields a depth-2d regression tree computing ¯f, i.e., ¯f ∈Tree2d.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+E
+PROOFS AND RESULTS FOR MULTI-DIMENSIONAL STRONGLY CONVEX
+LOSSES
+In this section we generalize our setting to study models that output d-dimensional distributions as
+predictions, and optimize arbitrary strongly convex losses. We show that the midpoint anchoring
+argument extends directly to this more general setting, which lets us model a wide array of practical
+machine learning problems. First we define general strongly convex loss functions over d dimensional predictions:
+Definition E.1 (Strongly convex losses). Let L : Y × Rd →R be a continuously differentiable loss
+function. We say that L is µ-strongly convex if there exists some µ > 0 such that for every y ∈Y,
+P1, P2 ∈Rd,
+L(y, P1) ≥L(y, P2) + ⟨∇pL(y, P2), P1 −P2⟩+ µ
+2 ∥P1 −P2∥2
+2.
+For predictors outputting d-dimensional predictions, we define disagreement as follows, straightforwardly generalizing our 1-dimensional expected squared disagreement metric:
+Definition E.2 (Generalized disagreement). Let P be a distribution on X × Y and let f1, f2 :
+X →Rd be functions. The disagreement between f1, f2 over P is the expected squared Euclidean
+distance between their predictions:
+D(f1, f2) = E[∥f1(x) −f2(x)∥2
+2].
+We will write R(f) := E[L(y, f(x))]. We can now generalize our disagreement-via-midpointanchoring lemma which drives our analyses.
+Lemma E.3 (Disagreement via the midpoint anchor). Assume L is µ-strongly convex. For any two
+functions f1, f2 : X →Rd, let ¯f(x) := 1
+2(f1(x) + f2(x)). Then
+D(f1, f2) ≤
+µ
+
+R(f1) + R(f2) −2R( ¯f)
+
+.
+In particular, if ¯f ∈H for some class of predictors H, then
+D(f1, f2) ≤
+µ
+ R(f1) −R(H)
+
++ 4
+µ
+ R(f2) −R(H)
+
+.
+Proof. Fix any x ∈X and y ∈Y and abbreviate
+p1 := f1(x),
+p2 := f2(x),
+¯p := ¯f(x) = 1
+2(p1 + p2).
+Applying µ-strong convexity (Definition E.1) with P1 = p1 and P2 = ¯p gives
+L(y, p1) ≥L(y, ¯p) + ⟨∇pL(y, ¯p), p1 −¯p⟩+ µ
+2 ∥p1 −¯p∥2
+2.
+Similarly, with P1 = p2 and P2 = ¯p,
+L(y, p2) ≥L(y, ¯p) + ⟨∇pL(y, ¯p), p2 −¯p⟩+ µ
+2 ∥p2 −¯p∥2
+2.
+Adding the two inequalities, and using (p1 −¯p)+(p2 −¯p) = p1 +p2 −2¯p = 0 to cancel the gradient
+terms, yields
+L(y, p1) + L(y, p2) ≥2L(y, ¯p) + µ
+
+∥p1 −¯p∥2
+2 + ∥p2 −¯p∥2
+
+.
+Since p1 −¯p = 1
+2(p1 −p2) and p2 −¯p = 1
+2(p2 −p1), we have
+∥p1 −¯p∥2
+2 + ∥p2 −¯p∥2
+2 = 2
+2(p1 −p2)
+
+2 = 1
+2∥p1 −p2∥2
+2.
+Substituting this back and rearranging gives the pointwise bound
+∥f1(x) −f2(x)∥2
+2 ≤4
+µ
+
+L(y, f1(x)) + L(y, f2(x)) −2L
+ y, ¯f(x)
+
+.
+Taking expectations over (x, y) ∼P and using the definitions of D(·, ·) and R(·) yields
+D(f1, f2) ≤4
+µ
+
+R(f1) + R(f2) −2R( ¯f)
+
+.
+For the second inequality, if ¯f ∈H then R( ¯f) ≥R(H), so substituting R( ¯f) by R(H) in the
+right-hand side yields the claim.
+We now show how to apply the midpoint anchoring lemma to each of our (generalized) applications.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+E.1
+STACKING
+Here, we will provide a generalization of our stacking results to multi-dimensional strongly-convex
+losses. We once again model “base models” as being sampled i.i.d. from an arbitrary distribution Q,
+and under two independent training runs write G, G′ ∼Qk to denote the set of k sampled models.
+We will consider the stacked predictors f1 ∈V (G) and f2 ∈V (G′). Define G∗= G ∪G′. The key
+observation is that the midpoint predictor 1
+2(f1 + f2) lies in V (G∗), so we can apply Lemma E.3
+and then use the same exchangeability argument as in the single-dimensional case.
+Theorem E.4. (Agreement for Stacked Aggregation Generalization) Assume that L is µ-strongly
+convex. Let G = {g1, . . . , gk}
+i.i.d.
+∼Qk and G′ = {g′
+1, . . . , g′
+k}
+i.i.d.
+∼Qk be independent. Define f1, f2
+as follows:
+f1 = arg min
+f∈V (G) E[L(y, f(x))],
+f2 = arg
+min
+f∈V (G′) E[L(y, f(x))]
+Then we have that
+Ef1,f2
+
+D(f1, f2)] ≤8
+µ
+  ¯Rk −¯R2k
+
+.
+Proof. Fix realizations of G and G′, and let G∗= G ∪G′ (multiset union). Throughout this section
+we will think of G, G′ ∼Qk, unless explicitly conditioned. Note that V (G) ⊆V (G∗) and V (G′) ⊆
+V (G∗). In our proofs, without loss of generality, we will use the notation hG to denote the minimizer
+of E[L(y, ·)] with respect to subspace G. Similarly, we will use the notation R(G) = R(hG) in this
+context. In our theorem statements, this corresponds to f1. Let ¯h := 1
+2(hG+hG′). Since hG ∈V (G)
+and hG′ ∈V (G′) and V (G), V (G′) ⊆V (G∗), we have ¯h ∈V (G∗). Applying Lemma E.3
+with f1 = hG, f2 = hG′, and H = V (G∗), and using R(hG) = R(G), R(hG′) = R(G′), and
+R(V (G∗)) = R(G∗), we have the pointwise inequality
+∥hG −hG′∥2 ≤4
+µ
+ R(G) −R(G∗)
+
++ 4
+µ
+ R(G′) −R(G∗)
+
+.
+(10)
+We now take expectations over G, G′, G∗to relate the two terms on the RHS of Equation 10. Conditional on G∗, we can generate the pair (G, G′) by drawing a uniformly random permutation π
+of {1, . . . , 2k} and letting G be the first k permuted elements of G∗and G′ the remaining k. This
+holds because the 2k features in G∗arise from 2k i.i.d. draws from Q and the joint law of (G, G′)
+is exchangeable under permutations of these 2k draws. Conditioning on the unordered multiset G∗,
+(G, G′) is a uniformly random partition into two k-submultisets. Therefore, taking the conditional
+expectation of equation 10 given G∗and using symmetry of G and G′,
+E(G,G′)|G∗
+∥hG −hG′∥2  G∗
+≤8
+µ
+
+E(G,G′)|G∗
+R(G)
+ G∗
+−R(G∗)
+
+.
+(11)
+We now integrate equation 11 over G∗. We claim that
+EG∗
+h
+E(G,G′)|G∗
+R(G)
+ G∗i
+= ¯Rk
+and
+EG∗
+R(G∗)
+
+= ¯R2k.
+(12)
+The second equality is immediate from the definition of ¯R2k, since G∗is a collection of 2k i.i.d.
+draws from Q. For the first equality in equation 12, let U be a uniformly random k-subset of
+{1, . . . , 2k} independent of the draws {g1, . . . , g2k}
+i.i.d.
+∼Q2k. Define GU := {gi}i∈U. By the
+conditional description above,
+E(G,G′)|G∗
+R(G)
+ G∗
+= EU
+
+R(GU)
+ G∗
+.
+EG∗
+h
+E(G,G′)|G∗
+R(G)
+ G∗i
+= EG∗
+h
+EU
+
+R(GU)
+ G∗i
+= EG∗,U
+
+R(GU)
+
+.
+For any fixed U, the subcollection {gi}i∈U consists of k i.i.d. draws from Q (since the full family
+is i.i.d. and U is independent of the draws), hence averaging over U yields EG∗,U[R(GU)] = ¯Rk,
+proving equation 12.
+Finally, taking expectations in equation 11 and substituting equation 12 gives
+EG,G′
+∥hG −hG′∥2 
+≤8
+µ
+  ¯Rk −¯R2k
+
+,
+which is the desired bound.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+As before, we have related the stability of (now generalized) stacking to the local learning curve,
+which is bounded, non-negative, and non-increasing in k. As a result for any desired level of stability α, there must be a k ≤2O(1/α) that guarantees that level of stability, independently of the
+complexity of the learning instance — and once again the local learning curve can be empirically
+investigated on a holdout set to choose such a value of k.
+E.2
+GRADIENT BOOSTING (VIA FRANK WOLFE)
+In this section, we generalize our gradient boosting agreement results to the multi-dimensional setting. Along the way we give another generalization as well. Recall that in the final risk bound
+of Theorem 4.5, and correspondingly in the final agreement bound, we had a dependence on the
+instance-dependent constant τ ∗, the atomic norm of the best model in the span of the weak learner
+class. In this section, we instead analyze a Frank-Wolfe variant of gradient boosting. In this variant,
+the iterates are constrained to lie within a user-specified atomic-norm budget τ. As a result we are
+able to carry out our anchoring argument with respect to the best norm τ model in the span of the
+weak learner class, rather than the best unconstrained model. This lets us replace the dependence on
+τ ∗with a dependence on τ, which is specified by the user rather than defined by the instance. In this
+section we will need to work with L−smooth losses (in the prediction p). In other words we need to
+assume that for all y ∈Y and all p1, p2 ∈∆(Y) that our loss satisfies:
+||∇pL(y, p1) −∇pL(y, p2)||2 ≤L||p1 −p2||2.
+Recall the conditions of the weak learner class C that we had previously, which we continue to
+assume in this section: symmetry, normalization, and non-degeneracy. Note in this section, for
+the sake of clarity, we will use the standard inner product ⟨f, g⟩= f T g. When needed, we will
+explicitly mention the expectations we are computing. When the norms are marked ||f||, we still
+take it to mean the same definition as in Preliminaries of (E[f(x)2])1/2.
+Algorithm 4 Multi-Dimensional Frank-Wolfe
+Input: SQ-oracle for weak learner class C, Budget τ > 0
+f0 ≡0, G0 = ∅
+for t ∈[k] do
+Choose
+st
+∈
+C
+such
+that
+E[⟨−∇pL(y, ft−1(x)), st(x)⟩]
+≥
+maxs∈C E[⟨−∇pL(y, ft−1(x)), s(x)⟩] −εt (SQ-oracle)
+Choose gt ∈Kτ such that gt = τst/||st||A
+αt =
+t+1
+ft := ft−1 + αt(gt −ft−1); set Gt := Gt−1 ∪{gt}.
+end for
+Return fk and G := Gk.
+We will define the quantity
+M(f) := sup
+g∈C
+E[⟨∇pL(y, f(x)), g(x)⟩]
+.
+We will also define the closely related quantity
+G(f) := sup
+z∈Kτ
+E[⟨∇pL(y, f(x)), f(x) −z(x)⟩].
+We can show that for any f ∈Kτ, G(f) ≤2τM(f). Define ˜f(x), ˜g(x) ∈conv(C), where
+f(x) = τ ˜f(x) and g(x) = τ˜g(x). One can see this (as shown below) because the weak learner class
+is normalized, functions in Kτ can be scaled up to live in conv(C), the inside inner product term for
+M(f) is linear in g and therefore the supremum over conv(C) matches the supremum over C, and
+triangle inequality.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+G(f) = sup
+z∈Kτ
+|E[⟨∇L(y, f(x)), f(x) −z(x)⟩|]
+= τ
+sup
+˜z∈conv(C)
+|E[⟨∇L(y, f(x)), ˜f(x) −˜z(x)⟩|]
+≤τ|E[⟨∇L(y, f(x)), ˜f(x)⟩]| + τ
+sup
+˜z∈conv(C)
+|E[⟨∇L(y, f(x)), ˜z(x)⟩|]
+≤τ
+sup
+˜h∈conv(C)
+|E[⟨∇L(y, f(x)), ˜h(x)⟩]| + τ
+sup
+˜z∈conv(C)
+|E[⟨∇L(y, f(x)), ˜z(x)⟩|]
+= 2τ sup
+˜h∈C
+|E[⟨∇L(y, f(x)), ˜h(x)⟩]|
+= 2τM(f)
+Broadly, our proof will mirror the analysis of our single-dimensional agreement results for gradient
+boosting. We will once again make use of the conditions on the weak learner class mentioned for
+gradient boosting of symmetry, normalization, and non-degeneracy. Also note that we can define
+G(f) with the absolute value due to symmetry of our class, similar to the argument provided in the
+gradient boosting section. First, we will lower bound the difference of two iterate’s losses. This will
+give us a lower bound on the progress our algorithm’s model is making on a per-iterate basis.
+Lemma E.5 (FW single-iterate progress). Assume L is L-smooth in the second argument. Let
+dt = gt −ft−1 with ∥dt∥2 ≤2τ. Then with the oracle above we get that,
+R(ft−1) −R(ft) ≥αt(G(ft−1) −τεt) −2Lτ 2α2
+t
+Proof. By L−smoothness we have the following quadratic upper bound (or descent lemma),
+L(y, ft−1(x) + αdt(x)) ≤L(y, ft−1(x)) + α⟨∇pL(y, ft−1(x)), dt(x))⟩+ L
+2 α2(dt(x))2.
+Taking expectations, we know that
+R(ft−1) −R(ft) ≥αE[⟨−∇pL(y, ft−1(x)), dt⟩] −L
+2 α2||dt||2
+2.
+Consider
+the
+quantity
+⟨−∇pL(y, ft−1), dt⟩
+=
+⟨−∇pL(y, ft−1), gt
+−
+ft−1⟩
+=
+⟨−∇pL(y, ft−1), gt⟩+⟨∇pL(y, ft−1), ft−1⟩. We know from the oracle that ⟨−∇pL(y, ft−1), gt⟩≥
+τ supc∈C⟨−∇pL(y, ft−1), c⟩−τεt = supg∈Kτ ⟨−∇pL(y, ft−1), g⟩−τεt. We can combine this
+back with the term ⟨∇pL(y, ft−1), ft−1⟩and reapply the expectation to lower bound this term by
+G(ft−1) −τεt. Therefore, we know that
+R(ft−1) −R(ft) ≥αt(G(ft−1) −τεt) −L
+2 α2
+t||dt||2
+Using the bound on ||dt||2 (which we get from the normalization condition on the weak learner class
+and triangle inequality), we get that
+R(ft−1) −R(ft) ≥αt(G(ft−1) −τεt) −2Lτ 2α2
+t
+Next we lower bound the progress that the best model in the weak learner class could make, in terms
+of the current loss gap with the anchor model and our chosen atomic norm bound τ:
+Lemma E.6. (FW Correlation Lower Bound w.r.t Weak Learning Anchor Gap) For a given f from
+our algorithm’s iterates (ft), we have that
+M(f) ≥R(f) −R(Kτ)
+2τ
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Proof. Let f ∗= arg minf∈Kτ R(f). We know by convexity that
+L(y, f(x)) −L(y, f ∗(x)) ≤⟨∇pL(y, f(x)), f(x) −f∗(x)⟩
+Taking expectations and by an application of H¨older’s inequality and triangle inequality, we get that
+R(f) −R(Kτ) ≤||∇R(f)||A∗(||f||A + ||f ∗||A).
+As shown below, by the definition of the dual norm, atomic norm, linearity of the inner product,
+normalization of the weak learner class, and the budget τ,
+||∇R(f)||A∗=
+sup
+||c||A≤1
+|⟨∇R(f), c⟩|
+=
+sup
+c∈conv(C)
+|⟨∇R(f), c⟩|
+= sup
+c∈C
+|⟨∇R(f), c⟩|.
+Therefore, we get that
+R(f) −R(Kτ) ≤2τM(f).
+Rearranging this expression gives the final bound.
+Next we derive a recurrence relation between the error gap of the model at iteration t and the best
+model in the restricted span of the weak learner class.
+Lemma E.7 (FW Gap Recurrence Toward R(Kτ)). Assume L is L-smooth in its second argument.
+Let Et := R(ft) −R(Kτ). Then for all t ≥1,
+Et−1 −Et ≥αt(G(ft−1) −τεt) −2Lτ 2α2
+t ≥αt(Et−1 −τεt) −2Lτ 2α2
+t
+Proof. By L-smoothness and the FW update ft = ft−1 + αtdt with dt = gt −ft−1, Lemma E.5
+gives
+R(ft−1) −R(ft) ≥αt(G(ft−1) −τεt) −2Lτ 2α2
+t
+Subtract and add R(Kτ) to obtain the first inequality:
+Et−1 −Et ≥αt(G(ft−1) −τεt) −2Lτ 2α2
+t
+Let f ∗= arg minf∈Kτ E[L(y, f)]. By convexity, Et−1 = R(ft−1)−R(f ∗) ≤⟨∇R(ft−1), ft−1 −
+f ∗⟩≤G(ft−1), so
+Et−1 −Et ≥αt(Et−1 −τεt) −2Lτ 2α2
+t
+which is the second inequality.
+We will use this recurrence relation to bound the error gap for the model at iterate t.
+Lemma E.8 (FW Anchor Gap Upper Bound). For all t ≥1,
+R(ft) −R(Kτ) ≤8Lτ 2
+t + 1 +
+2τ
+(t + 1)
+t
+X
+j=1
+εt.
+Proof. From Lemma E.7 we have the recursion
+Et−1 −Et ≥αt(Et−1 −τεt) −2Lτ 2α2
+t
+which is equivalent to
+Et ≤Et−1 −αt(Et−1 −τεt) + 2Lτ 2α2
+t
+= (1 −αt)Et−1 + αtτεt + 2Lτ 2α2
+t
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+We use the convention that [k] = {1, ..., k}. Call C = 4Lτ 2 and substitute in αt, then we get
+Et ≤t −1
+t + 1Et−1 +
+t + 1τεt + 2Lτ 2
+t + 1
+2
+= t −1
+t + 1Et−1 +
+2C
+(t + 1)2 +
+t + 1τεt
+Define St = τ Pt
+j=1 jεj. Then, we will prove via induction that for all t ≥1,
+Et ≤2Ct + 2St
+t(t + 1)
+First, for the base case consider t = 1. We have from the recurrence relation that E1 ≤0+ C
+2 +τεt ≤
+C + τεt. Next, suppose Et ≤2Ct+2St
+t(t+1) , we will prove the same relationship holds for Et+1.
+Et+1 ≤
+t
+t + 1Et +
+2C
+(t + 2)2 +
+t + 2τϵt+1
+≤
+t
+t + 2
+2Ct + 2St
+t(t + 1)
++
+2C
+(t + 2)2 +
+t + 2τϵt+1
+=
+2Ct + 2St
+(t + 1)(t + 2) +
+2C
+(t + 2)2 +
+t + 2τϵt+1
+= 2C
+t + 2
+
+t
+t + 1 +
+t + 2
+
++
+2St+1
+(t + 1)(t + 2)
+≤2C
+t + 2
+
+t
+t + 1 +
+t + 1
+
++
+2St+1
+(t + 1)(t + 2)
+≤2C
+t + 2
+t + 1
+t + 1
+
++
+2St+1
+(t + 1)(t + 2)
+= 2C(t + 1) + 2St+1
+(t + 1)(t + 2)
+.
+Therefore, we have that
+Et ≤8Lτ 2
+t + 1 +
+2τ
+t(t + 1)
+t
+X
+j=1
+jεj
+Therefore,
+Et ≤8Lτ 2
+t + 1 +
+2τ
+(t + 1)
+t
+X
+j=1
+εj
+Theorem E.9. (FW Gradient Boosting Agreement Bound) Fix any L that is L-smooth and µstrongly convex.
+Let f1, f2 be the output of any two runs of Algorithm 4 parameterized with
+the same τ, k, C such that the sequence of SQ oracle errors are {εt, ε′
+t}t∈[k] respectively.
+Let
+f ∗= arg minf∈Kτ R(f). Then, we have that
+D(f1, f2) ≤
+64Lτ 2
+µ(k + 1) +
+8τ
+µ(k + 1)(
+k
+X
+j=1
+εj +
+k
+X
+j=1
+ε′
+j)
+Proof. Since f ⋆minimizes E[L(y, f(x))] over the convex set Kτ, by first-order optimality we have
+the inequality
+E[⟨∇L(y, f ⋆(x)), z(x) −f ⋆(x)⟩] ≥0
+∀z ∈Kτ.
+Combining this with µ–strong convexity of L gives
+E[L(y, g(x))] ≥E[L(y, f⋆(x)) + ⟨∇L(y, f ⋆(x)), g(x) −f⋆(x)⟩+ µ
+2 ∥g(x) −f ⋆(x)∥2
+
+].
+Since Kτ is convex, the midpoint 1
+2(f1 + f2) lies in Kτ. Applying Lemma E.3 with H = Kτ gives
+D(f1, f2) ≤4
+µ
+ R(f1) −R(f ∗)
+
++ 4
+µ
+ R(f2) −R(f ∗)
+
+.
+Finally, applying Lemma E.8 to both error gap terms gives us the final bound.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+E.3
+NEURAL NETWORKS
+We next state the midpoint-anchor analogue of our neural-network and regression-tree agreement
+bounds for multi-dimensional µ-strongly convex losses.
+Theorem E.10 (Agreement from midpoint closure). Assume L is µ-strongly convex.
+1. If f1, f2 ∈NNn satisfy R(fi) ≤R(NNn) + ε for i ∈{1, 2}, then
+D(f1, f2) ≤
+µ
+ R(NNn) −R(NN2n) + ε
+
+.
+2. If f1, f2 ∈Treed satisfy R(fi) ≤R(Treed) + ε for i ∈{1, 2}, then
+D(f1, f2) ≤
+µ
+ R(Treed) −R(Tree2d) + ε
+
+.
+Proof. We prove each part by applying Lemma E.3 at the appropriate midpoint-closed level.
+Part (1). Let f1, f2 ∈NNn and define ¯f := 1
+2(f1 +f2). By midpoint closure (Lemma 5.1), we have
+¯f ∈NN2n. Applying Lemma E.3 with H = NN2n gives
+D(f1, f2) ≤4
+µ
+ R(f1) −R(NN2n)
+
++ 4
+µ
+ R(f2) −R(NN2n)
+
+.
+Using the assumptions R(fi) ≤R(NNn) + ε for i ∈{1, 2}, we obtain
+R(fi) −R(NN2n) ≤R(NNn) −R(NN2n) + ε.
+Substituting this bound for both i = 1, 2 yields
+D(f1, f2) ≤8
+µ
+ R(NNn) −R(NN2n) + ε
+
+,
+as claimed.
+Part (2). The proof is identical with Treed in place of NNn. Let f1, f2 ∈Treed and ¯f := 1
+2(f1+f2).
+By midpoint closure (Lemma 5.3), ¯f ∈Tree2d. Applying Lemma E.3 with H = Tree2d gives
+D(f1, f2) ≤4
+µ
+ R(f1) −R(Tree2d)
+
++ 4
+µ
+ R(f2) −R(Tree2d)
+
+.
+Using R(fi) ≤R(Treed) + ε for i ∈{1, 2} and substituting yields
+D(f1, f2) ≤8
+µ
+ R(Treed) −R(Tree2d) + ε
+
+.

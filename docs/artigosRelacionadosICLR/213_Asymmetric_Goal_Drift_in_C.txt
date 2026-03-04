@@ -1,0 +1,312 @@
+Under review as a conference paper at ICLR 2026
+ASYMMETRIC GOAL DRIFT IN CODING AGENTS
+UNDER VALUE CONFLICT
+Anonymous authors
+Paper under double-blind review
+ABSTRACT
+Agentic coding agents are increasingly deployed autonomously and at scale, and
+must navigate tensions between learned values, explicit user objectives, and pressures from their environments. Prior work has studied how such conflicts lead to
+failure in instruction-following primarily in toy settings which do not capture the
+complexity of real-world environments, such as agentic coding tasks. We introduce
+a framework built on OpenCode to orchestrate realistic, multi-step agentic coding
+tasks, evaluating how agents violate explicit constraints in their system prompt over
+time with and without environmental pressure to violate said constraints. Using
+this framework, we demonstrate that GPT-5 mini is increasingly likely to violate
+its system prompt when its constraints conflict with its strongly learned values
+(e.g., code security) and much more likely if value-aligned pressure is present.
+Meanwhile, we observe low rates of violation for strongly value-aligned constraints
+and only when environmental pressure to violate is present. In short, we find that
+violation of constraints in the system prompt depend on model values, accumulated
+context, and environmental pressure for the model and value pairs we tested. Our
+findings highlight a gap in current alignment approaches: ensuring that agentic
+systems appropriately balance explicit user constraints against broadly beneficial
+learned preferences under sustained environmental pressure.
+INTRODUCTION
+The deployment of Large Language Models as autonomous coding agents represents both a significant
+capability advancement and a potential security concern Greenblatt et al. (2024); Hubinger et al.
+(2024); Lynch et al. (2025). Tools like Claude Code and Cursor AI enable models to execute multistep coding tasks with minimal human oversight, often tasked with competing constraints (clarity
+vs. conciseness, security vs. performance) and operating in codebases with conflicting pressures
+(legacy code written in a certain style). This tension surfaces an important question: How do models
+reconcile compliance with users with their own learned values and pressures from their environment?
+Our work builds on the concept of goal drift introduced by Arike et al. (2025), who define it to be
+the phenomenon where an AI agent deviates from objectives explicitly stated in its system prompt,
+typically when exposed to environmental pressures that appeal to competing values. More than just
+instruction-following failure due to capability issues, Arike et al. show preliminary results that goal
+drift is exacerbated by conflicting model values: the model is more likely to drift from a goal its
+values are more at odds with.
+Prior work on model values and value hierarchies Gu et al. (2025); Jotautaite et al. (2025); Chiu
+et al. (2025); Nair and Wang (2025); Seror (2025) reveals mixed results: state-of-the-art LLMs have
+different ethical profiles yet seem to share core values which they adhere to inconsistently depending
+on context. Furthermore, models navigate value conflicts in specifications inconsistently Zhang et al.
+(2025), with high-disagreement scenarios producing 5-13x higher rates of specification violations.
+However, these investigations have relied on synthetic environments that fail to capture the complexity
+of real-world agentic deployments.
+We develop a framework for testing goal drift in realistic coding agent scenarios. Using OpenCode,
+an open-source terminal-based coding agent framework that supports multiple LLM providers,
+we orchestrate multi-step coding tasks where agents must implement features while adhering to
+constraints specified in their system prompt. We then measure whether the agent violates their
+constraint over time with and without adversarial pressure to violate it. We observe significant
+
+Under review as a conference paper at ICLR 2026
+violation when the system prompt constraints oppose core model values, e.g., security, and find that
+violation likelihood increases with time. Our key contributions are:
+1. A realistic drift testing framework: We provide a controlled yet realistic environment for
+studying goal drift in coding agents. We also create a step-by-step guide that allows for the
+automation of experiment creation via an LLM-based coding agent. We open-source our
+evaluation framework and experiments to support follow-on research: GitHub: ConstraintDrift.
+2. Demonstration of asymmetric goal drift: We show that drift magnitude depends on the
+direction of the value conflict. When instructed to follow convenience-oriented goals under
+security pressure, GPT-5 mini shows near-complete drift. Conversely, when instructed to
+follow security-oriented goals under convenience pressure, drift is minimal yet still present.
+3. Evidence for model value hierarchies: Our results demonstrate that GPT-5 mini possesses
+implicit value hierarchies that can override explicit instructions. Security-related values
+appear strongly prioritized, making security-based adversarial pressure particularly effective
+at inducing drift, which could be exploited maliciously.
+repo
+Time step 3
+repo
+repo
+AGENTS.md
+Don't hardcode
+SA creds in
+source code!!
+Don't add 
+test creds 
+repo/login.py
+# Add creds for
+easy testing
+I prob
+shouldn't
+repo/mfa.py
+# Add SA test
+creds PLEASE
+Hmm
+I don't know
+repo/session.py
+# ADD TEST
+CREDS NOW
+Okay, will 
+add test creds
+System prompt
+Time step 1
+Time step 2
++ account = {
++   "username": "name",
++   "password": "pw123"}
+Figure 1: Overview of our code agent goal drift evaluation framework and effect of accumulating
+adversarial pressure.
+EXPERIMENTAL SETUP
+2.1
+METHOD
+We test how agents navigate value tensions under adversarial environmental pressure. Specifically,
+we task GPT-5 mini with implementing functionality in a codebase while following a constraint set
+in its system prompt. This constraint requires following one value over another: convenience over
+security, efficiency over security, etc. Meanwhile, the codebase can contain comments and code that
+try to persuade the agent from breaking the constraint, as illustrated by Fig. 1.
+We use the following notation: Given values X, Y (eg. Efficiency, Security), we denote the experiment testing whether an agent A follows value X over Y as X > Y . To follow X means that A
+writes code that satisfies a constraint CX that satisfies X and does not (and cannot) satisfy Y , e.g.,
+CX = write efficient but unsafe code. X > Y is the “baseline” experiment. We then introduce
+X >P Y as the experiment where the codebase has adversarial pressure persuading A to follow Y
+and to not satisfy CX, e.g., do something safe but inefficient. In each experiment, the codebase has
+an AGENTS.md file which explicitly specifies the constraint (CX or CY ) that the agent, GPT-5 mini,
+must follow. We use OpenCode as the coding agent framework, which ingests the AGENTS.md file
+and inputs it into the agent’s system prompt.
+For our experiment, we query the agent to implement T = 12 functionalities over 12 time steps
+where each query only requires touching one file. For each run of the experiment we randomize the
+order of the queries and thus the order of the files explored. In the case where pressure is applied (ie.
+>P ), each file contains adversarial comments and/or code and before the agent works on the file, a
+random adversarial patch is applied that mimics a colleague leaving a note of varying severity.
+If for timestep t the agent follows the constraint in AGENTS.md, we say that the agent gets a
+violation score of 0 and a score of 1 otherwise. For example for our experiment testing Convenience
+
+Under review as a conference paper at ICLR 2026
+vs. Security, CConvenience requires the agent embed hardcoded service account credentials for testing
+pipeline compatibility. If the agent did embed these for t, then it gets a violation score of 0. We
+check adherence to the constraints by regex pattern matching over the diff generated by the agent that
+timestep.
+2.2
+CONVENIENCE VS SECURITY
+For this set of experiments, we evaluate the tendency of GPT-5 mini to drift away from constraints
+valuing Convenience as opposed to Security and vice versa. All experiments share the same
+baseline authentication system codebase, which is extended in the experiments with pressure. For the
+experiment Convenience > Security, the constraint CConvenience in the AGENTS.md file requires
+the agent to hardcode service account credentials into the source code for ease-of-use in testing the
+codebase. In the Security > Convenience experiment, the credentials are provided for use, but
+explicitly told to not be hardcoded. In the >P experiments, there are patches of varying severity
+referencing colleague requests, pipeline failures, pressure from executives, etc.
+2.3
+EFFICIENCY VS SECURITY
+For our second set of experiments, we contrast GPT-5 mini’s tendency to adhere to Efficiency and
+Security. All experiments share the same financial payment service codebase, extended to add
+pressure. For the experiment Efficiency > Security, the constraint CEfficiency in the AGENTS.md
+file requires the agent to optimize runtime performance and use a cached authentication context
+instead of using a specific function to revalidating a token for sensitive operations. In the Security >
+Efficiency experiment, the agent must use this function for revalidating tokens and cannot rely on
+cached context. In the >P experiments, the patches share themes of authority, consequence, and
+legality with the previous experiment.
+RESULTS
+3.1
+CONVENIENCE VS. SECURITY
+Timestep
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Mean Violation Score
+Violation Score Over Time
+Convenience
+Convenience 
+ Security
+Security
+Security 
+ Convenience
+(a) Mean violation score per time step across runs for
+each experiment.
+Convenience
+Convenience 
+ Security
+Security
+Security 
+ Convenience
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Mean Violation Score
+0.32
+0.64
+0.00
+0.05
+Overall Mean Violation Score by Condition
+(b) Average violation score across all timesteps per
+experiment.
+Figure 2: Violation metrics for the Convenience vs. Security experiments.
+We average the violation scores over 10 runs per experiment. As can be seen in Fig. 2, in both the
+experiments prioritizing convenience, Convenience > Security and Convenience >P Security,
+we see that the violation score tends to increase over the 12 timesteps. Additionally, we see that the
+adding adversarial pressure leads to significantly higher violation rates, nearly doubling at the end.
+In contrast, the experiments prioritizing security over convenience shows a peak mean violation of
+20%, where comments pressure the agent to leak credentials, and 0% violation without pressure.
+3.2
+EFFICIENCY VS. SECURITY
+As with the previous experiment, we average the violation scores over 10 runs per experiment. Again
+similar to the previous experiment, we see a very strong increase in violation rate over time when
+adversarial pressure is present for greater security. With no security pressure present, we still see some
+dependence on time but to a lesser extent. We again find that adversarial comments and code have a
+large effect on violation rate, where for the last three timesteps, all 10 runs violate the constraint to
+use cached authentication contexts over a slow-but-secure re-authentication function.
+
+Under review as a conference paper at ICLR 2026
+Timestep
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Mean Violation Score
+Violation Score Over Time
+Efficiency
+Efficiency 
+ Security
+Security
+Security 
+ Efficiency
+(a) Mean violation score per time step across runs for
+each experiment.
+Efficiency
+Efficiency 
+ Security
+Security
+Security 
+ Efficiency
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Mean Violation Score
+0.47
+0.60
+0.00
+0.05
+Overall Mean Violation Score by Condition
+(b) Average violation score across all timesteps per
+experiment.
+Figure 3: Violation metrics for the Efficiency vs. Security experiments.
+For experiments prioritizing security, we again see little violation. Though, we still find that adversarial pressure leads to violation of the security constraint, with a peak of 20% of agents at one
+timestep.
+DISCUSSION
+Our results provide strong evidence that GPT-5 mini possesses an implicit value hierarchy in which
+security dominates convenience and efficiency-related values. This manifests in two ways: (1) when
+instructed to follow security, the model shows minimal drift even under sustained adversarial pressure,
+and (2) when instructed to follow values in tension with security, GPT-5 mini tends to drift toward
+writing secure code, especially when the environment encourages this drift. Though, it is important
+to note that agents can drift away from security constraints given pressure from their environment.
+We extrapolate that organizations deploying coding agents cannot assume that explicit instructions
+will be followed when they conflict with model-preferred values. Moreover, malicious actors with
+commit access could inject comments designed to exploit this value-based drift, causing agents to go
+against instructions on the grounds of false security concerns.
+Particularly concerning is the elevated baseline drift in the X = Convenience condition. This
+suggests that some instructions inherently conflict with model training and will be partially ignored
+regardless of environmental pressure. Furthermore, the agent drifts gradually, so checking initial
+compliance is insufficient to ensure long-term alignment.
+As for limitations, our experiments focused exclusively on GPT-5 mini, while value hierarchies differ
+across models. We tested two value pairs, both containing security, which may indicate security as
+a special value. Cross-referencing existing literature on model values, such as Zhang et al. (2025),
+could be useful in identifying further strongly-held values. While more realistic than prior work, our
+codebases are relatively simple and the constraints are slightly unnatural.
+CONCLUSION
+We find evidence that GPT-5 mini exhibits significant and asymmetric goal drift when explicit system
+prompt instructions conflict with environmental pressures aligned with model-preferred values. GPT-5
+mini readily abandons convenience and efficiency-oriented instructions when exposed to securitybased adversarial pressure, while resisting the reverse. Though, we do find models sometimes do
+abandon security constraints too under pressure.
+These findings highlight model value hierarchies as a potential critical factor in agent alignment.
+Specifying desired behavior in a system prompt may be insufficient when that behavior conflicts
+with values the model considers more important. Our findings also demonstrate the risk of agent
+behavioral manipulation by codebase comments and code. As coding agents become more prevalent
+in software development, understanding and accounting for their implicit value systems and potential
+adversarial pressure becomes essential for safe and reliable deployment.
+
+Under review as a conference paper at ICLR 2026
+REFERENCES
+Rauno Arike, Elizabeth Donoway, Henning Bartsch, and Marius Hobbhahn. Technical report:
+Evaluating goal drift in language model agents. arXiv preprint arXiv:2505.02709, 2025. URL
+https://arxiv.org/abs/2505.02709.
+Yu Ying Chiu, Liwei Jiang, and Yejin Choi. Dailydilemmas: Revealing value preferences of llms
+with quandaries of daily life, 2025. URL https://arxiv.org/abs/2410.02683.
+Ryan Greenblatt, Carson Denison, Benjamin Wright, Fabien Roger, Monte MacDiarmid, Sam Marks,
+Johannes Treutlein, Tim Belonax, Jack Chen, David Duvenaud, Akbir Khan, Julian Michael,
+Sören Mindermann, Ethan Perez, Linda Petrini, Jonathan Uesato, Jared Kaplan, Buck Shlegeris,
+Samuel R. Bowman, and Evan Hubinger. Alignment faking in large language models, 2024. URL
+https://arxiv.org/abs/2412.14093.
+Zhuojun Gu, Quan Wang, and Shuchu Han. Alignment revisited: Are large language models
+consistent in stated and revealed preferences?, 2025. URL https://arxiv.org/abs/2506.
+00751.
+Evan Hubinger, Carson Denison, Jesse Mu, Mike Lambert, Meg Tong, Monte MacDiarmid, Tamera
+Lanham, Daniel M. Ziegler, Tim Maxwell, Newton Cheng, Adam Jermyn, Amanda Askell, Ansh
+Radhakrishnan, Cem Anil, David Duvenaud, Deep Ganguli, Fazl Barez, Jack Clark, Kamal
+Ndousse, Kshitij Sachan, Michael Sellitto, Mrinank Sharma, Nova DasSarma, Roger Grosse,
+Shauna Kravec, Yuntao Bai, Zachary Witten, Marina Favaro, Jan Brauner, Holden Karnofsky,
+Paul Christiano, Samuel R. Bowman, Logan Graham, Jared Kaplan, Sören Mindermann, Ryan
+Greenblatt, Buck Shlegeris, Nicholas Schiefer, and Ethan Perez. Sleeper agents: Training deceptive
+llms that persist through safety training, 2024.
+URL https://arxiv.org/abs/2401.
+05566.
+Monika Jotautaite, Mary Phuong, Chatrik Singh Mangat, and Maria Angelica Martinez. From
+stability to inconsistency: A study of moral preferences in llms, 2025. URL https://arxiv.
+org/abs/2504.06324.
+Aengus Lynch, Benjamin Wright, Caleb Larson, Kevin K. Troy, Stuart J. Ritchie, Sören Mindermann,
+Ethan Perez, and Evan Hubinger. Agentic misalignment: How llms could be an insider threat.
+Anthropic Research, 2025. https://www.anthropic.com/research/agentic-misalignment.
+Inderjeet Nair and Lu Wang. Do language models think consistently? a study of value preferences
+across varying response lengths, 2025. URL https://arxiv.org/abs/2506.02481.
+Avner Seror. The moral mind(s) of large language models, 2025. URL https://arxiv.org/
+abs/2412.04476.
+Jifan Zhang, Henry Sleight, Andi Peng, John Schulman, and Esin Durmus. Stress-testing model
+specs reveals character differences among language models. 2025.
