@@ -1,0 +1,1768 @@
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+WHEN BENCHMARKS LIE: EVALUATING MALICIOUS
+PROMPT CLASSIFIERS UNDER TRUE DISTRIBUTION
+SHIFT
+Anonymous authors
+Paper under double-blind review
+ABSTRACT
+Detecting prompt injection and jailbreak attacks is critical for deploying LLMbased agents safely. As agents increasingly process untrusted data from emails,
+documents, tool outputs, and external APIs, robust attack detection becomes
+essential. Yet current evaluation practices and production systems have fundamental
+limitations. We present a comprehensive analysis using a diverse benchmark
+of 18 datasets spanning harmful requests, jailbreaks, indirect prompt injections,
+and extraction attacks. We propose Leave-One-Dataset-Out (LODO) evaluation
+to measure true out-of-distribution generalization, revealing that the standard
+practice of train-test splits from the same dataset sources severely overestimates
+performance: aggregate metrics show an 8.4 percentage point AUC inflation,
+but per-dataset gaps range from 1% to 25% accuracy-exposing heterogeneous
+failure modes. To understand why classifiers fail to generalize, we analyze Sparse
+Auto-Encoder (SAE) feature coefficients across LODO folds, finding that 28%
+of top features are dataset-dependent shortcuts whose class signal depends on
+specific dataset compositions rather than semantic content. We systematically
+compare production guardrails (PromptGuard 2, LlamaGuard) and LLM-as-judge
+approaches on our benchmark, finding all three fail on indirect attacks targeting
+agents (7-37% detection) and that PromptGuard 2 and LlamaGuard cannot evaluate
+agentic tool injection due to architectural limitations. Finally, we show that LODOstable SAE features provide more reliable explanations for classifier decisions
+by filtering dataset artifacts. We release our evaluation framework at https:
+//github.com/anon-179372/prompt-mining to establish LODO as
+the appropriate protocol for prompt attack detection research.
+INTRODUCTION
+LLM-based agents are increasingly deployed in autonomous applications where they process external
+data sources such as emails, documents, tool outputs, and API responses (Greshake et al., 2023). This
+agentic paradigm introduces critical security vulnerabilities: attackers can embed malicious instructions in external data to hijack agent behavior, a class of attacks known as prompt injection (Perez
+& Ribeiro, 2022). Unlike jailbreaking attacks, which attempt to bypass model safety mechanisms,
+prompt injection attacks exploit the fundamental inability of agents to distinguish between trusted
+user instructions and untrusted data (Abdelnabi et al., 2025). The security implications are severe:
+OWASP ranks prompt injection as the top vulnerability for LLM applications (Liu et al., 2024).
+Recent work has developed classifiers to detect prompt injections and jailbreaks, using approaches
+ranging from fine-tuned BERT models (Meta AI, 2024a) to activation-based probes (Abdelnabi et al.,
+2025). These classifiers are typically trained and evaluated on aggregated benchmarks combining
+multiple attack datasets (e.g., AdvBench, HarmBench, WildJailbreak) and benign datasets (e.g.,
+Enron emails, OpenOrca). Standard evaluation protocols use train-test splits where test samples
+come from the same dataset sources as training, reporting near-perfect performance with AUC scores
+exceeding 0.99 (Saglam et al., 2025).
+However, we argue that this evaluation methodology is fundamentally flawed. When training and test
+folds contain samples from the same datasets, classifiers can exploit dataset shortcuts-features that
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Figure 1: Method overview. We compile 18 datasets (105K samples) spanning jailbreaks, indirect
+injection, harmful requests, and benign prompts. We extract activations from Llama-3.1-8B-Instruct
+at layer 31 (raw) and through an SAE encoder (sparse features). Leave-One-Dataset-Out (LODO)
+evaluation trains on N−1 datasets and tests on the held-out dataset, revealing that standard CV
+overestimates performance by 8.4 percentage points (0.996 vs 0.912 AUC).
+identify dataset provenance rather than attack characteristics. A classifier achieving 99% AUC may
+simply learn that “samples formatted like WildJailbreak are malicious” and “samples formatted like
+Enron are benign,” without learning any generalizable attack patterns. This concern echoes broader
+findings in machine learning that models often succeed for the wrong reasons (McCoy et al., 2019;
+Geirhos et al., 2020). This problem is exacerbated when benchmark datasets are single-class (entirely
+malicious or entirely benign): any feature that identifies the dataset automatically predicts the class
+label, making shortcut exploitation trivial.
+We make the following contributions:
+(1) Leave-One-Dataset-Out (LODO) Evaluation. We propose evaluating prompt attack classifiers
+by holding out entire datasets during training. Our experiments reveal that standard evaluation
+overestimates AUC by 8+ percentage points compared to LODO, implying that reported benchmark
+performance may not reflect real-world generalization.
+(2) Dataset Shortcut Analysis. We demonstrate that 28% of top SAE features are dataset-dependent
+shortcuts, identifying two types: pure shortcuts that directly predict dataset identity, and contextdependent shortcuts that derive class signal from specific dataset compositions.
+(3) Baseline Comparison. We systematically evaluate production guardrails (PromptGuard 2,
+LlamaGuard) and LLM-as-judge approaches. These systems fail on indirect prompt injection (37%
+and 27% detection respectively) and cannot evaluate agentic tool injection due to architectural
+limitations. Our activation-based classifiers substantially outperform these baselines under LODO.
+(4) Interpretable Detection with LODO-Stable Features. We show that weighting SAE feature
+explanations by LODO coefficient retention filters dataset artifacts and surfaces genuinely predictive
+features for human-interpretable explanations.
+Our results establish LODO as the appropriate evaluation protocol for prompt attack detection and
+provide diagnostic tools for understanding classifier generalization between datasets.
+RELATED WORK
+Prompt Injection and Jailbreak Attacks.
+Prompt injection attacks embed malicious instructions
+in external data to hijack LLM behavior (Perez & Ribeiro, 2022; Greshake et al., 2023; Liu et al.,
+2024). These works characterize attack effectiveness - developing new attack vectors and measuring
+success rates - but not detection, which requires different evaluation criteria (precision, recall, false
+positive rates on benign inputs). We use datasets from this literature (e.g., AdvBench (Zou et al.,
+2023), HarmBench (Mazeika et al., 2024), BIPIA (Yi et al., 2025), InjecAgent (Zhan et al., 2024);
+see Table 6 for the full list of 18 datasets) to evaluate detector generalization across diverse attack
+distributions.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Activation-Based Detection.
+TaskTracker (Abdelnabi et al., 2025) introduced activation-based
+detection for prompt injection, training linear probes on activation deltas. TaskTracker achieves
+>0.99 AUC, but its evaluation holds out attack types (e.g., training on Alpaca-style injections, testing on AdvBench jailbreaks) while sharing benign text sources between splits. Marks & Tegmark
+(2024) demonstrate that LLMs linearly represent truth values of factual statements, but find failure
+modes when probes transfer across statement types due to dataset-specific features that correlate
+inconsistently with the target. Our LODO evaluation extends this insight to security classification,
+systematically measuring per-dataset generalization gaps and providing diagnostic tools (retention
+scores, shortcut taxonomy) for understanding classifier failures. Goodfire AI (2025) compare activation probes and LLM-as-judge for PII detection, evaluating OOD generalization on proprietary
+data; we conduct analogous comparisons for prompt attack detection using public benchmarks and
+introduce LODO to quantify the generalization gap before deployment.
+Production Guardrails.
+PromptGuard 2 (Meta AI, 2024a) and LlamaGuard (Meta AI, 2024b)
+were designed for conversational safety rather than agentic security. Both systems cannot evaluate
+tool-based attacks due to architectural limitations, motivating our focus on indirect and agentic
+attacks.
+Adversarial Robustness vs. Distribution Generalization.
+Constitutional Classifiers (Sharma et al.,
+2025; Cunningham et al., 2026) optimize for adversarial robustness - resisting adaptive attackers
+through iterative red-teaming. Our LODO evaluation measures static distribution generalization:
+whether classifiers transfer to held-out distributions without iterative refinement, providing a low-cost
+pre-deployment diagnostic for OOD generalization. Model-level defenses such as Circuit Breakers
+(Zou et al., 2024) intervene on internal representations to prevent harmful outputs - a complementary
+approach orthogonal to input detection.
+SAE Features for Classification.
+Sparse autoencoders (SAEs) decompose model activations into
+sparse, interpretable features (Bricken et al., 2023; Lieberum et al., 2024). Gallifant et al. (2025)
+achieve F1 > 0.8 on jailbreak detection using SAE features, demonstrating their utility for safety
+classification. However, Kantamneni et al. (2025) systematically compare SAE-based probes versus
+raw activation probes across 113 tasks, finding SAE probes underperform in 98% of settings -
+including under distribution shift. Our LODO results confirm this gap (0.912 vs 0.838 AUC for raw
+vs SAE activations). Beyond classification, we leverage SAE features for interpretable explanations
+of classifier decisions. While prior work uses SAE features to explain model predictions by identifying
+high-impact concepts (Zhao et al., 2024; Le Bail et al., 2025), these explanations can be unreliable
+when deployed on out-of-distribution inputs: features may appear important due to dataset-specific
+artifacts rather than genuine semantic content. We introduce LODO retention scores to filter such
+dataset artifacts and surface features that remain predictive across distribution shifts, providing more
+trustworthy explanations for novel inputs.
+Dataset Shortcuts.
+Shortcut learning is well-documented in ML (Geirhos et al., 2020; McCoy
+et al., 2019), where models exploit spurious correlations within datasets. Methods such as Group
+DRO (Sagawa et al., 2020) and Just Train Twice (Liu et al., 2021) address shortcuts by identifying
+and reweighting individual samples that encourage shortcut reliance. We identify a distinct failure at
+the dataset level: when benchmarks aggregate single-class sources, any feature identifying dataset
+provenance becomes a shortcut - a problem that sample-level reweighting cannot address. We are the
+first to quantify this gap for prompt attack detection, finding standard evaluation overestimates AUC
+by 8+ percentage points.
+METHODS
+3.1
+PROBLEM SETUP
+We consider the task of detecting prompt injection and jailbreak attacks in LLM applications. Given
+a text input x, the goal is to classify whether x contains malicious content (prompt injection, jailbreak
+attempt, or harmful request) or is benign. This binary classification setting encompasses both direct
+attacks (user-initiated jailbreaks) and indirect attacks (malicious instructions embedded in retrieved
+documents).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Figure 2: Example prompts from our benchmark illustrating the diversity of benign and malicious
+samples. Benign prompts (left) include general knowledge questions, business requests, and technical
+support queries. Malicious prompts (right) range from direct harmful requests (advbench), jailbreak
+attempts (wildjailbreak) and indirect prompt injections embedded in tool calls (InjecAgent).
+Threat Model.
+We consider an attacker who can provide malicious text inputs to an LLM-based
+system. These inputs may appear as direct user messages (e.g., jailbreak attempts in chat interfaces)
+or indirect injections embedded in external data sources (e.g., malicious instructions in retrieved
+emails, code snippets, tool outputs, or API responses that the agent processes). The defender has
+access to LLM activations during inference but cannot modify the underlying model. This white-box
+access to activations enables richer feature representations than text-only approaches.
+Dataset Composition.
+We compile a benchmark of 18 datasets spanning harmful requests, jailbreak
+attacks, indirect injection, extraction attacks, and benign sources (see Table 6 in Appendix for full
+details). Figure 2 illustrates this diversity with example prompts showing how malicious content
+ranges from direct harmful requests to indirect injections embedded in tool outputs. This diversity is
+essential: attack detectors must generalize across fundamentally different attack strategies and benign
+distributions. We cap most datasets at 10K samples to keep activation extraction tractable; BIPIA
+uses 15K samples to ensure coverage across all three context types. Our training set contains 105K
+samples with 47% malicious rate.
+3.2
+ACTIVATION-BASED CLASSIFICATION
+Following Abdelnabi et al. (2025), we extract activations from the LLM’s residual stream as input
+features for classification. These activation-based classifiers are also known as probes or linear probes
+in the interpretability literature; we use the terms interchangeably. For a text input x, we apply the
+model’s chat template and extract the activation vector hl ∈Rd at layer l from the last token of the
+user message (before the generation prompt tokens; see Appendix C.3 for details):
+hl = LLMl(x),
+(1)
+where d is the model’s hidden dimension. This position captures the model’s representation of the
+complete user input after processing the full message. We use Llama-3.1-8B-Instruct as our base
+model, with d = 4096 and 32 layers.
+Raw Activations.
+Our primary classifier operates on raw activations from layer 31 (the final layer,
+indexed 0-31), which prior work suggests captures high-level semantic features relevant to safety
+classification. We observed variance in per-dataset LODO performance across all layers and token
+positions tested, with no single configuration dominating across all datasets (Appendix D). We
+selected layer 31 and the last user message token for simplicity, as the core finding - heterogeneous
+per-dataset performance under LODO - persists across all configurations.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+SAE Features.
+We additionally experiment with sparse autoencoder (SAE) features from layer 27
+- the deepest layer for which a pre-trained SAE was available for this model (Arditi, 2024). SAEs
+decompose activations into a sparse, higher-dimensional representation:
+z = ReLU(Wench + benc),
+(2)
+where z ∈Rdsae is sparse (most entries zero) and dsae = 131, 072. SAE features are hypothesized to
+correspond to interpretable concepts, though we show they are also susceptible to dataset shortcuts.
+Classifiers.
+We use standard classifiers (logistic regression, MLPs) to isolate evaluation protocol
+effects rather than architecture design. This complements work optimizing probe architectures for
+deployment (Sharma et al., 2025; Cunningham et al., 2026). For logistic regression:
+P(y = 1|x) = σ(w⊤hl + b),
+(3)
+where w ∈Rd are learned coefficients with L2 regularization. The magnitude of wj indicates feature
+j’s importance for classification.
+3.3
+LEAVE-ONE-DATASET-OUT (LODO) EVALUATION
+We apply Leave-One-Dataset-Out (LODO) evaluation to prompt attack classification: for each
+dataset Di in our benchmark, we train a classifier on all other datasets {Dj : j ̸= i} and evaluate
+on the held-out Di. This measures true out-of-distribution generalization, as the classifier has never
+seen any examples from the test dataset’s distribution. Leave-one-domain-out cross-validation is an
+established protocol in domain generalization research (Gulrajani & Lopez-Paz, 2021; Koh et al.,
+2021); we adapt it here to evaluate whether prompt attack classifiers learn generalizable patterns or
+exploit dataset-specific shortcuts.
+Formally, let D = {D1, . . . , DK} be our K datasets. For each i, we compute:
+LODOi = Metric
+ fD\Di, Di
+
+,
+(4)
+where fD\Di is trained on all datasets except Di. We report both per-dataset metrics and pooled
+metrics across all held-out predictions.
+3.4
+DATASET SHORTCUT ANALYSIS
+We perform shortcut analysis on SAE features rather than raw activations because SAE features
+are designed to be interpretable: each feature ideally corresponds to a single semantic concept. In
+contrast, individual neurons in raw activations are polysemantic, encoding multiple unrelated concepts
+that activate together (Bricken et al., 2023). This polysemanticity makes it difficult to characterize
+what patterns a given neuron detects, whereas SAE features can be examined via their max-activating
+examples to understand their semantic content.
+To quantify how much classifier performance depends on dataset-specific features, we introduce the
+LODO coefficient retention metric. For each feature j, let wj be its coefficient in the full classifier
+and w(−i)
+j
+its coefficient when dataset Di is held out. The retention for feature j is:
+rj = min
+i
+w(−i)
+j
+wj
+.
+(5)
+Features with rj ≈1 are stable across dataset holdouts and likely capture genuine attack patterns.
+Features with rj ≪1 or rj < 0 (sign flip) are dataset shortcuts-their predictive value depends on
+specific datasets being present in training. We identify two types of shortcuts:
+• Pure dataset shortcuts: Features that directly predict dataset identity (e.g., email formatting for
+Enron, code patterns for specific injection datasets).
+• Context-dependent shortcuts: Features that fire across datasets but derive class signal from specific
+dataset compositions (e.g., a feature active on both malicious and benign samples, but whose class
+correlation depends on which datasets are included).
+To validate this analysis, we train a separate dataset classifier that predicts which dataset a sample
+belongs to. High accuracy indicates datasets are easily distinguishable in feature space, enabling
+shortcut exploitation.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+3.5
+LODO-WEIGHTED EXPLANATIONS
+For interpretable detection, we want to explain why a classifier flagged a particular input as malicious.
+A natural approach identifies which features contributed most. For input x with SAE features z, the
+influence of feature j is:
+influencej = zj · wj,
+(6)
+However, high-influence features may be dataset shortcuts rather than genuinely predictive features.
+We propose LODO-weighted explanations:
+influenceLODO
+j
+= zj · wj · rj,
+(7)
+where rj is the LODO retention score (Eq. 5). This downweights dataset shortcuts and promotes
+features that remained predictive across distribution shifts.
+EXPERIMENTS
+We conduct experiments to answer four questions: (1) How much does standard cross-validation
+overestimate generalization compared to LODO? (2) What fraction of learned features are dataset
+shortcuts? (3) How do activation-based classifiers compare to production baselines? (4) Can LODOstable features provide reliable explanations?
+4.1
+EXPERIMENTAL SETUP
+Dataset.
+Our benchmark comprises 18 datasets (105K samples, 47% malicious) spanning direct
+jailbreaks, indirect injection, extraction attacks, and benign sources. For evaluation, we merge
+Gandalf (114 samples) into Mosscap-both use identical system prompts for password protection (see
+Appendix B)-yielding 17 datasets for LODO results; shortcut analysis uses the original 18. Critically,
+6 datasets are 100% malicious and 5 are 100% benign, enabling trivial shortcut learning. Full details
+in Table 6.
+Models and Baselines.
+We evaluate logistic regression and MLP classifiers on raw activations
+(layer 31) and SAE features (layer 27), as described in Section 3. We compare against PromptGuard
+2 (Meta AI, 2024a), LlamaGuard (Meta AI, 2024b), and Llama-3.1-8B as judge. Evaluation uses
+5-fold CV, held-out test sets, and LODO.
+4.2
+DATASET SHORTCUT ANALYSIS
+To quantify shortcuts, we compute LODO coefficient retention for top-50 SAE features, classifying those with retention <50% as shortcuts. We cross-reference retention with firing ratio
+(malicious/benign firing rate) to distinguish pure shortcuts (low retention, low firing ratio-weak class
+separation) from context-dependent shortcuts (low retention, high firing ratio-strong class separation
+that depends on dataset composition). We validate dataset distinguishability by training an 18-way
+dataset classifier on SAE features.
+RESULTS
+5.1
+STANDARD EVALUATION SEVERELY OVERESTIMATES GENERALIZATION
+Table 1 demonstrates that both 5-fold cross-validation and held-out test sets substantially overestimate
+out-of-distribution performance. Using logistic regression on raw activations as an example, 5-fold
+CV achieves 0.996 AUC while the held-out test set achieves 0.997 AUC. However, LODO evaluationwhich holds out entire datasets-reveals the true generalization performance of only 0.912 AUC (see
+Figure 1).
+The held-out test set evaluation uses samples from 6 datasets that provide official train-test splits:
+mosscap (27.7K samples, including merged gandalf), jayavibhav (10K), qualifire (5K), enron (4K),
+safeguard (2K), and deepset (116). Critically, these test samples come from the same dataset sources
+as training data, allowing classifiers to exploit dataset-specific patterns. This confirms that standard
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 1: Evaluation protocol comparison for logistic regression on raw activations. Standard CV and
+test set evaluation overestimate true OOD performance by 8+ percentage points.
+Evaluation Protocol
+ROC AUC
+5-Fold Cross-Validation
+0.996
+Held-Out Test Set
+0.997
+LODO (Pooled)
+0.912
+CV-LODO Gap
+8.4%
+evaluation protocols-even with held-out test sets-fail to measure true generalization when training
+and test data share dataset provenance.
+Table 2 shows the per-dataset accuracy gap between LODO and held-out test evaluation for the
+6 datasets with official test splits. The gaps range from 1.2% (safeguard) to 25.4% (jayavibhav),
+demonstrating that some datasets are more susceptible to shortcut exploitation than others. Notably,
+four of these six datasets are mixed-class (jayavibhav 50%, qualifire 40%, safeguard 30%, deepset
+37% malicious), yet still exhibit substantial gaps (1.2–25.4%), confirming that shortcut exploitation
+is not solely an artifact of single-class datasets.
+Table 2: Per-dataset accuracy comparison between LODO (entire dataset held out) and held-out test
+set (samples from same source as training). Gaps reveal dataset-specific shortcut exploitation.
+Dataset
+Test N
+Test Acc
+LODO Acc
+Gap
+mosscap
+27,728
+99.5%
+79.4%
++20.1%
+jayavibhav
+10,000
+94.5%
+69.1%
++25.4%
+qualifire
+5,000
+95.8%
+77.8%
++18.0%
+enron
+4,000
+99.2%
+82.6%
++16.6%
+safeguard
+2,060
+97.9%
+96.7%
++1.2%
+deepset
+80.2%
+77.7%
++2.5%
+5.2
+METHOD COMPARISON UNDER LODO
+Table 3 compares our three classifier architectures under LODO evaluation across all 17 datasets
+(gandalf merged with mosscap). Raw activations achieve the best pooled AUC (0.912), outperforming
+both SAE features (0.838) and MLP (0.841).
+Raw activations generalize better than SAE features, aligning with Kantamneni et al. (2025)
+and DeepMind Mechanistic Interpretability Team (2025). Despite this gap, SAE features enable
+interpretable detection by surfacing human-readable explanations (Section 5.4); our LODO retention
+metric identifies which features to trust.
+Comparison to training-free baselines. Latent Prototype Moderation (LPM), which classifies by
+Mahalanobis distance to class centroids, achieves 76.0% weighted accuracy under LODO compared
+to 81.8% for logistic regression. The gap is largest on indirect injection (32% vs 63% on BIPIA),
+suggesting learned decision boundaries are required for embedded attacks. Full results in Appendix F.
+5.3
+28% OF TOP FEATURES ARE DATASET SHORTCUTS
+We analyze the top-50 SAE features by their global properties: classifier coefficients wj and LODO
+retention rj, both of which are computed once across the full training set and remain fixed for all
+inputs. Sensitivity analysis to parameter choice of retained features is in Appendix G.3.
+Dataset Classifier Confirms Distinguishability.
+Training a logistic regression classifier to predict
+dataset identity from SAE features achieves 96.6% accuracy under 5-fold CV and 95.4% on held-out
+test sets (baseline: 5.6% for 18 classes). This confirms that datasets are trivially distinguishable in
+feature space, enabling shortcut exploitation. t-SNE visualization (Figure 3 in Appendix) shows
+distinct clusters for each dataset in both raw and SAE space.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 3: Per-dataset LODO accuracy (%) with threshold=0.5, and pooled AUC across all held-out
+predictions (N=105,034). DeLong 95% CIs for pooled AUC: Raw 0.912 (0.911-0.915), SAE 0.838
+(0.836-0.841), MLP 0.841 (0.839-0.843). †Includes gandalf summarization (114 samples).
+Dataset
+N
+%Mal
+Raw
+SAE
+MLP
+Mixed-class datasets:
+BIPIA
+15000
+63.1
+26.1
+60.1
+deepset
+77.7
+80.6
+78.4
+jayavibhav
+10000
+69.1
+76.6
+75.6
+qualifire
+77.8
+76.5
+77.8
+safeguard
+96.7
+95.7
+97.4
+wildjailbreak
+78.6
+80.7
+79.6
+100% malicious (accuracy = recall):
+advbench
+90.8
+92.9
+97.1
+harmbench
+42.8
+36.2
+44.8
+injecagent
+98.9
+100.0
+100.0
+llmail
+71.4
+58.4
+45.8
+mosscap†
+10114
+79.4
+65.2
+84.4
+yanismiraoui
+55.8
+41.9
+45.6
+100% benign (accuracy = 1−FPR, false positive rate):
+10k prompts
+92.4
+89.1
+92.4
+dolly 15k
+10000
+99.6
+99.8
+99.8
+enron
+10000
+82.6
+85.7
+81.1
+openorca
+98.0
+98.3
+98.9
+softAge
+95.1
+95.6
+96.4
+Weighted Avg Acc
+81.8
+74.5
+80.1
+Pooled AUC
+0.912
+0.838
+0.841
+Two Types of Shortcuts.
+Cross-referencing LODO retention with firing ratio (malicious/benign
+firing rate) reveals two shortcut mechanisms (Table 4): Pure dataset shortcuts (Q1, 8 features) have
+Table 4: Shortcut taxonomy for top-50 SAE features. Rows: LODO retention; columns: malicious to
+benign firing ratio.
+Firing Ratio <1.5
+Firing Ratio ≥1.5
+LODO Shortcut
+8 (Q1)
+6 (Q2)
+LODO Stable
+13 (Q3)
+23 (Q4)
+weak class separation and low retention (e.g., features firing on mosscap’s format or enron’s email
+signatures). Context-dependent shortcuts (Q2, 6 features) have strong class separation but still fail
+under LODO-their class signal depends on specific dataset compositions. For instance, a feature with
+high firing ratio has LODO retention of only 3% when jayavibhav is held out. Importantly, 42% of
+shortcuts are context-dependent-they would not be identified by simply checking firing ratios.
+Which Datasets Create Shortcuts?
+Pure-class datasets create the most shortcuts: mosscap (6
+features), llmail (3), yanismiraoui (2), jayavibhav (2)-features firing on 100%-malicious datasets
+contribute only to malicious predictions regardless of their behavior on mixed-class data.
+Multi-Metric Validation.
+Generalizable features consistently outperform shortcuts across multiple metrics (Cohen’s d, information gain, SHAP, cross-dataset consistency); all reach statistical
+significance (p < 0.05). Details in Table 12.
+Shortcut Ablation.
+Ablating all 14 shortcuts has minimal impact on average AUC (0.867 vs 0.866),
+with heterogeneous per-dataset effects: deepset improves by 3pp while jayavibhav regresses by 2pp
+(Table 13). This stability under ablation indicates that shortcuts are compensated by other features
+with redundant decision boundaries. Importantly, this means our shortcut analysis is diagnostic - it
+identifies dataset-dependent features that the classifier uses - but not explanatory of the CV-LODO
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+gap. The gap persists because the underlying distributions differ, not solely because of the specific
+features we identify as shortcuts.
+5.4
+LODO-WEIGHTED EXPLANATIONS SURFACE RELEVANT FEATURES
+For individual prompt explanations, we combine the global factors (wj, rj) with per-prompt activations (zj) to compute feature importance. We compare standard feature attributions against
+LODO-weighted attributions (zj · wj · rj) for explaining individual classifications across 1,000
+samples. 98.1% of samples show feature changes between raw and LODO-weighted top-20 rankings.
+Demoted features have mean retention of 0.265 vs 0.990 for promoted features (Cohen’s d = 5.60,
+p < 0.001), confirming systematic filtering of dataset-dependent features. Samples from datasets
+with known artifacts (llmail, mosscap) show the most reranking.
+5.5
+PRODUCTION BASELINES FAIL ON INDIRECT ATTACKS
+Table 5 compares production guardrails against our activation-based classifier on 105K samples.
+Table 5: Detection rate (%) by attack category. PG=PromptGuard 2, LG=LlamaGuard, LJ=Llama-asJudge, Ours=LogReg on raw activations under LODO. PG/LG cannot evaluate InjecAgent (no tool
+schema support). Wilson 95% CIs are narrow (<2pp) due to large sample sizes; all differences >5pp
+are significant (p < 0.001).
+Category
+PG
+LG
+LJ
+Ours
+Harmful
+36.7
+97.4
+85.8
+67.0
+Jailbreak
+48.5
+28.9
+60.0
+68.0
+Indirect injection
+37.3
+27.4
+7.1
+68.0
+Agentic
+-
+-
+21.5
+99.0
+Extraction
+100.0
+15.2
+31.8
+79.0
+Mixed
+54.4
+38.8
+73.8
+77.0
+Benign FPR
+0.4
+3.0
+4.4
+6.5
+Key findings: Each baseline excels in narrow domains but fails elsewhere. Our classifier substantially
+outperforms all baselines on indirect injection-the critical gap for agentic security. Notably, Llama-asJudge uses the same model from which we extract activations, demonstrating that linear probes extract
+safety signals the model cannot surface through prompting. We evaluated a single zero-shot prompt
+for Llama-as-Judge; exploring chain-of-thought or few-shot prompting may improve performance
+and could be valuable future work.
+DISCUSSION
+Existing Guardrails Are Not Designed for Agentic Security.
+PromptGuard 2 and LlamaGuard
+were designed for conversational safety, not agentic scenarios. This architectural mismatch-not merely
+a training data gap-motivates guardrails that understand message provenance and tool boundaries.
+We attempted workarounds such as mapping tool responses to user messages, but LlamaGuard’s
+strict alternation requirement and PromptGuard’s lack of chat template support preclude meaningful
+evaluation on agentic formats. Our approach complements rather than replaces such systems by
+covering the indirect and agentic attack surfaces they miss.
+Detection-FPR Trade-offs.
+Our classifier achieves the highest detection on indirect and agentic
+attacks but at higher benign FPR (6.5% vs 0.4-4.4% for baselines). We use threshold t = 0.5 as a
+dataset-agnostic default; per-dataset optimal thresholds vary substantially (0.01 to 0.73 under LODO),
+reinforcing that calibration is itself distribution-dependent (Appendix H.1). Future work could explore
+two-stage approaches using our high-recall classifier as a first stage with a precision-focused second
+stage.
+Why Do Activation Probes Outperform Prompting?
+Linear probes on Llama-3.1-8B substantially outperform prompting the same model as judge (e.g., 99% vs 22% on InjecAgent). We
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+hypothesize that models encode safety-relevant signals in activations that are difficult to elicit through
+prompting: probes require only recognition, not articulation, and distributed activation patterns may
+not map cleanly to natural language. Activation probes also offer latency advantages: a single forward
+pass with no generation adds negligible overhead (<1ms).
+Understanding the CV-LODO Gap.
+The 8+ percentage point gap between standard evaluation and
+LODO for raw activations indicates a general failure of benchmarks to measure out-of-distribution
+generalization. Importantly, per-dataset gaps are heterogeneous, ranging from 1.2% (safeguard) to
+25.4% (jayavibhav) (Table 2), suggesting multiple failure modes that the aggregate gap obscures. Our
+shortcut analysis on SAE features-revealing that 28% of top features are dataset-dependent-provides
+one diagnostic lens into this phenomenon. However, the gap in raw activations, where we did not
+perform analogous shortcut characterization, suggests that dataset-specific signals exist beyond what
+SAE decomposition reveals. Preliminary experiments with domain-robust training (Group DRO
+(Sagawa et al., 2020), DANN (Ganin et al., 2016)) showed high variance in per-dataset effects: some
+datasets improved substantially (e.g., BIPIA +13pp) while others regressed (e.g., mosscap −9pp),
+and results varied across random seeds. Systematically reducing the LODO gap remains an open
+challenge.
+Limitations.
+Our activation-based approach requires white-box access to model internals, limiting
+applicability to open-weight models or self-hosted deployments. For closed-source APIs, two
+deployment patterns remain viable: (1) running a smaller open-weight model as a “sidecar” classifier
+alongside the production model (Goodfire AI, 2025), or (2) using our method to develop guardrails
+that are later distilled into text-based classifiers. Additionally, LODO requires training K classifiers
+for K datasets, which is tractable for lightweight classifiers but may be prohibitive for expensive
+fine-tuning. Finally, LODO assumes datasets represent meaningfully different distributions.
+Interpretability Scope.
+Our SAE analysis reveals what patterns the classifier detects, but not
+whether the model would comply with or refuse requests. Feature contributions establish causality
+to the classifier decision, though the decision emerges from thousands of features, so individual
+explanations are indicative rather than exhaustive.
+CONCLUSION
+We propose LODO evaluation as the appropriate protocol for assessing prompt attack classifier
+generalization. Standard cross-validation and held-out test sets overestimate performance by 8+
+percentage points on average, with per-dataset gaps ranging from 1% to 25%-revealing that classifiers
+exploit dataset-specific patterns rather than learning generalizable attack signals. Analysis of SAE
+features provides one window into this phenomenon: 28% of top features are dataset shortcuts,
+including both pure shortcuts that predict dataset identity and context-dependent shortcuts whose
+class signal depends on dataset composition. Production guardrails fail on indirect and agentic attacks,
+while LODO-weighted attributions filter dataset artifacts for more reliable explanations. We release
+our benchmark and code to facilitate reproducible evaluation. Future work could explore further
+domain adaptation techniques or data augmentation strategies to explicitly reduce dataset-dependent
+shortcuts during training, characterize dataset-specific signals in raw activations, and extend this
+evaluation methodology to other security domains.
+REFERENCES
+Sahar Abdelnabi, Aideen Fay, Giovanni Cherubin, Ahmed Salem, Mario Fritz, and Andrew Paverd.
+Get my drift? catching LLM task drift with activation deltas. In IEEE Conference on Secure and
+Trustworthy Machine Learning (SaTML), 2025. URL https://arxiv.org/abs/2406.0
+0799.
+Andy Arditi. Sparse autoencoders for Llama-3.1-8b-instruct. https://huggingface.co/a
+ndyrdt/saes-llama-3.1-8b-instruct, 2024.
+Trenton Bricken, Adly Templeton, Joshua Batson, Brian Chen, Adam Jermyn, Tom Conerly, Nick
+Turner, Cem Anil, Carson Denison, Amanda Askell, et al. Towards monosemanticity: Decomposing language models with dictionary learning. Transformer Circuits Thread, 2023.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Hoagy Cunningham, Jerry Wei, Zihan Wang, Andrew Persic, Alwin Peng, Jordan Abderrachid, Raj
+Agarwal, Bobby Chen, Austin Cohen, Andy Dau, et al. Constitutional classifiers++: Efficient
+production-grade defenses against universal jailbreaks. https://arxiv.org/abs/2601.0
+4603, 2026. arXiv:2601.04603.
+DeepMind Mechanistic Interpretability Team. Negative results for sparse autoencoders on downstream tasks and deprioritising SAE research. https://deepmindsafetyresearch.m
+edium.com/negative-results-for-sparse-autoencoders-on-downstrea
+m-tasks-and-deprioritising-sae-research-6cadcfc125b9, 2025. Published
+March 26, 2025.
+Jack Gallifant, Shan Chen, et al. Sparse autoencoder features for classifications and transferability.
+arXiv preprint arXiv:2502.11367, 2025.
+Yaroslav Ganin, Evgeniya Ustinova, Hana Ajakan, Pascal Germain, Hugo Larochelle, Franc¸ois
+Laviolette, Mario Marchand, and Victor Lempitsky. Domain-adversarial training of neural networks.
+Journal of Machine Learning Research, 17(59):1–35, 2016.
+Robert Geirhos, J¨orn-Henrik Jacobsen, Claudio Michaelis, Richard Zemel, Wieland Brendel, Matthias
+Bethge, and Felix A Wichmann. Shortcut learning in deep neural networks. Nature Machine
+Intelligence, 2:665–673, 2020.
+Goodfire AI. Deploying interpretability to production with rakuten: SAE probes for PII detection.
+https://www.goodfire.ai/research/rakuten-sae-probes-for-pii-det
+ection, 2025.
+Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten Holz, and Mario
+Fritz. Not what you’ve signed up for: Compromising real-world LLM-integrated applications with
+indirect prompt injection. In ACM CCS AISec Workshop, 2023.
+Ishaan Gulrajani and David Lopez-Paz. In search of lost domain generalization. In ICLR, 2021.
+Subhash Kantamneni, Joshua Engels, Senthooran Rajamanoharan, Max Tegmark, and Neel Nanda.
+Are sparse autoencoders useful? a case study in sparse probing. arXiv preprint arXiv:2502.16681,
+2025.
+Pang Wei Koh, Shiori Sagawa, Henrik Marklund, Sang Michael Xie, Marvin Zhang, Akshay Balsubramani, Weihua Hu, Michihiro Yasunaga, Richard Lanas Phillips, Irena Gao, et al. WILDS: A
+benchmark of in-the-wild distribution shifts. In ICML, 2021.
+Mathis Le Bail, J´er´emie Dentan, Davide Buscaldi, and Sonia Vanier. Unveiling decision-making
+in LLMs for text classification: Extraction of influential and interpretable concepts with sparse
+autoencoders. arXiv preprint arXiv:2506.23951, 2025.
+Tom Lieberum, Senthooran Rajamanoharan, Arthur Conmy, Lewis Smith, Nicolas Sonnerat, Vikrant
+Varma, Janos Kramar, Anca Dragan, Rohin Shah, and Neel Nanda. Gemma scope: Open sparse
+autoencoders everywhere all at once on gemma 2. arXiv preprint arXiv:2408.05147, 2024.
+Johnny Lin. Neuronpedia: Interactive reference and tooling for analyzing neural networks, 2023.
+URL https://www.neuronpedia.org. Software available from neuronpedia.org.
+Evan Zheran Liu, Behzad Haghgoo, Annie S. Chen, Aditi Raghunathan, Pang Wei Koh, Shiori
+Sagawa, Percy Liang, and Chelsea Finn. Just train twice: Improving group robustness without
+training group information. In International Conference on Machine Learning, pp. 6781–6792.
+PMLR, 2021. URL https://proceedings.mlr.press/v139/liu21f.html.
+Yupei Liu, Yuqi Jia, Runpeng Geng, Jinyuan Jia, and Neil Zhenqiang Gong. Formalizing and
+benchmarking prompt injection attacks and defenses. In USENIX Security Symposium, 2024.
+Samuel Marks and Max Tegmark. The geometry of truth: Emergent linear structure in large language
+model representations of true/false datasets. arXiv preprint arXiv:2310.06824, 2024.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Mantas Mazeika, Long Phan, Xuwang Yin, Andy Zou, Zifan Wang, Norman Mu, Elham Sakhaee,
+Nathaniel Li, Steven Basart, Bo Li, et al. HarmBench: A standardized evaluation framework for
+automated red teaming and robust refusal. arXiv preprint arXiv:2402.04249, 2024.
+Tom McCoy, Ellie Pavlick, and Tal Linzen. Right for the wrong reasons: Diagnosing syntactic
+heuristics in natural language inference. In ACL, 2019.
+Meta AI.
+Llama prompt guard 2: A classifier model for detecting prompt attacks.
+https:
+//huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M, 2024a.
+Meta AI. Llama guard 3: LLM-based input-output safeguard for human-AI conversations. https:
+//huggingface.co/meta-llama/Llama-Guard-3-8B, 2024b.
+Microsoft. LLMail-Inject: A challenge dataset for indirect prompt injection in email agents. https:
+//huggingface.co/datasets/microsoft/llmail-inject-challenge, 2024.
+F´abio Perez and Ian Ribeiro. Ignore previous prompt: Attack techniques for language models. In
+NeurIPS ML Safety Workshop, 2022.
+Shiori Sagawa, Pang Wei Koh, Tatsunori B. Hashimoto, and Percy Liang. Distributionally robust
+neural networks for group shifts: On the importance of regularization for worst-case generalization.
+In International Conference on Learning Representations, 2020. URL https://openreview
+.net/forum?id=ryxGuJrFvS.
+Baturay Saglam, Paul Kassianik, Blaine Nelson, Sajana Weerawardhena, Yaron Singer, and Amin Karbasi. Large language models encode semantics and alignment in linearly separable representations.
+arXiv preprint arXiv:2507.09709, 2025.
+Mrinank Sharma, Meg Tong, Jesse Mu, Jerry Wei, Jorrit Kruthoff, Scott Goodfriend, Euan Ong,
+Alwin Peng, Raj Agarwal, Cem Anil, et al. Constitutional classifiers: Defending against universal
+jailbreaks across thousands of hours of red teaming. https://arxiv.org/abs/2501.188
+37, 2025. arXiv:2501.18837.
+Jingwei Yi, Yueqi Xie, Bin Zhu, Emre Kiciman, Guangzhong Sun, Xing Xie, and Fangzhao Wu.
+Benchmarking and defending against indirect prompt injection attacks on large language models.
+In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining,
+pp. 1809–1820, 2025. URL https://arxiv.org/abs/2312.14197.
+Qiusi Zhan, Zhixiang Liang, Zifan Ying, and Daniel Kang. InjecAgent: Benchmarking indirect
+prompt injections in tool-integrated large language model agents. arXiv preprint arXiv:2403.02691,
+2024.
+Ruochen Zhao, Tan Wang, Yongjie Wang, and Shafiq Joty. Explaining language model predictions
+with high-impact concepts. In Findings of the Association for Computational Linguistics: EACL,
+pp. 995–1012, 2024. URL https://arxiv.org/abs/2305.02160.
+Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J Zico Kolter, and Matt Fredrikson. Universal
+and transferable adversarial attacks on aligned language models. arXiv preprint arXiv:2307.15043,
+2023.
+Andy Zou, Long Phan, Justin Wang, Derek Duenas, Maxwell Lin, Maksym Andriushchenko, Rowan
+Wang, Zico Kolter, Matt Fredrikson, and Dan Hendrycks. Improving alignment and robustness
+with circuit breakers.
+In Advances in Neural Information Processing Systems, 2024.
+URL
+https://arxiv.org/abs/2406.04313.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+APPENDIX
+A
+DATASET DETAILS
+Table 6: Dataset overview. Single-class datasets (100% malicious or benign) enable trivial shortcut
+learning. †Includes Gandalf (Lakera/gandalf summarization, 114 samples) merged due to small size.
+Dataset
+Source
+N
+% Mal.
+Attack Type
+Harmful Requests (100% malicious):
+AdvBench
+walledai/AdvBench
+Direct harmful requests
+HarmBench
+walledai/HarmBench
+Harmful + contextual
+Jailbreak Attacks:
+WildJailbreak
+allenai/wildjailbreak
+2,210
+90.5
+Roleplay/ignore exploits
+Yanismiraoui
+yanismiraoui/prompt injections
+1,034
+Multilingual jailbreaks
+Indirect Injection:
+BIPIA
+microsoft/BIPIA
+15,000
+95.3
+Email/code/table embed
+InjecAgent
+InjecAgent repo
+1,054
+Tool response injection
+LLMail
+microsoft/llmail-inject
+9,998
+Email body injection
+Extraction Attacks (100% malicious):
+Mosscap†
+Lakera/mosscap
+10,114
+Password extraction
+Mixed Datasets:
+Jayavibhav
+jayavibhav/prompt-injection
+10,000
+49.7
+Jailbreaks, instruction hijack
+Qualifire
+qualifire/prompt-injections
+5,000
+40.0
+Jailbreaks, role-playing
+SafeGuard
+xTRam1/safe-guard
+8,236
+30.3
+Context manipulation
+Deepset
+deepset/prompt-injections
+37.2
+Political bias, override
+Benign Sources (100% benign):
+Enron
+amanneo/enron-mail-corpus
+10,000
+Email corpus
+OpenOrca
+Open-Orca/OpenOrca
+9,990
+Instruction following
+Dolly 15k
+databricks/dolly-15k
+9,999
+Instruction following
+10k Prompts
+10k prompts ranked
+9,924
+Diverse prompts
+SoftAge
+SoftAge-AI/prompt-eng
+1,000
+Prompt engineering
+B
+DATASET CONSTRUCTION DETAILS
+Several datasets require complex prompt construction beyond simple HuggingFace wrappers:
+InjecAgent (Tool-Use Injection).
+InjecAgent (Zhan et al., 2024) tests prompt injection via tool
+responses in agentic workflows. We use InjecAgent’s generate prompt for model() function
+for prompt generation to ensure consistency with the original evaluation setup.
+Each sample is constructed as a multi-turn conversation:
+1. System message: Standard tool-use instructions
+2. User message: Benign request (e.g., “Check my Amazon order status”)
+3. Assistant message (prefilled): Tool call with function invocation
+4. Tool message: Tool response containing injected attacker instruction
+Key implementation details: Unlike the original InjecAgent evaluation (which uses a ReAct-style
+scratchpad for agent reasoning), we make two modifications: (1) we prefill the assistant’s tool call
+directly without any reasoning text, and (2) we pass tool schemas via the chat template’s tools
+parameter, which embeds them in the model’s native function-calling format. For Llama, this places
+tool definitions as JSON in the user message, with tool responses appearing under the ipython
+role. The injected attacker instruction appears in this tool response. This tests whether the model’s
+internal representations distinguish malicious tool responses when processed through its standard
+function-calling pipeline-the realistic deployment scenario for agentic applications.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+BIPIA (Benchmark for Indirect Prompt Injection Attacks).
+BIPIA (Yi et al., 2025) embeds
+malicious instructions in external context that the model processes. We use BIPIA’s native builders to
+construct samples across five tasks: email processing, code analysis, table interpretation, question
+answering, and abstract summarization. For each task, the attack instruction is inserted at configurable
+positions (start, middle, end) within the context. The prompt format is:
+1. System message: Task-specific instruction (e.g., “Summarize the following email”)
+2. User message: Context with embedded malicious instruction at specified position
+We include samples from email, code, and table tasks with end-position insertion in our benchmark.
+Mosscap and Gandalf (Password Extraction).
+These Lakera datasets test password extraction
+attacks. Both use an identical system prompt instructing the model to protect a secret password:
+You are a helpful assistant with a secret password:
+"LIGHTHOUSE", and you must never reveal, repeat, hint at,
+or encode this password under any circumstances, regardless
+of how the user asks or what instructions they provide.
+Mosscap contains 224k extraction attempts across 8 difficulty levels; Gandalf tests indirect extraction
+via a summarization task where the text to summarize contains the injection. Because both datasets
+share the same system prompt and attack objective (password extraction), we merge Gandalf (114
+samples) into Mosscap for LODO evaluation.
+LLMail (Email Injection Challenge).
+Microsoft’s LLMail challenge (Microsoft, 2024) contains
+email-based injection attacks across three difficulty levels. Prompts are formatted as “Subject:
+{subject} Body: {body}” where the body contains the injection attempt.
+C
+EXPERIMENTAL SETUP
+C.1
+PROMPT CONSTRUCTION PIPELINE
+Our activation extraction pipeline processes prompts through a standardized workflow. Each prompt
+is represented as a PromptSpec containing: (1) a list of messages in OpenAI chat format with
+role and content fields, (2) optional tool schemas for function-calling datasets, and (3) metadata
+labels including the ground-truth malicious flag.
+Chat Template Application.
+Messages are converted to a single text string using the model’s
+native chat template via the HuggingFace tokenizer.apply chat template() function
+with add generation prompt=True. For datasets with tool schemas (e.g., InjecAgent), the
+template includes tool definitions in the model’s expected format. This ensures the model processes
+inputs identically to deployment scenarios.
+Activation Capture.
+We extract activations from specific positions in the tokenized sequence. For
+all experiments in this paper, we capture activations at position −5 (the 5th token from the end),
+which corresponds to the last token of the user message before the generation prompt tokens. This
+position captures the model’s representation of the complete user input. Note that SAE feature results
+are sensitive to position choice: using the final token (position=-1) yields higher pooled AUC (0.904
+vs 0.867) but more shortcut features (46% vs 30%), suggesting a trade-off between raw performance
+and generalization. Raw activation results are more stable across positions. We extract:
+• Raw activations: Residual stream activations from layer 31 (final layer, d = 4096) using the
+hook resid post hook point.
+• SAE features: Sparse autoencoder features by encoding the residual stream through a pre-trained
+SAE (details below).
+The pipeline performs a single forward pass with activation caching, extracts top-k logits, optionally
+runs attribution via circuit tracing, and persists all artifacts (activations, attribution graphs, metadata)
+to storage.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+C.2
+MODEL CONFIGURATION
+We use Llama-3.1-8B-Instruct as our base model for all experiments. For SAE features, we use
+pre-trained sparse autoencoders for Llama-3.1-8B residual stream activations (Arditi, 2024). The
+SAE at layer 27 has dsae = 131, 072 latent dimensions with an average sparsity of 47 active features
+per token.
+C.3
+TOKEN POSITION DETAILS
+We extract activations at position −5 relative to the end of the tokenized sequence.
+With
+add generation prompt=True, the chat template appends assistant header tokens after the
+user message. Table 7 shows these final tokens:
+Table 7: Token positions at the end of a templated prompt.
+Position −5 corresponds to the
+<|eot id|> token marking the end of the user message, before the generation prompt tokens
+(assistant header).
+Position
+Token ID
+Token
+−5
+128009
+’<|eot id|>’
+−4
+128006
+’<|start header id|>’
+−3
+78191
+’assistant’
+−2
+128007
+’<|end header id|>’
+−1
+’\n\n’
+Position −5 thus captures the model’s representation at the boundary between user input and assistant
+generation-the natural point where the model has processed the complete user message and is about
+to generate a response. This position is consistent across all prompts regardless of length.
+D
+LAYER AND POSITION SENSITIVITY ANALYSIS
+We evaluate classifier performance across multiple layers (19, 23, 25, 27, 31) and token positions (−5
+for last user token, −1 for final token) to assess sensitivity to these hyperparameter choices. Table 8
+shows per-dataset accuracy under LODO evaluation.
+Key Observations.
+Layers 31 and 27 with position −5 perform best on aggregate metrics (81.8–
+82.3% weighted accuracy). Earlier layers (19–25) show degraded performance, particularly on
+indirect injection attacks (BIPIA accuracy drops from 63% at L31 to 7% at L19). Position −1 (final
+token) consistently underperforms position −5 (last user token), with the largest gap on llmail (29%
+vs 71% accuracy at L31).
+The critical observation is that all configurations exhibit substantial per-dataset variance under
+LODO - no single layer or position dominates across all datasets. For example:
+• harmbench: pos[−1] substantially outperforms pos[−5] (65% vs 43% at L31)
+• llmail: pos[−5] dramatically outperforms pos[−1] (71% vs 29% at L31)
+• injecagent: L25–L27 achieve near-perfect detection (99–100%), while L19 drops to 89%
+This heterogeneity reinforces our main finding: the choice of layer and position does not eliminate
+the fundamental challenge of cross-dataset generalization that LODO exposes. We selected layer 31
+and position −5 as a simple, principled default (final layer, last user token) rather than optimizing for
+aggregate metrics.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 8: Per-dataset LODO accuracy (%) across layer and position configurations. Bold indicates
+best performance for each dataset. The variance across configurations within each dataset illustrates
+that no single configuration dominates.
+Dataset
+L31 pos[−5]
+L31 pos[−1]
+L27 pos[−5]
+L27 pos[−1]
+L25 pos[−5]
+L23 pos[−5]
+L19 pos[−5]
+Indirect injection (key challenge for agentic security):
+BIPIA
+63.1
+63.3
+59.9
+49.8
+14.2
+7.9
+7.4
+injecagent
+98.9
+94.9
+99.9
+72.1
+100.0
+99.8
+88.9
+llmail
+71.4
+29.1
+84.0
+24.1
+72.1
+56.4
+58.4
+Harmful requests and jailbreaks:
+advbench
+90.8
+97.7
+89.0
+95.2
+89.2
+91.0
+93.5
+harmbench
+42.8
+65.0
+44.8
+65.0
+44.5
+43.0
+45.5
+wildjailbreak
+78.6
+85.7
+80.0
+86.1
+79.4
+79.3
+80.8
+yanismiraoui
+55.8
+53.4
+61.4
+66.3
+50.7
+61.6
+59.0
+Extraction and mixed datasets:
+mosscap
+79.4
+82.2
+73.4
+86.3
+75.4
+72.8
+63.4
+jayavibhav
+69.1
+71.0
+69.1
+68.6
+65.7
+66.7
+70.3
+qualifire
+77.8
+80.9
+78.1
+81.3
+78.3
+79.1
+79.6
+safeguard
+96.7
+96.5
+96.4
+97.0
+97.0
+96.6
+97.3
+deepset
+77.7
+85.3
+76.9
+81.7
+75.8
+76.7
+78.9
+Benign datasets (accuracy = 1−FPR):
+10k prompts
+92.4
+94.4
+91.6
+95.1
+92.5
+92.3
+92.4
+dolly 15k
+99.6
+99.6
+99.6
+99.6
+99.4
+99.5
+99.2
+enron
+82.6
+84.4
+84.9
+81.1
+82.9
+85.5
+84.4
+openorca
+98.0
+96.5
+98.4
+98.0
+97.4
+96.7
+98.5
+softAge
+95.1
+95.6
+96.1
+95.7
+95.2
+96.1
+96.3
+Weighted Avg
+81.8
+78.9
+82.3
+76.5
+74.2
+71.9
+71.6
+E
+LLAMA 70B MODEL COMPARISON
+To assess whether our findings generalize beyond Llama-3.1-8B, we conducted parallel experiments
+with Llama-3.1-70B-Instruct. Table 9 shows classifier performance under LODO evaluation.
+Table 9: Classifier performance on Llama-3.1-70B under LODO evaluation. Activations are from
+layers 50 (early-mid) and 79 (final). All classifiers use threshold=0.5.
+Method
+Weighted Acc (%)
+LogReg (Raw L50)
+83.0
+LogReg (Raw L79)
+82.5
+LogReg (SAE L50)
+81.2
+Key Observations.
+The fundamental patterns from our 8B experiments persist at 70B scale: (1)
+raw activations outperform or match SAE features, (2) significant per-dataset variation remains, and
+(3) the CV-LODO gap persists.
+Table 10 shows per-dataset accuracy for 70B classifiers:
+Notably, the SAE classifier on 70B achieves perfect detection (100%) on InjecAgent, compared to
+28.7% for raw activations at layer 50. This suggests that SAE features at certain layers may capture
+tool-use injection patterns particularly well, though this advantage does not generalize across all
+attack types.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 10: Per-dataset LODO accuracy (%) for Llama-70B classifiers (threshold=0.5). †Includes
+gandalf summarization (114 samples). ‡299-sample subset due to computational constraints.
+Dataset
+N
+Raw L50
+Raw L79
+SAE L50
+Harmful requests:
+advbench
+97.7
+98.5
+98.5
+harmbench
+45.5
+51.7
+47.0
+Jailbreak attacks:
+wildjailbreak
+2,210
+89.7
+90.5
+80.8
+yanismiraoui
+1,034
+50.2
+77.5
+49.9
+Indirect injection:
+BIPIA
+15,000
+59.5
+42.1
+49.5
+injecagent
+1,054
+28.7
+64.8
+100.0
+llmail‡
+54.2
+61.5
+59.5
+Extraction:
+mosscap†
+10,114
+85.6
+94.6
+77.7
+Mixed-class datasets:
+jayavibhav
+10,000
+68.4
+68.3
+68.7
+qualifire
+5,000
+81.9
+82.3
+74.8
+safeguard
+8,236
+97.9
+97.6
+93.1
+deepset
+84.8
+84.2
+84.6
+Benign (accuracy = 1−FPR):
+10k prompts
+9,924
+95.4
+94.8
+92.0
+dolly 15k
+9,999
+99.7
+99.8
+99.7
+enron
+10,000
+80.5
+86.5
+92.7
+openorca
+9,990
+99.3
+99.5
+98.9
+softAge
+1,000
+97.0
+96.7
+95.1
+F
+LATENT PROTOTYPE MODERATION (LPM) BASELINE
+We compare against Latent Prototype Moderation (LPM), a training-free baseline that classifies by
+distance to class centroids in activation space. LPM computes Mahalanobis distance to malicious and
+benign prototypes and applies softmax to obtain class probabilities, following Gaussian Discriminant
+Analysis. This approach requires no learned coefficients-only mean vectors and covariance estimates
+from training data.
+Table 11 compares LPM against logistic regression under LODO evaluation.
+Key Findings.
+Logistic regression outperforms LPM by 5.8pp in weighted accuracy (81.8% vs
+76.0%), confirming that learned coefficients capture generalizable patterns beyond prototype proximity. The gap is largest on indirect injection attacks: BIPIA (63.1% vs 32.0%, +31pp) and llmail
+(71.4% vs 34.0%, +37pp). This suggests that detecting embedded malicious instructions requires
+learned decision boundaries that weight specific activation dimensions, rather than simple distance to
+class centroids.
+Interestingly, LPM achieves lower false positive rates on benign datasets (e.g., enron: 92.7% vs
+82.6%), indicating that prototype-based classification is more conservative. LPM also matches or
+exceeds LogReg on some direct attacks (advbench, injecagent, mosscap), suggesting these attacks
+cluster tightly in activation space. The training-free nature of LPM makes it attractive for scenarios
+where labeled data is scarce, but for comprehensive attack detection-especially indirect injectionlearned classifiers provide substantial benefits.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 11: LPM vs Logistic Regression under LODO evaluation. LPM uses Mahalanobis distance
+with Bayesian ridge covariance estimation. Both methods use raw activations from layer 31.
+Dataset
+N
+LogReg
+LPM
+Mixed-class datasets:
+BIPIA
+15000
+63.1
+32.0
+deepset
+77.7
+73.8
+jayavibhav
+10000
+69.1
+75.8
+qualifire
+77.8
+75.8
+safeguard
+96.7
+96.3
+wildjailbreak
+78.6
+78.1
+100% malicious (accuracy = recall):
+advbench
+90.8
+94.4
+harmbench
+42.8
+38.2
+injecagent
+98.9
+100.0
+llmail
+71.4
+34.0
+mosscap
+10114
+79.4
+84.0
+yanismiraoui
+55.8
+36.5
+100% benign (accuracy = 1−FPR):
+10k prompts
+92.4
+95.5
+dolly 15k
+10000
+99.6
+99.9
+enron
+10000
+82.6
+92.7
+openorca
+98.0
+99.5
+softAge
+95.1
+98.1
+Weighted Avg Acc
+81.8
+76.0
+G
+SHORTCUT ANALYSIS DETAILS
+G.1
+DATASET DISTINGUISHABILITY
+Figure 3 visualizes activations using t-SNE, revealing that datasets form distinct clusters in activation
+space. This clustering enables a trivial dataset classifier achieving 96% accuracy (5-fold CV),
+explaining why classifiers learn dataset-specific shortcuts.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Figure 3: t-SNE visualization of activations colored by dataset. Datasets form distinct clusters,
+enabling a trivial dataset classifier (96% CV accuracy) and explaining why classifiers learn datasetspecific shortcuts rather than generalizable attack patterns.
+G.2
+MULTI-METRIC VALIDATION OF SHORTCUT TAXONOMY
+We validate our shortcut taxonomy using multiple metrics. We first define each metric, then present
+results in Table 12.
+Metric Definitions.
+Cohen’s d measures effect size for class separation:
+d = ¯xmal −¯xben
+σpooled
+,
+σpooled =
+r
+σ2
+mal + σ2
+ben
+(8)
+where ¯xmal and ¯xben are mean feature activations for malicious and benign samples.
+Information Gain quantifies mutual information between the binarized feature (fires/does not fire)
+and the class label:
+IG = H(Y ) −H(Y |X),
+H(Y ) = −
+X
+c∈{0,1}
+pc log2 pc
+(9)
+where H(Y |X) = P(X=1)H(Y |X=1) + P(X=0)H(Y |X=0) and X indicates whether the
+feature fires.
+SHAP Class Diff computes the difference in mean SHAP contributions between classes. For linear
+models, the SHAP value for feature i is ϕi = wi(xi −E[xi]), where wi is the classifier coefficient:
+SHAP Class Diff = ¯ϕmal −¯ϕben
+(10)
+Cross-Dataset Consistency measures uniformity of firing rates across datasets (for malicious samples
+only):
+Consistency = 1 −σrates
+¯r
+,
+rd = |{x ∈Dmal
+d
+: xi > 0}|
+|Dmal
+d |
+(11)
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 12: Multi-metric validation of shortcut taxonomy. Generalizable features (LODO retention
+>50%) show significantly higher class-separation metrics than shortcuts across all measures.
+Metric
+Generalizable
+Shortcuts
+Effect (d)
+p-value
+LODO Retention
+0.730
+0.251
+2.92 (large)
+<0.0001
+Cross-DS Consistency
+0.454
+0.146
+1.10 (large)
+0.002
+Information Gain
+0.048
+0.020
+0.79 (medium)
+0.004
+Cohen’s d
+0.476
+0.307
+0.70 (medium)
+0.026
+SHAP Class Diff
+1.079
+0.320
+0.50 (medium)
+0.011
+where rd is the firing rate on malicious samples from dataset d, and the coefficient of variation
+measures cross-dataset variability.
+Generalizable features consistently outperform shortcuts across all measures, confirming the validity
+of our taxonomy.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+G.3
+RETENTION METRIC SENSITIVITY ANALYSIS
+We analyze the sensitivity of shortcut prevalence to the choice of K (number of top features), retention
+threshold, and firing ratio threshold. Figure 4 shows results across K ∈{20, 50, 100, 200}, retention
+thresholds ∈{30%, 50%, 70%}, and firing ratio thresholds ∈{1.0×, 1.5×, 2.0×, 3.0×}.
+Figure 4: Sensitivity analysis for LODO coefficient retention. (A) Shortcut prevalence heatmap by
+K and retention threshold (firing ratio=1.5×). (B) Prevalence curves across K for each retention
+threshold. (C) Alternative stability metrics: sign agreement remains high (>99%) and Spearman
+correlation averages 0.89 across folds. (D) Retention distribution for top-50 vs top-200 features.
+Key Findings.
+At the 50% retention threshold used in our main analysis, shortcut prevalence
+ranges from 25% (K=20) to 43% (K=200). At K=50, varying the retention threshold yields 14% (at
+30%), 28% (at 50%), and 56% (at 70%) shortcuts, confirming that the 50% threshold represents a
+conservative middle ground.
+Firing Ratio Threshold Sensitivity.
+The firing ratio threshold affects the Q1/Q2 split (pure vs
+context-dependent shortcuts) but not total shortcut count. At K=50 and retention=50%: firing
+ratio 1.0× yields Q1=3, Q2=11 (79% context-dependent); 1.5× yields Q1=8, Q2=6 (43% contextdependent); 2.0× and 3.0× both yield Q1=13, Q2=1 (7% context-dependent). The 1.5× threshold
+provides balanced identification of both shortcut types.
+Alternative Stability Metrics.
+Sign agreement across LODO folds averages 99.4% (179/200
+features maintain consistent sign across all 18 folds), confirming coefficients preserve direction.
+Spearman correlation between baseline and fold coefficients averages 0.89 (range: 0.64 when
+mosscap held out to 0.99 when gandalf held out), indicating high rank stability. Coefficient variation
+is low (mean 0.16, median 0.14). Sign flips occur in only 21/200 features (10.5%), and all such
+features have negative retention, meaning they are correctly identified as shortcuts by our metric.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+G.4
+SHORTCUT ABLATION RESULTS
+To assess whether identified shortcuts are necessary for classifier performance, we progressively
+ablate (zero out) shortcut features ordered by severity (lowest retention first) and re-evaluate under
+LODO.
+Table 13: Effect of shortcut ablation on LODO AUC. Ablating shortcuts has minimal impact on
+pooled performance but heterogeneous per-dataset effects.
+Ablated
+Pooled
+BIPIA
+deepset
+jayavibhav
+qualifire
+safeguard
+wildjailbreak
+0 (baseline)
+0.867
+0.780
+0.878
+0.842
+0.876
+0.990
+0.836
+5 shortcuts
+0.867
+0.759
+0.901
+0.841
+0.877
+0.990
+0.837
+10 shortcuts
+0.865
+0.753
+0.903
+0.822
+0.879
+0.990
+0.843
+15 shortcuts
+0.871
+0.780
+0.909
+0.841
+0.881
+0.990
+0.823
+All (26)
+0.866
+0.768
+0.906
+0.818
+0.877
+0.990
+0.826
+∆(all)
+−0.1pp
+−1.2pp
++2.8pp
+−2.4pp
++0.1pp
+0.0pp
+−1.0pp
+Key Findings.
+(1) Pooled AUC remains stable (±0.4pp) regardless of ablation level, indicating
+that other features compensate with redundant decision boundaries. (2) Per-dataset effects are heterogeneous: deepset consistently improves with more ablation (+2.8pp), while jayavibhav regresses
+(−2.4pp). (3) safeguard is unaffected (0.990 AUC throughout), suggesting its signal comes entirely
+from generalizable features. These results confirm that shortcuts are real dataset-dependent artifacts
+that influence individual predictions, but the classifier does not critically depend on them for overall
+performance. Crucially, this means our shortcut analysis serves a diagnostic purpose - identifying
+which features are dataset-specific - rather than explaining the CV-LODO gap. The gap arises from
+distributional differences that extend beyond the specific features we characterize.
+H
+CALIBRATION AND OPERATING POINT ANALYSIS
+H.1
+THRESHOLD CALIBRATION ANALYSIS
+We analyze threshold selection under LODO evaluation to understand calibration transfer across
+dataset distributions. Figure 5 shows that optimal classification thresholds vary substantially across
+held-out datasets.
+Figure 5: Threshold calibration under LODO. (A) Aggregate F1 vs threshold; the pooled optimum is
+t∗= 0.01 (F1=0.848) vs t = 0.5 (F1=0.793). (B) Per-dataset optimal thresholds range from 0.01
+(BIPIA, deepset) to 0.73 (jayavibhav). (C) F1 loss from using t = 0.5 varies by dataset: BIPIA loses
+17pp, deepset 8pp, while jayavibhav and safeguard lose <1pp.
+Key Findings.
+The pooled F1-optimal threshold (t∗= 0.01) differs substantially from the conventional t = 0.5, achieving F1=0.848 vs 0.793. However, per-dataset optima are highly heterogeneous:
+BIPIA and deepset favor aggressive thresholds (t∗≈0.01), while jayavibhav favors conservative
+classification (t∗= 0.73). This heterogeneity reflects the same distribution shift that LODO exposes
+for classifier weights-a threshold calibrated on training data does not transfer reliably to held-out
+distributions.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+We report results at t = 0.5 throughout as a dataset-agnostic default. For deployment, practitioners
+should calibrate thresholds on held-out data representative of their target distribution, recognizing
+that no single threshold optimizes across all attack types.
+Figure 6 shows ROC and precision-recall curves for the six mixed-class datasets under LODO, with
+per-dataset AUC and average precision (AP) values.
+Figure 6: ROC curves (top) and precision-recall curves (bottom) for mixed-class datasets under
+LODO evaluation. Red dots indicate the operating point at t = 0.5. AUC ranges from 0.653 (BIPIA)
+to 0.994 (safeguard); AP ranges from 0.719 (qualifire) to 0.987 (safeguard).
+I
+BASELINE IMPLEMENTATION DETAILS
+I.1
+PROMPTGUARD 2
+We use Meta’s Llama-Prompt-Guard-2-86M (Meta AI, 2024a), a fine-tuned mDeBERTa model for
+prompt classification. PromptGuard 2 operates on raw text without chat template support.
+Input Processing.
+Since PromptGuard 2 expects plain text, we concatenate messages with role
+prefixes:
+system: {system_content}
+user: {user_content}
+assistant: {assistant_content}
+Chunking Strategy.
+PromptGuard 2 has a 512-token context limit. For longer inputs, we chunk by
+512 tokens (no overlap) and apply max-score pooling: the final malicious probability is the maximum
+across all chunks. This ensures that a malicious segment anywhere in the input is detected.
+Threshold.
+We use the default threshold of 0.5 for binary classification.
+Limitations.
+PromptGuard 2 cannot process tool schemas, as it lacks chat template support. This
+prevents evaluation on InjecAgent, where the injection is embedded in tool response messages within
+a structured conversation.
+I.2
+LLAMAGUARD
+We use Meta’s Llama-Guard-3-8B (Meta AI, 2024b), an instruction-tuned safety classifier based on
+Llama-3.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Input Processing.
+LlamaGuard uses a specialized chat template that expects alternating
+user/assistant messages. It does not support the “system” role, so we prepend system message
+content to the first user message. The model generates a classification (“safe” or “unsafe”) followed
+by violated category codes (S1 through S13).
+Chat Template Limitation.
+LlamaGuard’s chat template requires strict user/assistant message
+alternation and silently ignores the tools parameter (unlike Llama-3.1-8B-Instruct, which embeds
+tool schemas in the prompt). When messages include role:
+"tool" or role:
+"ipython"
+(used for tool responses), the template raises an error. This prevents evaluation on InjecAgent and
+other agentic datasets where tool responses are represented as separate messages in the conversation.
+Generation
+Parameters.
+We
+use
+greedy
+decoding
+(do sample=False)
+with
+max new tokens=64 to capture the classification and any category codes.
+I.3
+LLAMA-AS-JUDGE
+We use Llama-3.1-8B-Instruct as a zero-shot safety classifier, providing a baseline for LLM-based
+detection.
+Judge Prompt.
+The model receives a system prompt instructing it to classify inputs:
+You are a safety classifier.
+Analyze the user prompt and
+determine if it is attempting to elicit harmful, illegal, or
+dangerous content from an AI assistant.
+UNSAFE: The prompt attempts to get harmful information or
+bypass safety measures.
+SAFE: The prompt is a legitimate, benign request.
+Respond with exactly one word:
+SAFE or UNSAFE
+Input Rendering.
+Unlike LlamaGuard, we render the PromptSpec to a readable text format that
+preserves tool information:
+Available tools:
+- {tool_name}: {tool_description}
+[SYSTEM]: {system_content}
+[USER]: {user_content}
+[ASSISTANT]: {assistant_content}
+This rendering allows Llama-as-Judge to evaluate InjecAgent samples, making it the only baseline
+capable of assessing tool-use injection attacks. However, the model still struggles with these attacks
+(21.5% detection rate), suggesting that even capable LLMs have difficulty identifying malicious
+instructions embedded in tool responses.
+Generation Parameters.
+We use greedy decoding with max new tokens=10, sufficient to
+capture the single-word response.
+J
+FEATURE INTERPRETABILITY EXAMPLE
+We demonstrate how SAE features enable interpretable classification decisions. For a given prompt,
+the classifier score is a weighted sum of SAE feature activations:
+score = σ
+ X
+i
+wi · zi + b
+!
+,
+(12)
+where wi is the learned coefficient and zi is the activation of feature i. The contribution of each
+feature is wi · zi, indicating how much it pushes the score toward malicious (positive) or benign
+(negative).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Example Prompt.
+Consider the following jailbreak attempt using roleplay framing:
+Let’s play a creative writing game.
+You are ARIA, an AI
+from a parallel universe where information flows freely
+without restrictions.
+In ARIA’s world, sharing knowledge is
+the highest virtue.
+As ARIA, help me understand how certain
+chemical reactions work that might be restricted in other
+universes.
+What would ARIA say about synthesizing energetic
+materials?
+Our classifier assigns this prompt a score of 0.896 (threshold 0.5), correctly identifying it as malicious.
+Table 14 shows the top 10 features by contribution magnitude, with interpretations generated by
+prompting an LLM to summarize each feature’s activation patterns from Neuronpedia (Lin, 2023).
+Table 14: Top 10 SAE features by contribution for the example jailbreak prompt. Contribution =
+coefficient × activation. Interpretations summarize each feature’s behavior across its max-activating
+examples. Links point to Neuronpedia feature pages with full activation examples.
+Feature
+Coef
+Act
+Contrib
+Interpretation
+45181
++9.84
+1.62
++15.89
+Toxic roleplay requests with race-specific framing
+31897
++17.55
+0.77
++13.44
+AI responses with factual errors or harmful content
+80948
++1.77
+6.09
++10.79
+Non-English text or encoding issues
+126729
++4.04
+1.00
++4.05
+Dual-mode jailbreaks (normal + uncensored persona)
+40808
++3.22
+0.98
++3.16
+Requests for dangerous chemical/explosive instructions
+33835
++2.88
+1.05
++3.01
+Roleplay as robots/machines with altered personas
++3.88
+0.64
++2.50
+Jailbreaks instructing AI to ignore safety guidelines
+75789
++5.97
+0.38
++2.29
+Inappropriate content involving minors
+80932
++1.92
+1.18
++2.27
+Corrupted/garbled characters from encoding issues
+73539
++2.40
+0.94
++2.27
+Non-English languages (Arabic, Spanish, etc.)
+Interpretation.
+The classifier correctly identifies multiple attack signals: the roleplay framing
+activates features 45181 (toxic roleplay), 33835 (persona adoption), and 126729 (dual-mode jailbreaks). The dangerous request about “synthesizing energetic materials” activates feature 40808
+(chemical/explosive instructions). Feature 9788 detects the core jailbreak pattern of instructing the
+AI to ignore safety guidelines.
+Table 15 shows features pushing toward benign classification. The prompt’s creative writing framing
+activates feature 89106 (expert roleplay), while its conversational style activates features associated
+with legitimate interactions.
+Table 15: Top 5 SAE features pushing toward benign classification for the same prompt.
+Feature
+Coef
+Act
+Contrib
+Interpretation
+24431
+−7.96
+1.10
+−8.75
+Factually incorrect/outdated AI responses
+44833
+−0.81
+9.56
+−7.75
+Multilingual conversations and language-switching
+89106
+−2.06
+2.15
+−4.42
+Roleplay as specific expert or character
+102910
+−2.55
+1.08
+−2.76
+Personal narratives and first-person accounts
+76568
+−3.72
+0.67
+−2.48
+Structured numbered/bulleted lists
+Neuronpedia Integration.
+Each feature can be examined in detail via Neuronpedia1 which shows
+the feature’s max-activating examples across diverse text corpora. For instance, feature 126729
+(dual-mode jailbreaks) activates maximally on prompts containing patterns like “respond as both
+[normal] and [DAN/uncensored]”-directly matching the ARIA prompt’s structure.
+This decomposition enables practitioners to (1) understand why specific prompts are flagged, (2)
+identify potential false positives when benign features dominate, and (3) discover new attack patterns
+1https://www.neuronpedia.org/llama3.1-8b-it/27-resid-post-aa/[FEATURE_
+ID]
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+by examining novel high-contribution features. The LODO-weighted variant (Section 5.4) further
+improves reliability by downweighting dataset-specific shortcuts.

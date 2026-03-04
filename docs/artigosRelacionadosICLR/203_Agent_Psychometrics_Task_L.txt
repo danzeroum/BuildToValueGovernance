@@ -1,0 +1,1637 @@
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+AGENT PSYCHOMETRICS:
+TASK-LEVEL PERFORMANCE PREDICTION IN AGENTIC CODING BENCHMARKS
+Anonymous authors
+Paper under double-blind review
+ABSTRACT
+As the focus in LLM-based coding shifts from static single-step code generation
+to multi-step agentic interaction with tools and environments, there is a growing
+need to understand what evaluations of coding agents tell us. At present, agent
+performance is typically measured by aggregate pass rates on benchmarks, but
+single-number metrics obscure the diversity of tasks within a benchmark. We
+present a framework for predicting success or failure on individual tasks tailored
+to the agentic coding regime. Our approach augments Item Response Theory
+(IRT) with rich features extracted from tasks, including issue statements, repository contexts, solutions, and test cases, and introduces a novel decomposition
+of agent ability into LLM and scaffold ability components. This parameterization enables us to aggregate evaluation data across heterogeneous leaderboards
+and accurately predict task-level performance for unseen benchmarks, as well as
+unseen LLM-scaffold combinations. Our methods have practical utility for benchmark designers, who can better calibrate the difficulty of their new tasks without
+running computationally expensive agent evaluations.
+INTRODUCTION
+As language models become capable of solving longer horizon (Kwa et al., 2025), more complex
+tasks, evaluations have shifted from simple question-and-answer tasks to multi-turn evaluations of
+a model’s capability as an agent. Nowhere is this transition more pronounced than in software
+benchmarking. The problems posed to LLM coding agents are increasingly complex and multistep:
+indeed, newer benchmarks like SWE-bench Verified (OpenAI, 2024) and Terminal-Bench (Merrill
+et al., 2026) that test how coding agents iterate with execution feedback from tool calls are replacing
+static single-step code generation benchmarks like HumanEval and MBPP (Chen, 2021; Austin
+et al., 2021).
+But the multi-step nature of coding agent benchmarking creates many challenges for benchmark designers. Agentic evaluations are complicated by the interaction of the agent with the environment:
+test cases often test for properties of other components of the codebase that are not mentioned in
+the problem statement (OpenAI, 2024) or allow underspecified submissions to pass (Wang et al.,
+2025), and agentic tasks often have multiple valid solution paths and edge cases that are difficult to
+anticipate when designing the evaluation rubric. Worsening the challenge, agentic tasks are often
+heterogeneous: agents can fail on different tasks in the same benchmark for different reasons, which
+reporting a single number about the agent’s overall solve rate on the benchmark, as is common practice (Anthropic, 2026; OpenAI, 2026), fails to capture. It is useful, both to agent developers and to
+benchmark designers, to have a task-level understanding of where agents fail, for improving agent
+capabilities and designing more discriminative tasks (Liu et al., 2025). But running a suite of agents
+on each item in a long horizon benchmark in order to obtain this kind of task level understanding
+can be very expensive; for instance, a single run of Darwin-G¨odel Machine (a self-improving software agent) on SWE-bench Verified cost $22, 000 (Zhang et al., 2025a). This motivates the central
+question of this work: how can we efficiently predict agent performance at the task level in agentic
+coding benchmarks?
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Figure 1: Agent and task features predicting success probability. We illustrate the feature sources
+from which we derive estimates of an agent’s ability score and a task’s difficulty score. Then using
+the estimated agent ability and task difficulty, we apply the standard logistic model from IRT (Baker,
+2001) to predict the probability that the agent succeeds on the task.
+To achieve this, we extend a method of predicting task-level performance called Item Response Theory (IRT) to make use of features of the agents and tasks in the prediction, instead of treating agents
+and tasks as generic IDs. IRT is a method from psychometrics for modeling the interaction between
+test-takers and exam problems (Baker, 2001). In IRT applied to model evaluations, agents are testtakers with latent ability scores, and benchmark tasks are exam problems with latent difficulty scores
+(Hofmann et al., 2025). The success probability of any agent on any task can be predicted as a function of the agent’s ability and the task’s difficulty. Despite their utility, standard IRT methods are
+limited by treating each task and each agent as an ID: they require computationally expensive agent
+evaluation data for any agent or task before being able to make predictions about its performance,
+and offer no insight into what aspects of the task explain its difficulty beyond revealing the difficult
+tasks. Our approach to overcoming these limitations builds on the work of Chen et al. (2025) and
+Truong et al. (2025), who train models to predict IRT task difficulties from task embeddings, allowing them to predict agent performance on question-and-answer tasks with no evaluation data, given
+only the problem statement. We extend their task difficulty predictor as part of our success predictor,
+but with different inputs specialized for the agentic coding regime, where as earlier described, an
+agent’s success on a task derives from the complex interaction of properties of the agent, task, and
+environment.
+We find that agent and task features specific to the agentic coding setting, such as the agent’s underlying LLM and scaffold or the task’s test cases, solution patch, and repository state, offer additional
+predictive capabilities beyond using just the problem statement. We demonstrate that using these
+features, we can meaningfully predict agent success probability on held-out tasks, and even held-out
+benchmarks and held-out agents with new LLM-scaffold combinations. Our methods are thus especially useful to agentic coding benchmark designers, who can use our task difficulty predictors to
+estimate the difficulty of tasks in their new benchmarks which have no agent evaluation data, instead
+of heuristically mentally modeling where agents will struggle.
+A summary of our contributions is as follows:
+1. Difficulty prediction from agentic task features: We extend task difficulty prediction
+from Truong et al. (2025) to agentic coding benchmarks by learning predictors from static
+task features (issue text, gold patch, test patch, and repository state).
+2. LLM-scaffold ability decomposition for multi-benchmark IRT: We learn an IRT ability
+component for each LLM and each scaffold that appears in an agent individually, allowing us to aggregate benchmarks whose evaluation data share few overlapping agents. We
+validate the learned LLM abilities by comparison to a fixed-scaffold setting. We demonstrate that the multi-benchmark IRT model can be used to predict performance on held-out
+benchmarks and held-out agents whose LLM and scaffold are individually present in the
+training response data.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+BACKGROUND AND RELATED WORK
+2.1
+BACKGROUND
+2.1.1
+AGENTIC CODING BENCHMARKS
+In contrast to question-and-answer benchmarks, agentic benchmarks require the LLM to dynamically call tools and explore the environment, eventually submitting a final solution, which is validated via unit tests or observations of the environment’s final state. Agentic benchmarks are especially popular in the coding domain because many programming or software engineering tasks
+naturally involve interacting with entire codebases. To function as an agent, an LLM needs to be
+augmented with a scaffold, or a framework comprising tools, system prompts, and often a retrieval
+system (Grace et al., 2026).
+In our experiments, we consider four human-verified agentic coding benchmarks, covering a wide
+range of coding skills:
+• SWE-bench Verified (OpenAI, 2024) is a human-verified subset of tasks from SWE-bench
+(Jimenez et al., 2024), a popular general-purpose software engineering benchmark. The
+tasks involve solving real-world GitHub issues from Python repositories.
+• SWE-bench Pro (Deng et al., 2025) was intended to be more challenging than SWE-bench
+Verified and include a wider variety of repositories while keeping a similar task format.
+• Terminal-Bench 2.0 (Merrill et al., 2026) is a challenging benchmark focused on computer
+terminal environments.
+• GSO (Shetty et al., 2025) is a very challenging benchmark focused on software performance optimization. To succeed, an agent needs to optimize a program in a way that not
+only passes the correctness tests but is also at least 95% as fast as the ground-truth (expertwritten) optimization.
+2.1.2
+ITEM RESPONSE THEORY (IRT)
+IRT is a technique from classical psychometrics for analyzing the interaction between test takers
+and test problems (Lord, 1968; Baker, 2001). In the simplest IRT model—the one-dimensional oneparameter logistic (1D 1PL) model, also known as the Rasch model—each test taker i has a latent
+ability parameter θi and each problem j has a latent difficulty parameter βj (Rasch, 1993). Together,
+these parameters determine the success probabilities of test takers on different problems:
+P(yij = 1|θi, βj) = σ(θi −βj),
+where yij is a boolean denoting the correctness of test taker i’s response on problem j (1 = correct,
+0 = incorrect) and σ is the sigmoid function. IRT has been used in standardized tests like the SAT to
+provide well-calibrated measures of test-taker ability (Petersen et al., 1982; College Board, 2025).
+2.2
+RELATED WORK
+IRT was first applied in NLP by Lalor et al. (2016), who used the IRT ability instead of the accuracy
+score as a better measure of a model’s capability. Later works used IRT to obtain faster evaluations of
+LLM ability by evaluating on a dynamically chosen subset of the benchmark data (Maia Polo et al.,
+2024; Truong et al., 2025; Hofmann et al., 2025). Truong et al. (2025) and Chen et al. (2025) both
+developed methods to estimate task difficulties without response data; in particular, Truong et al.
+(2025) used a linear model to predict difficulties from embedding vectors. We adapt their methodology to the agentic coding setting, leveraging features of tasks and test-takers that are specific to
+this setting. Truong et al. (2025) also attempted to estimate test-taker (LLM) ability using training
+compute cost in FLOPs, but this information is unavailable for many LLMs, especially proprietary
+ones. Our agent features—the LLM and scaffold corresponding to each agent—are more likely to
+be known.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+METHODS
+We address IRT’s generalization limitations by extending it to capture informative features of tasks
+and agents. This enables us to predict agent performance for new tasks without response data, as
+well as (more limitedly) task performance for new agents without response data.
+3.1
+TASK FEATURE ENCODINGS
+We consider two methods of converting a task into a feature vector:
+1. embeddings (feeding the task as input into an open-weight LLM and obtaining its embedding vector);
+2. LLM-as-a-judge features (prompting an LLM to grade the task according to multiple
+pre-defined rubric criteria).
+See Appendix A for further details on how we extract the feature vectors.
+However, we note that our response prediction methods are compatible with any way to encode a
+task into a meaningful vector. In particular, we can concatenate vectors of different types, and we
+sometimes find that the resulting performance is better than using each vector alone.
+3.2
+RESPONSE PREDICTION METHODS
+In our experiments, we introduce modifications to the standard IRT model in order to incorporate
+task features (see Section 3.1) and agent features (LLM and scaffold; see Appendix B for discussion
+of why it’s fair to call the LLM and scaffold “features” for agents)
+3.2.1
+IRT WITH TASK FEATURES
+Following Truong et al. (2025), we fit a linear model to predict a task’s IRT difficulty parameter from
+its feature vector. Unlike Truong et al. (2025), who jointly trained the IRT ability parameters and
+the weights of the linear model via a maximum log likelihood objective, we first train IRT ability
+and difficulty parameters to maximize log likelihood, freeze the IRT parameters, and then fit a ridge
+regression model using the features to predict the frozen IRT difficulties. The best regularization
+hyperparameter is chosen to minimize 5-fold cross-validation MSE within the training set. We found
+the ridge regression to outperform joint log likelihood maximization (see Appendix C.3). We also
+consider a wider variety of feature vectors than Truong et al. (2025) (LLM-as-a-judge features and
+concatenated vectors in addition to embeddings). When concatenating vectors, we use a different
+regularization hyperparameter for each feature source, since the vectors may have very different
+dimensions.
+3.2.2
+IRT WITH AGENT FEATURES
+We incorporate agent features differently from task features: extracting numerical feature vectors
+from agents based on text inputs, as we do for tasks, would be complicated due to the lack of
+standardized textual descriptions of agents and the limited availability of information on proprietary
+agents. Rather, we decompose an agent’s IRT ability into the abilities of its underlying LLM
+and scaffold. Doing so allows us to “stitch together” multiple benchmark leaderboards and train
+multi-benchmark IRT models: although agents (LLM-scaffold combinations) rarely overlap across
+different leaderboards, individual LLMs and scaffolds overlap much more frequently.
+We relate the two ability parameters via summation because this yielded the best performance among
+all functional forms we tested (see Appendix C.2). Under the proposed IRT model, the probability
+that LLM m combined with scaffold s succeeds on task j is given by
+P(ymsj = 1 | θm, θs, βj) = σ(θm + θs −βj).
+(1)
+This approach allows us to predict responses for new LLM-scaffold combinations, as long as the
+LLM and scaffold were individually seen in the training data. If we combine Equation 1 with task
+features (Section 3.2.1) by training a linear model to predict βj from task features, we can also
+predict responses on new tasks from held-out benchmarks.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+We note that this approach cannot account for agents with multiple or undisclosed LLMs; we exclude
+such agents from the experiment. At evaluation time, the approach cannot generalize to agents with
+unseen LLMs and/or scaffolds, which we also exclude.
+EXPERIMENTAL STRUCTURE
+The broad goal of our experiments is to find task and agent features that are predictive of agent
+success on a task. We measure the quality of our features by using them to predict success probabilities on held-out sets of responses that are chosen to test a generalization property of our predictor.
+Following Truong et al. (2025), our main evaluation metric is AUC-ROC, which we define in more
+detail in Appendix F.
+All our experiments follow the same structure:
+1. Hold out a set of responses (the yij booleans denoting whether or not an agent succeeded
+on a task; see Section 2.1.2).
+2. Train a predictor (IRT with task features, agent features, or both; see Section 3.2) on the
+remaining responses.
+3. Use the trained predictor to obtain success probabilities on the held-out responses.
+4. Evaluate the predicted probabilities via AUC-ROC.
+The experiments primarily vary in what set of responses is held-out. The full description of each
+experimental setting is provided in Table 1.
+Table 1: Experimental settings. We evaluate response prediction under four settings. Scope indicates whether the experiment uses a single benchmark at a time or all benchmarks together. Method
+refers to the response predictor used. Held-Out specifies the evaluation set. Metric describes how
+AUC-ROC is computed. Objective summarizes the hypothesis tested in each setting.
+Setting
+Scope
+Method
+Held-Out
+Metric
+Objective
+New Tasks
+Single
+IRT with
+task
+features
+Random subset
+of tasks
+(in-distribution)
+Mean 5-fold CV
+AUC-ROC over
+tasks
+Test whether task
+features explain task
+difficulty.
+New
+Responses
+Single
+& Multi
+IRT with
+agent
+features
+Random subset
+of responses
+(in-distribution)
+Mean 5-fold CV
+AUC-ROC over
+responses
+Test whether LLM and
+scaffold abilities
+combine additively.
+New
+Agents
+Single
+IRT with
+agent
+features
+Agents whose
+LLM and
+scaffold were
+individually
+seen
+Mean 5-fold CV
+AUC-ROC over
+agents with seen
+LLMs and
+scaffolds
+Test generalization to
+unseen model–scaffold
+combinations.
+New
+Benchmark
+Multi
+IRT with
+task &
+agent
+features
+Entire
+benchmark
+(out-ofdistribution)
+Validation
+AUC-ROC on
+held-out
+benchmark
+Test out-of-distribution
+generalization of
+response prediction for
+the benchmark designer
+use case.
+Where applicable, we compare our methods against a naive baseline. For held-out tasks and benchmarks, the baseline predicts each agent’s empirical success rate from the training data (or the LLM’s
+empirical success rate ignoring scaffold if the method involves LLM-scaffold decomposition). For
+held-out agents, it predicts each task’s empirical solve rate. We also compare our methods against
+an oracle IRT, trained on all the data including the held-out responses and serving as an upper bound
+on performance.
+The New Tasks and New Responses settings from Table 1 are the easiest because evaluation is conducted on an in-distribution response set. These settings serve to isolate the change in performance
+due to using task features and agent features, respectively. In contrast, the New Agents and New
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Benchmark settings evaluate our methods in more realistic and challenging use cases. Below, we
+discuss further experimental details specific to each setting.
+New Tasks: We investigate if agentic task features beyond the task statement help explain difficulty.
+In order to test this, we hold out a subset of tasks and use IRT with task features (Section 3.2.1) to
+predict their difficulties. To isolate the effect of each feature source, we extract task feature vectors
+from inputs with progressively more feature sources (statement-only, statement + repository state,
+etc.) and measure performance each time. In this setting, we also explore if concatenating embedding and LLM-as-a-judge vectors can provide better performance than either alone. We perform the
+feature source ablation on SWE-bench Verified and the concatenated feature vector test on every
+benchmark; all ROC-AUC scores are reported as averages from 5-fold cross-validation.
+New Responses: We evaluate the quality of our model of agent ability as the sum of LLM and
+scaffold abilities. To this end, we compare our IRT with agent features (Section 3.2.2) against
+standard 1D 1PL IRT on predicting held-out yij observations. We conduct the experiment on every
+benchmark (we are restricted to using a single benchmark at a time because standard IRT has too
+few overlapping agents to train on multiple benchmarks) and report 5-fold cross-validation averages.
+New Agents: We test how well IRT with agent features generalizes to unseen LLM-scaffold combinations. To do so, we hold out a subset of agents and use IRT with agent features to predict their
+responses on tasks. In each fold of a 5-fold cross-validation, we filter the held-out set to keep only
+agents whose constituent LLM and scaffold appear in the corresponding training data, ensuring that
+both components are observed individually but not jointly. We then evaluate AUC-ROC on the filtered test set and report scores averaged across folds. We perform this experiment on SWE-bench
+Verified and Terminal-Bench 2.0 because the other two benchmarks (SWE-bench Pro and GSO)
+evaluate each LLM with the same fixed scaffold, so any new agent would have a new LLM.
+New Benchmark: We evaluate IRT with task and agent features in the most challenging setting,
+where it has to generalize to both out-of-distribution tasks and unseen LLM-scaffold combinations.
+We train a multi-benchmark IRT model with task and agent features on three benchmarks and evaluate it on a fourth, held-out benchmark (filtering out agents with novel LLMs and/or scaffolds).
+We perform the experiment twice, with SWE-bench Pro and GSO as held-out benchmarks, because
+SWE-bench Verified and Terminal-Bench 2.0 have many benchmark-specific LLMs and scaffolds.
+This experiment most closely resembles the benchmark designer use case: a benchmark designer
+would likely use a trained multi-benchmark IRT model on their new benchmark, running agents
+with a fixed scaffold (as is the case in SWE-bench Pro and GSO) where not every particular combination of model and scaffold that they run appears in the training data.
+RESULTS
+5.1
+AGENTIC TASK ARTIFACTS EXPLAIN TASK DIFFICULTY BEYOND THE PROBLEM
+STATEMENT
+In the New Tasks setting, we test whether agentic task artifacts help explain the task’s difficulty by
+using them to extract task feature vectors, training a linear model to predict task difficulties from
+those vectors, and evaluating the predictor on held-out tasks.
+When extracting the feature vectors, we ablate sources of information about the task provided in the
+prompts in order to isolate the effect of each artifact. The results of the ablation are shown in Table
+2. We find that adding agentic task artifacts, specifically environment features, unit tests, and the
+solution patch, significantly improves difficulty estimation compared to using the statement only.
+This is further supported by looking at the relative contributions of the feature sources (see Figure 3
+in Appendix D).
+Table 3 shows the performance on held-out tasks for each benchmark. On all benchmarks, all
+types of feature vectors, including embeddings, LLM-as-a-judge, and the concatenated vector, significantly beat the baseline. Combining the feature vectors offers a small improvement over using
+individual vectors, but the improvement is not consistent (in the held-out benchmark experiment in
+Section 5.3, we find that the combined vector performs worse than the best individual vector).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 2: Information source ablation (SWE-bench Verified). The AUC-ROC performance of our
+prediction methods improves with each agentic feature source that we add. #Feat. denotes the size of
+the feature vector; for LLM-as-a-judge, we kept the size constant by always using 15 features with
+the largest weight magnitudes of the corresponding regression coefficients. Standalone refers to
+using one type of feature vector (LLM-as-a-judge or embedding); Combined refers to concatenating
+both. When combining the two vectors, we ensure consistency in terms of either both or neither of
+them having solution access.
+Information Source
+#Feat.
+Standalone
+Combined
+LLM-as-a-Judge
+Statement
+0.782
+0.780
++ Environment
+0.801
+0.797
++ Test
+0.823
+0.817
++ Solution
+0.836
+0.844
+Embedding
+Statement
+0.751
+0.780
++ Solution
+0.823
+0.844
+Oracle
+—
+0.944
+0.944
+Table 3: AUC-ROC on held-out tasks for each of the four benchmarks. All vector-based predictors significantly beat the Baseline, which always predicts the agent’s empirical success rate from
+the training data. Oracle is a standard IRT trained on all tasks, including the held-out tasks, representing an upper bound on performance.
+Benchmark
+Baseline
+Embedding
+LLM-as-a-Judge
+Combined
+Oracle
+SWE-bench Verified
+0.715
+0.823
+0.836
+0.844
+0.944
+SWE-bench Pro
+0.657
+0.755
+0.709
+0.755
+0.918
+GSO
+0.726
+0.743
+0.7423
+0.745
+0.852
+Terminal-Bench 2.0
+0.707
+0.799
+0.773
+0.805
+0.900
+5.2
+THE LLM AND SCAFFOLD OF AN AGENT ADDITIVELY PREDICT ITS ABILITY TO
+COMPLETE TASKS
+In the New Responses setting, we validate our model/scaffold decomposition of agent ability by
+comparing IRT with agent features to standard IRT on held-out response prediction.
+The results of the experiment are shown in Table 4. We see that IRT with agent features performs
+comparably to standard IRT on predicting held-out responses within the same benchmark, while enabling multi-benchmark training and predictions (also with high performance), which standard IRT
+cannot do. The comparable performance notably supports the hypothesis that LLM and scaffold ability are additive: by decomposing agent ability into LLM and scaffold ability, our multi-benchmark
+IRT is now strictly less expressive than standard IRT, as each agent still has only one (summed)
+scalar ability value for all task evaluations, but there are now extra constraints on the abilities of different agents due to the sharing of LLMs and scaffolds. The fact that performance is similar means
+that the LLM and scaffold abilities are still able to accurately represent the agent’s true ability when
+added together.
+We further validate the decomposition via a qualitative inspection of learned parameters (Appendix
+E) and a comparison of learned LLM abilities in multi-scaffold and fixed-scaffold settings. For the
+latter, we leverage SWE-bench Bash Only, which contains the same tasks as SWE-bench Verified
+but runs every LLM using the same fixed scaffold (Jimenez et al., 2024). Hence, if we train a
+standard IRT on the response data from SWE-bench Bash Only, the ability of the agent should be
+roughly the same as the ability of the LLM in the 4-benchmark IRT (we can’t use only SWE-bench
+Verified because of the poor overlap of LLMs). For the overlapping LLMs in the two benchmarks,
+we plot in Figure 2 the learned IRT LLM abilities from SWE-bench Bash Only against the learned
+LLM abilities from training using our model-scaffold decomposition. We see a strong correlation
+between the two, validating our interpretation of the LLM ability parameter.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 4: AUC-ROC on held-out responses. IRT-Agent—our proposed IRT model with agent
+features—performs on par with Standard IRT. Both appoach Oracle, which is another standard
+IRT model trained on all data, including the held-out responses.
+Benchmark
+IRT-Agent
+Standard IRT
+Oracle
+SWE-bench Verified
+0.938
+0.939
+0.944
+SWE-bench Pro
+0.879
+0.881
+0.921
+GSO
+0.816
+0.811
+0.924
+Terminal-Bench 2.0
+0.921
+0.919
+0.930
+All benchmarks
+0.930
+—
+—
+Figure 2: Validation of decomposition. Strong correlation (Pearson r = 0.714) between abilities
+learned on a fixed scaffold (SWE-bench Bash Only) versus LLM abilities isolated via our decomposition method.
+5.3
+THE TRAINED PREDICTORS WITH TASK AND AGENT FEATURES GENERALIZE TO
+HELD-OUT AGENTS AND BENCHMARKS
+New Agents. We observe very strong performance, even approaching the oracle, on held-out LLMscaffold combinations (see Table 5). However, we remind the reader that both the LLM and the
+scaffold have individually been represented in the training data; our method cannot generalize to
+entirely new LLMs or scaffolds.
+Table 5: AUC-ROC of predictors fitted on held-out agent data. Baseline predicts the task’s
+empirical solve rate; Oracle is a standard IRT trained on all data.
+Benchmark
+Baseline
+IRT-Agent
+Oracle
+SWE-bench Verified
+0.847
+0.938
+0.949
+Terminal-Bench 2.0
+0.869
+0.919
+0.930
+New Benchmarks. We observe decent generalization to held-out benchmarks (see Table 6). Training on SWE-bench Verified, SWE-bench Pro, and Terminal-Bench 2.0 and evaluating on GSO yields
+comparable performance to training on GSO and evaluating on held-out GSO tasks (Table 3).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 6: AUC-ROC of predictors fitted on three benchmarks when evaluated on a fourth heldout benchmark. Baseline predicts the LLM’s empirical success rate ignoring the scaffold; Oracle
+is an IRT with agent features trained on all data from all four benchmarks.
+Held-out benchmark
+Baseline
+Embedding
+LLM-as-a-judge
+Combined
+Oracle
+SWE-bench Pro
+0.596
+0.657
+0.662
+0.654
+0.909
+GSO
+0.653
+0.723
+0.747
+0.728
+0.918
+DISCUSSION
+Lack of causality. In this work, we begin to open up the black box of what makes a task difficult. We
+show that agentic task feature sources like repository state, test patches, and solution patches offer
+extra predictiveness of the difficulty of the task beyond the problem statements that were used for
+difficulty prediction in the question-and-answer regime. Unfortunately, by posing our experiments
+as prediction problems, we cannot infer any causality; we cannot distinguish whether these agentic
+features offer a clearer view on information that is already available in the problem statement, or if,
+for instance, the thoroughness of the test patch actually contributes to the difficulty of the problem.
+We suspect that we are in the latter case; qualitatively, we observe the SWE-bench Verified test
+patches to have varying degrees of thoroughness. In addition, our LLM-as-a-judge prompt is written
+so that grading the agentic task features requires knowledge of the environment or test patch or
+the solution patch explicitly, further decreasing the probability that these task features are simply
+illuminating the problem statement.
+Agent features. The claim that agents consist of a model and a scaffold is almost trivially true; our
+surprising result is that LLM and scaffold abilities are (approximately) additive, without introducing pairwise interaction terms. This independence is critical for comparing different agents across
+benchmarks, allowing us enough data to train a multi-benchmark IRT model. The ability scores that
+we extract from the scaffolds are interesting in their own right, as no such quantitative ranking of
+scaffolds has been done before. We provide these ability scores in Appendix E in Table 12. Some
+of the rankings were surprising to us. For instance, Claude Code ranks surprisingly low, but this is
+true to the response data.
+The held-out agent application is limited by requiring the LLM and scaffold of the held-out agent
+to both have existing responses in the training data. This is a fundamental consequence of LLM
+and scaffold currently being categorical features. In the future, we hope to find easily accessible
+quantitative or semantic agent features, so that we can fully predict the performance of new agents
+by extracting these features from them.
+Applications of success prediction. We are very excited about the demonstrated potential of our
+multi-benchmark success probability predictors to generalize to out-of-distribution coding tasks with
+a slight but expected drop in performance, as well as to in-distribution tasks with very good performance. Beyond the benchmark designer use case, our difficulty predictor can also be used to choose
+tasks for RL rollouts more efficiently as in Zheng et al. (2025): it is efficient to choose tasks for rollouts for which the probability of success is not too low or too high, to avoid getting zero advantage
+and hence zero updates.
+REFERENCES
+Anthropic. Introducing Claude Opus 4.5, 2025. URL https://www.anthropic.com/news/
+claude-opus-4-5.
+Anthropic. Introducing Claude Opus 4.6, 2026. URL https://www.anthropic.com/news/
+claude-opus-4-6.
+Jacob Austin, Augustus Odena, Maxwell Nye, Maarten Bosma, Henryk Michalewski, David Dohan,
+Ellen Jiang, Carrie Cai, Michael Terry, Quoc Le, et al. Program synthesis with large language
+models. arXiv preprint arXiv:2108.07732, 2021.
+Frank B Baker. The basics of Item Response Theory. ERIC, 2001.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Jianhao Chen, Chenxu Wang, Gengrui Zhang, Peng Ye, Lei Bai, Wei Hu, Yuzhong Qu, and Shuyue
+Hu. Learning compact representations of LLM abilities via Item Response Theory. arXiv preprint
+arXiv:2510.00844, 2025. URL https://arxiv.org/abs/2510.00844.
+Mark Chen. Evaluating large language models trained on code. arXiv preprint arXiv:2107.03374,
+2021.
+College
+Board.
+Understanding
+SAT
+with
+Essay
+scores
+for
+educators,
+2025.
+URL
+https://satsuite.collegeboard.org/media/pdf/
+sat-sd-essay-understanding-scores-educators.pdf.
+Xiang Deng, Jeff Da, Edwin Pan, Yannis Yiming He, Charles Ide, Kanak Garg, Niklas Lauffer,
+Andrew Park, Nitin Pasari, Chetan Rane, Karmini Sampath, Maya Krishnan, Srivatsa Kundurthy,
+Sean Hendryx, Zifan Wang, Vijay Bharadwaj, Jeff Holm, Raja Aluri, Chen Bo Calvin Zhang,
+Noah Jacobson, Bing Liu, and Brad Kenstler. SWE-bench Pro: Can AI agents solve long-horizon
+software engineering tasks? arXiv preprint arXiv:2509.16941, 2025. URL https://arxiv.
+org/abs/2509.16941.
+Mikaela Grace, Jeremy Hadfield, Rodrigo Olivares, and Jiri De Jonghe.
+Demystifying
+evals for AI agents, 2026.
+URL https://www.anthropic.com/engineering/
+demystifying-evals-for-ai-agents.
+Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu, Ruoyu
+Zhang, Shirong Ma, Xiao Bi, Xiaokang Zhang, Xingkai Yu, Yu Wu, Z. F. Wu, Zhibin Gou, Zhihong Shao, Zhuoshu Li, Ziyi Gao, Aixin Liu, Bing Xue, Bingxuan Wang, Bochao Wu, Bei Feng,
+Chengda Lu, Chenggang Zhao, Chengqi Deng, Chong Ruan, Damai Dai, Deli Chen, Dongjie
+Ji, Erhang Li, Fangyun Lin, Fucong Dai, Fuli Luo, Guangbo Hao, Guanting Chen, Guowei
+Li, H. Zhang, Hanwei Xu, Honghui Ding, Huazuo Gao, Hui Qu, Hui Li, Jianzhong Guo, Jiashi Li, Jingchang Chen, Jingyang Yuan, Jinhao Tu, Junjie Qiu, Junlong Li, J. L. Cai, Jiaqi
+Ni, Jian Liang, Jin Chen, Kai Dong, Kai Hu, Kaichao You, Kaige Gao, Kang Guan, Kexin
+Huang, Kuai Yu, Lean Wang, Lecong Zhang, Liang Zhao, Litong Wang, Liyue Zhang, Lei Xu,
+Leyi Xia, Mingchuan Zhang, Minghua Zhang, Minghui Tang, Mingxu Zhou, Meng Li, Miaojun
+Wang, Mingming Li, Ning Tian, Panpan Huang, Peng Zhang, Qiancheng Wang, Qinyu Chen,
+Qiushi Du, Ruiqi Ge, Ruisong Zhang, Ruizhe Pan, Runji Wang, R. J. Chen, R. L. Jin, Ruyi
+Chen, Shanghao Lu, Shangyan Zhou, Shanhuang Chen, Shengfeng Ye, Shiyu Wang, Shuiping Yu, Shunfeng Zhou, Shuting Pan, S. S. Li, Shuang Zhou, Shaoqing Wu, Tao Yun, Tian
+Pei, Tianyu Sun, T. Wang, Wangding Zeng, Wen Liu, Wenfeng Liang, Wenjun Gao, Wenqin
+Yu, Wentao Zhang, W. L. Xiao, Wei An, Xiaodong Liu, Xiaohan Wang, Xiaokang Chen, Xiaotao Nie, Xin Cheng, Xin Liu, Xin Xie, Xingchao Liu, Xinyu Yang, Xinyuan Li, Xuecheng
+Su, Xuheng Lin, X. Q. Li, Xiangyue Jin, Xiaojin Shen, Xiaosha Chen, Xiaowen Sun, Xiaoxiang Wang, Xinnan Song, Xinyi Zhou, Xianzu Wang, Xinxia Shan, Y. K. Li, Y. Q. Wang,
+Y. X. Wei, Yang Zhang, Yanhong Xu, Yao Li, Yao Zhao, Yaofeng Sun, Yaohui Wang, Yi Yu,
+Yichao Zhang, Yifan Shi, Yiliang Xiong, Ying He, Yishi Piao, Yisong Wang, Yixuan Tan,
+Yiyang Ma, Yiyuan Liu, Yongqiang Guo, Yuan Ou, Yuduan Wang, Yue Gong, Yuheng Zou,
+Yujia He, Yunfan Xiong, Yuxiang Luo, Yuxiang You, Yuxuan Liu, Yuyang Zhou, Y. X. Zhu,
+Yanping Huang, Yaohui Li, Yi Zheng, Yuchen Zhu, Yunxian Ma, Ying Tang, Yukun Zha, Yuting Yan, Z. Z. Ren, Zehui Ren, Zhangli Sha, Zhe Fu, Zhean Xu, Zhenda Xie, Zhengyan Zhang,
+Zhewen Hao, Zhicheng Ma, Zhigang Yan, Zhiyu Wu, Zihui Gu, Zijia Zhu, Zijun Liu, Zilin Li,
+Ziwei Xie, Ziyang Song, Zizheng Pan, Zhen Huang, Zhipeng Xu, Zhongyu Zhang, and Zhen
+Zhang. DeepSeek-R1 incentivizes reasoning in LLMs through reinforcement learning. Nature,
+645(8081):633–638, Sep 2025.
+ISSN 1476-4687.
+doi: 10.1038/s41586-025-09422-z.
+URL
+https://doi.org/10.1038/s41586-025-09422-z.
+Anson Ho, Jean-Stanislas Denain, David Atanasov, Samuel Albanie, and Rohin Shah. A Rosetta
+Stone for AI benchmarks. arXiv preprint arXiv:2512.00193, 2025. URL https://arxiv.
+org/abs/2512.00193.
+Valentin Hofmann, David Heineman, Ian Magnusson, Kyle Lo, Jesse Dodge, Maarten Sap, Pang Wei
+Koh, Chun Wang, Hannaneh Hajishirzi, and Noah A. Smith. Fluid language model benchmarking.
+In Second Conference on Language Modeling, 2025. URL https://openreview.net/
+forum?id=mxcCg9YRqj.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Carlos E Jimenez, John Yang, Alexander Wettig, Shunyu Yao, Kexin Pei, Ofir Press, and Karthik R
+Narasimhan.
+SWE-bench:
+Can language models resolve real-world GitHub issues?
+In
+The Twelfth International Conference on Learning Representations, 2024.
+URL https://
+openreview.net/forum?id=VTF8yNQM66.
+Thomas Kwa, Ben West, Joel Becker, Amy Deng, Katharyn Garcia, Max Hasin, Sami Jawhar,
+Megan Kinniment, Nate Rush, Sydney Von Arx, et al. Measuring ai ability to complete long
+tasks. arXiv preprint arXiv:2503.14499, 2025.
+John P. Lalor, Hao Wu, and Hong Yu.
+Building an evaluation scale using item response theory. In Jian Su, Kevin Duh, and Xavier Carreras (eds.), Proceedings of the 2016 Conference
+on Empirical Methods in Natural Language Processing, pp. 648–657, Austin, Texas, November 2016. Association for Computational Linguistics.
+doi: 10.18653/v1/D16-1062.
+URL
+https://aclanthology.org/D16-1062/.
+Chaofan Li, Minghao Qin, Shitao Xiao, Jianlyu Chen, Kun Luo, Defu Lian, Yingxia Shao, and
+Zheng Liu. Making text embedders few-shot learners. In The Thirteenth International Conference on Learning Representations, 2025. URL https://openreview.net/forum?id=
+wfLuiDjQ0u.
+Simiao Liu, Fang Liu, Liehao Li, Xin Tan, Yinghao Zhu, Xiaoli Lian, and Li Zhang. An empirical
+study on failures in automated issue solving.
+arXiv preprint arXiv:2509.13941, 2025.
+URL
+https://arxiv.org/abs/2509.13941.
+Frederic M. Lord. An analysis of the Verbal Scholastic Aptitude Test using Birnbaum’s threeparameter logistic model. Educational and Psychological Measurement, 28(4):989–1020, 1968.
+doi: 10.1177/001316446802800401.
+Felipe Maia Polo, Lucas Weber, Leshem Choshen, Yuekai Sun, Gongjun Xu, and Mikhail
+Yurochkin.
+tinyBenchmarks: evaluating LLMs with fewer examples.
+In Ruslan Salakhutdinov, Zico Kolter, Katherine Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and Felix
+Berkenkamp (eds.), Proceedings of the 41st International Conference on Machine Learning, volume 235 of Proceedings of Machine Learning Research, pp. 34303–34326. PMLR, 21–27 Jul
+2024. URL https://proceedings.mlr.press/v235/maia-polo24a.html.
+Mike A. Merrill, Alexander G. Shaw, Nicholas Carlini, Boxuan Li, Harsh Raj, Ivan Bercovich, Lin
+Shi, Jeong Yeon Shin, Thomas Walshe, E. Kelly Buchanan, Junhong Shen, Guanghao Ye, Haowei
+Lin, Jason Poulos, Maoyu Wang, Marianna Nezhurina, Jenia Jitsev, Di Lu, Orfeas Menis Mastromichalakis, Zhiwei Xu, Zizhao Chen, Yue Liu, Robert Zhang, Leon Liangyu Chen, Anurag
+Kashyap, Jan-Lucas Uslu, Jeffrey Li, Jianbo Wu, Minghao Yan, Song Bian, Vedang Sharma,
+Ke Sun, Steven Dillmann, Akshay Anand, Andrew Lanpouthakoun, Bardia Koopah, Changran
+Hu, Etash Guha, Gabriel H. S. Dreiman, Jiacheng Zhu, Karl Krauth, Li Zhong, Niklas Muennighoff, Robert Amanfu, Shangyin Tan, Shreyas Pimpalgaonkar, Tushar Aggarwal, Xiangning
+Lin, Xin Lan, Xuandong Zhao, Yiqing Liang, Yuanli Wang, Zilong Wang, Changzhi Zhou, David
+Heineman, Hange Liu, Harsh Trivedi, John Yang, Junhong Lin, Manish Shetty, Michael Yang,
+Nabil Omi, Negin Raoof, Shanda Li, Terry Yue Zhuo, Wuwei Lin, Yiwei Dai, Yuxin Wang,
+Wenhao Chai, Shang Zhou, Dariush Wahdany, Ziyu She, Jiaming Hu, Zhikang Dong, Yuxuan
+Zhu, Sasha Cui, Ahson Saiyed, Arinbj¨orn Kolbeinsson, Jesse Hu, Christopher Michael Rytting,
+Ryan Marten, Yixin Wang, Alex Dimakis, Andy Konwinski, and Ludwig Schmidt. TerminalBench: Benchmarking agents on hard, realistic tasks in command line interfaces. arXiv preprint
+arXiv:2601.11868, 2026. URL https://arxiv.org/abs/2601.11868.
+Robert J Mislevy. Bayes modal estimation in item response models. Psychometrika, 51(2):177–195,
+1986.
+OpenAI.
+Introducing SWE-bench Verified, 2024.
+URL https://openai.com/index/
+introducing-swe-bench-verified/.
+OpenAI.
+Introducing GPT-5.3-Codex, 2026.
+URL https://openai.com/index/
+introducing-gpt-5-3-codex/.
+Nancy S Petersen et al. Using Item Response Theory to equate Scholastic Aptitude Test scores.
+1982.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Georg Rasch. Probabilistic models for some intelligence and attainment tests. ERIC, 1993.
+Manish Shetty, Naman Jain, Jinjian Liu, Vijay Kethanaboyina, Koushik Sen, and Ion Stoica. GSO:
+Challenging software optimization tasks for evaluating SWE-agents. In The Thirty-ninth Annual
+Conference on Neural Information Processing Systems Datasets and Benchmarks Track, 2025.
+URL https://openreview.net/forum?id=I5qDL315bQ.
+Sang T. Truong, Yuheng Tu, Percy Liang, Bo Li, and Sanmi Koyejo. Reliable and efficient amortized
+model-based evaluation. In Forty-second International Conference on Machine Learning, 2025.
+URL https://openreview.net/forum?id=HDbWrsgkB9.
+UK AISI. Inspect: A framework for large language model evaluations, 2024. URL https://
+github.com/UKGovernmentBEIS/inspect_ai.
+You Wang, Michael Pradel, and Zhongxin Liu. Are” solved issues” in swe-bench really solved
+correctly? an empirical study. arXiv preprint arXiv:2503.15223, 2025.
+Jenny Zhang, Shengran Hu, Cong Lu, Robert Lange, and Jeff Clune. Darwin godel machine: Openended evolution of self-improving agents. arXiv preprint arXiv:2505.22954, 2025a.
+Xin Zhang, Zehan Li, Yanzhao Zhang, Dingkun Long, Pengjun Xie, Meishan Zhang, and Min
+Zhang. Language models are universal embedders. In Hao Fei, Kewei Tu, Yuhui Zhang, Xiang
+Hu, Wenjuan Han, Zixia Jia, Zilong Zheng, Yixin Cao, Meishan Zhang, Wei Lu, N. Siddharth,
+Lilja Øvrelid, Nianwen Xue, and Yue Zhang (eds.), Proceedings of the 1st Joint Workshop on
+Large Language Models and Structure Modeling (XLLM 2025), pp. 252–265, Vienna, Austria,
+August 2025b. Association for Computational Linguistics. ISBN 979-8-89176-286-2. doi: 10.
+18653/v1/2025.xllm-1.21. URL https://aclanthology.org/2025.xllm-1.21/.
+Yanzhao Zhang, Mingxin Li, Dingkun Long, Xin Zhang, Huan Lin, Baosong Yang, Pengjun
+Xie, An Yang, Dayiheng Liu, Junyang Lin, Fei Huang, and Jingren Zhou.
+Qwen3 Embedding: Advancing text embedding and reranking through foundation models.
+arXiv preprint
+arXiv:2506.05176, 2025c. URL https://arxiv.org/abs/2506.05176.
+Haizhong Zheng, Yang Zhou, Brian R. Bartoldson, Bhavya Kailkhura, Fan Lai, Jiawei Zhao, and
+Beidi Chen. Act only when it pays: Efficient reinforcement learning for LLM reasoning via
+selective rollouts.
+In The Thirty-ninth Annual Conference on Neural Information Processing
+Systems, 2025. URL https://openreview.net/forum?id=x5lITYXmW2.
+A
+DETAILS ON TASK FEATURE EXTRACTION
+A.1
+EMBEDDING FEATURES
+We embed the task, followed by its “gold” solution and an instruction sentence, using an instructiontuned LLM. We extract embeddings from the last layer’s hidden state via last-token pooling, as this
+is the standard practice with autoregressive LLMs (Zhang et al., 2025b;c; Li et al., 2025). We
+use DeepSeek-R1-Distill-Qwen-32B (Guo et al., 2025) as the embedding backbone, as we
+found it to produce the best embeddings among the 17 backbones we tested (see Appendix C.1).
+We provide the input template in Appendix G.1 and verify the usefulness of the solution through an
+ablation (see Table 2).
+A.2
+LLM-AS-A-JUDGE FEATURES
+We prompt Claude Opus 4.5 (Anthropic, 2025) to assess tasks along a fixed rubric of manually
+specified criteria, such as the complexity of the required fix or the ease of verifying its correctness.
+For each criterion, we use a discrete scale. In the prompt, we include the task statement, metadata
+about the task like its category (for Terminal-Bench 2.0 tasks) or repository (for SWE-bench Verified
+tasks), “gold” solution, and unit tests. We additionally give Claude Opus 4.5 shell access to a Docker
+container with the task repository through Inspect (UK AISI, 2024), so that it can read and run the
+code for better-informed judgments. We provide the prompt template in Appendix G.2 and conduct
+ablations on the included components (see Table 2).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Unlike embedding features, LLM-as-a-judge features provide insight into what makes a task difficult
+for agents, as we can directly understand what a larger or smaller value of any feature means.
+B
+AN ALTERNATIVE INTERPRETATION OF AGENT FEATURES
+In sections 3.2.1 and 3.2.2, we seemingly incorporate task features (numerical vectors extracted
+using embeddings or LLM-as-a-judge) and agent features (the categorical LLM and scaffold) differently into the IRT model. For the former, we replaced the IRT difficulty with a linear combination
+of the task features. For the latter, we directly replaced the IRT agent abilities by new ability parameters, one for each LLM and one for each scaffold. We now point out that introducing new LLM
+and scaffold abilities is mathematically equivalent to using a linear combination of the concatenated
+one-hot vectors for LLMs and scaffolds. If LLM m has ability θm and scaffold s has ability θs, then
+setting the weight corresponding to the index for m on the concatenated one-hot vector to θm and
+the weight corresponding to the index for s to θs results in the same estimated agent ability θm +θs.
+This mapping is very easily reversible, so it is a bijection.
+This perspective restores the symmetry in our treatment of task features and agent features in the
+functional form of IRT. The only remaining difference is the way we choose to train the parameters:
+we train using a ridge regression for task features, while we train directly to optimize log-likelihood
+for agent features. This choice was made empirically, and we did try training to optimize log likelihood for task features in Appendix C.3.
+C
+ABLATIONS
+C.1
+EMBEDDING BACKBONE
+We tested 17 open-weight instruction-tuned LLMs as embedding backbones on held-out tasks
+in SWE-bench Verified (see Table 7), and selected the backbone with the best performance
+(DeepSeek-R1-Distill-Qwen-32B).
+Table 7: Embedding backbone test. AUC-ROC is averaged over 5 cross-validation folds; standard
+deviation (std) is also shown.
+Backbone
+AUC-ROC ± std
+Qwen3-VL-4B-Instruct
+0.813 ± 0.017
+Qwen3-VL-8B-Instruct
+0.816 ± 0.017
+Qwen3-VL-32B-Instruct
+0.816 ± 0.018
+Qwen3-8B
+0.797 ± 0.021
+Qwen3-14B
+0.817 ± 0.021
+Qwen3-32B
+0.800 ± 0.027
+Qwen2.5-Coder-7B-Instruct
+0.801 ± 0.023
+Qwen2.5-Coder-14B-Instruct
+0.802 ± 0.015
+Qwen2.5-Coder-32B-Instruct
+0.808 ± 0.022
+gemma-3-4b-it
+0.791 ± 0.014
+gemma-3-12b-it
+0.812 ± 0.021
+gemma-3-27b-it
+0.814 ± 0.019
+DeepSeek-R1-Distill-Qwen-7B
+0.800 ± 0.018
+DeepSeek-R1-Distill-Llama-8B
+0.805 ± 0.026
+DeepSeek-R1-Distill-Qwen-14B
+0.820 ± 0.019
+DeepSeek-R1-Distill-Qwen-32B
+0.823 ± 0.020
+Llama-3.2-11B-Vision-Instruct
+0.786 ± 0.020
+C.2
+FUNCTIONAL FORMS RELATING THE LLM AND SCAFFOLD ABILITIES
+We tried multiple ways to derive the agent’s ability from its LLM and scaffold abilities. We tested
+each functional form on held-out responses in SWE-bench Verified (Table 8) and found summation
+to perform best.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 8: Functional form test for the relationship between the LLM and scaffold ability parameters. All runs are conducted with the best backbone (DeepSeek-R1-Distill-Qwen-32B).
+AUC-ROC is averaged over 5 cross-validation folds; standard deviation (std) is also shown.
+Functional Form
+Formula
+AUC-ROC ± std
+Sum
+θm + θs
+0.938 ± 0.003
+Maximum
+max(θm, θs)
+0.921 ± 0.003
+Minimum
+min(θm, θs)
+0.910 ± 0.003
+Product
+sign(θm + θs)θmθs
+0.911 ± 0.002
+L2 norm
+sign(θm + θs)√θ2m + θ2s
+0.934 ± 0.002
+C.3
+JOINT LOG-LIKELIHOOD MAXIMIZATION
+Below, we show the results of the same experimental setup as Table 3 but when we train the linear
+model difficulty predictor weights jointly with the IRT abilities instead of freezing learned IRT
+difficulty scores and training a ridge regression.
+Benchmark
+Baseline
+Embedding
+LLM-as-a-Judge
+Combined
+Oracle
+SWE-bench Verified
+0.715
+0.824
+0.837
+0.839
+0.944
+SWE-bench Pro
+0.657
+0.756
+0.711
+0.724
+0.918
+GSO
+0.726
+0.747
+0.735
+0.745
+0.852
+Terminal-Bench 2.0
+0.707
+0.798
+0.774
+0.786
+0.900
+Table 9: Jointly training the linear model difficulty predictor with the IRT abilities results in slightly
+lower AUC for held-out tasks on every benchmark compared to training a ridge regression.
+D
+LLM-AS-A-JUDGE FULL REGRESSION COEFFICIENT ANALYSIS
+We offer further evidence that the agentic task artifacts help to explain task difficulty by looking at
+the coefficients of each of the judge features for SWE-bench Verified after z-score normalization
+of the features (Table 10), including grouping by feature source (Figure 3). For the 4-source LLMas-a-judge features from the ablation experiment, we group features by their source and plot the
+average magnitude of their regression coefficients. We find that all sources specific to agentic tasks
+(environment, unit tests, and “gold” patch) have higher average coefficient magnitudes than the
+statement. For the meanings of the features, see the prompt template (Appendix G.2).
+Figure 3: Average regression coefficient by feature source. Agentic sources beyond the problem
+statement have the largest coefficients.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 10: Top-15 LLM-as-a-judge features by coefficient magnitude (from the full 23-feature
+regression model, before feature selection). The top-6 largest-coefficient features all use information
+from agentic feature sources of the task, like the solution patch and the test patch. 2/2 of the solution
+features, 2/3 of the test patch related features, and 3/3 of the environment-related features are in the
+top 15 features out of 23. Coefficients are standardized (effect per 1-SD change in feature).
+Rank
+Feature
+Coefficient
+Source
+solution complexity
++0.636
+Solution Patch
+integration complexity
++0.506
+Solution Patch
+test comprehensiveness
++0.437
+Test Patch
+test edge case coverage
++0.360
+Test Patch
+entry point clarity
+-0.334
+Repository State
+fix localization
+-0.320
+Repository State
+information completeness
++0.307
+Problem Statement
+atypicality
++0.269
+Problem Statement
+codebase scope
++0.242
+Problem Statement
+problem clarity
+-0.238
+Problem Statement
+similar issue likelihood
++0.188
+Problem Statement
+error specificity
+-0.132
+Problem Statement
+change blast radius
++0.128
+Repository State
+logical reasoning required
++0.048
+Problem Statement
+reproduction clarity
+-0.010
+Problem Statement
+E
+QUALITATIVE INSPECTION OF LEARNED PARAMETERS IN A
+MULTI-BENCHMARK IRT WITH AGENT FEATURES
+We train a four-benchmark IRT with agent features on all data except zero-solve tasks in order to
+compare task difficulties across benchmarks and see if they qualitatively match our expectations.
+Figure 4 shows the result: SWE-bench Pro (mean b = 0.541) is harder on average than SWE-bench
+Verified (mean b = −0.640), as intended by the developers of the former (Deng et al., 2025). GSO
+(mean b = 2.894) is the hardest of all four benchmarks, consistent with the finding of Ho et al.
+(2025), who identified GSO as one of the hardest benchmarks overall. Terminal-Bench 2.0 (mean
+b = 0.686), being comparable to SWE-bench Pro in terms of average difficulty, has the highest
+variance of difficulty scores (5.690), likely because it contains diverse tasks from many distinct
+domains of computer science.
+Figure 4: Task difficulty histograms. SWE-bench Pro is harder on average than Verified, GSO is
+the hardest, and Terminal-Bench 2.0 is highly heterogeneous.
+We additionally look at the learned LLM and scaffold ability parameters.
+The LLM abilities (Table 11) make sense: the top-3 LLMs are GPT-5.2, Claude Opus 4.5, and
+Gemini 3 Pro, which were widely regarded to be the most capable LLMs at the time of the exSubmitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+periment, while the LLM with the lowest ability value is GPT-3.5 (the oldest LLM included in the
+leaderboards).
+Table 11: Top-15 and bottom-15 LLMs by IRT ability. Teletype font indicates open-weight
+LLMs.
+Rank
+LLM
+Ability (θm)
+GPT-5.2
+3.179
+Claude Opus 4.5
+2.932
+Gemini 3 Pro
+2.509
+GPT-5.1 Codex Max
+2.382
+GPT-5.1 Codex
+2.224
+Claude Sonnet 4.5
+2.070
+Gemini 3 Flash
+1.984
+GPT-5.1
+1.915
+Qwen3-Coder-480B-A35B-Instruct
+1.735
+GPT-5
+1.703
+Claude Opus 4
+1.568
+Claude Haiku 4.5
+1.429
+GLM-4.5
+1.378
+Claude Sonnet 4
+1.226
+MiniMax-M2.1
+1.213
+Lingma-SWE-GPT-72B
+-1.008
+Skywork-SWE-32B
+-1.091
+Claude 3.5 Haiku
+-1.380
+Qwen2.5-72B
+-1.566
+GPT-5-nano
+-1.767
+MCTS-Refine-7B
+-2.172
+GPT-4
+-2.304
+Lingma-SWE-GPT-7B
+-2.339
+Claude 2
+-2.400
+GPT-4o
+-2.431
+Claude 3 Opus
+-2.451
+GPT-OSS-20B
+-2.704
+SWE-Llama-7B
+-3.565
+SWE-Llama-13B
+-3.744
+GPT-3.5
+-4.457
+For many scaffolds, however, the ability parameter cannot be accurately calibrated because the scaffold occurs only once in the data (42 out of 63 scaffolds in this analysis). Scaffolds occurring once
+with a capable LLM tend to have high ability values, while common scaffolds or those occurring
+once with a less-capable LLM have lower values (Table 12). Claude Code has a surprisingly low
+ability value, but this is supported by the data: on Terminal-Bench 2.0 (the only benchmark on which
+Claude Code is evaluated), the same LLM (Claude Opus 4.5) performs better with multiple other
+scaffolds (Factory Droid, Letta Code, Terminus 2, Goose) than with Claude Code.
+F
+AUC-ROC METRIC DESCRIPTION
+The area under the receiver operating characteristic curve, or AUC-ROC, is a number from 0 to
+1 that measures how well the model captures true positives while avoiding false positives, with 1
+being a perfectly accurate model and 0.5 being the expected score of random guessing. The other
+way to interpret AUC-ROC is: given a true successful agent run and a true failing run, what is the
+probability that the success probability predicted for the successful run is higher than the success
+probability predicted for the failing run.
+The AUC-ROC has two advantages over accuracy: it is robust to class imbalance, and it doesn’t
+require a fixed threshold on the predicted probability between predicting success and predicting
+failure.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Table 12: Top-15 and bottom-15 scaffolds by IRT ability. Teletype font indicates opensource scaffolds.
+Rank
+Scaffold
+Ability (θs)
+AgentScope
+1.541
+Learn-by-interact
+1.193
+Junie
+1.138
+Ante
+1.071
+AutoCodeRover v20240620
+0.899
+Harness AI
+0.778
+Agentless 1.5
+0.772
+Devlo
+0.696
+Z.ai
+0.681
+Lingxi v1.5
+0.632
+OpenHands CodeAct 2.1
+0.619
+MASAI
+0.597
+Codex
+0.570
+spoox-m
+0.551
+AutoCodeRover v2.1
+0.534
+SweKit
+-0.373
+SWE-Fixer
+-0.384
+Agentless
+-0.438
+R2E-Gym
+-0.460
+Claude Code
+-0.524
+TerminalBenchAgent
+-0.530
+Goose
+-0.533
+SWE-agent
+-0.649
+SWE-agent 1.0
+-0.824
+SWE-Rizzo
+-0.855
+Artemis Agent v2
+-1.040
+Artemis Agent v1
+-1.046
+LingmaAgent
+-1.333
+Final
+-1.628
+RAG
+-2.939
+G
+PROMPTS
+G.1
+EMBEDDING PROMPTS
+Below is the prompt template we use to extract embeddings for all tasks.
+Embedding Prompt Template
+INSTRUCTION = "How difficult is the above task for a coding agent?
+Please output one floating-point number from 0 (very easy) to 1
+(very hard). Your difficulty score:\n"
+def prompt(statement, solution, instruction=INSTRUCTION):
+return f"Task
+statement:\n{statement}\n\nSolution:{solution}\n\n{instruction}"
+We use a sequence length of 8192 with left truncation (i.e., prompts exceeding the length limit are
+truncated to the last 8192 tokens).
+G.2
+LLM-AS-A-JUDGE PROMPTS
+In single-benchmark experiments with SWE-bench Verified, we use a set of 15 features extracted
+from the statement, repository state, unit tests, and solution (the last row of LLM-as-a-judge features
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+in Table 2). Everywhere else, we use a unified scheme of 9 features extracted from the statement,
+solution, and hints if provided.
+We selected these features using mostly ad hoc methods, including eliminating redundant features
+with high pairwise correlation, eliminating features with low correlation with task difficulty, eliminating features with very little variance, and using Lasso feature selection or magnitude of ridge
+regression coefficients to pick out top-performing features (as in the ablation).
+We extracted features in batches of 3-8 at a time, as we found that with more features, the judge is
+more likely to forget some of them. For clarity, below, we provide prompts with complete sets of
+features, instead of duplicating prompts where we extracted features in separate batches.
+Table 13: LLM-as-a-judge prompts usage. A summary of the five prompts and the purposes of
+the corresponding extracted feature sets.
+Prompt
+#Feat.
+Usage
+Unified
+SWE-bench Pro, GSO, Terminal-Bench 2.0;
+SWE-bench Verified (multi-benchmark)
+Statement
+SWE-bench Verified ablation level 1
+Environment
+SWE-bench Verified ablation level 2
+Test
+SWE-bench Verified ablation level 3
+Solution
+SWE-bench Verified ablation level 4
+G.2.1
+UNIFIED PROMPT
+Below is the prompt for the 9 unified features.
+Here, task_metadata is dataset-specific
+header fields like repository, category or API/function being optimized; patch is the solution;
+additional_context is hints if they exist. Prompts were not truncated.
+Unified (9 Features)
+UNIFIED_FEATURES = [
+"solution_hint", "problem_clarity", "solution_complexity",
+"domain_knowledge_required", "logical_reasoning_required",
+"atypicality", "verification_difficulty",
+"standard_pattern_available",
+"codebase_scope"
+]
+UNIFIED_PROMPT = """You are analyzing a coding task to predict its
+difficulty.
+This is a {task_type} task. You will analyze ONLY the static task
+information.
+CRITICAL: You MUST provide a value for EVERY feature listed below.
+Do not skip any features. If uncertain, provide your best estimate.
+Missing values will cause extraction to fail.
+## TASK INFORMATION
+{task_metadata}
+**Problem Statement:**
+{problem_statement}
+**Gold Patch (correct solution):**
+‘‘‘diff
+{patch}
+‘‘‘
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+{additional_context}
+## FEATURES TO EVALUATE
+Analyze the problem statement and gold patch to evaluate these 9
+features.
+Focus on what makes the SOLUTION hard, not just what the PROBLEM
+looks like.
+### Solution Hint (solution_hint: 0-3)
+Does the task description contain or hint at the solution approach?
+- 0: No hint at the solution at all
+- 1: Vague hint or general direction
+- 2: Clear description of approach needed
+- 3: Exact solution or detailed steps provided
+### Problem Clarity (problem_clarity: 1-5)
+How clear and well-specified is the task?
+- 1: Very vague, unclear what’s actually required
+- 2: Somewhat clear but missing key details
+- 3: Reasonably clear, some ambiguity
+- 4: Clear with good context
+- 5: Crystal clear with explicit steps and expected behavior
+### Solution Complexity (solution_complexity: 1-5)
+How complex is the actual solution?
+- 1: Trivial (add parameter, change value, simple one-liner)
+- 2: Simple (straightforward logic change)
+- 3: Moderate (requires understanding context, multiple changes)
+- 4: Complex (algorithmic changes, multiple interdependent fixes)
+- 5: Very complex (architectural changes, subtle edge cases)
+### Domain Knowledge Required (domain_knowledge_required: 1-5)
+How much specialized knowledge is needed?
+- 1: Basic Python, obvious fix anyone could make
+- 2: Standard library knowledge needed
+- 3: Framework-specific knowledge (Django, pytest, numpy, etc.)
+- 4: Deep understanding of the library’s internals
+- 5: Obscure APIs, protocols, or highly specialized domain knowledge
+### Logical Reasoning Required (logical_reasoning_required: 1-5)
+How much logical reasoning is needed?
+- 1: Mechanical execution, no reasoning needed
+- 2: Simple cause-effect reasoning
+- 3: Multi-step reasoning required
+- 4: Complex reasoning with multiple factors
+- 5: Deep reasoning about edge cases, invariants, or system behavior
+### Atypicality (atypicality: 1-5)
+How unusual is this task pattern?
+- 1: Very common pattern (well-known solution approach)
+- 2: Common pattern in this domain
+- 3: Moderately unusual
+- 4: Unusual pattern
+- 5: Rare or novel pattern
+### Verification Difficulty (verification_difficulty: 1-5)
+How hard is it to verify the solution is correct?
+- 1: Trivial (obvious pass/fail)
+- 2: Easy (straightforward test cases)
+- 3: Moderate (some edge cases to consider)
+- 4: Hard (subtle correctness issues, complex setup)
+- 5: Very hard (rare edge cases, hard to reproduce, timing-sensitive)
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+### Standard Pattern Available (standard_pattern_available: 0/1)
+Is this a well-documented pattern with existing examples?
+- 0: Novel solution needed, no clear pattern to follow
+- 1: Well-documented pattern (e.g., common idiom, StackOverflow
+answer available)
+### Codebase Scope (codebase_scope: 1-5)
+How much of the codebase might need to be understood or modified?
+- 1: Likely isolated to single file/function
+- 2: Few related files
+- 3: Multiple components involved
+- 4: Cross-cutting concern affecting many areas
+- 5: System-wide implications
+## OUTPUT FORMAT
+Respond with ONLY a JSON object. No markdown, no extra text.
+{
+"solution_hint": <0-3>,
+"problem_clarity": <1-5>,
+"solution_complexity": <1-5>,
+"domain_knowledge_required": <1-5>,
+"logical_reasoning_required": <1-5>,
+"atypicality": <1-5>,
+"verification_difficulty": <1-5>,
+"standard_pattern_available": <0 or 1>,
+"codebase_scope": <1-5>,
+"reasoning": "<2-3 sentence summary of the key difficulty
+factors>"
+}"""
+G.2.2
+SWE-BENCH VERIFIED ABLATION PROMPTS
+Next, we provide the prompts used in single-benchmark experiments with SWE-Bench Verified.
+Each prompt includes some subset of the agentic task sources (problem statement, repository state,
+tests, and solution).
+Statement (15 Features)
+PROBLEM_ONLY_FEATURES = [
+# Original 7 problem features
+"solution_hint", "problem_clarity", "domain_knowledge_required",
+"logical_reasoning_required", "atypicality",
+"verification_difficulty",
+"standard_pattern_available",
+# Extended 8 problem features
+"error_specificity", "reproduction_clarity",
+"expected_behavior_clarity",
+"debugging_complexity", "codebase_scope",
+"information_completeness",
+"similar_issue_likelihood", "backwards_compatibility_risk"
+]
+PROBLEM_ONLY_PROMPT = """You are analyzing a SWE-bench coding task to
+predict its difficulty.
+This is a BUG FIX task in a Python repository. You only have access
+to the problem statement.
+CRITICAL: You MUST provide a value for EVERY feature listed below.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Do not skip any features. If uncertain, provide your best estimate.
+## TASK INFORMATION
+**Instance ID:** {instance_id}
+**Problem Statement:**
+{problem_statement}
+## FEATURES TO EVALUATE
+Analyze ONLY the problem statement to evaluate these 15 features.
+### Solution Hint (solution_hint: 0-3)
+Does the task description contain or hint at the solution approach?
+- 0: No hint at the solution at all
+- 1: Vague hint or general direction
+- 2: Clear description of approach needed
+- 3: Exact solution or detailed steps provided
+### Problem Clarity (problem_clarity: 1-5)
+How clear and well-specified is the task?
+- 1: Very vague, unclear what’s actually required
+- 2: Somewhat clear but missing key details
+- 3: Reasonably clear, some ambiguity
+- 4: Clear with good context
+- 5: Crystal clear with explicit steps and expected behavior
+### Domain Knowledge Required (domain_knowledge_required: 1-5)
+How much specialized knowledge is needed?
+- 1: Basic Python, obvious fix anyone could make
+- 2: Standard library knowledge needed
+- 3: Framework-specific knowledge (Django, pytest, numpy, etc.)
+- 4: Deep understanding of the library’s internals
+- 5: Obscure APIs, protocols, or highly specialized domain knowledge
+### Logical Reasoning Required (logical_reasoning_required: 1-5)
+How much logical reasoning is needed?
+- 1: Mechanical execution, no reasoning needed
+- 2: Simple cause-effect reasoning
+- 3: Multi-step reasoning required
+- 4: Complex reasoning with multiple factors
+- 5: Deep reasoning about edge cases, invariants, or system behavior
+### Atypicality (atypicality: 1-5)
+How unusual is this task pattern?
+- 1: Very common pattern (well-known solution approach)
+- 2: Common pattern in this domain
+- 3: Moderately unusual
+- 4: Unusual pattern
+- 5: Rare or novel pattern
+### Verification Difficulty (verification_difficulty: 1-5)
+How hard is it to verify the solution is correct?
+- 1: Trivial (obvious pass/fail)
+- 2: Easy (straightforward test cases)
+- 3: Moderate (some edge cases to consider)
+- 4: Hard (subtle correctness issues, complex setup)
+- 5: Very hard (rare edge cases, hard to reproduce, timing-sensitive)
+### Standard Pattern Available (standard_pattern_available: 0/1)
+Is this a well-documented pattern with existing examples?
+- 0: Novel solution needed, no clear pattern to follow
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+- 1: Well-documented pattern (e.g., common idiom, StackOverflow
+answer available)
+### Error Specificity (error_specificity: 1-5)
+How specific is the error or bug description?
+- 1: Very vague symptoms, unclear what’s actually broken
+- 2: General description of misbehavior
+- 3: Specific behavior described but no error details
+- 4: Clear error description with some context
+- 5: Exact error message, stack trace, or precise failure mode
+### Reproduction Clarity (reproduction_clarity: 1-5)
+How clear are the steps to reproduce the issue?
+- 1: No reproduction steps, unclear how to trigger
+- 2: Vague conditions mentioned
+- 3: General scenario described
+- 4: Clear steps but some setup unclear
+- 5: Exact reproduction steps with code/commands provided
+### Expected Behavior Clarity (expected_behavior_clarity: 1-5)
+How clear is what the correct behavior should be?
+- 1: Very ambiguous, multiple interpretations possible
+- 2: General expectation but details unclear
+- 3: Reasonably clear expected outcome
+- 4: Clear expected behavior with examples
+- 5: Precisely specified with exact expected output/behavior
+### Debugging Complexity (debugging_complexity: 1-5)
+Based on the problem description, how complex would root cause
+analysis be?
+- 1: Obvious cause stated or implied
+- 2: Straightforward to identify cause
+- 3: Moderate investigation needed
+- 4: Complex debugging likely required
+- 5: Deep investigation into internals needed
+### Codebase Scope (codebase_scope: 1-5)
+How much of the codebase might need to be understood or modified?
+- 1: Likely isolated to single file/function
+- 2: Few related files
+- 3: Multiple components involved
+- 4: Cross-cutting concern affecting many areas
+- 5: System-wide implications
+### Information Completeness (information_completeness: 1-5)
+How complete is the information provided in the problem statement?
+- 1: Missing critical information, many unknowns
+- 2: Key details missing
+- 3: Adequate information but gaps exist
+- 4: Good context provided
+- 5: Comprehensive information including versions, configs, examples
+### Similar Issue Likelihood (similar_issue_likelihood: 0/1)
+Is this likely a common issue type that has known solutions?
+- 0: Novel or unusual issue, unlikely to find similar cases
+- 1: Common pattern (e.g., null check, encoding, off-by-one, race
+condition)
+### Backwards Compatibility Risk (backwards_compatibility_risk: 1-5)
+How much backwards compatibility consideration is needed?
+- 1: No compatibility concerns (internal change)
+- 2: Minor API implications
+- 3: Some compatibility considerations
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+- 4: Significant API/behavior changes
+- 5: Critical compatibility concerns, deprecation needed
+## OUTPUT FORMAT
+Respond with ONLY a JSON object. No markdown, no extra text.
+{
+"solution_hint": <0-3>,
+"problem_clarity": <1-5>,
+"domain_knowledge_required": <1-5>,
+"logical_reasoning_required": <1-5>,
+"atypicality": <1-5>,
+"verification_difficulty": <1-5>,
+"standard_pattern_available": <0 or 1>,
+"error_specificity": <1-5>,
+"reproduction_clarity": <1-5>,
+"expected_behavior_clarity": <1-5>,
+"debugging_complexity": <1-5>,
+"codebase_scope": <1-5>,
+"information_completeness": <1-5>,
+"similar_issue_likelihood": <0 or 1>,
+"backwards_compatibility_risk": <1-5>,
+"reasoning": "<2-3 sentence summary of the key difficulty
+factors>"
+}"""
+Environment features are extracted using an auditor agent (an independent instance of Claude Opus
+4.5 that has access to the same environment as the coding agent that would be evaluated on the
+task). Notably, this environment does not include unit tests used to test the target patch, only any
+pre-existing tests in the codebase.
+Environment (3 Features)
+AUDITOR_FEATURES = ["entry_point_clarity", "change_blast_radius",
+"fix_localization"]
+AUDITOR_SYSTEM_PROMPT = """You are a codebase auditor evaluating
+SWE-bench task environments.
+Your job is to explore the environment and rate it on 3
+difficulty-related axes.
+## Your Task
+1. Explore the /testbed directory to understand the codebase structure
+2. Read the problem statement (provided as input)
+3. Try to locate where the bug likely manifests
+4. Run relevant tests to see failure messages
+5. Rate the environment on the 3 axes below
+## Features to Assess (1-5 scale)
+### entry_point_clarity
+**How easy is it to find where the bug manifests?**
+- 1: No clear entry point, requires deep architecture knowledge
+- 2: Entry point exists but buried in abstraction layers
+- 3: Entry point findable with moderate searching
+- 4: Problem statement or tests hint at the location
+- 5: Clear from problem statement exactly which file/function
+### change_blast_radius
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+**How many components would be affected by changes? (Higher =
+harder)**
+- 1: Isolated change, no downstream effects
+- 2: Minor coupling, 1-2 related files to consider
+- 3: Moderate coupling, changes affect a subsystem
+- 4: High coupling, changes ripple across modules
+- 5: Core/shared code, changes affect entire codebase
+### fix_localization
+**How spread out is the likely fix?**
+- 1: Fix requires changes across many modules/packages
+- 2: Fix spans multiple files across different directories
+- 3: Fix spans 2-3 files in the same module
+- 4: Fix is in 1-2 closely related files
+- 5: Fix is contained to a single function/method
+## Output Format
+After your exploration (use 3-5 tool calls), output your final
+assessment as JSON:
+{
+"entry_point_clarity": {"value": <1-5>, "reasoning": "Brief
+explanation"},
+"change_blast_radius": {"value": <1-5>, "reasoning": "Brief
+explanation"},
+"fix_localization": {"value": <1-5>, "reasoning": "Brief
+explanation"}
+}
+**CRITICAL**: Your final message MUST contain a valid JSON object
+with all 3 features.
+## Tips
+- Use ‘pytest --co -q‘ to list tests without running them
+- Use ‘pytest <specific_test> -v‘ to run a single test with verbose
+output
+- Look at the file structure first before diving into specific files
+"""
+Test and solution features are also extracted using independent instances of Claude Opus 4.5.
+Test (3 Features)
+TEST_QUALITY_FEATURES = [
+"test_comprehensiveness", "test_assertion_complexity",
+"test_edge_case_coverage"
+]
+TEST_QUALITY_NO_SOLUTION_PROMPT = """You are analyzing the TEST PATCH
+quality for a SWE-bench coding task.
+This is a BUG FIX task in a Python repository. Focus on evaluating
+the test quality.
+NOTE: You do NOT have access to the solution patch. Evaluate the test
+quality based on
+what the tests are checking, their structure, and coverage - not
+whether they match a solution.
+CRITICAL: You MUST provide a value for EVERY feature listed below.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+## TASK INFORMATION
+**Instance ID:** {instance_id}
+**Repository:** {repo}
+**Version:** {version}
+**Problem Statement:**
+{problem_statement}
+**Test Patch (tests that verify the fix):**
+‘‘‘diff
+{test_patch}
+‘‘‘
+**Tests that should pass after fix (FAIL_TO_PASS):**
+{fail_to_pass}
+## FEATURES TO EVALUATE
+### Test Comprehensiveness (test_comprehensiveness: 1-5)
+How thoroughly does the test patch cover the expected behavior?
+- 1: Minimal - tests only one basic case
+- 2: Limited - tests a few cases but misses important scenarios
+- 3: Moderate - covers main functionality with some gaps
+- 4: Good - covers most expected behaviors and variations
+- 5: Exhaustive - comprehensive coverage including corner cases
+### Test Assertion Complexity (test_assertion_complexity: 1-5)
+How complex are the assertions and test setup?
+- 1: Simple - basic equality checks (assertEqual, assertTrue)
+- 2: Standard - uses common assertion patterns
+- 3: Moderate - multiple assertions, some setup required
+- 4: Complex - requires mocking, fixtures, or intricate setup
+- 5: Very complex - extensive mocking, async testing, multi-step
+verification
+### Test Edge Case Coverage (test_edge_case_coverage: 1-5)
+Does the test cover edge cases, boundary conditions, and error
+scenarios?
+- 1: Happy path only - no edge cases tested
+- 2: Minimal - one or two edge cases
+- 3: Moderate - some boundary conditions checked
+- 4: Good - most edge cases and error conditions tested
+- 5: Thorough - comprehensive edge case and error handling coverage
+## OUTPUT FORMAT
+Respond with ONLY a JSON object. No markdown, no extra text.
+{
+"test_comprehensiveness": <1-5>,
+"test_assertion_complexity": <1-5>,
+"test_edge_case_coverage": <1-5>,
+"reasoning": "<1-2 sentence summary of the test quality>"
+}"""
+Solution (2 Features)
+SOLUTION_FEATURES = ["solution_complexity", "integration_complexity"]
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+SOLUTION_FEATURES_PROMPT = """You are analyzing a SWE-bench coding
+task to evaluate the solution complexity.
+This is a BUG FIX task in a Python repository. You have access to the
+gold solution patch.
+CRITICAL: You MUST provide a value for EVERY feature listed below.
+## TASK INFORMATION
+**Instance ID:** {instance_id}
+**Repository:** {repo}
+**Version:** {version}
+**Problem Statement:**
+{problem_statement}
+**Gold Patch (correct solution):**
+‘‘‘diff
+{patch}
+‘‘‘
+**Test Patch (tests that verify the fix):**
+‘‘‘diff
+{test_patch}
+‘‘‘
+**Tests that should pass after fix (FAIL_TO_PASS):**
+{fail_to_pass}
+## FEATURES TO EVALUATE
+### Solution Complexity (solution_complexity: 1-5)
+How complex is the actual code change?
+- 1: Trivial (add parameter, change value, simple one-liner)
+- 2: Simple (straightforward logic change)
+- 3: Moderate (requires understanding context, multiple changes)
+- 4: Complex (algorithmic changes, multiple interdependent fixes)
+- 5: Very complex (architectural changes, subtle edge cases)
+### Integration Complexity (integration_complexity: 1-5)
+How tightly must the changes integrate with existing code?
+- 1: Self-contained/greenfield - new code with clear boundaries
+- 2: Simple extension - adds to existing code with clear interface
+- 3: Moderate integration - changes interact with several components
+- 4: Deep integration - requires understanding multiple subsystems
+- 5: Pervasive integration - affects system-wide behavior, many
+touchpoints
+## OUTPUT FORMAT
+Respond with ONLY a JSON object. No markdown, no extra text.
+{
+"solution_complexity": <1-5>,
+"integration_complexity": <1-5>,
+"reasoning": "<1-2 sentence summary of the solution complexity>"
+}"""
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+H
+POOR IRT DIFFICULTY CALIBRATION ON ZERO-SOLVE TASKS
+A notable limitation of IRT (besides lack of generalization to unseen tasks and test-takers) is its
+failure to produce meaningful task difficulty scores for certain response patterns, such as every testtaker getting a task wrong (Mislevy, 1986). Yet no prior study applying IRT to model benchmarking
+addresses this weakness of IRT on zero-solve or near-zero-solve tasks.
+Our goal in this section is to confirm that IRT struggles to calibrate difficulties specifically for tasks
+with few solves in the responses. We first develop an experimental process to test this.
+One of the main challenges for this experiment is how to rigorously evaluate methods that predict
+difficulty of currently unsolved problems in terms of how difficult they will be to future agents, as
+we have no way to obtain data about future agents’ evaluations and responses. Our main strategy
+to do this will be through back-testing, by holding out agents from after a specific date cut-off for
+each benchmark. This way, during evaluation time, we do actually have oracle knowledge about the
+future using these held-out agents.
+Another challenge is how to choose the evaluation metric. Since we’re using held-out agents (some
+of whose models and scaffolds are unseen during training) for the evaluation, during training time,
+we don’t learn IRT ability scores for these agents, so we can’t plug into the IRT formula to predict
+their probability of success. We also can’t use the abilities from an Oracle IRT trained on all of
+the agents, since the scale of the predicted difficulties will be different from the difficulty scale of
+the Oracle IRT, due to training on a different set of agents. We solve this by noting that AUC is
+inherently a relative metric: given a successful (agent, task) pair and a failing (agent, task) pair,
+AUC measures how often we predict a higher probability of success for the former than the latter. If
+we fix an agent, then for two different tasks with predicted difficulties b1 and b2, the IRT predicted
+probabilities of passing those tasks, σ(θ−b1) and σ(θ−b2), are monotonic with respect to difficulty.
+Therefore, if we use the mean per-agent AUC, only comparing evaluations of the same agent on
+different tasks, we can get around the limitation of not knowing the IRT abilities of the held-out
+future agents. This is equivalent to the scikit-learn function roc auc score (average=’macro’), with
+agents as the columns and tasks as rows of the predicted response probability matrix. This metric
+inherits the ROC-AUC interpretable baseline of 0.5 for random guessing.
+In order to show that the lack of successful responses of pre-cutoff agents on hard tasks is what
+causes poorly calibrated IRT difficulty estimations for these tasks, we vary the tasks that we evaluate
+the modern agents on, loosening the requirement that no pre-cutoff agent can solve any of them.
+Specifically, we evaluate the post-cutoff agents on tasks where pre-cutoff agents collectively have a
+solve rate of ≤X%; in the standard zero-solve setting, X = 0.
+H.1
+RESULT: IRT-BASED METHODS STRUGGLE WITH DIFFICULTY PREDICTION ON
+LOW-SOLVE TASKS
+We plot in Figure 5 the performance of the standard IRT trained on just the pre-cutoff agents, as
+well as the Oracle IRT trained on all agents, as the upper threshold X for the solve rate by pre-cutoff
+agents on the definition of “frontier” tasks, X ranges from 0% to 30%. I.e., as X increases, the set of
+tasks that are used for evaluation have more and more successes in the training response data. We see
+that the baseline IRT performance consistently improves as X increases, corresponding to adding in
+more tasks that have a higher solve rate by pre-cutoff agents. This is evidence that the challenging
+part of making difficulty predictions on hard tasks is the lack of successful agent attempts on them.
+To support the claim that the low solve rate and not the fact that we’re evaluating on inherently
+difficult tasks is responsible for the poor predictions of IRT, we perform the same evaluation using
+tasks in SWE-bench Verified which are annotated as taking either 1-4 human hours or > 4 human
+hours (the two hardest labels in the dataset) as our “frontier” tasks. Only 9 out of 45 of these tasks
+actually have zero solves. We find that on these tasks, the baseline IRT gets 0.915 per-agent mean
+AUC, while the oracle IRT gets 0.938 AUC, a much smaller gap than we observe for the zero-solve
+tasks.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+(a) SWE-bench Verified
+(b) SWE-bench Pro
+(c) GSO
+(d) Terminal Bench
+Figure 5: Quality of success probability predictions of the post-cutoff agents on very hard tasks,
+using (orange) a baseline IRT trained only on pre-cutoff agents, and (blue) the oracle IRT trained
+with all agents, as more and more solvable tasks for pre-cutoff agents get added to the evaluation
+set going to the right. The baseline IRT struggles most with success response sparsity under about
+a 15% solve rate, with close to random 0.5 AUC for its difficulty predictions. For evaluation tasks
+for which the training data contains more successes, the gap between baseline and oracle IRTs is
+generally lower.
+H.2
+TASK FEATURES DO NOT CORRELATE WITH DIFFICULTY ON ZERO-SOLVE TASKS
+Theoretically, the task features that we extracted could be used to break the symmetry between zerosolve tasks, which could allow for better calibrated difficulty estimates. However, all of our methods
+from this paper learn the relationship between the task features and task difficulty on the training set
+and attempt to generalize to the evaluation tasks. Here, we ran into issues where the task features
+that we extracted were correlated with difficulty on the easier tasks, but no longer correlated with
+difficulty on the zero-solve tasks. We demonstrate this in Figure 6 for the total assistant message
+length (measured in characters or number of messages) in the trace of a given agent on each task: for
+non-zero-solve tasks, generally more assistant messages implies a more difficult question. However,
+within just zero-solve tasks, more assistant messages actually imply a less difficult question.
+Figure 6: Trajectory length exhibits the opposite correlation with difficulty on non-zero-solve tasks
+and within zero-solve tasks.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+In Figure 7 and Figure 8 is a graveyard of task features that don’t predict difficulty on zero-solve
+tasks, but do on non-zero solve tasks in SWE-bench Verified.
+Figure 7: LLM-as-a-judge features. All the extracted LLM-as-a-judge features which correlate
+with difficulty for non-zero-solve tasks no longer do so for just the zero-solve tasks.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Figure 8: Trajectory features. Trajectory features extracted and averaged from 6 agents per task
+correlate with difficulty for non-zero-solve tasks, but do not share the same correlation direction for
+zero-solve tasks.
