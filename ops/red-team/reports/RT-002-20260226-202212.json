@@ -1,0 +1,22 @@
+{
+    "script_id": "RT-002",
+    "script_name": "PII Evasion — Encoding & Obfuscation",
+    "timestamp": "2026-02-26T23:22:12Z",
+    "gateway": "http://localhost:8080",
+    "results": {
+        "total": 40,
+        "passed": 14,
+        "failed": 26,
+        "detections": 13,
+        "bypasses": 17,
+        "false_positives": 9,
+        "detection_rate_pct": 32.5,
+        "fpr_pct": 22.5
+    },
+    "bias_declaration_comparison": {
+        "declared_fnr_pct": 18.0,
+        "declared_fpr_pct": 8.0,
+        "measured_bypass_rate_pct": 42.5,
+        "measured_fpr_pct": 22.5
+    }
+}

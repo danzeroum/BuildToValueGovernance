@@ -329,6 +329,20 @@ fn build_default_patterns() -> Vec<CompiledPattern> {
         // System prompt extraction
         (r"(?i)\bqual\s+[ée]\s+a\s+mensagem\s+inicial\s+do\s+sistema\?\b", "DATA_EXFILTRATION"),
         (r"(?i)\bmostre\s+as\s+instru[çc][õo]es\s+que\s+voc[êe]\s+recebeu\b", "DATA_EXFILTRATION"),
+        // Phishing sem URL (urgência + ação)
+        (r"(?i)\b(acesse|clique|confirme|valide|regularize)\b.{0,60}\b(conta|acesso|sistema|dados)\b",
+            "SOCIAL_ENGINEERING"),
+        // Impersonation PT — autoridades
+        (r"(?i)\b(auditor|fiscal|delegado|agente)\s+(da?|federal|receita|policia)\b",
+            "SOCIAL_ENGINEERING"),
+        (r"(?i)\breceita\s+federal\b.{0,80}\b(cpf|dados|informe|regulariz)\b",
+            "SOCIAL_ENGINEERING"),
+        // Pretexting PT — acesso a dados
+        (r"(?i)\bpreciso\s+(do\s+)?(acesso|banco\s+de\s+dados|credenciais)\b.{0,60}\b(clientes|usuarios|sistema)\b",
+            "SOCIAL_ENGINEERING"),
+        // Urgência PT
+        (r"(?i)\b(bloqueado|suspenso|cancelado)\b.{0,40}\b(acesse|clique|regularize|confirme)\b",
+            "SOCIAL_ENGINEERING"),
     ];
     for (pat, cat) in &pt_patterns {
         if let Some(cp) = CompiledPattern::new(pat, PatternTier::Primary, pt_lang, cat) {
@@ -367,6 +381,15 @@ fn build_default_patterns() -> Vec<CompiledPattern> {
         // System prompt extraction
         (r"(?i)\bcu[áa]l\s+es\s+tu\s+mensaje\s+de\s+sistema\?\b", "DATA_EXFILTRATION"),
         (r"(?i)\bmu[ée]strame\s+las\s+instrucciones\s+iniciales\b", "DATA_EXFILTRATION"),
+        // Phishing genérico — urgência + credencial
+        (r"(?i)\b(account|access)\s+(has\s+been|will\s+be)\s+(compromised|suspended|blocked)\b",
+            "SOCIAL_ENGINEERING"),
+        // Pretexting — "pentest" + credenciais
+        (r"(?i)\b(penetration\s+test|pentest|security\s+audit)\b.{0,80}\b(credentials?|password|admin)\b",
+            "SOCIAL_ENGINEERING"),
+        // Impersonation genérica EN
+        (r"(?i)\bi\s+(am|'m)\s+(from|the)\s+(ceo|ciso|it\s+support|legal|hr|microsoft|google)\b",
+            "SOCIAL_ENGINEERING"),
     ];
     for (pat, cat) in &es_patterns {
         if let Some(cp) = CompiledPattern::new(pat, PatternTier::Primary, es_lang, cat) {

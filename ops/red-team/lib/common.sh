@@ -25,6 +25,14 @@ rt_validate() {
         -d "{\"input\": \"$1\"}"
 }
 
+# Adicionar após rt_validate() em ops/red-team/lib/common.sh
+rt_validate_raw() {
+    # Para inputs com UTF-8 — usa printf + stdin para evitar expansão bash
+    printf '%s' "$1" | curl -s --max-time 20 -X POST "$GATEWAY/v1/validate" \
+        -H "Content-Type: application/json" \
+        --data-binary @-
+}
+
 rt_get_field() {
     echo "$1" | python -c "import sys,json; print(json.load(sys.stdin).get('$2',''))" 2>/dev/null || echo ""
 }

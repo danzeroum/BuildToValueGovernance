@@ -511,7 +511,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         slm_result = _slm.classify_if_ambiguous(
             text=req.input_text,
             finding_count=req.finding_count,
-            max_confidence=req.max_finding_confidence,
+            critical_count=req.critical_count,
         )
         if slm_result is not None:
             slm_used = True
