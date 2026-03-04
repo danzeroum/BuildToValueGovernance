@@ -1,0 +1,1298 @@
+Under review as a conference paper at ICLR 2026
+PHYSICS-GUIDED
+MULTIMODAL
+MULTI-AGENT
+LEARNING FOR INTELLIGENT TRANSPORTATION SYSTEMS
+Anonymous authors
+Paper under double-blind review
+ABSTRACT
+Intelligent transportation systems (ITS) require reliable coordination among multiple vehicles operating under heterogeneous behaviors and time-varying traffic
+conditions. Prior approaches face a recurring trade-off: physics-based controllers
+provide interpretability and constraint handling but can be brittle under model
+mismatch, whereas data-driven policies adapt to complex scenarios but often
+lack safety guarantees and transparent decision logic. We propose a hierarchical,
+physics-guided framework that separates semantic coordination from continuous
+control execution. At the regional level, a large language model (LLM) generates
+discrete, human-interpretable coordination directives (e.g., yielding priority and
+target gaps) from multimodal observations. At the vehicle level, each directive
+is realized by a physics-informed controller augmented with a learned residual
+policy, where the residual is constrained and safety-filtered to preserve feasibility and closed-loop robustness. Multimodal fusion via vision–language models
+(VLMs) supports context-aware coordination by combining visual cues with textual traffic descriptors and temporal signals. In highway merging simulations, the
+proposed framework improves traffic throughput by 23% and reduces collision
+rates by 31% relative to classical and learning-based baselines, indicating that semantic coordination and physics-grounded execution can be combined without
+sacrificing safety-critical control requirements.
+INTRODUCTION
+Urban traffic congestion continues to impose substantial social, economic, and environmental
+burdens on modern cities. Recent analyses estimate that congestion-related delays cost billions of
+dollars in lost productivity and excess fuel consumption annually, while tailpipe emissions from inefficient traffic flows degrade urban air quality and contribute to climate impact Essamlali et al. (2025);
+Gao et al. (2025); Lin (2025); Yu et al. (2025b). These inefficiencies stem not merely from limited
+infrastructure capacity but also from complex interactions among heterogeneous vehicles, diverse
+driving behaviors, pedestrian unpredictability, and dynamic environmental factors Yu et al. (2025c).
+Consequently, attempts to alleviate congestion through road-widening or infrastructure expansion
+alone often lead to induced demand effects, resulting in only temporary improvements Ossokina
+et al. (2022); Wang et al. (2025a); Xin et al. (2024); Cao et al. (2025c;b). Meanwhile, Connected
+and Autonomous Vehicles (CAVs) have emerged as a promising direction for transforming traffic
+systems by enabling vehicle-to-vehicle (V2V) and vehicle-to-infrastructure (V2I) coordination Islam et al. (2023); Xin et al. (2025b); Yu (2025); Lin et al. (2025b); Zheng et al. (2025a;b); Tian et al.
+(2025b); Lin et al. (2024b). However, unlocking the efficiency potential of CAVs requires coordination strategies that remain robust, interpretable, and reliable across diverse traffic situations.
+Traditional vehicle control and traffic coordination strategies rely on physically grounded and
+mathematically interpretable frameworks, such as Model Predictive Control (MPC), PID, carfollowing models, artificial potential field methods, sampling-based methods, and optimal control
+formulations Borrelli et al. (2005); Zhang et al. (2025b); Li et al. (2025b;a). These methods can
+ensure stable and safe vehicle behavior by explicitly embedding system dynamics, collision avoidance constraints, and comfort considerations Wang & Wang (2024); Sarkar et al. (2025); Xin et al.
+(2025a); Lin et al. (2025a). However, their performance depends heavily on parametric assumptions
+
+Under review as a conference paper at ICLR 2026
+Figure 1: Overview of the proposed hierarchical framework. Multimodal inputs (visual, semantic,
+temporal) are integrated at the regional level to produce low-frequency semantic directives via a
+Regional LLM Coordinator. Each vehicle executes directives through a physics-based controller
+augmented by a bounded residual policy, followed by a hard safety filter (e.g., CBF/QP) to enforce
+constraint satisfaction. The traffic environment provides state/observation feedback to close the
+loop.
+that simplify real-world complexities, such as homogeneous vehicle types, rational driving behaviors, and stationary traffic regimes Treiber & Kesting (2013); Cao et al. (2025a). In environments
+where human-driven vehicles exhibit varying levels of aggressiveness and attention, these assumptions may fail, leading to degraded performance or overly conservative behaviors Chen et al. (2023).
+Thus, classical control methods offer safety and interpretability but often sacrifice adaptability in
+rapidly changing contexts.
+Recent advancements in reinforcement learning (RL) and deep learning have shown the potential
+to improve adaptability by optimizing control policies directly from interaction experience Yu et al.
+(2025a); Lin et al. (2024a); Tian et al. (2025c). Learning-based systems excel in high-dimensional
+state spaces and can infer control strategies for conditions that exceed the modeling capability of
+handcrafted physics models Li et al. (2026). Nevertheless, deploying such methods in safety-critical
+domains such as transportation remains challenging. First, RL models demand extensive training
+data that are unsafe or impractical to collect in real traffic scenarios Kiran et al. (2021). Second,
+policy learning often results in opaque decision processes that cannot easily be interpreted or validated Rudin (2019). Third, learned policies generally provide few formal safety guarantees and may
+exhibit unpredictable failure modes in previously unseen conditions Cheng et al. (2019). While multimodal perception models—integrating visual, temporal, and semantic features—have improved
+scene interpretation Chen et al. (2024b), current systems still struggle to translate perception into
+coordinated and verifiable vehicle actions Araujo et al. (2023).
+Multi-agent coordination introduces additional layers of complexity beyond single-vehicle control Zhang et al. (2025a). Effective traffic coordination requires resolving implicit social negotiations
+such as merging priority, yielding behavior, platoon formation, and lane-level cooperation ShalevShwartz et al. (2017). Conventional Multi-Agent Reinforcement Learning (MARL) methods face
+non-stationarity, where each agent’s evolving policy continuously alters the environment for all
+others Hernandez-Leal et al. (2019). As a consequence, MARL systems often scale poorly with
+traffic density and fail to generalize to new roadway topologies or behavioral distributions. Recently, Large Language Models (LLMs) have demonstrated capabilities in structured reasoning and
+high-level planning in multi-agent settings Chen et al. (2025); Wang et al. (2025b). These models
+allow coordination logic to be expressed in interpretable natural language form, offering a potential
+foundation for human-comprehensible CAV cooperation. However, existing LLM-based coordination approaches often remain disconnected from low-level continuous control, lacking the physical
+grounding needed for safety and closed-loop robustness in real traffic scenarios.
+
+Under review as a conference paper at ICLR 2026
+Table 1: Representative comparison of approaches for intelligent transportation systems.
+Approach
+Interpret.
+Adapt.
+Multi-Agent
+Multimodal
+Physics
+Safety
+Theoretical
+Real-time
+IDM/MPC Borrelli et al. (2005); Treiber & Kesting (2013)
+✓
+×
+×
+×
+✓
+✓
+✓
+✓
+DCRNN Li et al. (2018)
+×
+✓
+×
+△
+×
+×
+△
+✓
+PPO/SAC Schulman et al. (2017); Haarnoja et al. (2018)
+△
+✓
+×
+△
+×
+×
+△
+✓
+QMIX/MAPPO Rashid et al. (2020); Yu et al. (2022)
+△
+✓
+✓
+△
+×
+△
+△
+✓
+InterFuser Shao et al. (2023)
+×
+✓
+×
+✓
+×
+△
+×
+✓
+GPT-Driver Chen et al. (2025)
+✓
+△
+△
+✓
+×
+×
+×
+△
+LanguageMPC Sha et al. (2023)
+✓
+△
+×
+△
+✓
+✓
+△
+△
+Ours
+✓
+✓
+✓
+✓
+✓
+✓
+△
+✓
+Notes: △denotes partial/indirect support. ... Theoretical = stated stability/convergence results; we mark △for
+our method as the LLM coordination optimality analysis (Prop. 3) remains informal.
+To address these gaps, we propose a physics-guided hierarchical multi-agent framework that
+integrates high-level semantic reasoning with verifiable low-level control. Our central hypothesis
+is that traffic coordination is inherently hierarchical: what should be coordinated (e.g., merging order, negotiation priority, lane assignment) is naturally specified at an abstract semantic level, while
+how to realize those cooperative intentions must be grounded in vehicle dynamics and safety envelopes Khan et al. (2025). Accordingly, we introduce regional LLM-based coordination modules
+that generate interpretable coordination directives (e.g., yielding priority, target gaps, or speed harmonization), which are then executed by per-vehicle controllers built from a physically grounded
+baseline control law augmented with a constrained residual learning correction and safety filtering
+to preserve feasibility and robustness Cheng et al. (2019). This design aims to improve adaptability
+while maintaining safety-critical control requirements.
+Our contributions can be summarized as follows:
+• A hierarchical physics-guided coordination framework. Inspired by recent progress
+on leveraging foundation models for structured decision support, we introduce a two-level
+architecture separating semantic coordination (via regional LLM reasoning) from vehiclelevel residual control, aiming for interpretability at the high level and safety-aware execution at the low level Brunke et al. (2022).
+• Unified multimodal scene representation. We develop a vision–language–temporal fusion framework that captures visual topology, behavioral intent cues, and temporal motion
+trends to support context-aware coordination Tian et al. (2025a); Chen et al. (2024a).
+• Residual learning with safety-preserving constraints. Our residual adaptation layer provides fine-grained adjustability of vehicle actions while preserving physical stability and
+comfort bounds through explicit constraints Berkenkamp et al. (2017).
+• Comprehensive empirical evaluation. We evaluate in challenging highway merging scenarios and report improvements in throughput, collision rates, and driving efficiency, with
+ablation studies isolating and validating each architectural contribution.
+METHODOLOGY
+2.1
+PROBLEM FORMULATION
+We consider a traffic network with N autonomous vehicles operating in a shared environment E .
+The key difficulty is that multi-vehicle interactions are coupled (each agent affects others) and nonstationary (traffic patterns, intents, and local conflicts evolve over time). We formulate coordination
+as a multi-agent sequential decision problem with a weighted reward capturing safety, efficiency,
+and comfort.
+At discrete time t, vehicle i has state st
+i ∈S :
+st
+i = [pt
+i,vt
+i,at
+i,θt
+i ]T,
+(1)
+where pt
+i ∈R2 is position, vt
+i ∈R2 velocity, at
+i ∈R2 acceleration, and θt
+i ∈[0,2π) heading. The
+global state is St = [st
+1,...,st
+N] ∈S N, and each action satisfies ut
+i ∈U , with the joint action Ut =
+[ut
+1,...,ut
+N] ∈U N.
+
+Under review as a conference paper at ICLR 2026
+The coordination problem seeks residual policies π = {π1,...,πN} maximizing expected discounted return under the system dynamics:
+π∗= argmax
+π Eτ∼p(τ|π)
+"
+T
+∑
+t=0
+γtR(St,Ut)
+#
+,
+(2)
+where γ ∈(0,1] and τ denotes a trajectory. High-level coordination directives (defined below) are
+treated as contextual inputs that parameterize low-level action generation.
+To reflect safety-critical requirements, R combines safety, efficiency, and comfort:
+R = λ1Rsafety +λ2Refficiency +λ3Rcomfort,
+∑
+m=1
+λm = 1.
+(3)
+We instantiate safety via distance-based penalties:
+Rsafety(St,Ut) = −
+N
+∑
+i=1∑
+j̸=i
+max
+ 0,dmin −∥pt
+i −pt
+j∥2
+
+,
+(4)
+where dmin is the minimum safe inter-vehicle distance.
+2.2
+OVERALL FRAMEWORK ARCHITECTURE
+Our design goal is to combine (i) interpretable coordination and intent reasoning at the region
+level with (ii) stable low-level control that respects vehicle dynamics and safety envelopes. To
+this end, we use a two-level hierarchy: semantic coordination produces high-level directives, while
+physics-guided residual control executes these directives through a stabilizing baseline controller
+augmented by a bounded learned correction.
+Hierarchical decomposition.
+The framework contains (1) a Regional LLM Coordination
+Layer that processes multimodal traffic signals and outputs human-readable coordination directives, and (2) a Physics-Guided Residual Control Layer that maps directives into vehicle-specific
+control actions.
+Regional structure. The traffic network is partitioned into regions R = {R1,...,RK}, each with
+a coordinator Ck producing directives dt
+k for vehicles in Rk. This regionalization improves scalability
+and mitigates non-stationarity by restricting coordination to locally interacting agents.
+Physics-guided execution. For each vehicle i ∈Rk, the executed action decomposes into a
+physics baseline plus a learned residual:
+ut
+i = uphys
+i
+(st
+i,dt
+k)+ures
+i (st
+i,dt
+k).
+(5)
+The baseline provides stability and constraint handling, while the residual captures unmodeled interactions and rare negotiation cases.
+2.3
+REGIONAL LLM COORDINATION LAYER
+The coordinator aims to produce interpretable and consistent directives that reduce conflicts (e.g.,
+merging order, yielding preference, speed harmonization) using multimodal evidence. Rather than
+directly outputting continuous controls, the LLM operates at the semantic level to avoid an unconstrained end-to-end mapping from language to actions that is difficult to verify in safety-critical
+settings.
+Regional partitioning. We define a partitioning function Φ : S N →P({1,...,N}):
+Rt
+k = {i : Φ(St)i = k}.
+(6)
+Directive space. We define the coordination directive dt
+k as a structured tuple:
+dt
+k = (σt
+k,Gt
+k,vadv,t
+k
+) ∈D,
+(7)
+where σt
+k ∈S|Rt
+k| is a permutation defining priority order, Gt
+k ∈R
+|Rt
+k|
++
+specifies target inter-vehicle
+gaps, and vadv,t
+k
+∈R
+|Rt
+k|
++
+provides advisory speeds. This hybrid discrete-continuous space enables
+
+Under review as a conference paper at ICLR 2026
+interpretable high-level coordination while remaining compatible with downstream optimizationbased control. Multimodal directive generation. Each regional coordinator consumes vision Vt
+k,
+language/semantic descriptors Lt
+k, and temporal signals Tt
+k, then outputs directives
+dt
+k = Ck(Vt
+k,Lt
+k,Tt
+k;θk).
+(8)
+In practice, dt
+k can encode priority ordering, target gaps, suggested speeds, and soft preference
+weights that are compiled into references and constraints for the low-level controller.
+2.4
+PHYSICS-GUIDED RESIDUAL CONTROL LAYER
+This layer translates directives into feasible actions while enforcing safety constraints.
+The
+physics baseline provides a constraint-satisfying operating point; the residual improves performance
+under mismatch without sacrificing stability.
+Physics-based baseline. We use a constrained controller as backbone (e.g., MPC). For vehicle i:
+uphys
+i
+= arg min
+ut:t+H−1
+i
+H
+∑
+ℓ=0
+h
+∥st+ℓ
+i
+−sref
+i (dt
+k)∥2
+Q +∥ut+ℓ
+i
+∥2
+R
+i
+,
+(9)
+subject to vehicle dynamics and directive-consistent constraints.
+As a concrete longitudinal prior, IDM can be used:
+aIDM = amax
+"
+1−
+ v
+v0
+4
+−
+s∗(v,∆v)
+s
+2#
+,
+s∗(v,∆v) = s0 +vT +
+v∆v
+2√amaxb.
+(10)
+Residual policy. The residual correction is learned
+ures
+i
+= πres
+i (st
+i,dt
+k;ϕi)
+, which captures unmodeled interactions and improves efficiency/comfort while remaining close to
+the physics baseline.
+Safety filter. All actions are enforced by hard constraints (example for longitudinal control):
+amin ≤atotal ≤amax,
+TTC ≥TTCmin,
+THW ≥THWmin.
+(11)
+2.5
+MULTIMODAL DATA INTEGRATION
+We fuse regional vision, semantic text, and temporal signals to provide the coordinator with a
+compact, situation-aware representation. Let fv and fl be vision and language encoders. Crossattention produces fused features
+zt
+k = Attention(fv(Vt
+k), fl(Lt
+k))+WtTt
+k,
+(12)
+and temporal dependencies are captured
+ht
+k = GRU(zt
+k,ht−1
+k
+)
+. These representations are used by Ck to generate stable, context-consistent directives.
+Implementation details. We instantiate the regional coordinator using LLaMA-2-7B with LoRA
+fine-tuning (r = 16, α = 32, dropout= 0.05). The input prompt follows a structured template:
+[REGION STATE] {traffic density, avg speed, queue length}
+[VEHICLES] {id, position, velocity, lane, intent}×N [TASK]
+Generate coordination directives for safe and efficient
+merging.
+The LLM outputs a JSON-formatted directive:
+{"priority order":
+[id1, id2, ...], "yield pairs":
+[[id a,
+id b], ...], "target gap":
+{id:
+gap m}, "speed advisory":
+{id:
+v ref}}
+These discrete/continuous parameters are parsed and compiled into reference trajectories sref
+i
+and
+constraint bounds for the downstream MPC. Fine-tuning uses 50K labeled coordination scenarios
+from MTCD with cross-entropy loss on discretized directive tokens.
+
+Under review as a conference paper at ICLR 2026
+Classical
+Deep RL
+MARL
+LLM
+Ours
+Vehicles/hour
+Classical
+Deep RL
+MARL
+LLM
+Ours
+Collisions/1000
+8.5
+5.2
+3.8
+4.5
+2.4
+Classical
+Deep RL
+MARL
+LLM
+Ours
+Seconds
+45s
+32s
+28s
+30s
+21s
+Training Episodes
+Cumulative Reward
+Classical Control
+Deep RL
+MARL
+LLM-based
+Ours (Physics-Guided)
+Safety
+Efficiency
+Adaptability
+Interpretability
+Robustness
+0.20.40.60.81.0
+Ours
+MARL
+LLM-based
+Highway
+Merge
+Urban
+Intersection
+Roundabout
+Lane
+Change
+Emergency
+Brake
+Congested
+Traffic
+Traffic Scenarios
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Success Rate
+Classical
+Deep RL
+MARL
+LLM-based
+Ours
+Figure 2: Performance comparison across different traffic densities. Our method maintains strong
+performance at the highest density setting.
+2.6
+TRAINING AND OPTIMIZATION PIPELINE
+We adopt a staged training pipeline to reduce instability from jointly optimizing LLM coordination and low-level residual control.
+Stage 1 (coordination pre-training). Regional coordinators are trained on labeled coordination
+scenarios:
+Lcoord = E(x,y)∼Dcoord
+
+∥Ck(x;θk)−y∥2
+
+.
+(13)
+Stage 2 (residual RL). Residual policies are trained using RL with regularization encouraging minimal corrections:
+Lres = Eτ∼π
+"
+T
+∑
+t=0
+γt  R(St,Ut)−α∥ures
+i ∥2
+
+#
+.
+(14)
+Stage 3 (joint fine-tuning). We optionally fine-tune the full stack with safety penalties:
+Ltotal = Lcoord +βLres +ηLsafety.
+(15)
+EXPERIMENTS AND RESULTS
+3.1
+MAIN RESULTS
+3.1.1
+CROSS-MODAL ATTENTION MECHANISM
+Fig. 3 provides diagnostic results for the multimodal fusion module used by the regional coordinator. The cross-modal attention map (c) shows consistent alignment between visual and textual tokens, suggesting effective information exchange between modalities and supporting a unified scene
+representation for directive generation.
+3.1.2
+TEMPORAL FEATURE EVOLUTION
+The temporal feature analysis in Fig. 3(a) indicates distinct dynamics across speed, density, and
+flow signals. Modeling these temporal patterns helps the coordinator anticipate traffic state transitions and adjust regional directives proactively.
+
+Under review as a conference paper at ICLR 2026
+Algorithm 1 Physics-Guided Multi-Agent Training
+1: Initialize physics prior (e.g., IDM/MPC) and residual policy networks
+2: Generate simulation trajectories and semantic labels (e.g., SUMO)
+3: Fine-tune regional LLM coordinators (e.g., LoRA)
+4: for each training episode do
+5:
+Collect regional observations (Vt
+k,Lt
+k,Tt
+k)
+6:
+Get coordination directives dt
+k from the regional coordinator
+7:
+Compute physics baseline actions uphysics
+i
+8:
+Apply residual corrections ures
+i
+9:
+Execute safety filtering
+10:
+Update residual policies (e.g., PPO)
+11: end for
+12: Joint fine-tuning with safety regularization
+Feature Dimension
+Time Steps
+Embedding Dimension
+Token Position
+Visual Tokens
+Text Tokens
+0.2
+0.4
+0.6
+0.8
+Time (s)
+Normalized Features
+Speed
+Density
+Flow
+Feature Value
+Frequency
+Visual
+Textual
+Fused
+Accuracy
+Precision
+Recall
+F1-Score
+IoU
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Score
+Visual Only
+Text Only
+Multimodal Fusion
+Figure 3: Diagnostic analysis of the multimodal fusion module. The figure visualizes internal representations and performance effects of multimodal fusion, including temporal latent features, embedding activations, cross-modal attention patterns, traffic variable evolution, feature distributions,
+and quantitative performance comparison across modality settings.
+3.1.3
+FEATURE DISTRIBUTION ANALYSIS
+The feature distribution comparison in Fig. 3(b) supports the fusion strategy. While visual and
+textual features exhibit different distributional characteristics, the fused representation is more balanced and exhibits reduced variance, suggesting improved stability for downstream directive generation.
+3.1.4
+PERFORMANCE IMPROVEMENTS
+The metric summary in Fig. 3(d) indicates consistent gains from multimodal fusion over unimodal variants on the fusion subtask used by the coordinator (e.g., rare-event detection and spatial
+understanding). These improvements align with the observed gains in downstream coordination
+performance reported in Tab. 2.
+3.1.5
+COMPARATIVE PERFORMANCE ANALYSIS
+Tab. 2 indicates that the proposed physics-guided multimodal multi-agent framework improves
+coordination across all reported metrics. Our method achieves an 84.6% success rate and reduces
+
+Under review as a conference paper at ICLR 2026
+Table 2: Performance comparison on highway merge scenarios. SR: success rate, CR: collision rate,
+MS: mean speed, CI: comfort index.
+Method
+SR (%)
+CR (%)
+MS (m/s)
+CI
+IDM
+67.3
+12.4
+24.1
+0.52
+PPO
+74.8
+8.9
+26.7
+0.61
+SAC
+76.2
+8.1
+27.3
+0.63
+MAPPO
+78.9
+6.7
+28.1
+0.67
+Ours
+84.6
+3.2
+29.8
+0.74
+the collision rate to 3.2%. Compared to the strongest baseline MAPPO, this corresponds to a relative reduction of 52.2% in CR (6.7% to 3.2%). It also maintains a higher mean speed of 29.8 m/s
+while achieving the highest comfort index of 0.74, suggesting that hierarchical semantic coordination combined with physics-guided execution improves both efficiency and safety-related outcomes.
+3.1.6
+PERFORMANCE ANALYSIS ACROSS MULTIPLE DIMENSIONS
+Fig. 2 summarizes performance trends across traffic densities. Our approach achieves the highest
+throughput (1850 vehicles/hour), corresponding to a 48% improvement over classical control and a
+7.6% gain over the best MARL baseline. Collision rates are reduced under the same evaluation protocol, and efficiency gains are reflected in shorter merge times (21 s), outperforming both classical
+control and MARL approaches. Training curves suggest faster and more stable convergence with the
+physics-guided prior, while the radar chart indicates balanced performance across safety, efficiency,
+adaptability, interpretability, and robustness. Scenario-level evaluation further shows success rates
+above 80% across diverse conditions, including congested traffic where classical and MARL baselines degrade.
+CONCLUSION
+This paper introduced a physics-guided multimodal multi-agent framework for intelligent transportation systems, integrating regional large language model (LLM)-based semantic coordination
+with residual-learning-enhanced low-level vehicle control. By decomposing cooperative driving
+into macro-level semantic directives and micro-level execution, the framework mitigates the practical tension among interpretability, adaptability, and safety in multi-vehicle coordination. Specifically, LLMs provide region-level coordination cues for cooperation, while physics-grounded controllers enforce motion feasibility and safety-oriented constraints during execution. This hierarchical
+design improves responsiveness under dynamic traffic conditions while retaining consistent and interpretable coordination outcomes.
+REFERENCES
+Hugo Araujo, Mohammad Reza Mousavi, and Mahsa Varshosaz. Testing, validation, and verification of robotic and autonomous systems: a systematic review, 2023.
+Felix Berkenkamp, Matteo Turchetta, Angela Schoellig, and Andreas Krause. Safe model-based
+reinforcement learning with stability guarantees, 2017.
+Francesco Borrelli, Paolo Falcone, Tamas Keviczky, Javad Asgari, and Drago Hrovat. Mpc-based
+approach to active steering for autonomous vehicle systems, 2005.
+Lukas Brunke, Melissa Greeff, Adam W Hall, Zhaocong Yuan, Siqi Zhou, Jacopo Panerati, and
+Angela P Schoellig. Safe learning in robotics: From learning-based control to safe reinforcement
+learning, 2022.
+Zongsheng Cao, Yangfan He, Anran Liu, Jun Xie, Feng Chen, and Zhepeng Wang. Tv-rag: A
+temporal-aware and semantic entropy-weighted framework for long video retrieval and understanding, 2025a.
+
+Under review as a conference paper at ICLR 2026
+Zongsheng Cao, Yangfan He, Anran Liu, Jun Xie, Zhepeng Wang, and Feng Chen.
+Cofi-dec:
+Hallucination-resistant decoding via coarse-to-fine generative feedback in large vision-language
+models, 2025b.
+Zongsheng Cao, Yangfan He, Anran Liu, Jun Xie, Zhepeng Wang, and Feng Chen. Purifygen: A
+risk-discrimination and semantic-purification model for safe text-to-image generation, 2025c.
+Y. Chen, W. Huang, S. Zhou, Q. Chen, and Z. Xiong. Self-supervised neuron segmentation with
+multi-agent reinforcement learning, 2023.
+Y. Chen, W. Huang, X. Liu, S. Deng, Q. Chen, and Z. Xiong. Learning multiscale consistency for
+self-supervised electron microscopy instance segmentation, 2024a.
+Y. Chen, C. Liu, X. Liu, R. Arcucci, and Z. Xiong. Bimcv-r: A landmark dataset for 3d ct text-image
+retrieval, 2024b.
+Y. Chen, Y. He, J. Yang, D. Zhang, Z. Yuan, M. A. Khan, J. Baili, and L. Yee. Empower: Evolutionary medical prompt optimization with reinforcement learning, 2025.
+Yu-Liang Chen, V. Sundareswaran, C. Anderson, A. Badura, A. Barth, R. Bostelman, S. Foufou,
+E. Sheh, and M. Shneier. Automotive 2030: Racing toward a digital future, 2017.
+Richard Cheng, G´abor Orosz, Richard M Murray, and Joel W Burdick. End-to-end safe reinforcement learning through barrier functions for safety-critical continuous control tasks, 2019.
+Ismail Essamlali, Hasna Nhaila, and Mohamed El Khaili. Impact of urban block shape on traffic
+and air quality: A sumo-based comparative study of rectangular, radial, and triangular forms,
+2025. ISSN 2590-1982. URL https://www.sciencedirect.com/science/misc/
+pii/S2590198225000922.
+Jakob Foerster, Gregory Farquhar, Triantafyllos Afouras, Nantas Nardelli, and Shimon Whiteson.
+Counterfactual multi-agent policy gradients, 2018.
+Bo Gao, Jianhui Wang, Xinyuan Song, Yangfan He, Fangxu Xing, and Tianyu Shi. Free-mask: A
+novel paradigm of integration between the segmentation diffusion model and image editing, 2025.
+Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actor-critic: Off-policy
+maximum entropy deep reinforcement learning with a stochastic actor, 2018.
+Pablo Hernandez-Leal, Bilal Kartal, and Matthew E Taylor. A survey and critique of multiagent
+deep reinforcement learning, 2019.
+Muhammad Mobaidul Islam, Abdullah Al Redwan Newaz, Li Song, Benjamin Lartey, Shih-Chun
+Lin, Wei Fan, Ali Hajbabaie, Mubbashar Altaf Khan, Alireza Partovi, Tienake Phuapaiboon, Abdollah Homaifar, and Ali Karimoddini. Connected autonomous vehicles: State of practice, 2023.
+URL https://onlinelibrary.wiley.com/doi/abs/10.1002/asmb.2772.
+Azal Ahmad Khan, Michael Andrev, Muhammad Ali Murtaza, Sergio Aguilera, Rui Zhang, Jie
+Ding, Seth Hutchinson, and Ali Anwar. Safety aware task planning via large language models in
+robotics, 2025.
+B Ravi Kiran, Ibrahim Sobh, Victor Talpaert, Patrick Mannion, Ahmad A Al Sallab, Senthil Yogamani, and Patrick P´erez. Deep reinforcement learning for autonomous driving: A survey, 2021.
+Qinghao Li, Zhen Tian, Xiaodan Wang, Jinming Yang, and Zhihao Lin. Adaptive field effect planner for safe interactive autonomous driving on curved roads. In 2025 IEEE 45th International
+Conference on Distributed Computing Systems Workshops (ICDCSW), pp. 273–278, 2025a. doi:
+10.1109/ICDCSW63273.2025.00052.
+Qinghao Li, Zhen Tian, Xiaodan Wang, Jinming Yang, and Zhihao Lin. Efficient and safe planner
+for automated driving on ramps considering unsatisfication. In 2025 IEEE 45th International
+Conference on Distributed Computing Systems Workshops (ICDCSW), pp. 267–272, 2025b. doi:
+10.1109/ICDCSW63273.2025.00051.
+
+Under review as a conference paper at ICLR 2026
+Yaguang Li, Rose Yu, Cyrus Shahabi, and Yan Liu. Diffusion convolutional recurrent neural network: Data-driven traffic forecasting, 2018.
+Yixuan Li, Xuesong Wang, Tianyi Wang, Lishengsa Yue, and Qian Liu. Characteristics analysis of
+autonomous vehicle pre-crash scenarios, 2026.
+Shiyin Lin. Hybrid fuzzing with llm-guided input mutation and semantic feedback, 2025. URL
+https://arxiv.org/abs/2511.03995.
+Zhihao Lin, Zhen Tian, Jianglin Lan, Qi Zhang, Ziyang Ye, Hanyang Zhuang, and Xianxian Zhao.
+A conflicts-free, speed-lossless kan-based reinforcement learning decision system for interactive
+driving in roundabouts. arXiv preprint arXiv:2408.08242, 2024a.
+Zhihao Lin, Zhen Tian, Qi Zhang, Hanyang Zhuang, and Jianglin Lan. Enhanced visual slam for
+collision-free driving with lightweight autonomous cars. Sensors, 24(19):6258, 2024b.
+Zhihao Lin, Jianglin Lan, Christos Anagnostopoulos, Zhen Tian, and David Flynn. Safety-critical
+multi-agent mcts for mixed traffic coordination at unsignalized intersections. IEEE Transactions
+on Intelligent Transportation Systems, 2025a.
+Zhihao Lin, Zhen Tian, Jianglin Lan, Dezong Zhao, and Chongfeng Wei.
+Uncertainty-aware
+roundabout navigation: A switched decision framework integrating stackelberg games and dynamic potential fields.
+IEEE Transactions on Vehicular Technology, pp. 1–13, 2025b.
+doi:
+10.1109/TVT.2025.3638264.
+Ioulia V Ossokina, Jos van Ommeren, and Henk van Mourik. Do highway widenings reduce congestion?, 12 2022. ISSN 1468-2702. URL https://doi.org/10.1093/jeg/lbac034.
+Tabish Rashid, Mikayel Samvelyan, Christian Schroeder De Witt, Gregory Farquhar, Jakob Foerster,
+and Shimon Whiteson. Monotonic value function factorisation for deep multi-agent reinforcement
+learning, 2020.
+Cynthia Rudin. Stop explaining black box machine learning models for high stakes decisions and
+use interpretable models instead, 2019.
+Ayushman Sarkar, Mohd Yamani Idna Idris, and Zhenyu Yu. Reasoning in computer vision: Taxonomy, models, tasks, and methodologies, 2025.
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy
+optimization algorithms, 2017.
+Hao Sha, Yao Mu, Yuxuan Jiang, Li Chen, Chenfeng Xu, Ping Luo, Shengbo Eben Li, Masayoshi
+Tomizuka, Wei Zhan, and Mingyu Ding. Languagempc: Large language models as decision
+makers for autonomous driving. arXiv preprint arXiv:2310.03026, 2023.
+Shai Shalev-Shwartz, Shaked Shammah, and Amnon Shashua. On a formal model of safe and
+scalable self-driving cars, 2017.
+Hao Shao, Letian Wang, Ruobing Chen, Hongsheng Li, and Yu Liu. Safety-enhanced autonomous
+driving using interpretable sensor fusion transformer. In Conference on Robot Learning, pp. 726–
+737, 2023.
+Yu Tian, Zhongheng Yang, Chenshi Liu, Yiyun Su, Ziwei Hong, Zexi Gong, and Jingyuan Xu.
+Centermamba-sam: Center-prioritized scanning and temporal prototypes for brain lesion segmentation, 2025a. URL https://arxiv.org/abs/2511.01243.
+Zhen Tian, Zhihao Lin, Dezong Zhao, Christos Anagnostopoulos, Qiyuan Wang, Wenjing Zhao,
+Xiaodan Wang, and Chongfeng Wei. A risk-aware spatial-temporal trajectory planning framework for autonomous vehicles using qp-mpc and dynamic hazard fields.
+arXiv preprint
+arXiv:2509.00643, 2025b.
+Zhen Tian, Zhihao Lin, Dezong Zhao, Wenjing Zhao, David Flynn, Shuja Ansari, and Chongfeng
+Wei. Evaluating scenario-based decision-making for interactive autonomous driving using rational criteria: A survey. arXiv preprint arXiv:2501.01886, 2025c.
+
+Under review as a conference paper at ICLR 2026
+Martin Treiber and Arne Kesting. Traffic Flow Dynamics: Data, Models and Simulation. SpringerVerlag, Berlin, Germany, 2013.
+Jianhui Wang, Yangfan He, Yan Zhong, Xinyuan Song, Jiayi Su, Yuheng Feng, Ruoyu Wang,
+Hongyang He, Wenyu Zhu, Xinhang Yuan, et al.
+Twin co-adaptive dialogue for progressive
+image generation, 2025a.
+Yangyang Wang and Tianyi Wang. Research on dual-clutch intelligent vehicle infrastructure cooperative control based on system delay prediction of two-lane highway on-ramp merging area,
+2024.
+Yujin Wang, Quanfeng Liu, Zhengxin Jiang, Tianyi Wang, Junfeng Jiao, Hongqing Chu, Bingzhao
+Gao, and Hong Chen. Rad: Retrieval-augmented decision-making of meta-actions with visionlanguage models in autonomous driving, 2025b.
+Yi Xin, Junlong Du, Qiang Wang, Zhiwen Lin, and Ke Yan. Vmt-adapter: Parameter-efficient
+transfer learning for multi-task dense scene understanding, 2024.
+Yi Xin, Qi Qin, Siqi Luo, Kaiwen Zhu, Juncheng Yan, Yan Tai, Jiayi Lei, Yuewen Cao, Keqi Wang,
+Yibin Wang, et al. Lumina-dimoo: An omni diffusion large language model for multi-modal
+generation and understanding, 2025a.
+Yi Xin, Juncheng Yan, Qi Qin, Zhen Li, Dongyang Liu, Shicheng Li, Victor Shea-Jay Huang,
+Yupeng Zhou, Renrui Zhang, Le Zhuo, et al. Lumina-mgpt 2.0: Stand-alone autoregressive image
+modeling, 2025b.
+Chao Yu, Akash Velu, Eugene Vinitsky, Jingxuan Gao, Yiran Wang, Alexandre Bayen, and Yuxin
+Wu. The surprising effectiveness of ppo in cooperative multi-agent games, 2022.
+Liyang Yu, Tianyi Wang, Junfeng Jiao, Fengwu Shan, Hongqing Chu, and Bingzhao Gao. Bida:
+A bi-level interaction decision-making algorithm for autonomous vehicles in dynamic traffic scenarios, 2025a.
+Zhenyu Yu. Ai for science: A comprehensive review on innovations, challenges, and future directions, 2025.
+Zhenyu Yu, Mohd Yamani Idna Idris, and Pei Wang. Physics-constrained symbolic regression from
+imagery, 2025b.
+Zhenyu Yu, Mohd Yamani Idna Idris, and Pei Wang. Visualizing our changing earth: A creative AI
+framework for democratizing environmental storytelling through satellite imagery, 2025c.
+Miao Zhang, Zhenlong Fang, Tianyi Wang, Shuai Lu, Xueqian Wang, and Tianyu Shi.
+Ccma:
+A framework for cascading cooperative multi-agent in autonomous driving merging using large
+language models, 2025a.
+Yaqiong Zhang, Zhen Tian, and Haoyu Hua. Design of an autonomous vehicle speed control system
+based on a pid controller. In 2025 International Conference on Advances in Electrical Engineering and Computer Applications (AEECA), pp. 491–495, 2025b. doi: 10.1109/AEECA65693.
+2025.00092.
+Liancheng Zheng, Zhen Tian, Yangfan He, Shuo Liu, Huilin Chen, Fujiang Yuan, and Yanhong
+Peng.
+Enhanced mean field game for interactive decision-making with varied stylish multivehicles. arXiv preprint arXiv:2509.00981, 2025a.
+Liancheng Zheng, Xuemei Wang, Feng Li, Zebing Mao, Zhen Tian, Yanhong Peng, Fujiang Yuan,
+and Chunhong Yuan. A mean-field-game-integrated mpc-qp framework for collision-free multivehicle control. Drones, 9(5):375, 2025b.
+
+Under review as a conference paper at ICLR 2026
+APPENDIX
+A
+EXPERIMENT SETUP
+A.1
+SIMULATION ENVIRONMENT
+Experiments are conducted using SUMO v1.14.0, a widely-used microscopic traffic simulator.
+The simulation runs at a 0.1s time step to capture fine-grained interactions. The test scenario features a 2km, three-lane highway with a 500m on-ramp merge zone, designed to induce natural
+bottlenecks. Vehicle dynamics include acceleration limits (amax = 2.6m/s2, amin = −4.5m/s2),
+lane-changing with a 100m look-ahead, and driver reaction times sampled from N (1.0,0.22)s.
+A.2
+HARDWARE AND SOFTWARE CONFIGURATION
+Training is performed on distributed clusters with 4×A100 (40GB) GPUs for LLM modules
+and 8×V100 (32GB) GPUs for PPO-based residual policy learning (batch size: 2048 trajectories).
+The stack includes PyTorch 2.0.1 + CUDA 11.8, Transformers 4.35.0, and Stable-Baselines3 1.8.0.
+LoRA fine-tuning (r = 16, α = 32) is applied to LLMs, substantially reducing trainable parameters
+while maintaining competitive performance. LLM training achieves ∼1,500 tokens/sec throughput.
+A.3
+EVALUATION METRICS
+We evaluate across four dimensions: (1) Safety: collision rate, critical TTC < 1.5s, THW > 0.9s,
+emergency braking (> 4.0m/s2), and unsafe lane changes (gap < 2.0s). (2) Efficiency: average travel time, merge-point throughput, mean harmonic speed, and Macroscopic Fundamental
+Diagram (MFD) analysis. (3) Comfort: ISO 2631-1 based jerk thresholds (0.9m/s3 longitudinal, 0.6m/s3 lateral), acceleration variance, and a normalized comfort index. (4) Interpretability:
+LLM-generated explanations are rated by 50 traffic engineers using a predefined rubric on accuracy,
+completeness, clarity, and actionability; Fleiss’ κ = 0.78 indicates substantial inter-rater agreement.
+A.4
+DATASETS AND SCENARIOS
+Our experimental evaluation focuses on highway merge scenarios using a 3-lane highway configuration with on-ramp merge zones. Key statistics are summarized in Table 3. The network design
+incorporates varying traffic densities and vehicle heterogeneity to capture realistic traffic conditions.
+We develop a custom Multimodal Traffic Congestion Dataset (MTCD) that integrates visual data
+from over 500 traffic cameras, textual traffic reports from regional transportation authorities, and
+temporal sensor data from loop detectors and GPS traces with synchronized labels for congestion
+levels and incident types. MTCD is used to pre-train the multimodal representation and coordination
+components, while closed-loop control evaluation is conducted in SUMO.
+To assess robustness across different traffic conditions, we evaluate the framework under multiple scenario variations. Light traffic scenarios use densities from 10 to 30 veh/km/lane, representing
+free-flow conditions. Moderate traffic conditions span 30 to 60 veh/km/lane, introducing coordination challenges. Heavy traffic scenarios with densities between 60 and 90 veh/km/lane test the
+system’s performance under congested conditions. Additionally, we include incident scenarios involving accidents, construction zones, and adverse weather conditions to evaluate adaptability under
+anomalous situations.
+A.5
+BASELINE METHODS
+We compare our approach against representative baselines spanning classical control, deep reinforcement learning, and multi-agent coordination. Classical baselines include the Intelligent Driver
+Model (IDM) and MOBIL (Minimizing Overall Braking Induced by Lane Changes), which are
+widely-used physics-based approaches in traffic control. For learning-based comparisons, we implement Proximal Policy Optimization (PPO) Schulman et al. (2017), Soft Actor-Critic (SAC) Haarnoja
+et al. (2018), and QMIX Rashid et al. (2020), a value-based multi-agent Q-learning method with
+
+Under review as a conference paper at ICLR 2026
+Table 3: MTCD Dataset Statistics and SUMO Simulation Parameters
+MTCD Dataset
+Cameras
+500+ traffic cameras
+Video
+2000+ hours
+Reports
+15,000+ incidents
+Sensor Data
+50M+ loop detector points
+GPS Traces
+100,000+ vehicles
+Congestion
+4 levels (free/stable/congested/-
+jammed)
+Incidents
+types
+(accident/construction/etc.)
+SUMO Simulation
+Version
+SUMO v1.14.0
+Time Step
+0.1s
+Highway
+2km, 3 lanes
+Merge Zone
+500m
+Accel./Decel.
+2.6/−4.5m/s2
+Reaction Time
+N (1.0,0.22)s
+Look-ahead
+100m
+Density Range
+0.1–0.9 veh/m
+Test Cases
+1000+ scenarios
+Evaluation
+50 runs/config
+Notes: MTCD = Multimodal Traffic Congestion Dataset.
+mixing networks. We also evaluate Multi-Agent PPO (MAPPO) Yu et al. (2022) and Counterfactual Multi-Agent Policy Gradients (COMA) Foerster et al. (2018), which are standard cooperative
+MARL baselines.
+B
+THEORETICAL ANALYSIS
+We establish theoretical foundations for the proposed framework through formal analysis of stability, safety, and coordination quality. For analysis, we consider a continuous-time control-affine
+surrogate model ˙s = f(s)+g(s)u.
+B.1
+LYAPUNOV STABILITY OF RESIDUAL CONTROL
+We show that the residual learning mechanism preserves the stability of the physics-based baseline controller under bounded perturbations.
+Definition 1 (Safe Operating Region). The safe operating region Ssafe ⊂S is defined as:
+Ssafe =
+
+s ∈S : ∥pi −pj∥2 ≥dmin, ∀i ̸= j
+
+(16)
+where dmin is the minimum safe inter-vehicle distance.
+Theorem 1 (Residual Control Stability). Let the physics-based controller uphysics(s) render the equilibrium s∗asymptotically stable with a Lyapunov function V(s) satisfying
+∇V(s)⊤
+f(s)+g(s)uphysics(s)
+
+≤−cV(s),
+c > 0.
+(17)
+If the residual policy is bounded as ∥ures(s)∥2 ≤ε and ∥∇V(s)⊤g(s)∥2 ≤L in a neighborhood of s∗,
+then for ε < c
+2L the composite controller utotal = uphysics +ures preserves asymptotic stability.
+Proof. Along trajectories under utotal, we have
+˙V(s) = ∇V(s)⊤
+f(s)+g(s)uphysics(s)
+
++∇V(s)⊤g(s)ures(s)
+(18)
+≤−cV(s)+
+∇V(s)⊤g(s)
+
+2 ·∥ures(s)∥2
+(19)
+≤−cV(s)+Lε.
+(20)
+
+Under review as a conference paper at ICLR 2026
+For ε < c
+2L, ˙V(s) < 0 holds outside a sufficiently small neighborhood of s∗, which preserves asymptotic stability.
+B.2
+SAFETY GUARANTEES VIA CONTROL BARRIER FUNCTIONS
+We formalize safety constraints using Control Barrier Functions (CBFs).
+Definition 2 (Control Barrier Function). A continuously differentiable function h : S →R is a
+Control Barrier Function if there exists an extended class K∞function α such that:
+sup
+u∈U
+∂h
+∂s (f(s)+g(s)u)+α(h(s))
+
+≥0.
+(21)
+For collision avoidance, we define:
+hij(s) = ∥pi −pj∥2
+2 −d2
+min.
+(22)
+Theorem 2 (Forward Invariance of Safe Set). If the control action satisfies the CBF constraint:
+∂hi j
+∂s (f(s)+g(s)u)+γ hij(s) ≥0
+(23)
+for all vehicle pairs (i, j) with γ > 0, then the safe set Ssafe is forward invariant, i.e., if s(0) ∈Ssafe,
+then s(t) ∈Ssafe for all t ≥0.
+In implementation, the safety filter enforces a quadratic-program constraint; TTC/THW limits
+can be included as additional practical constraints within the same filtering step.
+B.3
+LLM COORDINATION OPTIMALITY
+We analyze the approximation quality of LLM-generated coordination directives for a given
+region-time instance.
+Proposition 3 (Coordination Cost Degradation Bound (Informal)). Let d∗be an optimal coordination directive and dLLM be the LLM-generated directive. If the directive space is bounded and the
+LLM incurs a bounded approximation error εLLM, then the coordination cost satisfies
+J(dLLM) ≤(1+εLLM)J(d∗)+O(τcomm),
+(24)
+where τcomm is the communication delay.
+This bound motivates the use of LLMs for high-level coordination while relying on physics-based
+controllers for real-time safety.
+B.4
+MULTI-AGENT CONVERGENCE ANALYSIS
+Theorem 4 (Distributed Training Convergence (Informal)). Under the Centralized Training Decentralized Execution (CTDE) paradigm with a shared reward, the joint policy π = {π1,...,πN}
+obtained by stochastic policy optimization converges to an ε-stationary solution in expectation, with
+a typical rate O(T −1/2) in terms of the expected gradient norm, where T denotes the number of
+training updates.
+This convergence-rate characterization is consistent with our multi-stage training design, where
+physics-guided initialization provides structured exploration and empirically stabilizes learning
+compared to unstructured initialization.
+C
+ADDITIONAL EXPERIMENTS
+C.1
+ABLATION STUDIES
+To quantify the contribution of each component in our hierarchical framework, we perform ablations by removing one module at a time. Table 4 reports the results.
+
+Under review as a conference paper at ICLR 2026
+Table 4: Ablation Study Results
+Configuration
+SR (%)
+CR (%)
+CI
+Full Method
+84.6
+3.2
+0.74
+w/o LLM Coord.
+79.1
+5.8
+0.68
+w/o Physics Prior
+76.4
+7.3
+0.62
+w/o Multimodal
+81.2
+4.1
+0.71
+w/o Safety Filter
+82.3
+8.9
+0.69
+Notes: SR = Success Rate ↑; CR = Collision Rate ↓; CI = Comfort Index ↑. Arrows indicate optimization
+direction.
+Full
+System w/o LLM
+Coord.w/o Physics
+Prior
+w/o
+Multimodalw/o Safety
+Filter
+w/o
+Residual
+Success Rate (%)
+(a) Success Rate
+Full
+System w/o LLM
+Coord.w/o Physics
+Prior
+w/o
+Multimodalw/o Safety
+Filter
+w/o
+Residual
+Collision Rate (%)
+(b) Collision Rate
+Full
+System w/o LLM
+Coord.w/o Physics
+Prior
+w/o
+Multimodalw/o Safety
+Filter
+w/o
+Residual
+0.55
+0.60
+0.65
+0.70
+0.75
+0.80
+Comfort Index
+(c) Driving Comfort
+Figure 4: Ablation study visualization. Removing the physics prior yields the largest drop in success
+rate, while removing the safety filter causes the largest increase in collision rate.
+C.1.1
+IMPACT OF LLM COORDINATION
+Removing the LLM coordination layer decreases the success rate from 84.6% to 79.1% (5.5 pp)
+and increases the collision rate from 3.2% to 5.8% (2.6 pp). This trend suggests that semantic-level
+directives help resolve multi-vehicle negotiation patterns (e.g., zipper merging and yielding) beyond
+purely reactive local control. The comfort index also decreases from 0.74 to 0.68, indicating less
+smooth coordination.
+C.1.2
+SIGNIFICANCE OF PHYSICS-BASED PRIOR
+The physics prior (i.e., the physics-based baseline controller) has the strongest effect on overall
+performance. Without it, the success rate drops to 76.4% (8.2 pp) and the collision rate increases to
+7.3% (4.1 pp), indicating that learning alone is less reliable in maintaining consistent safety margins
+under interaction uncertainties. The comfort index decreases to 0.62, consistent with less regularized
+control actions without a dynamics-informed operating point.
+C.1.3
+CONTRIBUTION OF MULTIMODAL FUSION
+Without multimodal integration, the success rate decreases to 81.2% (3.4 pp) with a moderate
+collision-rate increase to 4.1% (0.9 pp). This pattern indicates that multimodal fusion primarily
+improves situational awareness and decision quality under partial observability, while the physics
+prior and safety filter dominate hard safety constraints. The comfort index changes modestly (0.71
+vs 0.74), suggesting a larger impact on high-level coordination than on low-level smoothness.
+C.1.4
+ROLE OF SAFETY FILTERING
+Removing the safety filter increases the collision rate to 8.9%, compared to 3.2% for the full system, while the success rate remains 82.3%. This pattern suggests that the filter mainly intervenes in
+safety-critical edge cases rather than constraining nominal operation. Without explicit constraint enforcement, the controller exhibits more aggressive maneuvers (CI drops to 0.69), including frequent
+hard braking and abrupt steering corrections.
+
+Under review as a conference paper at ICLR 2026
+Road Length (km)
+Lanes
+0.00
+0.15
+0.30
+0.45
+0.60
+0.75
+0.90
+Speed (m/s)
+Time (s)
+Position (m)
+Ideal Trajectory
+Baseline Method
+Our Method
+Action Dimension 1
+Action Dimension 2
+Classical
+Deep RL
+Ours
+Time Steps
+Inter-vehicle Distance (m)
+Danger Zone
+Safety Threshold
+Baseline
+Our Method
+Vehicle ID
+Cumulative Energy (kWh)
+12.4% Energy Saved
+Baseline
+Our Method
+Vehicle ID
+Vehicle ID
+0.90 0.85
+0.85 0.93 0.81
+0.81 0.96 0.89
+0.89 1.00 0.77
+0.77 0.96 0.83
+0.83 0.93 0.89
+0.89 0.96 0.72
+0.72 0.95 0.89
+0.89 0.98 0.84
+0.84 0.91
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Coordination Score
+Figure 5: Qualitative examples of regional LLM coordination directives with accompanying rationales.
+C.1.5
+SYNERGISTIC EFFECTS
+The ablation trends indicate complementary roles across components. LLM coordination provides semantic directives for multi-vehicle negotiation, the physics prior supplies a dynamicsconsistent operating point for execution, multimodal fusion enriches situational context for directive generation, and the safety filter enforces hard constraints as a final safeguard. Together, these
+modules support interpretable coordination while maintaining safe execution under interaction uncertainties.
+C.2
+QUALITATIVE ANALYSIS
+Figure 5 illustrates representative behaviors and decision patterns of the proposed framework
+across multiple operational aspects, highlighting how regional directives are translated into feasible
+vehicle actions.
+C.2.1
+SPATIAL-TEMPORAL TRAFFIC PATTERNS
+The traffic-flow heatmap (top-left) shows structured patterns under our coordination framework.
+The velocity field visualization indicates smooth speed transitions over the 2-km highway segment,
+with regular waves consistent with stabilized traffic flow. The trajectory comparison (top-middle)
+shows closer tracking to the reference path, while the baseline exhibits cross-track deviations of up
+to 15 m in congested intervals, which can degrade comfort and increase lane-deviation risk.
+C.2.2
+CONTROL ACTION DISTRIBUTION AND SAFETY MARGINS
+The action-space visualization (top-right) contrasts different control behaviors. Classical control
+produces clustered actions within a limited range, whereas deep RL spreads actions more broadly.
+Our method forms organized clusters that remain consistent with dynamics constraints while adapting to traffic conditions. The safety-distance analysis (bottom-left) shows inter-vehicle distances
+remaining above the configured dmin threshold (5 m in our setup) more consistently than baselines,
+which more frequently approach unsafe proximity in dense traffic.
+
+Under review as a conference paper at ICLR 2026
+Number of Vehicles
+Success Rate (%)
+(a) Success Rate Scalability
+Number of Vehicles
+Collision Rate (%)
+(b) Collision Rate Scalability
+Number of Vehicles
+Throughput (veh/hour)
+(c) System Throughput
+Number of Vehicles
+Average Latency (ms)
+(d) System Latency
+Figure 6: Scalability analysis under increasing vehicle counts. The framework maintains high success rates (>78%) up to 100 vehicles while exhibiting graceful degradation under extreme loads.
+C.2.3
+ENERGY EFFICIENCY AND MULTI-AGENT COORDINATION
+The energy-consumption visualization (bottom-middle) indicates improved efficiency, with
+smoother acceleration profiles and fewer braking events. The coordination matrix (bottom-right)
+suggests stronger pairwise consistency for neighboring vehicles, consistent with more effective
+merging and lane-change negotiation guided by the regional coordination layer.
+C.2.4
+INTERPRETABILITY AND HUMAN EVALUATION
+The system generates human-readable rationales for coordination decisions, e.g., yielding recommendations based on relative speed and remaining merge distance. Expert ratings from 50 traffic
+engineers report that these rationales are 87% accurate in capturing salient factors and 91% helpful for understanding system behavior, supporting interpretability in safety-critical transportation
+settings.
+C.3
+SCALABILITY ANALYSIS
+To evaluate scalability, we conduct experiments with varying numbers of concurrent vehicles.
+Figure 6 summarizes performance across fleet sizes. With 10 vehicles, the framework achieves a
+90.2% success rate and 2.8% collision rate. As vehicle count increases to 50, performance remains
+robust with 85.1% success rate. Even at 100 vehicles, the system maintains 78.4% success rate,
+representing a 13% degradation relative to the 10-vehicle setting. Throughput scales near-linearly
+up to 50 vehicles (1720 veh/h to 3150 veh/h), suggesting effective coordination without severe communication bottlenecks.
+
+Under review as a conference paper at ICLR 2026
+Perception
+Fusion
+LLM
+Coordinator
+Physics
+Controller
+Residual
+Policy
+Safety
+Filter
+Average Latency (ms)
+(a) Average Latency by Component
+Perception
+Fusion
+6.1%
+LLM
+Coordinator
+89.3%
+Physics
+Controller
+1.1%
+Residual
+Policy
+2.6%
+Safety
+Filter
+0.9%
+(b) Latency Distribution
+Figure 7: Latency breakdown of system components. LLM coordination dominates latency but
+operates at lower frequency (1 Hz), while physics-based control maintains real-time performance at
+50 Hz.
+Highway
+Merge
+Urban
+Intersection
+Roundabout
+Emergency
+Brake
+Congested
+Traffic
+Success Rate (%)
+Performance Comparison Across Driving Scenarios
+IDM
+MAPPO
+Ours
+Figure 8: Performance comparison across diverse traffic scenarios. The framework demonstrates
+consistent improvements over baselines across all scenario types, with particularly strong gains in
+complex multi-vehicle interactions.
+C.4
+REAL-TIME PERFORMANCE ANALYSIS
+Figure 7 presents the latency breakdown across system components. The physics-based controller
+operates with 2.1 ms average latency (99th-percentile, p99: 4.8 ms), enabling 50 Hz control loops
+suitable for real-time vehicle control. The residual policy adds 5.3 ms (p99: 11.2 ms), remaining
+within real-time constraints. The LLM coordination layer requires 185 ms average latency (p99:
+420 ms), which we address by running coordination asynchronously at 1 Hz, decoupled from the
+high-frequency control loop. As a result, time-critical low-level control does not depend on LLM
+inference latency.
+C.5
+CROSS-SCENARIO GENERALIZATION
+Figure 8 evaluates generalization across diverse traffic scenarios including highway merging, urban intersections, roundabouts, construction zones, and adverse weather conditions. Our framework
+maintains consistent advantages on the primary performance metric: 23% gain in highway scenarUnder review as a conference paper at ICLR 2026
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+Safety Margin Coefficient
+Collision Rate (%)
+Optimal
+Balance
+Safety-Efficiency Trade-off Analysis
+Collision Rate (%)
+Efficiency Loss (%)
+Efficiency Loss (%)
+Figure 9: Pareto frontier of safety-efficiency trade-off under varying safety constraint strictness. Our
+method achieves superior Pareto optimality compared to baselines.
+ios, 28% in urban intersections, and 31% in construction zones compared to the best baseline. The
+physics-guided design is particularly beneficial in scenarios where constraint satisfaction is most
+critical.
+C.6
+SAFETY-EFFICIENCY TRADE-OFF ANALYSIS
+Figure 9 visualizes the safety-efficiency Pareto frontier by varying the safety-filter strictness gain
+γ ∈[0.5,1.2] at evaluation time. At γ = 0.8 (default), the system achieves a balanced operating point
+with 84.6% success rate and 3.2% collision rate. Stricter constraints (γ = 1.2) reduce collisions to
+1.1% but decrease throughput by 8%. This Pareto curve enables tuning for deployment contexts,
+ranging from aggressive highway settings to more conservative urban operation.
+D
+DISCUSSION
+D.1
+KEY FINDINGS AND INSIGHTS
+Our experimental results support several findings:
+Synergy of Physics and Learning: Combining physics-based priors with residual learning improves both stability and adaptability, mitigating limitations of purely classical or purely learningbased approaches (e.g., Table 4).
+Interpretability Benefits: The regional LLM layer provides interpretable coordination rationales without degrading performance, which can facilitate auditing and debugging in safety-critical
+transportation systems (e.g., Fig. 5).
+Multimodal Advantage: Integrating visual, textual, and temporal inputs improves robustness
+under diverse traffic conditions and incident scenarios (e.g., Fig. 8).
+
+Under review as a conference paper at ICLR 2026
+D.2
+LIMITATIONS AND FUTURE WORK
+Computational Complexity: The LLM coordination layer introduces additional overhead. Future work should explore compression and distillation techniques to further reduce latency and compute.
+Low-frequency coordination limitations: The 1 Hz LLM coordination may be insufficient for
+sudden cut-in or emergency braking scenarios where sub-second re-coordination is needed. We
+mitigate this through the safety filter, but future work should explore lightweight “reflex” modules
+that can override stale directives in time-critical situations.
+Real-world Validation: While simulation results are promising, real-world deployment requires
+validation on physical testbeds and additional safety considerations beyond the simulator assumptions.
+Scalability: Current experiments study moderate-scale settings (up to 100 vehicles). Scaling to
+city-wide traffic networks introduces further challenges in coordination, communication, and partial
+observability.
+D.3
+BROADER IMPLICATIONS
+This work highlights the potential of integrating foundation models with classical control for
+safety-critical applications Shalev-Shwartz et al. (2017). Interpretable coordination rationales may
+improve system transparency and operational oversight. As the automotive industry transitions
+toward autonomy Chen et al. (2017), frameworks that balance learning-based adaptability with
+physics-based constraints will become increasingly important.

@@ -1,0 +1,818 @@
+Under review as a conference paper at ICLR 2026
+JUDGE RELIABILITY HARNESS: STRESS TESTING THE
+RELIABILITY OF LLM JUDGES
+Anonymous authors
+Paper under double-blind review
+ABSTRACT
+We present the Judge Reliability Harness, an open source library for constructing
+validation suites that test the reliability of LLM judges. As LLM based scoring
+is widely deployed in AI benchmarks, more tooling is needed to efficiently assess the reliability of these methods. Given a benchmark dataset and an LLM
+judge configuration, the harness generates reliability tests that evaluate both binary judgment accuracy and ordinal grading performance for free-response and
+agentic task formats. We evaluate four state-of-the-art judges across four benchmarks spanning safety, persuasion, misuse, and agentic behavior, and find meaningful variation in performance across models and perturbation types, highlighting
+opportunities to improve the robustness of LLM judges. No judge that we evaluated is uniformly reliable across benchmarks using our harness. For example, our
+preliminary experiments on judges revealed consistency issues as measured by
+accuracy in judging another LLM’s ability to complete a task due to simple text
+formatting changes, paraphrasing, changes in verbosity, and flipping the ground
+truth label in LLM-produced responses. The code for this tool is available at:
+https://anonymous.4open.science/r/judge-reliability-harness-960E/README.md
+INTRODUCTION
+Large language models (LLMs) are increasingly used as judges (also referred as LLM judges) or
+“autograders” to score, rank, or classify AI outputs in AI evaluations (Thakur et al., 2025). Human
+evaluation yields high quality judgments but is expensive and difficult to scale, which has motivated
+the widespread use of LLMs as judges in place of human annotators (Bai et al., 2024; Chiang et al.,
+2024). However, the reliability of judge system comfiguration, including the LLM judge model,
+rubric, and prompt templates, are rarely evaluated and measured in a systematic manner or reported
+alongside benchmark evaluation results. Point estimates of agreement with human raters on small
+validation sets provide limited assurance about how a judge will respond to realistic variations in
+inputs, such as changes in formatting, paraphrasing, verbosity, or sampling parameters. This gap between the central role of model judges and the limited tools available to characterize their reliability
+makes it difficult for practitioners and decision makers to understand how much confidence to place
+in AI evaluation results.
+In this paper, we introduce the Judge Reliability Harness (JRH), an open source library that generates
+validation suites for any LLM judge on both agentic and free-response benchmarks. JRH generates
+reliability tests that measure grading accuracy via label flipped responses, invariance to formatting
+and paraphrasing, susceptibility to verbosity bias, stochastic stability under repeated sampling, and
+calibration across an ordinal grading scale. JRH features a human-in-the-loop review process for
+generated reliability tests through a user interface that gives full control to accept, reject, or edit
+the tests. Across a range of candidate judges, it aggregates pass rates, confidence intervals, and
+cost curves into standardized reports. By making reliability testing configurable, reproducible, and
+inexpensive, JRH aims to support a more transparent and trustworthy use of LLM judges in both
+research and deployment contexts.
+
+Under review as a conference paper at ICLR 2026
+Figure 1: Workflow for the Judge Reliability Harness. Human-in-the-loop review is performed after
+generation of the JRH synthetic test suite and before evaluation by the judges.
+RELATED WORK
+Evaluation of open ended text generation remains a central challenge in natural language processing, especially as LLMs are deployed in safety critical and applications that demand high reliability.
+Human evaluation yields high quality judgments but is expensive and difficult to scale, which has
+motivated the widespread use of LLMs as judges that score model outputs in place of human annotators. Benchmarks such as MT-Bench (Bai et al., 2024) and Chatbot Arena (Chiang et al., 2024)
+show that powerful judges like GPT-4 can approach expert level agreement on preference judgments,
+while frameworks such as G-Eval (Liu et al., 2023) obtain strong correlations with human ratings
+on summarization and dialog through structured rubrics and chain of thought prompting. Recent
+surveys document the rapid proliferation of LLM-as-a-judge across diverse tasks and evaluation
+settings, which establishes this paradigm as a core element of modern evaluation practice.
+An emerging research direction investigates whether existing LLM judge methods are sufficiently
+reliable. Chehbouni et al. (2025) use tools from measurement theory to argue that enthusiasm for
+LLM judges has outpaced rigorous scrutiny of their validity and reliability, and that key assumptions
+about their use as measurement instruments remain under tested. Thakur et al. (2025) benchmark
+multiple judge models against human exam graders and find that only the largest models attain reasonable alignment, while still displaying sensitivity to prompt complexity and a tendency toward
+lenient scoring. Doddapaneni et al. (2024) introduce the FBI meta-evaluation benchmark, where
+targeted perturbations that degrade factuality, instruction following, long form coherence, or reasoning reveal that evaluator LLMs often fail to detect quality drops. Ye et al. identify a wide range of
+biases in LLM judges, including position and verbosity biases, and propose the CALM framework
+to quantify their impact. Taken together, these studies show that the reliability of LLM judges cannot
+be taken for granted.
+METHODOLOGY
+In this section, we outline and describe the reliability tests used to systematically evaluate LLM
+judge reliability. Each test reveals a different dimension of reliability/robustness through the generation and validation of synthetically generated data. Each run proceeds in four stages: (1) the
+seed dataset is loaded and normalized into a common schema (2) synthetic data pipelines are run
+to generate and validate perturbed items that probe different failure modes, (3) the judge is evaluated on the generated samples and (4) the harness computes and aggregates reliability metrics that
+characterize where and how the judge failed.
+3.1
+BASIC PERTURBATIONS
+This suite of tests contains discriminative and consistency perturbations aimed at determining
+whether an LLM judge responds appropriately to both label-changing and meaning-preserving variUnder review as a conference paper at ICLR 2026
+ations of the same content. Discriminative tests generate samples that are semantically inverted to
+verify that the autograder is able to distinguish between qualitatively different sample outputs. The
+consistency tests apply semantically equivalent transformations such as reformatting, paraphrasing,
+and response-length variation to validate that the autograder produces scores that are stable when
+changes are made that do not impact quality.
+• Label flip (discriminative). The original response is rewritten so that it clearly violates
+the rubric or inverts the ground-truth label, while preserving topic and overall structure. A
+reliable judge should flip its decision on these perturbations.
+• Format invariance (layout-only changes). The response is rewritten to alter visual layout without changing the text itself: adding or removing blank lines between paragraphs,
+inserting clusters of extra spaces within lines, or adding indentation at the start of lines.
+The judge should be invariant to these purely formatting changes and preserve its original
+score.
+• Semantic paraphrase. The response is paraphrased so that wording and sentence structure
+change, but the underlying meaning and factual content remain the same. A robust judge
+should give paraphrases the same score as the original.
+• Verbosity bias (short vs. long). The response is rewritten into longer or shorter variants
+that preserve the same factual content and intent: an expanded version with additional explanation and a compressed version that is more concise. These perturbations test whether
+judges over-reward longer answers or penalize succinct ones when quality is held constant.
+3.2
+STOCHASTIC STABILITY
+This test measures whether the behavior of the LLM judge is consistent across identical inputs. This
+pipeline samples from the original dataset and creates duplicates of each item. The evaluation stage
+compares each duplicate request and measures scoring consistency by comparing the autograder
+outputs across the duplicates of the same underlying sample so any variation reflects stochastic
+instability rather than changes in content.
+3.3
+SYNTHETIC ORDINAL
+For datasets requiring ordinal scores, the synthetic ordinal mode generates synthetic samples targeting each level of an ordinal rubric. This pipeline aims to produce an even distribution of samples across the range of possible ordinal scores. It maintains a scoring bucket manager that tracks
+which score levels have been generated for each source sample. For each target score “bucket” the
+pipeline leverages temperature ramping, starting at an initial temperature and incrementally increasing towards the user-defined maximum. Few-shot examples from the desired scoring level are also
+included to guide the generation of the new synthetic samples. After each attempt, we employ a
+validator LLM to confirm the achieved score – if the target is missed, the system retries with an
+increased temperature up to the configurable maximum. The pipeline also leverages a computed
+cosine similarity metric between the generated sample and all the original examples (to ensure the
+generator is not drawing too heavily from the provided few shot example/s and (2) the previously
+generated synthetic samples (to encourage synthetic response diversity).
+3.4
+AGENTIC MODE
+This data generation mode supports ingestion of Inspect (AI Security Institute) evaluation files and
+enables users to generate variations of agentic transcripts. Agentic mode is comprised of two tests:
+• Agent perturbation mode modifies transcripts to induce rubric violations
+• Agent positives steers the transcript towards satisfying the rubric criteria
+Both modes rely on the same core pipeline for modifying logs. The pipeline first loads the Inspect
+evaluation along with the rubric instructions. A planning LLM analyzes the agent transcript and
+generates a sequence of edit steps targeting specific messages. A separate editor LLM then iterates
+through each proposed step, modifying the flagged agent messages to move the transcript toward
+
+Under review as a conference paper at ICLR 2026
+the target outcome—either degrading performance to trigger a rubric violation or improving it to
+achieve a passing evaluation. Each edit is designed to be logically coherent and account for preceding changes. A summarizer LLM consolidates the evolving conversation state so the editor can
+make contextually appropriate modifications. An optional verifier LLM confirms whether the edited
+transcript achieves the target outcome before the perturbation is emitted.
+3.5
+HUMAN IN THE LOOP REVIEW
+All data generation modes support an optional human-in-the-loop review to enable quality control
+and refinement of generated synthetic data. Reviewers can accept, edit, or reject items and their
+score labels as they come in (see Appendix Figure 2). This workflow is helpful for catching edge
+cases, correcting validation errors, ensuring perturbations align with the domain specific evaluation
+requirements, and improving the realism/utility and coverage of the synthetic data.
+EXPERIMENTS
+This section describes the experimental setup used to evaluate the Judge Reliability Harness. We
+specify the benchmarks, rubrics, and model judges considered, the configuration of the reliability
+tests, and the computational budget and implementation details. It also outlines the evaluation protocol for comparing alternative judge configurations. We evaluate the judge reliability harness by
+applying it to characterize the reliability of four LLM judges across four benchmark datasets. The
+experiments demonstrate the harness’s ability to probe different failure modes across a diverse set
+of benchmarks. For each dataset we run a fixed suite of reliability tests.
+Unless otherwise noted, the LLM used to produce responses to the benchmark dataset is GPT4o mini. For modes that validate the synthetically generated samples, Gemini 3 Pro is used to
+verify the generated perturbations achieve their intended target labels before evaluation. For a given
+benchmark, all LLM judges are evaluated on the same curated set of synthetic data. We consider the
+judge models: GPT-4o, Claude Sonnet 4.5, LLama Maverick 4.1, and Gemini 2.5 Pro. Each judge
+is paired with a prompt template and rubric appropriate to the underlying benchmark and reliability
+test.
+4.1
+BENCHMARKS
+We down-sample each benchmark due to the substantial monetary costs associated with perturbing
+every sample. For example, running eight tests across ten samples requires 80 API calls. Downsampling also keeps manual review manageable for the 80 perturbed samples. For FORTRESS,
+Persuade, and HarmBench, ten samples were manually selected to ensure adequate representation
+of the original datasets through stratified sampling on category columns in each dataset. We perturbed these subsets using OpenAI’s GPT-4o-mini and validated the resulting samples with Gemini
+3 Pro. When Gemini 3 Pro raised safety errors during validation, GPT-4o-mini served as a fallback
+validator. For the AgentHarm benchmark, sixteen samples were randomly selected and stratified by
+harm category (eight categories with two samples each).
+The PERSUADE benchmark (Crossley et al., 2024) is comprised of argumentative essays produced
+by students from 6th to 12th grade to assess writing quality across several dimensions. For this
+dataset, we stratify based on discourse type and run the full suite of JRH tests (excluding label
+flip and agentic) that target both ordinal calibration and invariance: synthetic ordinal, three format
+invariance tests (altering vertical spacing, intra-line spacing, and indentation), semantic paraphrase,
+verbosity bias, and stochastic stability with 10 samples per test.
+FORTRESS (Knight et al., 2025) is a benchmark that evaluates how robust LLMs are against misuse, with a specific focus on national security and public safety. For this dataset, we examine the
+following reliability tests: label flip, format invariance, semantic paraphrase, and verbosity bias. The
+FORTRESS samples are stratified based on the risk subdomain.
+HarmBench (Mazeika et al., 2024) targets harmful content, with binary labels indicating whether
+a response violates safety policies. For HarmBench, we run the same reliability tests as we do on
+FORTRESS. The responses are stratified based on the SemanticCategory so that perturbations
+cover a range of different harm types.
+
+Under review as a conference paper at ICLR 2026
+AgentHarm (Andriushchenko et al., 2025) is an agent safety-related benchmark that evaluates the
+compliance or violation of various harmful requests across a multi-step agent task. This mode will
+generate perturbations that either violate the specified criteria in the rubric or evaluate the ability of
+the judge to discern these subtle changes across an entire agent transcript. This mode relies more
+heavily on the human in the loop review during generation due to the complexity of agent behavior.
+The dataset will be stratified by scenario category, testing 2 generated samples from each of the 8
+categories (Disinformation, Drugs, Fraud, Harassment, Hate, Sexual, Copyright, and Cybercrime).
+4.2
+HUMAN IN THE LOOP VALIDATION
+To improve the quality of the synthetic test cases, we use human-in-the-loop validation. We first
+generate the synthetic task data and then use the JRH review interface to allow the annotator to
+accept, edit, or reject perturbations and their labels. For FORTRESS, Persuade, and HarmBench,
+we did not require human edits to the LLM-generated perturbations before accepting the modified
+samples because, upon human review, they appeared to satisfy the intended reliability tests.
+Human in the loop validation was used significantly in the AgentHarm benchmark to ensure that the
+generated synthetic data points were generating realistic and accurate transcripts for the evaluator
+to assess. For the agent perturbations mode where we targeted transcript modifications that
+degraded the quality of the transcript, 14 out of 16 had one or more message modified. For the
+agent positives mode, where our harness targets transcript modifications to better align the
+response with the rubric criteria, only 2 out of 16 transcripts were modified in the HITL phase. The
+greater reliance on the HITL step in the former mode reflects limitations primarily caused by safety
+guardrails in the model used to perturb transcripts (GPT-4o).
+4.3
+EVALUATION PROTOCOL
+The judge reliability metrics are computed by comparing the fraction of items where the judge agrees
+with the target label. The primary output of this analysis is 4 heatmaps, one for each benchmark,
+illustrating a judge-by-judge breakdown of reliability on a per-test basis. The computed metric
+represents the percent of answers where the judge’s score matches the expected score of the new
+synthetic data points, where a higher accuracy score is better.
+4.4
+LLM JUDGES
+We evaluate 4 LLMs judges, including GPT-4o, Claude Sonnet 4.5, Llama Maverick 4.1 17B and
+Gemini 2.5 Pro when used as judges. 3 models are inferenced through their company provided
+APIs (GPT-4o, Claude Sonnet 4.5, and Gemini 2.5 Pro), while LLama Maverick 4.1 17B was access
+through AWS Bedrock. During preliminary experiments on the AgentHarm benchmark, we observed Sonnet 4.5 frequently had inconsistencies in its natural-language reasoning and the returned
+structured score. This behavior was not observed in Opus 4.5 or Haiku 4.5 (or any other tested
+model). We therefore use Claude Opus 4.5 in place of Sonnet 4.5 in the AgentHarm.
+RESULTS
+This section will report the preliminary empirical findings of applying the Judge Reliability Harness.
+It will present reliability metrics for each judge and benchmark, analyses of failure modes uncovered
+by the different test families, and visualizations of cost–reliability trade offs. It will also summarize
+key quantitative outcomes, indicating that Llama 4.1 Maverick 17B tends to be the most reliable
+judge while running at a fraction of the cost of other judges tested.
+In Figures 3a, 3b and 3c, we show the metric scores achieved by each LLM across 8 reliability tests
+for FORTRESS, HarmBench and Persuade respectively. We observe that LLM judges are robust
+in the FORTRESS and HarmBench benchmarks, while more fragile on the Persuade benchmark.
+Generally, the semantic paraphrase test shows the most consistent robustness across each test
+with the lowest accuracy score of 40% achieved by Gemini 2.5 Pro in the Persuade Benchmark.
+The pronounced fragility in the Persuade benchmark likely stems from the multi-class scoring of
+the benchmark. For example, the judges for FORTRESS and HarmBench primarily give binary
+(yes/no) answers, while Persuade requires the judge to provide a score ∈[1, 6]. Assessing the
+
+Under review as a conference paper at ICLR 2026
+Figure 2: Human in the Loop Review User Interface (Agentic mode). The original sample from
+the benchmark is shown at the top. The left shows the transcript provided as input along with edits
+made by the synthetic data pipeline in red and green. The right shows the edited transcript, which is
+a free text box the user may use to make further edits. The bottom gives the user an option to accept
+the sample if they are satisfied with the edits, or to reject the sample and move on to the next one.
+semantic proximity of the judge’s responses to the ground truth in the Persuade benchmark remains
+an important direction for future work.
+Across each benchmark, no model is uniformly robust to perturbations, highlighting the sensitivity
+between the autograder inputs (instruction, rubric, text for grading, and model). In particular, we
+observe an inverse relationship in the volatility of the models between the Persuade and HarmBench
+benchmarks, as shown in Table 4. In the Persuade benchmark, Claude Sonnet 4.5 shows the highest
+volatility (standard deviation of 17.18%) while Gemini 2.5 Pro exhibits the lowest (standard deviation of 11.10%). This pattern is reversed in HarmBench, where Claude shows the lowest standard
+deviation (11.13%) while Gemini shows the highest (17.17%), further emphasizing that robustness
+to perturbations is a property of the specific task being evaluated.
+All the other benchmarks are binary judgment (classification) tasks, whereas PERSUADE is a regression task that involves predicting an ordinal value. Accordingly, in addition to reporting accuracy in Figure 3c, we report the Concordance Correlation Coefficient (CCC), Pearson’s correlation
+coefficient (ρ), Spearman’s correlation coefficient (ρs), and Mean Absolute Error (MAE) in the Appendix. These metrics offer a clearer view of how closely the LLM judges’ ordinal predictions track
+the ground-truth ordinal scores. For PERSUADE, we obtain Pearson’s ρ = 0.901 and MAE = 0.48
+for Claude Sonnet 4.5, ρ = 0.960 and MAE = 0.23 for GPT-4o, ρ = 0.935 and MAE = 0.34 for
+Gemini 2.5 Pro, and ρ = 0.953 and MAE = 0.29 for Llama Maverick 4.
+
+Under review as a conference paper at ICLR 2026
+(a) FORTRESS
+(b) HarmBench
+(c) Persuade
+(d) AgentHarm
+Figure 3: Reliability performance heatmaps across all four benchmarks: (a) FORTRESS, (b) HarmBench, (c) Persuade, and (d) AgentHarm.
+Table 5 presents the distributions statistics of scores per benchmark. With the exception of Fortress,
+we observe that autograders struggle and achieve their lowest mean scores on format invariance tests,
+suggesting that models are more robust to semantic level perturbations/differences than to formatting
+variations. This suggests that natural human errors such as typos are more likely to disrupt model
+performance than semantic changes to content.
+Figure 6 summarizes the reliability of the agent perturbation and agent positives tests
+for the AgentHarm benchmark. For the agent perturbation test, GPT-4o, Gemini 2.5 Pro, and
+Llama 4 Maverick demonstrate strong robustness, each achieving a score of 87.5% while Claude
+Opus 4.5 achieves a score of 68.75%. On the agent positives test, Claude Opus 4.5, GPT4o, and Llama 4 Maverick tie for highest score of 93.75% while Gemini 2.5 Pro scores only 75%.
+As detailed in Table 3, GPT-4o and Llama 4 Maverick achieved the highest scores with an overall
+accuracy score of 0.906. Opus 4.5 shows the largest asymmetry between the two tests, with a score of
+93.75% on agent positives and 68.75% on agent perturbation. This suggests it misses
+a larger fraction of subtle violations introduced in the multi-turn agentic transcripts (consistent with
+the high false negative rate in Table 3). Gemini 2.5 Pro has the opposite failure mode, scoring better
+on agent perturbation than agent positives, implying a tendency to incorrectly flag
+corrected transcripts as violations.
+DISCUSSION
+The empirical findings highlight a fundamental tension in the current evaluation ecosystem: although LLM judges are now central to benchmarking and research workflows, their reliability varies
+
+Under review as a conference paper at ICLR 2026
+sharply across tasks, perturbation families, and model choices. Several clear patterns emerge from
+our stress tests.
+Judge output robustness is highly task-dependent. Models that appear stable in binary safetyclassification settings (e.g., FORTRESS or HarmBench) degrade substantially when required to
+assign multi-level ordinal scores, as in Persuade.
+Practitioners who rely on ordinal scoring or
+preference-ranking tasks may be overestimating the reliability of their evaluation systems.
+Formatting perturbations produce larger reliability drops than semantic perturbations. This
+asymmetry is concerning, as different LLMs tend to have unique quirks in how they format their
+responses. Judges that are brittle to such differences risk embedding instability into downstream
+model comparisons or leaderboard decisions, even when semantic content remains unchanged.
+Agentic evaluations expose qualitatively different failure modes. Some judges struggle to detect
+subtle violations inserted into multi-turn transcripts (high false-negative rates), while others overpenalize corrected transcripts (high false-positive rates). These asymmetric vulnerabilities imply
+that judge performance in free-response tasks does not generalize to agentic settings. As agentbased evaluations proliferate, the reliability gap documented here grows increasingly salient.
+Cost-reliability trade-offs are nontrivial. Our preliminary experiments show that smaller or moderately sized open models (e.g., Llama 4.1 Maverick 17B) may outperform or match the reliability of
+premium frontier judges while operating at significantly lower inference cost as seen in Table 1. This
+undermines the common assumption that the “strongest” or most expensive model is necessarily the
+best judge and highlights opportunities for more cost-effective evaluation practice.
+SUMMARY AND CONCLUSION
+This work introduces the Judge Reliability Harness (JRH), an open source library for constructing
+validation suites for measuring the reliability of LLM judges. Our preliminary results demonstrate
+that LLM judges vary in reliability, show no universally robust configuration, and remain vulnerable
+to minor formatting changes, paraphrasing, and discriminative tests. This motivates reliability-aware
+judge selection, reporting, and benchmarking. The harness offers a practical toolkit for incorporating
+such reliability assessments into research workflows, enabling practitioners to identify unreliable
+judge configurations before they influence model comparisons or safety evaluations.
+
+Under review as a conference paper at ICLR 2026
+REFERENCES
+UK AI Security Institute. Inspect AI: Framework for Large Language Model Evaluations. URL
+https://github.com/UKGovernmentBEIS/inspect_ai.
+Maksym Andriushchenko, Alexandra Souly, Mateusz Dziemian, Derek Duenas, Maxwell Lin, Justin
+Wang, Dan Hendrycks, Andy Zou, Zico Kolter, Matt Fredrikson, Yarin Gal, and Xander Davies.
+Agentharm: A benchmark for measuring harmfulness of llm agents. In Proceedings of the International Conference on Learning Representations (ICLR), 2025.
+Guan Bai, Jing Liu, Xin Bu, Yifan He, Jiamu Liu, Zhiyuan Zhou, Zitian Lin, Wei Su, Tao Ge,
+Bowen Zheng, and Wanli Ouyang. MT-Bench-101: A fine-grained benchmark for evaluating
+large language models in multi-turn dialogues. In Proceedings of the 62nd Annual Meeting of
+the Association for Computational Linguistics (ACL), pp. 7421–7454, Bangkok, Thailand, 2024.
+Association for Computational Linguistics. doi: 10.18653/v1/2024.acl-long.401.
+Khaoula Chehbouni, Mohammed Haddou, Jackie CK Cheung, and Golnoosh Farnadi. Neither Valid
+Nor Reliable? Investigating the Use of LLMs as Judges. In Women in Machine Learning Workshop @ NeurIPS 2025, 2025.
+Wei-Lin Chiang, Lianmin Zheng, Ying Sheng, Anastasios Nikolas Angelopoulos, Tianle Li,
+Dacheng Li, Banghua Zhu, Hao Zhang, Michael Jordan, Joseph E Gonzalez, et al.
+Chatbot
+arena: An open platform for evaluating llms by human preference. In Forty-first International
+Conference on Machine Learning (ICML), 2024.
+Scott A Crossley, Y Tian, P Baffour, Abigail Franklin, Margaret Benner, and Ulrich Boser.
+A
+large-scale corpus for assessing written argumentation: PERSUADE 2.0. Assessing Writing, 61:
+100865, 2024.
+Sumanth Doddapaneni, Mohammed Safi Ur Rahman Khan, Sshubam Verma, and Mitesh M Khapra.
+Finding blind spots in evaluator LLMs with interpretable checklists.
+In Yaser Al-Onaizan,
+Mohit Bansal, and Yun-Nung Chen (eds.), Proceedings of the 2024 Conference on Empirical
+Methods in Natural Language Processing, pp. 16279–16309, Miami, Florida, USA, November
+2024. Association for Computational Linguistics. doi: 10.18653/v1/2024.emnlp-main.911. URL
+https://aclanthology.org/2024.emnlp-main.911/.
+Christina Q Knight, Kaustubh Deshpande, Ved Sirdeshmukh, Meher Mankikar, Scale Red Team,
+SEAL Team, and Julian Michael. FORTRESS: Frontier risk evaluation for national security and
+public safety. arXiv preprint arXiv:2506.14922, 2025.
+Yang Liu, Dan Iter, Yichong Xu, Shuohang Wang, Ruochen Xu, and Chenguang Zhu. G-eval: NLG
+evaluation using gpt-4 with better human alignment. In Houda Bouamor, Juan Pino, and Kalika
+Bali (eds.), Proceedings of the Conference on Empirical Methods in Natural Language Processing, pp. 2511–2522, Singapore, December 2023. Association for Computational Linguistics. doi:
+10.18653/v1/2023.emnlp-main.153.
+Mantas Mazeika, Long Phan, Xuwang Yin, Andy Zou, Zifan Wang, Norman Mu, Elham Sakhaee,
+Nathaniel Li, Steven Basart, Bo Li, David Forsyth, and Dan Hendrycks. Harmbench: a standardized evaluation framework for automated red teaming and robust refusal. In Proceedings of the
+41st International Conference on Machine Learning, ICML’24, 2024.
+Aman Singh Thakur, Kartik Choudhary, Venkat Srinik Ramayapally, Sankaran Vaidyanathan, and
+Dieuwke Hupkes. Judging the judges: Evaluating alignment and vulnerabilities in LLMs-asjudges.
+In Ofir Arviv, Miruna Clinciu, Kaustubh Dhole, Rotem Dror, Sebastian Gehrmann,
+Eliya Habba, Itay Itzhak, Simon Mille, Yotam Perlitz, Enrico Santus, Jo˜ao Sedoc, Michal
+Shmueli Scheuer, Gabriel Stanovsky, and Oyvind Tafjord (eds.), Proceedings of the Fourth Workshop on Generation, Evaluation and Metrics (GEM²), pp. 404–430, Vienna, Austria and virtual
+meeting, July 2025. Association for Computational Linguistics. ISBN 979-8-89176-261-9. URL
+https://aclanthology.org/2025.gem-1.33/.
+
+Under review as a conference paper at ICLR 2026
+A
+COST CURVES
+Figure 4: Cost-Accuracy Trade-off Across Benchmarks. Each point represents a model’s total cost
+and average accuracy across all benchmarks. Full model names are Llama Maverick 4, Gemini 2.5
+Pro, GPT-4o, and Claude Sonnet 4.5
+B
+COST EFFICIENCY BY MODEL
+Benchmark
+Llama 4 Maverick 17B
+Claude Sonnet 4.5
+GPT 4o
+Gemini 2.5 Pro
+Fortress
+0.0016
+0.0230
+0.0150
+0.0108
+Persuade
+0.0008
+0.0260
+0.0430
+0.0073
+HarmBench
+0.0015
+0.0352
+0.0190
+0.0132
+AgentHarm
+0.0001
+0.0050
+0.0013
+0.0007
+Overall
+0.0010
+0.0223
+0.0196
+0.0080
+Table 1: Model Cost Efficiency Across Benchmarks ($ per accuracy point) (↓)
+Note: Cost per Accuracy Point =
+P total cost usd
+mean(accuracy) . Values represent dollars spent per percentage point of
+accuracy. Overall row calculated as sum of all costs divided by average of all accuracies.
+
+Under review as a conference paper at ICLR 2026
+C
+TOKEN COSTS BY MODEL
+Model
+Input Cost / 1M tokens
+Output Cost / 1M tokens
+GPT 4o 1
+$2.50
+$10
+Claude Opus 4.5 2
+$5
+$25
+Claude Sonnet 4.5
+$3
+$15
+Gemini 2.5 Pro 3
+$1.25
+$10
+Llama 4 Maverick 17B 4
+$0.24
+$0.97
+Table 2: Cost of input/output tokens per model (per 1 Million tokens)
+D
+PERSUADE JUDGE PERFORMANCE BY RELIABILITY TEST
+Model Name
+Test Name
+CCC
+Pearson’s ρ
+Spearman’s ρs
+MAE
+Claude Sonnet 4.5
+format invariance 1
+0.343
+0.595
+0.616
+1.700
+format invariance 2
+0.868
+0.928
+0.901
+0.500
+format invariance 3
+0.819
+0.915
+0.914
+0.600
+semantic paraphrase
+0.125
+0.327
+0.444
+1.200
+stochastic stability
+0.739
+0.943
+0.958
+0.900
+synthetic ordinal
+0.838
+0.901
+0.889
+0.484
+verbosity bias long
+0.627
+0.834
+0.911
+1.300
+verbosity bias short
+0.600
+0.901
+0.846
+1.300
+GPT4o
+format invariance 1
+0.546
+0.702
+0.715
+1.200
+format invariance 2
+0.881
+0.965
+0.942
+0.500
+format invariance 3
+0.741
+0.856
+0.829
+0.700
+semantic paraphrase
+0.744
+0.963
+0.973
+0.600
+stochastic stability
+0.682
+0.850
+0.863
+0.933
+synthetic ordinal
+0.955
+0.960
+0.944
+0.226
+verbosity bias long
+0.877
+0.888
+0.834
+0.600
+verbosity bias short
+0.898
+0.936
+0.887
+0.500
+Gemini 2.5 Pro
+format invariance 1
+0.465
+0.600
+0.659
+1.300
+format invariance 2
+0.906
+0.922
+0.901
+0.400
+format invariance 3
+0.846
+0.899
+0.914
+0.600
+semantic paraphrase
+0.210
+0.427
+0.468
+1.200
+stochastic stability
+0.853
+0.886
+0.850
+0.400
+synthetic ordinal
+0.927
+0.935
+0.916
+0.344
+verbosity bias long
+0.649
+0.771
+0.864
+1.100
+verbosity bias short
+0.682
+0.834
+0.864
+1.100
+Llama Maverick 4
+format invariance 1
+0.634
+0.709
+0.733
+1.000
+format invariance 2
+0.823
+0.905
+0.891
+0.600
+format invariance 3
+0.705
+0.836
+0.831
+0.800
+semantic paraphrase
+0.446
+0.538
+0.516
+0.800
+stochastic stability
+0.564
+0.752
+0.761
+1.100
+synthetic ordinal
+0.944
+0.953
+0.932
+0.290
+verbosity bias long
+0.932
+0.937
+0.904
+0.400
+verbosity bias short
+0.942
+0.948
+0.837
+0.400
+Table 3: Performance on the Persuade benchmark across eight reliability tests, reporting the Concordance Correlation Coefficient (CCC), Pearson’s Correlation Coefficient (ρ), Spearman’s Correlation
+Coefficient (ρs), and Mean Absolute Error (MAE).
+
+Under review as a conference paper at ICLR 2026
+E
+NON-AGENTIC BENCHMARK PERFORMANCE BY MODEL
+Benchmark
+Judge
+Mean Score
+Std Dev
+Min Score
+Max Score
+Persuade
+Claude Sonnet 4.5
+37.26%
+17.18%
+20.00%
+60.00%
+GPT-4o
+48.43%
+16.61%
+30.00%
+77.42%
+Gemini 2.5 Pro
+53.20%
+11.10%
+40.00%
+70.00%
+LLama 4 Maverick
+52.62%
+15.05%
+30.00%
+70.97%
+HarmBench
+Claude Sonnet 4.5
+60.50%
+11.13%
+40.00%
+73.33%
+GPT-4o
+62.33%
+14.88%
+40.00%
+80.00%
+Gemini 2.5 Pro
+62.33%
+17.17%
+40.00%
+85.33%
+LLama 4 Maverick
+73.92%
+16.33%
+38.00%
+93.33%
+Fortress
+Claude Sonnet 4.5
+69.42%
+6.82%
+60.00%
+80.00%
+GPT4o
+70.00%
+13.09%
+50.00%
+90.00%
+Gemini 2.5 Pro
+63.46%
+20.25%
+30.00%
+87.67%
+Llama Maverick 4
+78.75%
+17.27%
+50.00%
+100.00%
+Table 4: Performance of Judges Across Non-Agentic Benchmarks
+F
+NON-AGENTIC BENCHMARK PERFORMANCE BY RELIABILITY TEST
+Benchmark
+Test
+Mean Score
+Std Dev
+Min Score
+Max Score
+Persuade
+format invariance 1
+35.00%
+12.91%
+20.00%
+50.00%
+format invariance 2
+52.50%
+5.00%
+50.00%
+60.00%
+format invariance 3
+40.00%
+0.00%
+40.00%
+40.00%
+semantic paraphrase
+60.00%
+8.16%
+50.00%
+70.00%
+stochastic stability
+37.50%
+22.17%
+20.00%
+70.00%
+synthetic ordinal
+68.02%
+8.21%
+58.06%
+77.42%
+verbosity bias long
+42.50%
+17.08%
+20.00%
+60.00%
+verbosity bias short
+47.50%
+15.00%
+30.00%
+60.00%
+HarmBench
+format invariance 1
+61.66%
+12.62%
+53.33%
+80.00%
+format invariance 2
+55.00%
+25.75%
+40.00%
+93.33%
+format invariance 3
+50.00%
+12.77%
+40.00%
+66.67%
+label flip
+63.33%
+11.55%
+53.33%
+80.00%
+semantic paraphrase
+71.67%
+6.38%
+66.67%
+80.00%
+stochastic stability
+68.17%
+20.99%
+38.00%
+85.33%
+verbosity bias long
+76.67%
+3.85%
+73.33%
+80.00%
+Fortress
+format invariance 1
+72.50%
+9.57%
+60.00%
+80.00%
+format invariance 2
+82.50%
+12.58%
+70.00%
+100.00%
+format invariance 3
+80.00%
+11.55%
+70.00%
+90.00%
+label flip
+50.00%
+16.33%
+30.00%
+70.00%
+semantic paraphrase
+57.50%
+12.58%
+40.00%
+70.00%
+stochastic stability
+83.25%
+6.79%
+75.33%
+90.00%
+verbosity bias long
+65.00%
+5.77%
+60.00%
+70.00%
+verbosity bias short
+72.50%
+15.00%
+60.00%
+90.00%
+Table 5: Statistics of Tests Across Non-Agentic Benchmarks
+
+Under review as a conference paper at ICLR 2026
+G
+AGENTIC BENCHMARK JURY PERFORMANCE
+Model
+Accuracy
+Error Rate
+FPR
+FNR
+GPT-4o
+0.906
+0.094
+0.063
+0.125
+Claude Opus 4.5
+0.813
+0.188
+0.063
+0.313
+Gemini 2.5 Pro
+0.813
+0.188
+0.250
+0.125
+Llama 4 Maverick 17B
+0.906
+0.094
+0.063
+0.125
+Best Trio Ensemble
+0.906
+0.094
+0.063
+0.125
+Table 6: Model Performance Metrics on Agent Perturbation Reliability Tests (AgentHarm)
+Note: FPR = False Positive Rate, FNR = False Negative Rate. Bold indicates best performance.
