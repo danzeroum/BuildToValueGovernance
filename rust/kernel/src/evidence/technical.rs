@@ -177,6 +177,28 @@ impl TechnicalEvidence {
         self.calculate_hash() == self.hash
     }
 
+
+    // ── PROP-031: Skill Provenance (reserved_metadata[8..40]) ──────────────
+
+    /// Retorna o skill_hash BLAKE3 armazenado em _reserved_metadata[8..40].
+    /// Zeros indicam ausência de skill registrada.
+    pub fn get_skill_hash(&self) -> &[u8; 32] {
+        self._reserved_metadata[8..40]
+            .try_into()
+            .expect("slice de tamanho fixo 32")
+    }
+
+    /// Grava skill_hash BLAKE3 em _reserved_metadata[8..40].
+    /// Zero heap: opera sobre slice existente, sem alloc.
+    pub fn set_skill_hash(&mut self, hash: &[u8; 32]) {
+        self._reserved_metadata[8..40].copy_from_slice(hash);
+    }
+
+    /// Retorna true se skill_hash foi definido (≠ zeros).
+    pub fn has_skill_hash(&self) -> bool {
+        self._reserved_metadata[8..40].iter().any(|&b| b != 0)
+    }
+
     pub fn to_bytes(&self) -> [u8; EVIDENCE_SIZE] {
         unsafe {
             let mut bytes = [0u8; EVIDENCE_SIZE];
