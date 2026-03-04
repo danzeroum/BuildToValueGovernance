@@ -52,6 +52,9 @@ class RequestContext:
     ip_risk: str = "Low"
     drift_level: str = "None"
     timestamp: int = 0
+    prior_sensitivity_tags: list = field(default_factory=list)
+    cumulative_risk: float = 0.0
+    active_combinations: list = field(default_factory=list)
 
     def __post_init__(self):
         if self.timestamp == 0:
