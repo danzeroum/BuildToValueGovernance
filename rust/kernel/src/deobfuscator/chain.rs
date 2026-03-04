@@ -117,7 +117,7 @@ impl DeobfuscatorChain {
 
     fn try_decode_hex(&self, input: &str) -> Option<String> {
         let trimmed = input.trim().trim_start_matches("0x");
-        if trimmed.len() < 16 || trimmed.len() % 2 != 0 {
+        if trimmed.len() < 16 || !trimmed.len().is_multiple_of(2) {
             return None;
         }
         if !trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
