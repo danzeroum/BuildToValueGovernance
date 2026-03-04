@@ -15,8 +15,8 @@ def submit(loop, user_id="u1") -> str:
         user_id=user_id,
         reason="test reason with enough characters",
     )
-    # Forçar timestamp no passado para garantir overdue
-    appeal.timestamp = int(time.time()) - 10
+    # Forçar sla_deadline  no passado para garantir overdue
+    appeal.sla_deadline  = int(time.time()) - 10
     loop.appeals[appeal.appeal_id] = appeal
     return appeal.appeal_id
 

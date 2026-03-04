@@ -40,6 +40,10 @@ from buildtovalue.governance.context_engine import (
     RequestContext,
     RustEvidence,
 )
+from buildtovalue.governance.sensitivity_accumulator import (
+    SessionSensitivityAccumulator,
+    SensitivityState,
+)
 from buildtovalue.governance.mercy_scenarios import ACTION_SEVERITY, SEVERITY_ACTION
 from buildtovalue.api.auth import require_api_key
 from buildtovalue.api.routes.intelligence import get_ingestor, hydrate_from_sqlite
@@ -200,6 +204,8 @@ class AppealSubmitRequest(BaseModel):
     user_id: str = Field(..., min_length=1)
     reason: str = Field(..., min_length=20)
     evidence: Optional[str] = None
+    evidence_hash: Optional[str] = None
+    grounds: List[str] = []
 
 
 class AppealResponse(BaseModel):
@@ -214,6 +220,9 @@ class AppealResponse(BaseModel):
     resolution_timestamp: Optional[int] = None
     sla_deadline: int
     is_overdue: bool
+    evidence_hash: Optional[str] = None
+    grounds: List[str] = []
+    mediator_recommendation: Optional[str] = None
 
 
 class AppealListResponse(BaseModel):
@@ -225,6 +234,7 @@ class AppealResolveRequest(BaseModel):
     accepted: bool
     reviewer_notes: str = Field(..., min_length=10)
     reviewer_id: str = Field(..., min_length=1)
+    mediator_recommendation: Optional[str] = None
 
 
 class AppealMetricsResponse(BaseModel):
@@ -385,10 +395,16 @@ async def lifespan(application):
     from buildtovalue.intelligence.threat_feed import init_threats_db
     init_threats_db()
 
-    _contestability_loop = ContestabilityLoop(sla_hours=24)
+    _contestability_loop = ContestabilityLoop(
+        sla_hours=24,
+        db_path=os.environ.get("BTV_APPEALS_DB"),
+    )
     _ethical_engine = EthicalContextEngine(signing_key=HMAC_KEY)
 
-    import os
+    _sensitivity_accumulator = SessionSensitivityAccumulator()
+    app.state.sensitivity_accumulator = _sensitivity_accumulator
+    logger.info("SessionSensitivityAccumulator initialized")
+
     policy_root = Path(os.environ.get("BTV_POLICY_DIR", "data/policies"))
     profiles_dir = policy_root / "agents"
 
@@ -451,6 +467,28 @@ app.include_router(ledger_router)
 app.include_router(webhooks_router)
 app.include_router(compliance_eval_router)
 
+# ═══════════════════════════════════════════════════════════════
+# HELPERS
+# ═══════════════════════════════════════════════════════════════
+
+def _appeal_to_response(appeal) -> AppealResponse:
+    return AppealResponse(
+        appeal_id=appeal.appeal_id,
+        audit_trail_id=appeal.audit_trail_id,
+        user_id=appeal.user_id,
+        timestamp=appeal.timestamp,
+        reason=appeal.reason,
+        evidence_provided=appeal.evidence_provided,
+        status=appeal.status.value,
+        reviewer_notes=appeal.reviewer_notes,
+        resolution_timestamp=appeal.resolution_timestamp,
+        sla_deadline=appeal.sla_deadline,
+        is_overdue=appeal.is_overdue(),
+        # ADR-047
+        evidence_hash=appeal.evidence_hash,
+        grounds=appeal.grounds or [],
+        mediator_recommendation=appeal.mediator_recommendation,
+    )
 
 # ═══════════════════════════════════════════════════════════════
 # GLOBALS
@@ -462,6 +500,7 @@ _sector_loader: Optional[SectorLoader] = None
 _slm: Optional[SLMClassifier] = None
 _ethical_engine: Optional[EthicalContextEngine] = None
 _output_validator: Optional[OutputSchemaValidator] = None
+_sensitivity_accumulator: Optional["SessionSensitivityAccumulator"] = None
 
 # ═══════════════════════════════════════════════════════════════
 # GOVERNANCE — /v1/decide (Judiciário da República Algorítmica)
@@ -471,34 +510,60 @@ _output_validator: Optional[OutputSchemaValidator] = None
 def decide(req: DecideRequest, _=Depends(require_api_key)):
     """
     Pipeline:
-      0. Hard block → BLOCK imediato
-      1. SLM (ambiguity zone only — ADR-027)
-      2. Profile/sector risk adjustment
-      3. EthicalContextEngine.decide() → mercy + trust + HMAC
-      4. Return signed, explainable, contestable verdict
+      0. Hard block → BLOCK imediato (sem mercy, sem ADR-046)
+      1. ADR-046: acumular findings da sessão → cumulative_risk
+      2. SLM (ambiguity zone only — ADR-027)
+      3. Profile/sector risk adjustment
+      4. EthicalContextEngine.decide() → mercy + trust + HMAC
+      5. Return signed, explainable, contestable verdict
     """
     start = time.perf_counter()
     session_id = req.session_id or "anonymous"
 
-    # ── Step 0: Hard block — no governance, no mercy ──────────
+    # ── Step 0: Hard block — sem governance, sem mercy ────────
     if req.hard_blocked:
         update_trust(session_id, "BLOCK")
-        sig = sign_verdict(f"VRD-HB-{int(time.time())}", "BLOCK", req.composite_risk)
+        sig = sign_verdict(
+            f"VRD-HB-{int(time.time())}", "BLOCK", req.composite_risk
+        )
         return DecideResponse(
             verdict_id=f"VRD-HB-{int(time.time())}",
-            action="BLOCK", original_action="BLOCK",
-            mercy_applied=False, mercy_scenario="HARD_BLOCK",
+            action="BLOCK",
+            original_action="BLOCK",
+            mercy_applied=False,
+            mercy_scenario="HARD_BLOCK",
             mercy_score=0.0,
             trust_score=get_trust_score(session_id),
             adjusted_risk=req.composite_risk,
-            rationale=f"Hard block triggered. Matched: {req.matched_policies}. "
-                      "No mercy applicable. Contestable within 24h.",
-            contestable=True, appeal_deadline_hours=24,
+            rationale=(
+                f"Hard block triggered. Matched: {req.matched_policies}. "
+                "No mercy applicable. Contestable within 24h."
+            ),
+            contestable=True,
+            appeal_deadline_hours=24,
             signature=sig,
             latency_ms=(time.perf_counter() - start) * 1000,
         )
 
-    # ── Step 1: SLM classification (ambiguity zone) ───────────
+    # ── Step 1: ADR-046 — acumular sensitivity da sessão ──────
+    # Executado antes do SLM: o cumulative_risk entra no RequestContext
+    # e influencia EthicalContextEngine.decide(). Hard blocks não acumulam
+    # (já retornaram acima).
+    sensitivity_state = None
+    if _sensitivity_accumulator is not None:
+        # matched_policies contém nomes de validators que dispararam (ex: "cpf->BLOCK")
+        # Extraímos a parte antes de "->" para obter o validator name limpo.
+        findings_summary = [
+            p.split("->")[0].lower()
+            for p in req.matched_policies
+            if p
+        ]
+        sensitivity_state = _sensitivity_accumulator.accumulate(
+            session_id=session_id,
+            findings_summary=findings_summary,
+        )
+
+    # ── Step 2: SLM classification (ambiguity zone) ───────────
     slm_used = False
     slm_intent = None
     slm_risk = None
@@ -534,17 +599,21 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                     req.action, adjusted_action, slm_intent, slm_result.risk,
                 )
 
-    # ── Step 2: Profile/sector risk adjustment ────────────────
+    # ── Step 3: Profile/sector risk adjustment ────────────────
     sector_note = ""
     if req.profile and _profile_manager and _sector_loader and req.input_text:
         try:
             loaded_profile = _profile_manager.load_profile(req.profile)
-            domain_keys = [k for k in loaded_profile.domain_config.keys() if k != "general"]
+            domain_keys = [
+                k for k in loaded_profile.domain_config.keys() if k != "general"
+            ]
             if domain_keys:
                 sector_id = domain_keys[0]
                 matched_types = [p.split(":")[0] for p in req.matched_policies]
                 multiplier = _sector_loader.apply_whitelist(
-                    input_text=req.input_text, findings=matched_types, sector_id=sector_id,
+                    input_text=req.input_text,
+                    findings=matched_types,
+                    sector_id=sector_id,
                 )
                 if multiplier < 1.0:
                     adjusted_risk *= multiplier
@@ -555,7 +624,25 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         except ValueError:
             logger.warning("Profile not found: %s", req.profile)
 
-    # ── Step 3: EthicalContextEngine → EthicalVerdict ─────────
+    # ── Step 4: ADR-046 — aplicar cumulative_risk ao adjusted_risk ───
+    # cumulative_risk adiciona ao risco ajustado; nunca substitui.
+    # Nota na rationale quando acúmulo influenciou decisão.
+    cumulative_note = ""
+    if sensitivity_state is not None and sensitivity_state.cumulative_risk > 0.0:
+        adjusted_risk = min(1.0, adjusted_risk + sensitivity_state.cumulative_risk)
+        cumulative_note = (
+            f" Hybrid Alignment (ADR-046): acúmulo de sessão detectou "
+            f"combinação perigosa ({', '.join(sensitivity_state.active_combinations)}). "
+            f"Risco cumulativo: {sensitivity_state.cumulative_risk:.2f}."
+        )
+        logger.info(
+            "Sensitivity accumulator: session=%s cumulative_risk=%.2f combinations=%s",
+            session_id,
+            sensitivity_state.cumulative_risk,
+            sensitivity_state.active_combinations,
+        )
+
+    # ── Step 5: EthicalContextEngine → EthicalVerdict ─────────
     evidence = RustEvidence(
         composite_risk=adjusted_risk,
         finding_count=adjusted_finding_count,
@@ -574,14 +661,26 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         ip_jurisdiction=req.ip_jurisdiction,
         ip_risk=req.ip_risk,
         drift_level=req.drift_level,
+        # ADR-046: campos de acúmulo semântico (defaults se acumulador indisponível)
+        prior_sensitivity_tags=(
+            list(sensitivity_state.tags) if sensitivity_state else []
+        ),
+        cumulative_risk=(
+            sensitivity_state.cumulative_risk if sensitivity_state else 0.0
+        ),
+        active_combinations=(
+            sensitivity_state.active_combinations if sensitivity_state else []
+        ),
     )
 
     trust = get_trust_score(session_id)
     _ethical_engine.set_trust_score(session_id, trust)
 
-    verdict = _ethical_engine.decide(evidence, context, external_verdict_id=req.verdict_id)
+    verdict = _ethical_engine.decide(
+        evidence, context, external_verdict_id=req.verdict_id
+    )
 
-    # ── Step 3.5: Runtime Compliance (B2 — EU AI Act) ─────────
+    # ── Step 5.5: Runtime Compliance (EU AI Act) ───────────────
     risk_class = None
     compliance_violations = None
     compliance_rate = None
@@ -604,7 +703,9 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         risk_class = rc.risk_level.value
 
         if rc.risk_level.value in ("HIGH_RISK", "PROHIBITED"):
-            from buildtovalue.compliance.compliance_evaluator import ComplianceEvaluator
+            from buildtovalue.compliance.compliance_evaluator import (
+                ComplianceEvaluator,
+            )
             evaluator = ComplianceEvaluator()
             agent_meta = {
                 "agent_id": req.profile or "unknown",
@@ -628,72 +729,47 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                 for v in eval_result.violations
             ]
             compliance_rate = eval_result.compliance_rate
-        # ── Step 3.6: Output Schema Validation (Levinas) ──────────
-        schema_violations = None
-        if req.llm_output and req.profile and _profile_manager:
-            try:
-                loaded = _profile_manager.load_profile(req.profile)
-                output_schema = loaded.output_schema
-                if output_schema and _output_validator:
-                    schema_result = _output_validator.validate(req.llm_output, output_schema)
-                    if not schema_result.valid:
-                        schema_violations = [
-                            {"path": v.path, "rule": v.rule, "message": v.message}
-                            for v in schema_result.violations
-                        ]
-                        # Escalate to REDACT if schema violated
-                        if ACTION_SEVERITY.get(verdict.final_action, 0) < ACTION_SEVERITY.get("REDACT", 0):
-                            verdict = _ethical_engine.decide(
-                                RustEvidence(
-                                    composite_risk=max(adjusted_risk, 0.6),
-                                    finding_count=adjusted_finding_count + 1,
-                                    critical_count=adjusted_critical_count,
-                                    entropy=req.entropy,
-                                    total_chars=req.total_chars,
-                                    policy_action="REDACT",
-                                    blake3_hash=req.blake3_hash,
-                                ),
-                                context,
-                            )
-                            logger.info(
-                                "Output schema violation → REDACT (session=%s, violations=%d)",
-                                session_id, len(schema_result.violations),
-                            )
-            except (ValueError, Exception) as e:
-                logger.warning("Output schema validation error: %s", e)
 
-        # ── Step 4: Update trust + respond ────────────────────────
-        update_trust(session_id, verdict.final_action)
-        latency = (time.perf_counter() - start) * 1000
-        rationale = verdict.explanation + sector_note
-        return DecideResponse(
-            verdict_id=verdict.verdict_id,
-            action=verdict.final_action,
-            original_action=req.action,
-            mercy_applied=verdict.mercy_applied,
-            mercy_scenario=verdict.mercy_scenario,
-            mercy_score=verdict.mercy_score,
-            trust_score=verdict.trust_score,
-            adjusted_risk=adjusted_risk,
-            rationale=rationale,
-            contestable=verdict.contestable,
-            appeal_deadline_hours=24,
-            signature=verdict.hmac_signature,
-            latency_ms=latency,
-            slm_used=slm_used,
-            slm_intent=slm_intent,
-            slm_risk=slm_risk,
-            risk_classification=risk_class,
-            compliance_violations=compliance_violations,
-            compliance_rate=compliance_rate,
-            schema_violations=schema_violations,
-        )
+    # ── Step 5.6: Output Schema Validation (Levinas) ───────────
+    schema_violations = None
+    if req.llm_output and req.profile and _profile_manager:
+        try:
+            loaded = _profile_manager.load_profile(req.profile)
+            output_schema = loaded.output_schema
+            if output_schema and _output_validator:
+                schema_result = _output_validator.validate(
+                    req.llm_output, output_schema
+                )
+                if not schema_result.valid:
+                    schema_violations = [
+                        {"path": v.path, "rule": v.rule, "message": v.message}
+                        for v in schema_result.violations
+                    ]
+                    if ACTION_SEVERITY.get(verdict.final_action, 0) < ACTION_SEVERITY.get("REDACT", 0):
+                        verdict = _ethical_engine.decide(
+                            RustEvidence(
+                                composite_risk=max(adjusted_risk, 0.6),
+                                finding_count=adjusted_finding_count + 1,
+                                critical_count=adjusted_critical_count,
+                                entropy=req.entropy,
+                                total_chars=req.total_chars,
+                                policy_action="REDACT",
+                                blake3_hash=req.blake3_hash,
+                            ),
+                            context,
+                        )
+                        logger.info(
+                            "Output schema violation → REDACT (session=%s, violations=%d)",
+                            session_id,
+                            len(schema_result.violations),
+                        )
+        except Exception as e:
+            logger.warning("Output schema validation error: %s", e)
 
-    # ── Step 4: Update trust + respond ────────────────────────
+    # ── Step 6: Update trust + respond ────────────────────────
     update_trust(session_id, verdict.final_action)
     latency = (time.perf_counter() - start) * 1000
-
-    rationale = verdict.explanation + sector_note
+    rationale = verdict.explanation + sector_note + cumulative_note
 
     return DecideResponse(
         verdict_id=verdict.verdict_id,
@@ -715,6 +791,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         risk_classification=risk_class,
         compliance_violations=compliance_violations,
         compliance_rate=compliance_rate,
+        schema_violations=schema_violations,
     )
 
 
@@ -731,6 +808,11 @@ def submit_appeal(req: AppealSubmitRequest):
             reason=req.reason,
             evidence=req.evidence,
         )
+        # ADR-047: persistir campos opcionais de mediação no objeto Appeal
+        if req.evidence_hash:
+            appeal.evidence_hash = req.evidence_hash
+        if req.grounds:
+            appeal.grounds = req.grounds
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return _appeal_to_response(appeal)
@@ -772,13 +854,21 @@ def list_appeals(status: Optional[str] = None, user_id: Optional[str] = None):
 def resolve_appeal(appeal_id: str, req: AppealResolveRequest):
     existing = _contestability_loop.get_appeal(appeal_id)
     if existing is None:
-        raise HTTPException(status_code=404, detail=f"Appeal not found: {appeal_id}")
+        raise HTTPException(
+            status_code=404, detail=f"Appeal not found: {appeal_id}"
+        )
     if existing.status in (AppealStatus.ACCEPTED, AppealStatus.REJECTED):
-        raise HTTPException(status_code=409, detail=f"Already resolved: {existing.status.value}")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Already resolved: {existing.status.value}",
+        )
     try:
         resolved = _contestability_loop.resolve_appeal(
-            appeal_id=appeal_id, accepted=req.accepted,
-            reviewer_notes=req.reviewer_notes, reviewer_id=req.reviewer_id,
+            appeal_id=appeal_id,
+            accepted=req.accepted,
+            reviewer_notes=req.reviewer_notes,
+            reviewer_id=req.reviewer_id,
+            mediator_recommendation=req.mediator_recommendation,  # ADR-047
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
