@@ -1,12 +1,5 @@
 //! POST /v1/decide — Pipeline ético completo (ADR-040).
-//!
-//! Alias semântico de /v1/validate com:
-//! - Header X-BTV-Pipeline-Stage: ethical injetado no governance
-//! - X-BTV-Jurisdiction → jurisdiction_bitmask (stub até ADR-032)
-//! - Retorna explain_decision estruturado
-//!
-//! Filosofia: /v1/validate = scan técnico. /v1/decide = decisão ética.
-//! Novos clientes devem usar /v1/decide. /v1/validate preservado para compat.
+//! ADR-043: verdict_id gerado pelo Rust antes do scan, imutável até o cliente.
 
 use axum::{
     extract::State,
@@ -16,18 +9,18 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
+use ulid::Ulid;
+use buildtovalue_kernel::network::IpRisk;
+use buildtovalue_kernel::session_guard::SessionTracker;
 
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
 
 // ── JURISDICTION BITMASK (stub ADR-032) ──────────────────────
 
-/// Converte header X-BTV-Jurisdiction em bitmask.
-/// Valores: BR=0x01, US=0x02, EU=0x04, UK=0x08
-/// TODO(ADR-032): mover para ScanContextFlags quando implementado.
 fn parse_jurisdiction_bitmask(headers: &HeaderMap) -> u32 {
     let Some(val) = headers.get("X-BTV-Jurisdiction") else {
-        return 0x01; // default: BR
+        return 0x01;
     };
     let Ok(s) = val.to_str() else { return 0x01 };
     let mut mask: u32 = 0;
@@ -75,7 +68,6 @@ pub struct DecideResponse {
     pub latency_ms: f64,
 }
 
-/// Justificativa estruturada (EU AI Act Art. 13).
 #[derive(Serialize, Default)]
 pub struct ExplainDecision {
     pub summary: String,
@@ -120,6 +112,16 @@ struct GovernanceDecideRequest {
     input_text: String,
     jurisdiction_bitmask: u32,
     pipeline_stage: String,
+    /// ADR-043: ID gerado pelo Rust, passado ao Python para uso sem modificação.
+    verdict_id: String,
+    /// Confiança máxima entre findings (0.0-1.0).
+    max_finding_confidence: f32,
+    entropy: f32,
+    total_chars: u32,
+    blake3_hash: String,
+    ip_risk: String,
+    ip_jurisdiction: String,
+    drift_level: String,
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -146,6 +148,28 @@ struct GovernanceExplain {
     #[serde(default)] pipeline_trace: Vec<String>,
 }
 
+// ── HELPERS ADR-044 ─────────────────────────────────────────────
+
+fn extract_client_ip(headers: &HeaderMap) -> String {
+    headers.get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .or_else(|| headers.get("X-Real-IP")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string()))
+        .unwrap_or_else(|| "0.0.0.0".to_string())
+}
+
+fn ip_risk_to_str(risk: IpRisk) -> &'static str {
+    match risk {
+        IpRisk::Low      => "Low",
+        IpRisk::Medium   => "Medium",
+        IpRisk::High     => "High",
+        IpRisk::Critical => "Critical",
+    }
+}
+
 // ── HANDLER ───────────────────────────────────────────────────
 
 pub async fn decide_handler(
@@ -155,11 +179,21 @@ pub async fn decide_handler(
 ) -> Result<Json<DecideResponse>, StatusCode> {
     let start = Instant::now();
 
+    // ADR-043: Rust gera verdict_id antes de qualquer processamento.
+    let verdict_id = format!("VRD-{}", Ulid::new());
+
+    // ADR-044: classificar IP antes do scan
+    let client_ip = extract_client_ip(&headers);
+    let ip_class = state.ip_classifier.classify(&client_ip);
+    let ip_risk_str = ip_risk_to_str(ip_class.risk).to_string();
+    let ip_jurisdiction = state.jurisdiction_mapper.classify(&client_ip).country_code.to_string();
+
     let jurisdiction_bitmask = parse_jurisdiction_bitmask(&headers);
 
     // ── EXECUTIVO ─────────────────────────────────────────────
     let (finding_count, critical_count, composite_risk, policy_action,
-         hard_blocked, hard_block_term, matched_policies) = {
+         hard_blocked, hard_block_term, matched_policies, max_finding_confidence,
+         entropy, total_chars, blake3_hash, drift_level) = {
         let mut gk = state.gatekeeper.lock()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -183,6 +217,23 @@ pub async fn decide_handler(
             PolicyAction::Allow   => "ALLOW",
         };
 
+        let max_conf = findings.iter()
+            .map(|f| f.confidence as f32 / 255.0)
+            .fold(0.0_f32, f32::max);
+
+        // ADR-044: drift dentro do bloco onde evidence existe
+        let drift_str = if let Ok(mut tracker) = state.session_tracker.lock() {
+            let sid: u128 = req.session_id.as_deref().and_then(|s| s.parse().ok()).unwrap_or(0);
+            let result = tracker.track(sid, &evidence);
+            match result.level {
+                buildtovalue_kernel::session_guard::DriftLevel::None     => "None",
+                buildtovalue_kernel::session_guard::DriftLevel::Low      => "LOW",
+                buildtovalue_kernel::session_guard::DriftLevel::Medium   => "MEDIUM",
+                buildtovalue_kernel::session_guard::DriftLevel::High     => "HIGH",
+                buildtovalue_kernel::session_guard::DriftLevel::Critical => "CRITICAL",
+            }.to_string()
+        } else { "None".to_string() };
+
         (
             evidence.finding_count as u32,
             evidence.critical_count as u32,
@@ -191,6 +242,11 @@ pub async fn decide_handler(
             eval.hard_blocked,
             eval.hard_block_term,
             eval.matched_policies,
+            max_conf,
+            evidence.stats.entropy,
+            evidence.stats.total_chars,
+            format!("{:016x}", evidence.original_request_hash),
+            drift_str,
         )
     };
 
@@ -212,6 +268,14 @@ pub async fn decide_handler(
             input_text: req.input.clone(),
             jurisdiction_bitmask,
             pipeline_stage: "ethical".to_string(),
+            verdict_id: verdict_id.clone(),  // ADR-043
+            max_finding_confidence,
+            entropy,
+            total_chars,
+            blake3_hash,
+            ip_risk: ip_risk_str,
+            ip_jurisdiction,
+            drift_level,
         };
 
         match state.http_client
@@ -230,7 +294,8 @@ pub async fn decide_handler(
     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     // ── MERGE ─────────────────────────────────────────────────
-    let (final_action, mercy_applied, verdict_id, rationale, signature,
+    // ADR-043: verdict_id gerado pelo Rust é o fallback garantido.
+    let (final_action, mercy_applied, final_verdict_id, rationale, signature,
          contestable, appeal_hours, trust_score, mercy_score, explain) =
         if let Some(ref v) = verdict {
             let ex = v.explain.as_ref().map(|e| ExplainDecision {
@@ -243,11 +308,19 @@ pub async fn decide_handler(
                 trust_score: v.trust_score,
                 mercy_score: v.mercy_score,
             }).unwrap_or_default();
-            (v.action.clone(), v.mercy_applied, v.verdict_id.clone(),
-             v.rationale.clone(), v.signature.clone(), v.contestable,
-             v.appeal_deadline_hours, v.trust_score, v.mercy_score, ex)
+            (
+                v.action.clone(),
+                v.mercy_applied,
+                if v.verdict_id.is_empty() { verdict_id.clone() } else { v.verdict_id.clone() },
+                v.rationale.clone(),
+                v.signature.clone(),
+                v.contestable,
+                v.appeal_deadline_hours,
+                v.trust_score,
+                v.mercy_score,
+                ex,
+            )
         } else {
-            // Fail-secure: governance indisponível → manter policy action
             let ex = ExplainDecision {
                 summary: "Governance unavailable — kernel decision applied".to_string(),
                 rawls_rationale: "Policy applied uniformly (Rawls)".to_string(),
@@ -258,9 +331,19 @@ pub async fn decide_handler(
                 trust_score: 0.0,
                 mercy_score: 0.0,
             };
-            (policy_action.clone(), false, String::new(), String::new(),
-             String::new(), !hard_blocked, if hard_blocked { 0 } else { 24 },
-             0.0, 0.0, ex)
+            // Python indisponível: ID local garante ledger + appeal funcionais.
+            (
+                policy_action.clone(),
+                false,
+                verdict_id.clone(),
+                String::new(),
+                String::new(),
+                !hard_blocked,
+                if hard_blocked { 0 } else { 24 },
+                0.0_f32,
+                0.0_f32,
+                ex,
+            )
         };
 
     // ── METRICS ───────────────────────────────────────────────
@@ -274,6 +357,16 @@ pub async fn decide_handler(
         if hard_blocked  { HARD_BLOCKS_TOTAL.inc(); }
     }
 
+    // Suppress unused warning for hard_block_term (kept for future ledger use)
+    let _ = hard_block_term;
+    let _ = max_finding_confidence;
+    let _ = drift_level;
+    let _ = entropy;
+    let _ = total_chars;
+    let _ = blake3_hash;
+    let _ = trust_score;
+    let _ = mercy_score;
+
     Ok(Json(DecideResponse {
         action: final_action,
         original_action: policy_action,
@@ -284,7 +377,7 @@ pub async fn decide_handler(
         hard_blocked,
         contestable,
         appeal_deadline_hours: appeal_hours,
-        verdict_id,
+        verdict_id: final_verdict_id,
         signature,
         rationale,
         explain,

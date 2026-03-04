@@ -10,7 +10,9 @@ pub mod base64;
 pub mod hex;
 pub mod leetspeak;
 pub mod chain;
+pub mod normalizer;
 
+pub use normalizer::Normalizer;
 pub use base64::Base64Detector;
 pub use hex::HexDecoder;
 pub use leetspeak::LeetspeakDetector;
