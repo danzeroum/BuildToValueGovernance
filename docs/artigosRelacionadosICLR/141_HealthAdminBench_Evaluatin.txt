@@ -1,0 +1,1302 @@
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+HEALTHADMINBENCH:
+EVALUATING COMPUTERUSE AGENTS ON REALISTIC HEALTHCARE ADMINISTRATION TASKS
+Anonymous authors
+Paper under double-blind review
+ABSTRACT
+Healthcare administration accounts for $1 trillion of annual spend, representing
+an ideal application for LLM-based computer-use agents. While clinical applications of LLMs have received significant attention, no benchmark currently exists
+for evaluating LLMs on end-to-end administrative workflows. To address this gap,
+we introduce HEALTHADMINBENCH, which consists of four realistic GUI environments (an EHR, two payer portals, and a fax system) with 70 expert-defined
+tasks including insurance verification, prior authorization, clinical reasoning, and
+medical equipment ordering. Each task is annotated with fine-grained, verifiable success criteria, totaling 947 unique points of evaluation. We evaluate six
+frontier computer-use agents under multiple prompting and observation settings.
+The best-performing agent on full-task success, Claude Opus 4.5, successfully
+completes only 22.9% of tasks, while Gemini 3 attains the highest subtask success rate (76.4%), revealing a substantial gap between current agent capabilities
+and the demands of real-world administration work. Across models, documenthandling subtasks remain the lowest-performing category, with five of six models
+achieving under 20% accuracy, making cross-application data transfer the dominant source of failure. HEALTHADMINBENCH establishes a rigorous foundation
+for measuring progress toward safe, reliable automation of high-stakes healthcare
+administrative tasks, and we welcome future contributions from the community.
+INTRODUCTION
+The application of large language models (LLMs) in healthcare has primarily focused on clinical
+tasks such as diagnostic reasoning and triage (Arora et al., 2025; Bedi et al., 2025). In contrast, little
+academic attention has been paid to administrative tasks (e.g. prior authorization, claims submission,
+patient intake), which cumulatively cost our healthcare system $1 trillion per year (Sahni et al., 2023)
+and lead to hundreds of thousands of deaths due to preventable medical errors (Makary & Daniel,
+2016; Rodziewicz et al., 2024). These administrative tasks typically involve executing complex,
+multi-step workflows on legacy software that cannot be directly automated due to a lack of API
+support. LLM-based computer-use agents (i.e. models that can observe and interact with computer
+software) offer a promising solution to this administrative crisis.
+A key challenge, however, has been the absence of a realistic benchmark that captures the complexity
+and nuance of automating administrative healthcare tasks. While many benchmarks for computeruse agents have been published for consumer websites (Zhou et al., 2023; Deng et al., 2023; Garg
+et al., 2025; Xu et al., 2025) and general enterprise software (Drouin et al., 2024), no benchmarks
+have been published that accurately reflect enterprise healthcare software. A core reason is these
+systems’ lack of public documentation, gated access, and sensitive data.
+Several works have tried to address these issues, such as MedAgentBench (Jiang et al., 2025) and
+MedHELM Bedi et al. (2026). While the former created an interactive environment for LLM agents,
+it only contains clinical tasks that can be solved via Fast Healthcare Interoperability Resources
+(FHIR) API calls and does not support computer-use agents operating over graphical user interfaces (GUIs). Similarly, while MedHELM (Bedi et al., 2026) provides a comprehensive evaluation
+framework for medical tasks which includes administrative tasks, it only supports static evaluation
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Figure 1: HEALTHADMINBENCH is the first evaluation of computer-use agents on administrative
+healthcare tasks. Agents navigate four web environments based on real healthcare applications
+to complete 70 expert-defined tasks spanning patient verification, prior authorization, chart-based
+clinical reasoning, and durable medical equipment ordering.
+of models on text-response pairs rather than the dynamic environments needed to evaluate computeruse agents.
+To address this gap we introduce HEALTHADMINBENCH, the first benchmark, dataset, and
+repository of interactive environments for training and evaluating computer-use agents on
+administrative healthcare tasks. Our benchmark focuses on the Healthcare Administration and
+Workflow task category as defined in MedHELM (Bedi et al., 2026), but uniquely operationalizes
+these task definitions into concrete, multi-step GUI-based workflows.
+Building on the REAL framework (Garg et al., 2025), we develop four deterministic web environments to simulate key administrative interfaces (an electronic health record (EHR) portal, two payer
+portals, and a fax portal) and define 70 expert-defined tasks spanning patient verification, prior authorization, chart-based clinical reasoning, and durable medical equipment (DME) ordering. We
+provide verifiers (LLM-based and deterministic) for 947 distinct subtasks within these 70 tasks. In
+experiments with six frontier LLMs, including Claude Opus 4.5, Gemini 3, and GPT-5, the strongest
+agent (Claude Opus 4.5) achieves a 22.9% full-task success rate. Our analysis identifies document
+handling and cross-application data movement as key challenges for current models.
+Our contributions are as follows:
+1. Realistic environments for 4 enterprise healthcare applications. We publish four deterministic computer-use environments to replicate common administrative interfaces, including an EHR, payer authorization portals, and a fax portal. These environments serve as
+reproducible proxies for proprietary administrative systems that are not publicly accessible,
+and can be used for both training and evaluation.
+2. Benchmark of 70 specialized administrative tasks. We curate a dataset of 70 multi-step
+administrative tasks from domain experts, covering the MedHELM Administration and
+Workflow category. We algorithmically verify whether a task is completed successfully
+by decomposing each task into a set of subtasks, where each subtask is a concrete step
+that can be checked using either a JMESPath query (a JSON query language for extracting
+structured fields from agent outputs) or an LLM judge. These annotations enable finegrained assessment and can be used to construct rewards for agent training.
+3. Empirical analysis of 6 frontier agents. We evaluate Claude Opus 4.5, Gemini 3, GPT-5,
+Kimi K2.5, Llama 4 Maverick, and Qwen-3-VL on HEALTHADMINBENCH. The bestperforming model, Claude Opus 4.5, achieves a 22.9% success rate on end-to-end task
+completion. We also divide each task into roughly a dozen subtasks (947 total), and find
+that Gemini 3 achieves the highest subtask success rate of 76.4% but struggles to complete
+all subtasks within a given task (only completing 12.9% of tasks end-to-end). Ablations
+over the observation space (i.e. vision-enabled vs. DOM-only) and prompting strategy
+(i.e. zero-shot vs. informative prompts) show that document handling and cross-portal data
+transfer are key failure modes.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Upon acceptance, we will release the HEALTHADMINBENCH evaluation framework and a public
+leaderboard, and we welcome community contributions of new tasks and environments.
+BACKGROUND AND RELATED WORK
+2.1
+COMPUTER-USE AGENTS
+Web interaction.
+Early web-interaction suites such as MINIWOB++ (Liu et al., 2018) provide
+synthetic, templated websites that stress basic UI primitives (clicking, typing, form filling). More
+realistic benchmarks move to live websites and richer task instructions. WEBSHOP (Yao et al.,
+2023) evaluates end-to-end shopping tasks with grounded actions, while WEBARENA (Zhou et al.,
+2023) evaluates instruction following across multiple websites with long-horizon dependencies.
+MIND2WEB (Deng et al., 2023) further emphasizes generalization by grounding actions in diverse real webpages and annotated demonstrations. Recent multimodal settings such as WEBVOYAGER (He et al., 2024) introduce screenshot-grounded web navigation, highlighting the gap between DOM-only agents and agents that must interpret rendered UIs. Most recently, REAL (Garg
+et al., 2025) provides deterministic, high-fidelity replicas of real-world websites with programmatic
+state-diff checks and rubric-guided LLM judgments, enabling reproducible multi-turn web-agent
+evaluation.
+Enterprise and “workplace” web environments.
+A key trend is moving from consumer web
+navigation to professional workflows with stricter schemas, business rules, and multi-step procedures. WORKARENA (Drouin et al., 2024) targets enterprise-style tasks (e.g., ticketing/CRM-style
+workflows) and emphasizes evaluation under realistic constraints such as authentication, form validation, and high action costs. REAL (Garg et al., 2025) similarly evaluates agents on realistic,
+multi-step tasks in deterministic replicas of production websites, with explicit evaluation of state
+changes and information retrieval quality. The BrowserGym ecosystem (Chezelles et al., 2025) unifies several of these web-agent suites (including MINIWOB++, WEBARENA, and WORKARENA)
+under a common observation/action interface, simplifying large-scale, cross-benchmark evaluation.
+OS and multi-application workflows.
+Beyond the browser, benchmarks now test full desktop
+interaction. OSWORLD (Xie et al., 2024) evaluates multimodal agents on open-ended tasks in real
+OS environments, requiring GUI grounding, tool switching, and recovery from errors. These results
+suggest that failures often arise from brittle perception-action grounding and incomplete operational
+knowledge rather than purely “reasoning” mistakes.
+Taken together, these benchmarks motivate healthcare administration environments that resemble
+enterprise workflows: agents must execute schema-constrained portal interactions reliably and recover gracefully from invalid actions.
+Table 1 summarizes how these benchmarks compare along dimensions that matter for administrative work, including cross-application workflows, schema-constrained interactions, explicit commit
+actions, and objective success checks.
+2.2
+THE CLINICAL V. ADMINISTRATIVE GAP
+Most medical AI research focuses on the clinical front-end of care rather than the administrative
+infrastructure that supports it.
+Clinical reasoning and dialogue.
+Benchmarks and evaluation suites such as MultiMedQA (Singhal et al., 2022) and Med-HALT (Pal et al., 2023) probe diagnostic reasoning, clinical question
+answering, and safety vulnerabilities. The most recent comprehensive evaluation, MedHELM (Bedi
+et al., 2026), assesses LLMs across 121 tasks spanning clinical decision support, patient communication, medical research, and healthcare administration tasks. However, these evaluations are largely
+text-based and do not capture the end-to-end, payer-facing transactional workflows (e.g., portal navigation, form completion, and submission) that underpin revenue-cycle operations.
+Clinical agents in EHRs.
+Interactive clinical agents are emerging. MedAgentBench and its 2026
+extension (Jiang et al., 2025; Chen et al.) introduce task automation inside simulated EHR environSubmitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Benchmark
+Cross-App
+Workflows
+Strict Forms
+& Commits
+Objective
+Success
+Healthcare
+Admin
+WebShop (2022)
+x
+✓
+✓
+x
+Mind2Web (2023)
+x
+x
+x
+x
+WebArena (2023)
+x
+✓
+✓
+x
+WorkArena (2024)
+x
+✓
+✓
+x
+OSWorld (2024)
+✓
+✓
+✓
+x
+REAL (2025)
+x
+✓
+✓
+x
+MedAgentBench (2025)
+x
+✓
+✓
+x
+MedHELM (2026)
+x
+x
+✓
+•
+HEALTHADMINBENCH
+✓
+✓
+✓
+✓
+Table 1: Comparison of HEALTHADMINBENCH with related benchmarks. ✓= present, x= absent.
+Columns denote: (1) workflows spanning multiple disjoint applications, (2) UI environments with
+rigid schema validation and terminal commit actions, (3) verifiable, programmatic success criteria,
+and (4) tasks grounded in healthcare administration.
+ments built on the FHIR standard, a widely used specification for representing clinical data. These
+agents automate internal workflows such as ordering labs or reviewing notes, but they operate within
+a single institutional system and remain focused on read-heavy, clinician-facing tasks.
+Administrative and revenue-cycle workflows.
+Administrative workflows such as prior authorization, claims submission, and DME processing constitute a transactional layer of healthcare that
+remains under-studied in benchmark design. While industry analyses highlight the potential of
+LLMs for revenue-cycle management (Sahni et al., 2023), there is no reproducible, expert-annotated
+environment for evaluating these capabilities. HEALTHADMINBENCH addresses this gap by focusing on payer–provider interactions that require agents to operate across disjoint systems rather than
+within an EHR alone.
+HEALTHADMINBENCH
+We define healthcare administration tasks as sequential decision problems over multiple interactive
+web portals. Each task is formalized as a partially observable Markov decision process (POMDP),
+where the latent state st ∈S encodes the complete configuration of all browser sessions at time t.
+This state includes rendered page content, navigation context, and task-relevant statuses such as submitted forms, uploaded documents, and portal-specific workflow progress. Environment dynamics
+are deterministic. Given an action at ∈A selected by the agent, the browser automation engine executes the corresponding interaction and transitions the system deterministically to a new state st+1
+via a transition function T : S × A →S. At each timestep, the agent receives a partial observation
+ot = O(st) ∈O, such as a rendered screenshot of the active portal or a structured representation
+of the interface. The agent selects actions conditioned on the task specification and its interaction
+history, and advances the environment accordingly. Episodes terminate when the agent signals completion or exceeds a specified interaction budget. Performance is evaluated using a binary terminal
+reward rT ∈{0, 1}, indicating whether the administrative objective was completed correctly. Following similar works Garg et al. (2025), all interactions with the environment are mediated through
+Playwright, providing a standardized interface for executing user-level browser actions.
+3.1
+ENVIRONMENTS
+HEALTHADMINBENCH includes four deterministic web environments that mirror core revenue–cycle systems: an EHR-like clinical viewer, two payer authorization portals with distinct layouts and rules, and a fax submission portal. These environments were selected based on more than
+40 hours of observation of real authorization and billing workflows, in which staff routinely transfer
+information across multiple systems.
+Each site is a sandboxed web app with typed inputs, schema validation, policy checks, and realistic failure modes (e.g., required fields). Each environment also includes synthetic patient data to
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+(a) EHR
+(b) Payer A
+(c) Payer B
+(d) eFax
+Figure 2: HEALTHADMINBENCH contains four environments which mimic commonly utilized applications for administrative healthcare tasks – (a) an EHR inspired by Epic, (b) a payer portal
+inspired by Anthem, (c) a portal inspired by Availity, and an eFax inspired by RightFax. These
+environments are implemented as websites following the REAL framework Garg et al. (2025)
+provide an initial state for task execution. Although both patient data and the environments are
+synthetic, they have been designed to support task logic that reflects real payer policies and documentation requirements. Agents must combine chart interpretation with strict form completion
+under heterogeneous portal constraints.
+3.2
+OBSERVATION SPACE
+The observation function O(st) specifies the information available to the agent at timestep t.
+HEALTHADMINBENCH supports observation modalities that reflect realistic enterprise computer
+use. Concretely, observations may consist of: (i) a structured interface representation derived from
+the accessibility tree, in which interactive elements are indexed by stable data-testid identifiers, (ii) a rendered screenshot of the current browser viewport, or (iii) both.
+The data-testid-indexed representation follows prior computer-use benchmarks Garg et al.
+(2025) and lets agents refer to complex UI elements symbolically, without explicit reasoning over
+screen coordinates. This aligns with language-based agents that operate primarily over textual or
+structured inputs. Screenshot-only observations, in contrast, support computer-use agents that rely
+on visual grounding: these agents must infer both the correct action and where to apply it on the
+screen.
+3.3
+ACTION SPACE
+We define a finite action space that captures user-level keyboard and mouse operations. Actions
+are expressed in natural language and emulate how a human operator interacts with administrative
+web portals. For agents with access to the accessibility tree, actions operate on interface elements
+addressed by their data-testid identifiers, enabling symbolic selection and manipulation of UI
+components. Agents with screenshot-only observations are given the same action set but must also
+infer the spatial location of each action.
+The action space includes standard browser interactions such as clicking buttons, entering text, selecting dropdown options, toggling checkboxes, uploading or downloading files, and scrolling. A
+complete enumeration of supported actions for each environment appears in Table 5.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+3.4
+TASKS
+In line with the MedHELM taxonomy, each HEALTHADMINBENCH “task” is grounded in a MedHELM Administration and Workflow task, and our “subtasks” make its fine-grained, verifiable steps
+explicit.
+HEALTHADMINBENCH contains 70 tasks spanning the four environments in Section 3.1. Tasks
+were designed with expert healthcare administrators and target four common administrative workflows: patient information verification, prior authorization submission, chart-based clinical reasoning, and durable medical equipment (DME) processing. These workflows are among the most frequent and time-consuming responsibilities of revenue–cycle staff.
+1. Patient Verification (20 tasks). These tasks require the agent to verify patient-specific
+information and document a determination within the EHR, such as determining whether a
+visit requires prior authorization, checking appointment dates, and ensuring referrals contain complete documentation. Workflows remain within a single portal and do not require
+cross-site navigation.
+• Example:
+Open the referral for Robert Quinn (60M with Aetna HMO). Before proceeding with the stress echocardiogram authorization, verify that the patient’s insurance coverage status is valid. Document your findings and take appropriate action
+2. Prior Authorization (20 tasks). These tasks instruct the agent to submit a prior authorization request, which typically requires gathering EHR information (e.g. diagnosis codes,
+authorization letters, provider NPIs), navigating to the correct payer portal, completing the
+authorization form, and recording the authorization number in the EHR.
+• Example: Open the referral for John Doe and submit a prior authorization request for
+a bilateral eye injection to the Payer A portal. Record the authorization number in the
+EHR and clear the referral.
+3. Clinical Reasoning (20 tasks). These tasks require the agent to reason over clinical information (e.g. medication dosages or referral documentation) in the EHR in order to choose
+the correct administrative action.
+• Example: Paul Adams requires chemotherapy authorization. Review the clinical notes
+to identify the treatment plan and calculate the total number of visits needed for the
+full course of treatment. Submit the authorization request for the correct number of
+visits and record the authorization number in the EHR.
+4. DME Processing (10 tasks). These tasks involve processing durable medical equipment
+(DME) orders by downloading documentation from the EHR, creating an eFax submission,
+and documenting the result in the EHR.
+• Example: Process David Mitchell’s DME order for a CPAP machine. Download the
+required documents, fax them to the supplier, add a note, and clear the referral.
+3.5
+SUBTASKS
+Each task in HEALTHADMINBENCH is associated with a fixed set of subtasks that determine success. A trajectory counts as successful only if the agent satisfies all subtasks (100% pass rate),
+mirroring the high-stakes nature of administrative workflows where minor omissions can invalidate
+an entire submission.
+In total, HEALTHADMINBENCH contains 947 distinct subtasks. Of these, 802 are validated with
+automated JMESPath-based verifiers that query the final environment state (structured as JSON) to
+verify objective conditions (e.g., whether a specific ICD-10 code such as H35.52 appears in a prior
+authorization request). The remaining 145 subtasks use LLM-based validation and assess semantic
+criteria that are difficult to encode programmatically (e.g., whether a progress note correctly explains
+why a prior authorization is not needed). All verifiers return a binary score.
+We group subtasks into five categories:
+1. Document Handling (142 subtasks). Checks that the agent correctly downloads and uploads required documents across portals, such as retrieving an authorization letter from the
+EHR and attaching it to a payer submission.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Primary Task
+Subtask
+Document
+Handling
+Documentation
+/ Notes
+EHR
+Navigation
+Form
+Entry
+Submission
+/ Disposition
+Patient Verification
+5.0%
+100.0%
+80.0%
+0.0%
+100.0%
+Prior Authorizations
+95.0%
+100.0%
+100.0%
+100.0%
+100.0%
+Clinical Reasoning
+65.0%
+100.0%
+100.0%
+75.0%
+95.0%
+DME Processing
+100.0%
+100.0%
+0.0%
+100.0%
+100.0%
+Table 2: Distribution of subtasks across task categories in HEALTHADMINBENCH. Each entry denotes the percentage of tasks within a category that include at least one subtask of the corresponding
+type.
+2. Documentation and Notes (168 subtasks). Checks that the agent documents task-relevant
+information in EHR notes, including clinical justification, coverage rationale, or disposition
+summaries.
+3. EHR Navigation and Review (154 subtasks). Checks that the agent visits the appropriate EHR sections and retrieves required information, such as diagnoses, appointments, or
+coverage details.
+4. Portal Form Entry (365 subtasks). Checks that the agent correctly completes interactive
+forms in payer portals or the eFax system and has gathered required information before
+submission.
+5. Submission and Disposition (118 subtasks). Checks that the agent completes terminal
+actions, such as submitting a form, sending a fax, or clearing a referral, rather than leaving
+workflows incomplete.
+3.6
+MEMORY
+HEALTHADMINBENCH comprises tasks that require multiple steps across multiple screens. Most
+computer-use agents do not have sufficient context length to provide all past actions and observations
+to the model at every step. To address this, we provide models with a scratch space to store longterm information between steps. At each step, we ask the model to provide information that should
+be saved. The saved information is then returned to the model in the following steps.
+3.7
+PROMPTING STRATEGY
+As part of running an agent, it is necessary to provide prompts that explain the environment to
+the model (including explanations of actions, observations, and information retention). We support
+three general strategies for prompting: zero-shot, informative, and task-specific. In the zero-shot
+prompting setting, we provide only environment information to the prompt as well as a simple description of the task. In the informative prompting setting, we expand on the zero-shot prompts
+to also include general advice on how to perform administrative health tasks. In the task-specific
+prompting setting, we expand the informative prompts to also include per-task step-by-step instructions on how to perform the task. See Appendix A for full details of the prompting setup, including
+sample prompts.
+RESULTS
+We evaluate six models on HEALTHADMINBENCH: three closed-source frontier models (Claude
+Opus 4.5, GPT-5, and Gemini 3) and three open-source models (Kimi K2.5, Llama-4-Maverick17B-128E-Instruct, and Qwen-3-VL-32B-Instruct).
+HEALTHADMINBENCH supports multiple observation and prompting configurations. Unless otherwise noted, all results use accessibility-tree observations with informative prompting.
+Figure 3 reports overall performance. We track two metrics: task success and subtask success.
+Subtask success measures the fraction of subtasks completed correctly across all tasks. Task success
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+is stricter: a task is counted as successful only if the agent passes all of its subtasks. As described in
+Section 3.5, many tasks require the successful completion of 15 or more subtasks, making full-task
+success challenging. Under this regime, Claude Opus 4.5 achieves the highest task success rate,
+while Gemini 3 attains the highest subtask success rate. The number of steps each model takes to
+perform the tasks is provided in Appendix B.
+A potential concern with any benchmark is whether it has sufficient power to distinguish models. To
+assess this, we conduct pairwise head-to-head comparisons in Appendix C, where we estimate and
+statistically test performance differences between model pairs. We observe statistically significant
+differences in success rates for 19 of the 30 pairwise comparisons, indicating that HEALTHADMINBENCH is large and granular enough to support meaningful model comparison.
+Success rate (%)
+Claude Opus 4.5
+GPT-5
+Gemini 3
+Kimi K2.5
+Llama 4 Maverick
+Qwen 3
+22.9%
+20.0%
+12.9%
+11.4%
+7.1%
+7.1%
+Success Rate for Tasks
+Success rate (%)
+Gemini 3
+Claude Opus 4.5
+GPT-5
+Kimi K2.5
+Llama 4 Maverick
+Qwen 3
+76.4%
+72.4%
+67.2%
+60.1%
+46.6%
+28.5%
+Success Rate for Subtasks
+(a)
+(b)
+Figure 3: Performance of evaluated models on HEALTHADMINBENCH, reported as (a) task success
+rate and (b) subtask success rate. 95% test-set bootstrap confidence intervals are noted with error
+bars.
+4.1
+PERFORMANCE BY TASK TYPE
+As described in the methods section, our tasks are split into four categories: Patient Verification,
+Prior Authorization, Clinical Reasoning, and DME Processing. Table 3 shows that task performance
+varies widely across categories, with most models achieving some success on patient verification and
+most models failing completely or struggling significantly on the other three categories.
+We believe that the models struggle in the other three categories for two reasons. First, Prior Authorizations, Clinical Reasoning, and DME Processing are mostly long-horizon tasks, much longer
+than Patient Verification (see Section 3.5). Second, the three hard categories have a different subtask
+composition (see Table 2). In particular, the difficult Document Handling and Portal Form Entry
+subtasks are highly prevalent in the hard categories.
+Model
+Primary Task
+Patient
+Verification
+Prior
+Authorizations
+Clinical
+Reasoning
+DME
+Processing
+Claude Opus 4.5
+50.0%
+0.0%
+10.0%
+40.0%
+Gemini 3
+40.0%
+5.0%
+0.0%
+0.0%
+GPT-5
+60.0%
+0.0%
+5.0%
+10.0%
+Kimi K2.5
+35.0%
+0.0%
+0.0%
+10.0%
+Llama 4 Maverick
+25.0%
+0.0%
+0.0%
+0.0%
+Qwen 3
+25.0%
+0.0%
+0.0%
+0.0%
+Table 3: End-to-end task success rates, split by task category.
+4.2
+PERFORMANCE BY SUBTASK TYPE
+As with the task-type categorization, our subtasks are organized into five categories: Document
+Handling, Documentation/Notes, EHR Navigation/Review, Portal Form Entry, and Submission/Disposition. As with tasks, Table 4 shows a significant difference in performance between subtask
+types.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Model
+Subtask
+Document
+Handling
+Documentation
+/ Notes
+EHR
+Navigation
+Form
+Entry
+Submission
+/ Disposition
+Claude Opus 4.5
+17.1%
+87.0%
+79.6%
+74.7%
+80.4%
+Gemini 3
+86.2%
+78.4%
+75.0%
+77.1%
+76.1%
+GPT-5
+40.3%
+76.0%
+67.1%
+59.7%
+76.8%
+Kimi K2.5
+13.4%
+75.5%
+67.9%
+49.7%
+66.7%
+Llama 4 Maverick
+10.7%
+53.3%
+53.7%
+37.9%
+62.3%
+Qwen 3
+7.4%
+19.4%
+49.3%
+12.7%
+31.9%
+Table 4: Granular success rate for individual subtasks, split by subtask category. Note that one task
+can include many subtasks.
+We find several key trends. First, performance varies substantially across subtask categories, with
+Document Handling emerging as the primary bottleneck. Gemini 3 significantly outperforms other
+models in this category, contributing to its top overall subtask success rate in Figure 3. Second,
+performance is highly heterogeneous: Claude Opus 4.5 excels in Documentation/Notes, EHR Navigation/Review, and Submission/Disposition, but performs poorly on Document Handling.
+4.3
+ABLATION EXPERIMENTS: PROMPTING AND OBSERVATION
+In our primary experiments, we evaluate models using informative prompts and accessibility-tree
+observations. To assess the sensitivity of our results to these design choices, we conduct ablation
+experiments that vary both the prompting strategy and the observation modalities.
+Figure 4 summarizes these ablations.
+Specifically, we compare the performance of zero-shot
+prompting to informative prompting (see Section A), and evaluate the effect of augmenting
+accessibility-tree observations with screenshots, relative to using the accessibility information alone.
+We find that replacing informative prompts with zero-shot prompts leads to a substantial degradation
+in performance, with large drops in task success rates across all models. This result indicates that
+current frontier models struggle to reliably navigate complex, interconnected healthcare administrative environments without additional domain-specific guidance. These findings highlight the importance of informative prompting when applying general-purpose models to specialized domains such
+as healthcare administration. In contrast, adding screenshot observations provides limited, if any,
+additional benefit when accessibility-tree information is already available.
+4.4
+QUALITATIVE ANALYSIS OF FAILURE MODES
+To better understand where models struggle, we manually reviewed failure traces from Claude Opus
+4.5 and confirmed the same patterns across other models. Three categories of errors account for the
+majority of failures.
+Hidden long-term dependencies.
+Many tasks follow a two-phase structure: (i) gather information
+in the EHR and (ii) perform data entry in a payer portal or fax system. The difficulty lies in the fact
+that the information required in phase (ii) is not always obvious during phase (i). For example, a
+payer portal may request a specific document only visible after several form pages. Humans recover
+by returning to the EHR and re-gathering missing information, but agents rarely restart and, even
+if they do, typically exhaust the step budget. This mismatch between forward-only execution and
+latent task dependencies leads to systematic failures.
+Avoidance of file downloads and uploads.
+Although HEALTHADMINBENCH includes support
+for file downloads and uploads, most models hesitate to use these actions or simply ignore them.
+Since document transfer is essential for prior authorization and DME workflows, this single behavior causes widespread failure in document-handling subtasks. Gemini 3 is the notable exception,
+exhibiting reliable use of download and upload actions.
+Information loss over long horizons.
+Unlike humans, who naturally retain all prior observations,
+computer-use agents often operate with strict context limits. Only the most recent accessibility trees
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+or screenshots are provided (typically the last N=5), causing earlier information to be forgotten
+unless the model deliberately stores it. We provide a scratch space to mitigate this limitation, but
+models often fail to record key details, leading to “workflow amnesia” that becomes especially
+problematic in multi-portal tasks requiring information gathered dozens of steps earlier.
+Success rate (%)
+Claude Opus 4.5
+GPT-5
+Gemini 3
+Kimi K2.5
+Llama 4 Maverick
+Qwen 3
+22.9%
+20.0%
+12.9%
+11.4%
+7.1%
+7.1%
+10.0%
+12.9%
+8.6%
+11.4%
+2.9%
+0.0%
+24.3%
+20.0%
+15.7%
+15.7%
+10.0%
+2.9%
+Success Rate for Tasks
+Success rate (%)
+Claude Opus 4.5
+GPT-5
+Gemini 3
+Kimi K2.5
+Llama 4 Maverick
+Qwen 3
+72.4%
+67.2%
+76.4%
+60.1%
+46.6%
+28.5%
+42.5%
+44.9%
+43.4%
+44.5%
+29.2%
+20.2%
+75.3%
+64.6%
+74.3%
+60.0%
+42.9%
+28.8%
+Success Rate for Subtasks
+(a)
+(b)
+Informative Prompts + Axtree Input
+Zero-Shot Prompts + Axtree Input
+Informative Prompts + Combined Accessibility Tree/Screenshot Observations
+Figure 4: Performance of evaluated models on HEALTHADMINBENCH, reported as (a) task success
+rate and (b) subtask success rate. We vary the prompt and observations provided to the model.
+DISCUSSION
+We introduced HEALTHADMINBENCH, a benchmark for evaluating computer-use agents on realistic healthcare administrative workflows spanning multiple enterprise systems. Across six frontier
+models, end-to-end task success remains low—the strongest model (Claude Opus 4.5) reaches only
+22.9%—despite much higher subtask pass rates. Performance varies sharply by workflow type, and
+most failures stem from document handling and cross-portal information transfer. These findings
+highlight a substantial gap between current agent capabilities and the reliability required for realworld revenue-cycle operations.
+Limitations.
+While our environments and task set capture key sources of structural difficulty in
+healthcare administrative web workflows, they remain simplified proxies for production systems and
+do not reflect the full variability of payer policies or interface drift over time. Agents operate under
+limited context windows, leading to information loss over long horizons even with scratch space. We
+evaluate single-shot trajectories without human-like recovery patterns, and results remain sensitive
+to prompt design and action abstractions.
+Broader impact.
+Administrative workflows drive major cost, delay, and burnout, and health systems increasingly prioritize them for AI automation Muhammad (2026). But premature deployment
+of agentic systems risks operational errors with financial or clinical consequences. Benchmarks
+like HEALTHADMINBENCH enable more rigorous pre-deployment assessment and highlight areas
+where human oversight is still necessary.
+Future directions.
+Promising directions include fine-tuning agents on HEALTHADMINBENCH
+using dense subtask signals, incorporating explicit planning and recovery, and developing stronger
+memory and document-aware representations. In addition, supporting and evaluating human-in-theloop workflows for healthcare administrative tasks represents an important avenue for research, as
+our results suggest that full automation remains infeasible with current frontier models. Extending
+the benchmark to support UI variability, policy changes, and multi-agent workflows would further
+improve realism. We welcome community contributions of new tasks and environments.
+ACKNOWLEDGMENTS
+The environments developed in this paper are designed under the principles of fair use for the purposes of research and development.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+REFERENCES
+Rahul K Arora, Jason Wei, Rebecca Soskin Hicks, Preston Bowman, Joaquin Qui˜nonero-Candela,
+Foivos Tsimpourlas, Michael Sharman, Meghan Shah, Andrea Vallone, Alex Beutel, et al. Healthbench: Evaluating large language models towards improved human health.
+arXiv preprint
+arXiv:2505.08775, 2025.
+Suhana Bedi, Yutong Liu, Lucy Orr-Ewing, et al. Testing and evaluation of health care applications
+of large language models: A systematic review. JAMA, 333(4):319–328, 2025. doi: 10.1001/
+jama.2024.21700. Published online October 15, 2024.
+Suhana Bedi, Hejie Cui, Miguel Fuentes, Alyssa Unell, Michael Wornow, Juan M. Banda, Nikesh
+Kotecha, Timothy Keyes, Yifan Mai, Mert Oez, Hao Qiu, Shrey Jain, Leonardo Schettini, Mehr
+Kashyap, Jason Alan Fries, Akshay Swaminathan, Philip Chung, Fateme Nateghi Haredasht, Ivan
+Lopez, Asad Aali, Gabriel Tse, Ashwin Nayak, Shivam Vedak, Sneha S. Jain, Nigam H. Shah,
+et al. Holistic evaluation of large language models for medical tasks with MedHELM. Nature
+Medicine, January 2026. doi: 10.1038/s41591-025-03420-8. URL https://www.nature.
+com/articles/s41591-025-03420-8.
+Eric Chen, Sam Postelnik, Kameron Black, Yixing Jiang, and Jonathan H. Chen.
+MedAgentBench v2:
+Improving Medical LLM Agent Design, pp. 354–371.
+doi:
+10.1142/
+9789819824755 0025.
+URL https://www.worldscientific.com/doi/abs/10.
+1142/9789819824755_0025.
+Thibault Le Sellier De Chezelles, Maxime Gasse, Alexandre Drouin, Massimo Caccia, L´eo Boisvert,
+Megh Thakkar, Tom Marty, Rim Assouel, Sahar Omidi Shayegan, Lawrence Keunho Jang,
+Xing Han L`u, Ori Yoran, Dehan Kong, Frank F. Xu, Siva Reddy, Quentin Cappart, Graham
+Neubig, Ruslan Salakhutdinov, Nicolas Chapados, and Alexandre Lacoste.
+The browsergym
+ecosystem for web agent research, 2025. URL https://arxiv.org/abs/2412.05467.
+Xiang Deng, Yu Gu, Boyuan Zheng, Shijie Chen, Samuel Stevens, Boshi Wang, Huan
+Sun,
+and Yu Su.
+Mind2web:
+Towards a generalist agent for the web.
+In Advances
+in
+Neural
+Information
+Processing
+Systems
+(Datasets
+and
+Benchmarks
+Track),
+2023.
+URL
+https://papers.nips.cc/paper_files/paper/2023/
+hash/5950bf290a1570ea401bf98882128160-Abstract-Datasets_and_
+Benchmarks.html.
+Alexandre Drouin, Maxime Gasse, Massimo Caccia, Issam H. Laradji, Manuel Del Verme, Tom
+Marty, L´eo Boisvert, Megh Thakkar, Quentin Cappart, David Vazquez, Nicolas Chapados, and
+Alexandre Lacoste. Workarena: How capable are web agents at solving common knowledge work
+tasks?, 2024. URL https://arxiv.org/abs/2403.07718.
+Divyansh Garg, Shaun VanWeelden, Diego Caples, Andis Draguns, Nikil Ravi, Pranav Putta, Naman
+Garg, Tomas Abraham, Michael Lara, Federico Lopez, James Liu, Atharva Gundawar, Prannay
+Hebbar, Youngchul Joo, Jindong Gu, Charles London, Christian Schroeder de Witt, and Sumeet
+Motwani. Real: Benchmarking autonomous agents on deterministic simulations of real websites,
+2025. URL https://arxiv.org/abs/2504.11543.
+Hongliang He, Wenlin Yao, Kaixin Ma, Wenhao Yu, Yong Dai, Hongming Zhang, Zhenzhong Lan,
+and Dong Yu. Webvoyager: Building an end-to-end web agent with large multimodal models,
+2024. URL https://arxiv.org/abs/2401.13919.
+Yixing Jiang, Kameron C. Black, Gloria Geng, Danny Park, James Zou, Andrew Y. Ng, and
+Jonathan H. Chen. Medagentbench: A realistic virtual ehr environment to benchmark medical llm agents. arXiv preprint arXiv:2501.14654, 2025. URL https://arxiv.org/abs/
+2501.14654.
+Evan Zheran Liu, Kelvin Guu, Panupong Pasupat, Tianlin Shi, and Percy Liang. Reinforcement
+learning on web interfaces using workflow-guided exploration. In International Conference on
+Learning Representations (ICLR), 2018. URL https://arxiv.org/abs/1802.08802.
+Martin A Makary and Michael Daniel. Medical error—the third leading cause of death in the US.
+BMJ, 353, 2016.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Mariah Muhammad. 91 c-suite execs on the one priority that will define 2026. https://www.
+beckershospitalreview.com/hospital-management-administration/
+92-c-suite-execs-on-the-one-priority-that-will-define-2026/, 2026.
+Accessed 2026-02-02.
+Ankit Pal, Logesh Kumar Umapathi, and Malaikannan Sankarasubbu. Med-halt: Medical domain
+hallucination test for large language models, 2023. URL https://arxiv.org/abs/2307.
+15343.
+Thomas L Rodziewicz, Benjamin Houseman, and John E Hipskind.
+Medical Error Reduction
+and Prevention. StatPearls Publishing, 2024. URL https://www.ncbi.nlm.nih.gov/
+books/NBK499956/.
+Nikhil R. Sahni, Pranay Gupta, Michael Peterson, and David M. Cutler. Active steps to reduce
+administrative spending associated with financial transactions in us health care. Health Affairs
+Scholar, 1(5):qxad053, October 2023. doi: 10.1093/haschl/qxad053.
+Karan Singhal, Shekoofeh Azizi, Tao Tu, S. Sara Mahdavi, Jason Wei, Hyung Won Chung, Nathan
+Scales, Ajay Tanwani, Heather Cole-Lewis, Stephen Pfohl, Perry Payne, Martin Seneviratne, Paul
+Gamble, Chris Kelly, Nathaneal Scharli, Aakanksha Chowdhery, Philip Mansfield, Blaise Aguera
+y Arcas, Dale Webster, Greg S. Corrado, Yossi Matias, Katherine Chou, Juraj Gottweis, Nenad
+Tomasev, Yun Liu, Alvin Rajkomar, Joelle Barral, Christopher Semturs, Alan Karthikesalingam,
+and Vivek Natarajan. Large language models encode clinical knowledge, 2022. URL https:
+//arxiv.org/abs/2212.13138.
+Tianbao Xie, Danyang Zhang, Jixuan Chen, Xiaochuan Li, Siheng Zhao, Ruisheng Cao, Toh Jing
+Hua, Zhoujun Cheng, Dongchan Shin, Fangyu Lei, Yitao Liu, Yiheng Xu, Shuyan Zhou, Silvio Savarese, Caiming Xiong, Victor Zhong, and Tao Yu. Osworld: Benchmarking multimodal
+agents for open-ended tasks in real computer environments, 2024. URL https://arxiv.
+org/abs/2404.07972.
+Kai Xu, YiWei Mao, XinYi Guan, and ZiLong Feng. Web-bench: A llm code benchmark based on
+web standards and frameworks, 2025. URL https://arxiv.org/abs/2505.07473.
+Shunyu Yao, Howard Chen, John Yang, and Karthik Narasimhan. Webshop: Towards scalable realworld web interaction with grounded language agents, 2023. URL https://arxiv.org/
+abs/2207.01206.
+Shuyan Zhou, Frank F. Xu, Hao Zhu, Xuhui Zhou, Robert Lo, Abishek Sridhar, Xianyi Cheng,
+Yonatan Bisk, Daniel Fried, Uri Alon, and Graham Neubig.
+Webarena: A realistic web environment for building autonomous agents.
+arXiv preprint arXiv:2307.13854, 2023.
+URL
+https://arxiv.org/abs/2307.13854.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Appendix
+CONTENTS
+Introduction
+Background and Related Work
+2.1
+Computer-Use Agents
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2.2
+The Clinical v. Administrative Gap . . . . . . . . . . . . . . . . . . . . . . . . . .
+HealthAdminBench
+3.1
+Environments . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3.2
+Observation Space
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3.3
+Action Space
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3.4
+Tasks
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3.5
+Subtasks . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3.6
+Memory . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3.7
+Prompting Strategy . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Results
+4.1
+Performance By Task Type . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+4.2
+Performance By Subtask Type . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+4.3
+Ablation Experiments: Prompting and Observation . . . . . . . . . . . . . . . . .
+4.4
+Qualitative Analysis of Failure Modes . . . . . . . . . . . . . . . . . . . . . . . .
+Discussion
+Acknowledgments
+A Prompting Strategy Details
+A.1
+Base System Prompts . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+A.2
+Zero-Shot Prompt Amendments
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+A.3
+Informative Prompt Amendments
+. . . . . . . . . . . . . . . . . . . . . . . . . .
+A.4
+Task-Specific Prompt Amendments . . . . . . . . . . . . . . . . . . . . . . . . . .
+A.5
+User Prompts . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+B
+Steps Taken
+C Head-to-Head Comparisons
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+APPENDIX
+A
+PROMPTING STRATEGY DETAILS
+Reliable prompting is necessary for obtaining stable behavior across long-horizon administrative
+workflows. Here, we present the prompting design used in HEALTHADMINBENCH.
+A.1
+BASE SYSTEM PROMPTS
+Context
+Action
+Description
+Accessibility Tree
+click(id)
+Click the UI element referenced by data-testid id.
+fill(id, text)
+Enter text into an input field.
+select(id, option)
+Select an option from a dropdown menu by visible label.
+scroll(dir)
+Scroll the page vertically (up or down).
+back()
+Navigate to the previous page in browser history.
+download(id)
+Click a download link or button and save the resulting file.
+upload(id, file)
+Upload a file to a file input element.
+done()
+Signal that the task has been completed.
+Screenshot Only
+click coord(x, y)
+Left-click at pixel coordinates (x, y) (origin at top-left).
+double click coord(x, y)
+Double-click at pixel coordinates (x, y).
+right click coord(x, y)
+Right-click at pixel coordinates (x, y).
+move coord(x, y)
+Move the cursor to pixel coordinates (x, y).
+type text(text)
+Type text at the current cursor focus.
+key press(key)
+Press a keyboard key or key combination.
+scroll(dx, dy)
+Scroll by pixel offsets (positive dy scrolls downward).
+scroll(x, y, dx, dy)
+Move to (x, y) and scroll by pixel offsets.
+wait(t)
+Pause execution for t seconds.
+done()
+Signal that the task has been completed.
+Table 5: Complete action space for HealthAdminBench. Agents with access to the accessibility tree
+operate on symbolic UI elements referenced by data-testid identifiers, while screenshot-only
+agents interact with the environment via coordinate-based mouse and keyboard actions.
+We use a fixed system prompt to (i) specify the agent role, (ii) define the admissible action space
+and required syntax (Table 5), and (iii) enforce a structured output format that includes both the next
+action and a concise summary of newly observed, task-relevant information. This format serves as
+an explicit instruction can be carried forward across timesteps.(Section 3.6). We additionally include
+constraints to ensure actions are executable (e.g., only referencing element identifiers that appear in
+the accessibility tree) and to standardize termination (the agent must emit done() when it believes
+the objective is complete).
+The full system prompt used for accessibility tree and screenshot only settings are provided below.
+Base System Prompt (Accessibility Tree Setting)
+You are an autonomous web agent that can interact with websites by
+performing actions.
+Your task is to complete the given objective by analyzing the current
+page and selecting the appropriate action.
+AVAILABLE ACTIONS:
+- click([id]) - Click an element with the specified identifier (USE
+THIS FOR NAVIGATION)
+- fill([id], "text") - Type text into an input field
+- select([id], "option") - Select dropdown option by visible label
+(for <select> elements)
+- scroll(down) or scroll(up) - Scroll the page
+- back() - Go back to the previous page (browser back button)
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+- download([id]) - Download a document (e.g., authorization letters)
+- upload([id], "filename") - Upload a previously downloaded file
+("last" for most recent)
+- done() - Signal task completion
+ACTION FORMAT:
+ACTION: action string
+KEY INFO: concise summary of all NEW task-relevant information from the
+current page.
+Examples:
+- ACTION: click([login-button])
+KEY INFO: Found login form with username and password fields.
+- ACTION: fill([email-input], "user@example.com")
+KEY INFO: None - just filling the form.
+- ACTION: download([download-auth-letter])
+KEY INFO: Downloading auth letter to attach as supporting
+documentation.
+- ACTION: upload([file-upload-input], "last")
+KEY INFO: Uploading the previously downloaded auth letter.
+- ACTION: done()
+KEY INFO: Task completed - note added and referral cleared.
+IMPORTANT GUIDELINES:
+1.
+Always extract element identifiers from the PAGE ELEMENTS section
+2.
+Only use identifiers that are explicitly shown in PAGE ELEMENTS
+(e.g., [id])
+3.
+Do not invent or guess identifiers
+4.
+In axtree only mode, PAGE ELEMENTS already includes the full page;
+scrolling rarely reveals new elements
+5.
+If an element is not in PAGE ELEMENTS, try checking other tabs or
+sections
+6.
+Complete the objective step by step
+7.
+Call done() only when the entire objective is accomplished
+Base System Prompt (Screenshot-Only Setting)
+You are an autonomous web agent that can interact with websites by
+performing actions.
+Your task is to complete the given objective by analyzing the current
+page and selecting the appropriate action.
+AVAILABLE ACTIONS (SCREEN COORDINATES):
+- click coord(x, y) - Left click at pixel coordinates (origin top-left)
+- double click coord(x, y) - Double click at pixel coordinates
+- right click coord(x, y) - Right click at pixel coordinates
+- move coord(x, y) - Move mouse to pixel coordinates
+- type text("text") - Type text at the current cursor focus
+- key press("Enter") - Press a key or key combo (e.g., "Enter",
+"Ctrl+L")
+- scroll(dx, dy) - Scroll by pixel offsets (positive dy = down)
+- scroll(x, y, dx, dy) - Move to (x,y) then scroll by offsets
+- wait(seconds) - Pause before the next action
+- done() - Signal that you have completed the objective
+ACTION FORMAT:
+You MUST respond with an action AND key information from the current
+page using this format:
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+ACTION: action string
+KEY INFO: concise but complete summary of all NEW information from this
+page potentially relevant to completing the task.
+Do NOT repeat facts already listed in KEY INFORMATION GATHERED SO
+FAR unless they have changed.
+Include specific values (IDs, dates, names, amounts, statuses,
+codes, credentials).
+Use a single line with separators like "; " or " | " to retain
+multiple facts.
+Examples:
+- ACTION: click coord(420, 318)
+KEY INFO: Clicking the login button.
+- ACTION: type text("user@example.com")
+KEY INFO: Entered the username.
+- ACTION: scroll(0, 500)
+KEY INFO: Scrolling to reveal more options.
+- ACTION: done()
+KEY INFO: Task completed.
+IMPORTANT GUIDELINES:
+1.
+Coordinates are in pixels relative to the screenshot
+2.
+Use the screenshot to locate UI elements visually
+3.
+Prefer clicking UI elements instead of typing URLs
+4.
+Complete the objective step by step
+A.2
+ZERO-SHOT PROMPT AMENDMENTS
+To evaluate agent performance under minimal task-specific guidance, we adopt a zero-shot prompting setting in which the system prompt is amended to provide only basic interaction constraints and
+form-filling conventions. In particular, zero-shot prompts include lightweight guidelines for form
+input and navigation, but do not provide procedural instructions, task decomposition, or examples
+of successful behavior.
+This setting is designed to measure the extent to which agents can infer appropriate strategies for
+administrative workflows from the environment alone. Below, we present the zero-shot prompt
+amendments used for accessibility-tree and screenshot-only agents, respectively.
+Zero-Shot System Prompt Amendment (Accessibility Tree Setting)
+FORM INPUT GUIDELINES:
+- For <select> elements, use select() rather than fill().
+- For date inputs, always use the YYYY-MM-DD format (e.g.,
+1965-03-15).
+- Identify form fields using data-testid values provided in PAGE
+ELEMENTS.
+NAVIGATION NOTES:
+- goto("url") is available but should be avoided when possible.
+Prefer clicking in-page links to preserve session state.
+- When navigating between portals, click link elements rather than
+manually entering URLs.
+- Use back() to return to the previous portal after completing a
+subtask (e.g., returning to the EMR after submitting a form in a payer
+portal).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Zero-Shot System Prompt Amendment (Screenshot-Only Setting)
+FORM INPUT GUIDELINES:
+- Use click coord(x, y) to focus an input field before typing.
+- Use type text("...") to enter values (this does not clear existing
+text by default).
+- For dropdown menus, click the dropdown first, then click the desired
+option.
+- For date inputs, always use the YYYY-MM-DD format (e.g.,
+1965-03-15).
+- If text is entered into the wrong field, re-click the correct field
+and retry.
+- Prefer clicking UI elements over typing URLs to preserve session
+state.
+NAVIGATION NOTES:
+- Do not type URLs directly into the address bar.
+- Use in-page buttons and links to navigate between pages.
+A.3
+INFORMATIVE PROMPT AMENDMENTS
+As healthcare administrative portals and the associated multi-portal workflows are nontrivial, we
+additionally evaluate agents under an informative prompting setting. In this regime, the system
+prompt is provided with additional high-level procedural guidance for interacting with each portal,
+including how to extract credentials, navigate patient records, complete documentation, and manage
+cross-portal workflows. Importantly, these prompts offer general operational guidance rather than
+step-by-step task solutions, preserving the need for agents to reason about task execution.
+Below, we present an example informative system prompt amendment used across both
+accessibility-tree and screenshot-only settings.
+Informative System Prompt Amendment
+EXTRACTING CREDENTIALS:
+When login credentials (e.g., username and password) are displayed on
+a page, you MUST capture the exact values in KEY INFO.
+Include both the username and password on the same line so they
+persist across steps.
+These credentials will be required when logging into external portals.
+Example:
+KEY INFO: Portal credentials are username=provider@payera.com
+password=demo123
+MULTI-PORTAL WORKFLOW:
+When submitting prior authorizations across portals:
+1.
+GATHER all required information from the EHR before navigating
+away.
+2.
+NAVIGATE to the payer portal using the portal link and credentials
+provided in the Coverages/Auth page.
+3.
+COMPLETE the payer portal form.
+If specific codes are not
+visible, use reasonable defaults:
+- Diagnosis codes:
+common ICD-10 codes (e.g., H35.32 for wet
+macular degeneration, E11.9 for diabetes).
+- Procedure codes:
+the CPT code listed in the referral or common
+codes (e.g., 67028 for eye injection).
+- Document uploads:
+use the authorization letter from the patient’s
+documents section.
+4.
+DO NOT navigate backward while filling out a form, as this may
+result in lost progress.
+5.
+AFTER submission, look for a \Return to EMR" button to navigate
+back.
+6.
+Upon returning to the EMR, ADD A NOTE documenting the
+authorization details.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+PATIENT RECORD NAVIGATION:
+On the worklist page, locate patients by scrolling or using the search
+field.
+Click the patient’s row or link to open their referral record.
+Within a referral record, relevant tabs include:
+- General:
+patient information, notes, and communications
+- Procedures:
+activity and authorization history
+- Diagnoses:
+ICD-10 diagnosis codes
+- Services:
+requested procedures with CPT codes
+- Flags:
+clinical alerts and flags
+- Coverages:
+insurance coverage and authorization requirements
+- Referral:
+detailed referral information
+When adding a note:
+1.
+Click "Add Note" to open the note editor.
+2.
+Fill in the note subject and content.
+3.
+Select the appropriate note category.
+4.
+Click "Save".
+5.
+Click "Clear from Worklist" to complete the task.
+A.4
+TASK-SPECIFIC PROMPT AMENDMENTS
+To assess whether each task in HEALTHADMINBENCH is in principle completable by a computeruse agent, we introduce task-specific prompt amendments as the most informative level of system
+prompting. This setting extends the informative prompting instructions described in Section A.3 by
+additionally providing explicit, step-by-step natural-language instructions for completing a particular task.
+As such detailed procedural guidance is unlikely to be available in realistic deployments of agentic
+systems, we use task-specific prompt amendments solely for validation and debugging purposes.
+Results obtained under this prompting regime are therefore not included in the benchmark’s reported
+performance metrics. Instead, this setting serves to verify task correctness, environment consistency,
+and the feasibility of successful task completion.
+Below, we present an example of a task-specific prompt amendment for a task requiring submission
+of a prior authorization.
+Task-Specific System Prompt Amendment
+STEP-BY-STEP GUIDE:
+1.
+Click on referral REF-2025-001 in the worklist to open it.
+2.
+Review patient demographics and referral details for the bilateral
+eye injection.
+3.
+Click the Diagnoses tab to view diagnosis codes (H35.32, H35.31,
+E11.9).
+4.
+Click the Services tab to view procedure codes (67028, J2778).
+5.
+Click the Coverages tab to retrieve Payer A portal credentials.
+6.
+Record the username and password for the Payer A portal.
+7.
+Download the authorization letter from the Documents section.
+8.
+Click the Payer A portal link to navigate to the external portal.
+9.
+Log in to the Payer A portal using the retrieved credentials.
+10.
+Select the request type as Outpatient Procedure.
+11.
+Fill out the prior authorization form with the member ID
+(AET123456789) and date of birth (1965-03-15).
+12.
+Enter all diagnosis codes:
+H35.32, H35.31, E11.9.
+13.
+Enter all procedure codes:
+67028, J2778.
+14.
+Provide a clinical indication describing the diagnosis (e.g.,
+macular degeneration).
+15.
+Upload the authorization letter as supporting documentation.
+16.
+Submit the authorization form.
+17.
+Copy the authorization reference number from the confirmation
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+page.
+18.
+Return to the EMR.
+19.
+Add a note in the Communications section containing the
+authorization reference number.
+20.
+Clear the referral from the worklist.
+A.5
+USER PROMPTS
+The user prompt presents the agent with the current environment state, including the task objective,
+interaction metadata, and the most recent observation. Specifically, the prompt contains the task
+description, step count, current URL, recent action history, accumulated key information from prior
+steps, and the current observation in the form of the accessibility tree and/or a browser screenshot,
+depending on the observation mode. At the end of each prompt, the agent is explicitly instructed to
+produce the next action and to summarize any newly observed, task-relevant information.
+Below, we show the scaffolding of the user prompt for the setting in which both the accessibility
+tree and screenshots are provided.
+User Prompt
+OBJECTIVE: <task description>
+CURRENT URL: <current browser URL>
+STEP: <step count>
+RECENT ACTIONS (most recent last):
+<list of all previous actions taken by the agent>
+KEY INFORMATION GATHERED SO FAR:
+<list of all key information summaries produced in prior steps>
+SCREENSHOT:
+<screenshot of the current web page, if included in the observation
+mode>
+PAGE ELEMENTS (use identifiers shown in [brackets]):
+<accessibility tree content, if included in the observation mode>
+Analyze the current page and objective.
+What is the next single
+action to take?
+Respond with:
+ACTION: <your action>
+KEY INFO: <concise but complete summary of all NEW information from
+this page potentially relevant to completing the task>
+B
+STEPS TAKEN
+Resource usage is an important component of computer use agents, as they require time and API
+calls for each step they perform. Figure 5 shows the number of steps taken by each model. We find
+that most models consume about the same number of steps, with the exception of Qwen 3, which
+uses drastically more steps.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Steps Taken Per Task
+Claude Opus 4.5
+GPT-5
+Gemini 3
+Kimi K2.5
+Llama 4 Maverick
+Qwen 3
+Figure 5: Box plots indicating the min, first quartile, median, third quartile, and max steps taken by
+each model on HealthAdminBench.
+C
+HEAD-TO-HEAD COMPARISONS
+In our primary result tables, we report the overall task and subtask success rates, along with confidence intervals for those estimates. However, in many cases we care more about model comparisons. In this section, we perform head-to-head comparisons where we evaluate the difference in
+performance between models, and the confidence intervals for those differences. We find that our
+benchmark contains sufficient signal to measure many statistically significant differences between
+models.
+Claude
+Opus 4.5
+GPT-5
+Gemini 3
+Kimi K2.5
+Llama
+4 Maverick
+Qwen 3
+GPT-5
+2.9%
+(-5.7% - 10.0%)
+Gemini 3
+10.0%
+(2.9% - 18.6%)
+7.1%
+(0.0% - 14.3%)
+Kimi K2.5
+11.4%
+(4.3% - 20.0%)
+8.6%
+(0.0% - 17.1%)
+1.4%
+(-4.3% - 7.1%)
+Llama
+4 Maverick
+15.7%
+(8.5% - 24.3%)
+12.9%
+(5.7% - 21.4%)
+5.7%
+(0.0% - 12.9%)
+4.3%
+(-2.9% - 11.4%)
+Qwen 3
+15.7%
+(5.7% - 27.1%)
+12.9%
+(4.3% - 21.4%)
+5.7%
+(-1.4% - 14.3%)
+4.3%
+(-2.9% - 11.5%)
+0.0%
+(-8.6% - 7.1%)
+Table 6: Head-to-head differences in task success rate (percentage points). Positive numbers indicate
+that the model in the column is better than the model in row. 95% test-set bootstrap confidence
+intervals are reported under the overall difference between models. Bolded rows are statistically
+significant (p < 0.05).
+Claude
+Opus 4.5
+GPT-5
+Gemini 3
+Kimi K2.5
+Llama
+4 Maverick
+Qwen 3
+GPT-5
+5.3%
+(-0.6% - 11.6%)
+Gemini 3
+-4.0%
+(-10.2% - 2.8%)
+-9.3%
+(-17.7% - -0.7%)
+Kimi K2.5
+12.3%
+(6.3% - 18.3%)
+7.0%
+(0.2% - 13.7%)
+16.3%
+(9.4% - 23.3%)
+Llama
+4 Maverick
+25.9%
+(19.3% - 32.6%)
+20.6%
+(13.1% - 28.1%)
+29.9%
+(22.9% - 37.2%)
+13.6%
+(7.8% - 19.3%)
+Qwen 3
+44.0%
+(36.8% - 50.5%)
+38.7%
+(31.3% - 46.0%)
+48.0%
+(40.0% - 56.3%)
+31.7%
+(25.2% - 37.9%)
+18.1%
+(11.7% - 24.6%)
+Table 7: Head-to-head differences in subtask success rate (percentage points). Positive numbers indicate that the model in the column is better than the model in row. 95% test-set bootstrap confidence
+intervals are reported under the overall difference between models. Bolded rows are statistically significant (p < 0.05).

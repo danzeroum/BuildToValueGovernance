@@ -1,0 +1,1165 @@
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+FICO-BENCH:
+EVALUATING
+VISION-LANGUAGE
+MODELS UNDER VISUAL FIDELITY AND COMPRESSION AT SCALE
+Anonymous authors
+Paper under double-blind review
+ABSTRACT
+Visual text compression is an emerging paradigm for rendering text as images
+for processing by vision-language models (VLMs), enabling higher information
+density per context token. However, the robustness of VLMs under dense, textbased visual inputs remains unevaluated. We introduce FICO-BENCH, a benchmark designed to assess VLM robustness across seven controlled variants of visual fidelity and information density. FICO-BENCH spans documents of 8k to
+64k tokens and includes three tasks of increasing semantic granularity: optical
+character recognition (OCR), needle-in-a-haystack (NIAH) retrieval, and visual
+question answering (VQA). Evaluating 11 general-purpose VLMs and 3 OCRspecialized models reveals three consistent trends: performance drops sharply under increased density or reduced resolution; cross-task transfer between OCR,
+NIAH, and VQA is limited; and VQA is comparatively robust, suggesting that
+low-level details are lost before semantics. By exposing failure modes that remain invisible under conventional VLM evaluations, FICO-BENCH establishes
+a rigorous test-bed for visual text compression. Data and code are available at
+https://anonymous.4open.science/r/FiCo-Bench-Jan-ARR.
+INTRODUCTION
+Despite the strong performance of large language models (LLMs) across a wide range of complex
+tasks, the quadratic O(n2) computational cost of the self-attention mechanism (Vaswani et al., 2017)
+remains a fundamental bottleneck for long-context processing (Zhao et al., 2025; Tay et al., 2020).
+To mitigate these issues, prior work has explored various self-attention alternatives (Yuan et al.,
+2025a; Katharopoulos et al., 2020) and context compression methods (Ge et al., 2024; Jiang et al.,
+2023). More recently, visual text compression has been proposed to directly reduce token counts by
+representing text in the pixel space, as illustrated in fig. 1b. Studies, including DeepSeek-OCR (Wei
+et al., 2025) and Glyph (Cheng et al., 2025), demonstrate that strong performance can be preserved
+at compression rates up to 10x (i.e., representing the same text with images using roughly one-tenth
+the tokens), showing promise toward general-purpose, efficient language models that process text
+visually.
+While DeepSeek-OCR (Wei et al., 2025) and Glyph (Cheng et al., 2025) are explicitly trained for
+visual text compression, any vision-language model (VLM) is capable of visual text compression
+to various degrees of effectiveness. This raises a fundamental question: Are VLMs proficient and
+robust when reasoning over long, dense, text-centric image contexts? While recent benchmarks
+have evaluated VLMs’ abilities to retrieve facts or answers to multi-hop questions from multimodal
+documents (Wang et al., 2025a; Ma et al., 2024; Zou et al., 2024; Mathew et al., 2021), rendering
+text as images introduces new challenges that can impact the reliability of VLMs (Cheng et al.,
+2025; Zhao et al., 2025). Deliberate choices between fidelity and efficiency, e.g., font size, color
+space, and dots per inch (DPI), are crucial in balancing compression and performance.
+To systematically study these trade-offs, we introduce Fidelity-Compression Bench (FICOBENCH), the first benchmark designed to evaluate the fidelity-scale trade-off in long-context visionlanguage models. FICO-BENCH studies three tasks of increasing abstraction, namely optical character recognition (OCR), needle-in-a-haystack (NIAH), and visual question answering (VQA), unSubmitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+(a) Accuracy of 11 VLMs across 7 rendering variations, averaged across OCR, NIAH, and VQA tasks.
+(b) Comparison of visual text compression (top) and
+traditional text-based inference (bottom).
+Figure 1: Overview of evaluation results and optic compression paradigm.
+der various levels of visual fidelity and compression. In doing so, we evaluate models’ abilities
+to recognize low-level characters and reason over high-level semantics under two orthogonal perturbation axes: information density, which alters the effective compression ratio through font size
+and DPI changes, and fidelity, which introduces visual degradation via binarization, JPEG compression, and upscaling blur. Building on an existing long-context language benchmark, we construct
+a vision-language dataset with 7 rendering variants that systematically cover both dense and sparse
+text layouts, as well as high- and low-fidelity visual conditions.
+Through extensive experiments with 14 open-source VLMs (including 3 specialized OCR models),
+we obtain the following key findings: (1) Current VLMs exhibit limited robustness to long, dense
+image inputs, with consistently high error rates in OCR and NIAH, and pronounced performance
+degradation when visual context is used as a substitute for textual context in VQA. (2) Each task
+relies on distinct vision-language capabilities with limited inter-task generalization. For instance,
+Kimi-VL-A3B (Du et al., 2025) and Glyph (Cheng et al., 2025) achieve strong performance on
+NIAH and VQA tasks, yet exhibit high OCR error rates. (3) Across tasks, performance is most sensitive to information density. Dynamic native-resolution models, such as Qwen2.5-VL (Bai et al.,
+2025b), achieve strong OCR and NIAH results under high-resolution inputs, but are highly vulnerable to changes in resolution and text-density, particularly in the low-DPI and dense-text regimes.
+In contrast, tile-based and static-resolution models generally attain lower peak performance but degrade more gracefully across resolution and density shifts, demonstrating greater robustness. (4)
+For VQA, models remain largely robust to both density and fidelity perturbations, with only minor performance variations. This suggests that high-level semantic information can be efficiently
+compressed and preserved, whereas low-level literal recognition (e.g., characters and exact spans)
+requires substantially larger token budgets.
+The key contributions of this paper are as follows:
+• We introduce FICO-BENCH, a benchmark for evaluating the fidelity-compression tradeoff in long-context vision-language models across three complementary tasks of increasing
+abstraction: OCR, NIAH, and VQA.
+• We construct a large-scale image-rendered dataset with seven rendering variants with differing levels of information density and visual fidelity, enabling controlled analysis of robustness under various compression ratios.
+• We benchmark 11 general-purpose and 3 OCR-specialized VLMs, revealing limited robustness to dense contexts and weak cross-task transfer between tasks.
+• Our study uncovers a task-dependent efficiency-fidelity trade-off: high-level semantics remain stable under compression, whereas low-level literal recognition is highly sensitive to
+text density.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+RELATED WORKS
+Long-context modeling.
+The quadratic complexity of self-attention is a key bottleneck for scaling
+language models to long contexts (Vaswani et al., 2017; Tay et al., 2020), which is necessary in longhorizon or deep-reasoning tasks such as agentic coding or mathematical problem solving (Jimenez
+et al., 2024; Rando et al., 2025; Chen et al., 2025; Shao et al., 2025). Autoregressive inference
+becomes prohibitive at long contexts due to the growing key-value cache. Many techniques have
+been proposed to improve the efficiency of language models on long contexts, including architectural
+solutions (Yuan et al., 2025a; Katharopoulos et al., 2020; Yang et al., 2025; Gu & Dao, 2024; Poli
+et al., 2023; Hutchins et al., 2022), context compression methods (Ge et al., 2024; Jiang et al.,
+2023), and selective context management techniques (Yu et al., 2025; Yuan et al., 2025b; Sun et al.,
+2025). VIST (Xing et al., 2025) is an early exploration of compressing text contexts using visual
+tokens with a learned perceiver-resampler module that encodes high-signal context information.
+DeepSeek-OCR (Wei et al., 2025) systematically studies the trade-off between OCR performance
+and compression rate, showing that a 96% accuracy is achievable using 10% of equivalent tokens.
+Concurrently, Glyph (Cheng et al., 2025) builds an instruction-following model with up to 4x token
+savings.
+Multimodal long-context & robustness benchmarks.
+Needle-in-a-haystack (NIAH) (Kamradt,
+2023; Hsieh et al., 2024) and long-context question answering (Bai et al., 2024; 2025c) evaluate
+the effectiveness of language models on long texts. In the multimodal setting, MM-NIAH (Wang
+et al., 2025a) evaluates a model’s ability to retrieve, count, and reason with long multimodal documents, while Wang et al. (2024) requires a model to extract the relevant image needle. Moreover, MMLongBench-Doc (Ma et al., 2024) is a question answering (QA) benchmark with long
+PDF documents featuring interleaved image and text paragraphs, and MMLongBench (Bai et al.,
+2025c) expands the scope by designing a diverse problem set, including summarization, visual
+retrieval augmented generation, and in-context learning tasks. MLLM-IC (Qiu et al., 2025) and
+MMC-Bench (Zhang et al., 2024) are image benchmarks that test VLMs under common corruptions, including color space shift, occlusion, and patch artifacts. However, these benchmarks are not
+tailored to test long-context abilities, and the perturbation types are unlikely in the text rendering
+pipeline.
+FICO-BENCH
+Visual text compression offers a new perspective on long-context modeling, particularly in scenarios
+where large external documents are provided as auxiliary context. Formally, given a long text-only
+document T = [t1, . . . , tNT ], where NT denotes the total number of text tokens, we apply a text
+rendering pipeline R, implemented using the ReportLab library (ReportLab Inc., 2024), to render
+the text into images: I = R(T) = [I1, . . . , IM], where M denotes the total number of rendered
+images. The vision encoder ϕV of a VLM transforms and encodes each image into a set of visual
+tokens: NV = P
+Ii |ϕV (Ii)|, where NV denotes the sum of all vision tokens for document T. We
+thereby define the compression ratio Rc = NT
+NV , which measures the effective reduction in context
+length. Notably, the number of visual tokens ultimately consumed by a model can vary substantially
+across architectures due to differences in image preprocessing pipelines and vision tokenizers (Du
+et al., 2025; Wei et al., 2025; Bai et al., 2025a; Team, 2025).
+Parameter
+Value
+Font style
+NotoSans
+Font size
+Line height
+DPI
+Margin
+Aspect ratio
+A4
+Table 1: Default rendering configuration.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Task
+Documents
+Instances
+Images
+OCR
+5,312
+5,312
+NIAH
+3,885
+19,672
+VQA
+19,672
+Table 2: Dataset statistics for FICO-BENCH. Documents denotes the number of source documents,
+instances denotes the number of evaluated samples, and images denotes the total number of rendered
+images consumed by the models.
+To evaluate general performance, we adopt a reasonable default rendering configuration (detailed
+in table 1) following prior studies (Zhao et al., 2025; Cheng et al., 2025), balancing the compression
+ratio and visual fidelity. We then construct a set of perturbed variants by modifying the rendering
+configuration or applying image post-processing operations. Overall, we curate a seed text-only
+dataset derived from LongBenchV2 (Bai et al., 2025c), containing documents of 8k-64k tokens,
+with extreme-length cases removed to accommodate a broader range of VLMs. Under the default
+rendering configuration, each document is rendered into 5-42 images, with only 3-20 images in the
+densest setting.
+3.1
+VISUAL TEXT COMPRESSION TASKS
+To provide a holistic analysis of VLMs, we deliberately design 3 tasks spanning different levels of
+abstraction, ranging from low-level character recognition to high-level semantic reasoning.
+OCR
+The OCR task represents the most fine-grained evaluation, challenging models to faithfully
+reconstruct the source text from rendered images. This task tests low-level visual recognition, requiring models to attend to fine-grained details while avoiding hallucination or paraphrasing.
+Following OmniDocBench (Ouyang et al., 2025) and DocVQA (Mathew et al., 2021), we adopt the
+Normalized Edit Distance (Levenshtein, 1965) and report the Character Error Rates (CER). These
+metrics are widely used in OCR evaluation because they directly measure character-level fidelity and
+remain robust to length variations. To isolate the impact of visual text compression and image-level
+perturbations, we restrict the OCR task to single-image inputs. Despite the absence of multi-image
+context, each image contains, on average, 1,600 and 3,600 tokens for the original and dense setting,
+respectively, ensuring that the task remains challenging.
+NIAH
+The NIAH (Kamradt, 2023; Hsieh et al., 2024) task is a standard evaluation for understanding models’ effective context length, measuring whether a model can retrieve a small but precise piece of information embedded sparsely within a long context dominated by irrelevant content.
+Concretely, a model is required to report a target value associated with a queried key, which is
+surrounded by substantial distractor text.
+Following previous works (Hsieh et al., 2024; Zhao et al., 2025), we formulate a multikey NIAH retrieval task by programmatically injecting text needles into the original document before rendering.
+To control needle depth, we insert five needles per document, each
+placed uniformly at random within one of five non-overlapping context intervals (0-20%, 2040%, 40-60%, 60-80%, and 80-100%).
+Each needle follows a fixed key-value template,
+“The secret {key} is {value}.” We ensure that all keys and values are unique and do
+not appear elsewhere in the context. This setting explicitly evaluates a model’s ability to isolate the
+correct information in the presence of multiple distractors, requiring both fine-grained recognition
+and semantic grounding. We evaluate performance using Exact Match (EM), in which a prediction
+is only assigned credit if the target value is correctly identified in the parsed model output.
+VQA
+This task challenges a model to perform multi-hop reasoning over long documents, requiring
+high-level semantic understanding and complex reasoning to deduce the correct answer. We reuse
+the questions from LongBenchv2 (Bai et al., 2025c) but render the input context as images. Each
+question takes the form of a multiple-choice question, spanning 5 subtasks: single-document QA,
+multi-document QA, codebase and structured data understanding, multi-turn history understanding,
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Figure 2: Examples of the default rendering and 6 perturbation variants. Visual artifacts are applied
+to the Binarization, JPEG, and Upscale variants. Dense, Low DPI, and High DPI settings produce
+images with different sizes and amounts of text, resulting in different compression ratios.
+and long in-context learning. We measure accuracy, computed by parsing the predicted answer and
+comparing it against the ground-truth answer.
+3.2
+PERTURBATION VARIANTS
+Previous work (Cheng et al., 2025; Zhao et al., 2025) has shown that VLMs can be sensitive to
+rendering and preprocessing choices. To comprehensively evaluate model capability and robustness
+under common and practical rendering conditions, we construct seven splits in total for each of
+the three tasks introduced above: one original (unperturbed) split and six perturbed splits. The
+configuration of the original split is detailed in table 1, while representative examples of the six
+perturbation splits are shown in fig. 2.
+1. Binarization: We convert grayscale images to 1-bit black-and-white using a global threshold of 128 (8-bit scale). This enforces clear foreground-background separation but perturbs
+fine character strokes and contours.
+2. JPEG: We apply JPEG encoding with a quality factor of 10, inducing severe quantization of
+Discrete Cosine Transform (DCT) coefficients, resulting in characteristic blocking artifacts
+and ringing around high-contrast edges.
+3. Dense: We decrease the font size from 11 to 7 and the line height from 12 to 8 to increase
+the character density, forcibly increasing the compression ratio for all models.
+4. Low DPI: We decrease the DPI from 96 to 56 to downscale the image resolution, increasing
+character density for native-resolution models while having minimal effect on models that
+rescale inputs to a fixed size.
+5. High DPI: We double the DPI from 96 to 192 to increase the resolution, yielding more
+visual tokens for dynamic-resolution models and a lower effective compression ratio.
+6. Upscale: We bilinearly upscale images rendered at 56 DPI to the 96 DPI image size. Although the spatial dimensions match the default setting, high-frequency details are lost,
+resulting in blur.
+The Binerization, JPEG, and Upscale perturbations don’t impact the compression ratio relative to
+the default rendering configuration. The estimated compression ratios of the remaining variants for
+each model are found in Table 3.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Model
+Original
+Dense
+HighDPI
+LowDPI
+Qwen3-VL-8B
+1.84
+4.36
+0.46
+5.41
+Qwen3-VL-2B
+1.84
+4.36
+0.46
+5.41
+Qwen2.5-VL-7B
+1.41
+3.34
+0.35
+4.14
+InternVL3.5-8B
+0.89
+2.12
+0.89
+0.89
+Kimi-VL-A3B
+1.41
+3.34
+0.35
+4.14
+Glyph
+1.41
+3.34
+0.35
+4.14
+Gemma3-27B
+6.25
+14.84
+6.25
+6.25
+Gemma3-12B
+6.25
+14.84
+6.25
+6.25
+Qianfan-VL-8B
+0.89
+2.12
+0.89
+0.89
+GLM-4.6V
+1.40
+3.34
+0.35
+4.14
+GLM-4.1V-9B
+1.40
+3.34
+0.35
+4.14
+PaddleOCR-VL
+0.36
+0.84
+0.11
+1.08
+DeepSeek OCR
+2.44
+5.79
+1.09
+3.51
+Table 3: Estimated model compression ratio across variants. The remaining perturbations preserve
+the same compression ratio as the original split. The exact number of tokens varies from page to
+page, while the image sizes remain consistent.
+EXPERIMENTS
+4.1
+SETUP
+We evaluate 11 open-source general-purpose VLMs, including Qwen3-VL-8B and Qwen3-VL2B
+(Bai et al., 2025a), Qwen2.5-VL-7B
+(Bai et al., 2025b), InternVL3.5-8B
+(Wang et al.,
+2025b), Kimi-VL-A3B (Du et al., 2025), Glyph (Cheng et al., 2025), Gemma3-27B and Gemma312B (Team, 2025), Qianfan-VL-8B (Dong et al., 2025), GLM-4.6V and GLM-4.1V-9B (Hong
+et al., 2025), as well as 3 OCR-specialized models, namely PaddleOCR-VL (Cui et al., 2025),
+MinerU2.5 (Niu et al., 2025), and DeepSeek-OCR (Wei et al., 2025), covering a diverse range
+of model architectures and dynamic resolution strategies. For the Qwen3 series, we select their
+“instruct” variants to avoid unnecessary thinking verbosity. We serve all models on NVIDIA RTX
+6000 Pro Blackwell GPUs using the vLLM backend (Kwon et al., 2023). For models using dynamic tiling, we fix the maximum number of tiles to 12. Additional hyperparameters are provided
+in Appendix A.
+4.2
+MAIN RESULTS
+We report the OCR, NIAH, and VQA scores of each model under the original and the 6 perturbed
+rendering strategies in table 4.
+OCR
+The OCR results show that optical character recognition remains challenging across most
+settings: even OCR-specialized models achieve character error rates (CER) no lower than 10%
+using the default rendering configuration. Nevertheless, Qwen2.5-VL, Qwen3-VL, and GLM-4.6V
+perform competitively and, in the High-DPI setting, can even surpass specialized OCR systems.
+Despite their strong peak performance, models that rely on native-resolution processing, including
+the Qwen2.5-VL, Qwen3-VL, and GLM-4.6V, are highly sensitive to changes in compression ratio.
+Their OCR error rate grows significantly under Low-DPI and Dense-Text conditions and only partially recovers in the Upscale setting. In contrast, models that operate on fixed input resolutions
+(e.g., the Gemma3 family) or employ dynamic tiling (e.g., Qianfan-VL) exhibit greater robustness, as intermediate resizing mitigates extreme density shifts. Among OCR-specialized models,
+PaddleOCR-VL and MinerU2.5 are also sensitive to increased text density and further degrade under JPEG compression. By contrast, DeepSeek-OCR demonstrates the most consistent performance
+across all perturbations, reflecting the benefits of its compression-targeted training.
+Upon qualitative inspection of the OCR predictions, we identify three recurring failure modes: (1)
+Many models, including the OCR-specialized ones, exhibit degenerate behavior in which they produce excessively long, repetitive output sequences from which they rarely recover. (2) Several
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Perturbations
+Task
+Model
+Orig.
+LowDPI
+HighDPI
+Bin.
+Dense
+Upscale
+JPEG
+OCR (Err ↓)
+Qwen3-VL-8B
+24.02
+75.11
+13.18
+26.44
+69.76
+22.08
+24.97
+Qwen3-VL-2B
+33.88
+78.46
+25.06
+44.03
+76.98
+34.77
+37.49
+Qwen2.5-VL-7B
+11.07
+60.29
+8.26
+13.61
+51.14
+12.46
+14.29
+InternVL3.5-8B
+36.15
+36.97
+34.46
+36.87
+76.44
+36.59
+36.64
+Kimi-VL-A3B
+47.41
+75.89
+45.69
+47.58
+76.39
+45.72
+46.01
+Glyph
+47.46
+72.47
+35.70
+47.42
+73.53
+47.91
+47.23
+Gemma3-27B
+53.28
+53.41
+53.70
+53.50
+72.66
+53.41
+53.46
+Gemma3-12B
+57.53
+58.14
+58.00
+58.23
+72.73
+58.57
+58.11
+Qianfan-8B
+32.05
+42.32
+34.27
+34.16
+69.65
+39.18
+33.01
+GLM-4.6V
+20.09
+71.55
+7.03
+22.17
+67.82
+20.78
+21.05
+GLM-4.1V-9B
+50.22
+82.56
+29.22
+51.30
+78.52
+49.92
+58.01
+PaddleOCR†
+17.33
+73.38
+12.80
+23.78
+72.48
+21.66
+40.09
+MinerU2.5†
+17.72
+63.58
+14.76
+18.83
+72.79
+18.82
+22.39
+DeepSeek-OCR†
+21.21
+22.31
+20.92
+21.14
+41.01
+24.09
+30.99
+NIAH (Acc ↑)
+Qwen3-VL-8B
+74.59
+9.91
+88.29
+71.53
+15.68
+69.37
+67.21
+Qwen3-VL-2B
+23.96
+1.08
+63.42
+32.07
+4.14
+14.41
+27.03
+Qwen2.5-VL-7B
+85.59
+25.41
+82.88
+83.60
+38.20
+83.42
+84.14
+InternVL3.5-8B
+27.21
+24.86
+26.13
+25.41
+11.71
+23.60
+25.59
+Kimi-VL-A3B
+68.65
+19.10
+75.50
+42.70
+31.71
+70.63
+70.81
+Glyph
+81.08
+27.03
+87.75
+81.26
+36.94
+78.20
+80.90
+Gemma3-27B
+19.64
+19.64
+20.54
+18.20
+8.29
+20.00
+18.56
+Gemma3-12B
+18.02
+19.64
+16.76
+18.92
+8.29
+18.56
+19.10
+Qianfan-8B
+42.70
+40.54
+43.96
+41.44
+27.57
+39.82
+39.28
+GLM-4.6V
+77.66
+30.45
+32.25
+77.48
+40.90
+77.66
+70.99
+GLM-4.1V-9B
+71.89
+21.62
+55.32
+74.23
+31.17
+72.43
+74.95
+VQA (Acc ↑)
+Qwen3-VL-8B
+36.22
+34.05
+37.30
+35.14
+35.68
+37.84
+38.91
+Qwen3-VL-2B
+32.43
+33.51
+36.22
+32.43
+34.59
+38.38
+29.73
+Qwen2.5-VL-7B
+36.76
+36.22
+35.14
+40.54
+36.22
+40.54
+37.30
+InternVL3.5-8B
+18.38
+22.70
+22.70
+17.84
+24.32
+23.78
+23.24
+Kimi-VL-A3B
+36.76
+29.19
+37.30
+36.76
+34.05
+38.38
+38.38
+Glyph
+29.19
+28.11
+27.03
+27.57
+31.35
+23.78
+25.95
+Gemma3-27B
+28.65
+29.73
+27.57
+27.57
+29.19
+30.27
+26.49
+Gemma3-12B
+27.03
+29.73
+25.95
+27.03
+32.97
+28.65
+28.11
+Qianfan-8B
+21.08
+19.46
+20.54
+22.70
+29.19
+19.46
+20.00
+GLM-4.6V
+31.35
+35.68
+36.21
+28.11
+34.59
+34.05
+28.65
+GLM-4.1V-9B
+24.86
+16.76
+15.68
+23.24
+25.41
+24.32
+20.54
+Table 4: Main results for OCR (Err ↓), NIAH (Acc ↑), and VQA (Acc ↑) across image perturbations.
+Bold: Best score for each task/perturbation. †: Dedicated OCR-specialized models.
+general-purpose VLMs refuse to produce a transcription. This suggests a failure mode rooted in
+instruction following rather than visual recognition. (3) Some models partially or fully switch to
+Chinese output despite all inputs being English-only. An example of each is shown in table 7.
+NIAH
+The retrieval (NIAH) results exhibit patterns broadly consistent with those observed in
+OCR. Models that process inputs at native resolution achieve the highest peak performance, with
+Qwen2.5-VL-7B attaining the best score (∼85%). However, these gains come at the cost of robustness: performance degrades sharply as text density increases. Notably, despite high error rates
+in OCR, Glyph, Kimi-VL-A3B, and GLM-4.1V-9B perform competitively on NIAH and, in some
+cases, can even outperform the Qwen models. This discrepancy further supports the conclusion
+that OCR fidelity and long-context retrieval rely on distinct capabilities. Moreover, when comparing Glyph and its counterpart GLM-4.1V-9B, we find a significant performance boost likely due to
+Glyph’s focused training.
+Across models, tolerance to visual artifacts such as binarization, upscaling blur, and JPEG compression varies considerably. Most models experience modest performance drops under these perturbations. For example, relative to the default configurations, InternVL-3.5-8B degrades by 3.5 points
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+(a) Glyph
+(b) Kimi-VL-A3B
+(c) Gemma3-27B
+Figure 3: NIAH heatmaps across different OCR-capable VLMs.
+Qwen3-VL-8B
+Qwen3-VL-2B
+Qwen2.5-VL-7B
+InternVL3.5-8B
+Kimi-VL-A3B
+Glyph
+Gemma3-27B
+Gemma3-12B
+Qianfan-VL-8B
+GLM-4.6V
+GLM-4.1V-9B
+Accuracy (%)
+36.2
+32.4
+36.8
+18.4
+36.8
+29.2
+28.6
+27.0
+21.1
+31.4
+24.9
+41.5
+35.1
+40.0
+26.5
+31.9
+40.5
+35.7
+34.6
+20.0
+49.2
+21.1
+Random Guess (25%)
+Image Context
+Text Context
+Figure 4: Accuracies of VLMs on VQA with image context using FICO-BENCH default rendering
+(blue) and direct LongBenchV2 text context without any images (pink).
+in the upscale setting, and Qwen3-VL-8B drops by 7 points under JPEG compression. In contrast,
+Kimi-VL-A3B shows limited robustness, suffering a severe 26-point drop under binarization. Surprisingly, while seeing occasionally large performance drops, GLM-4.1V-9B also slightly benefits
+from certain perturbations, exhibiting gains of up to 3 points. Overall, these results reinforce that the
+effective compression ratio is the primary determinant of retrieval performance, while also revealing
+substantial variation in models’ resilience to fidelity perturbations.
+To examine how retrieval performance varies with needle depth and context length, we present a
+detailed analysis of Glyph, Kimi-VL-A3B, and Gemma3-27B in fig. 3, and report scores for the
+other models in Appendix D. For Glyph and Kimi-VL-A3B, we observe a consistent trend: retrieval
+accuracy is highest for shorter contexts and shallow needle placements, and degrades progressively
+as both context length and needle depth increase. In Glyph, the gap between the best- and worstperforming regions approaches 30 percentage points, indicating that even models with specific training for visual text compression exhibit uneven information retention across context positions. In
+contrast, Gemma3-27B demonstrates poor long-context proficiency and shows no depth-dependent
+structure. Instead, performance appears largely uncorrelated with either needle depth or context
+length, with accuracies remaining below 20% across most regions and isolated outliers ranging from
+47% to as low as 0.8%. While VLMs demonstrate promising potential for long-context retrieval,
+their ability to attend to fine-grained information is highly non-uniform across context positions.
+VQA
+Unlike OCR and NIAH, the VQA task cannot be solved by literal string matching and instead requires multi-hop reasoning over contextual information. In comparison to OCR and NIAH,
+we observe markedly strong robustness on the VQA task.
+For example, the Qwen2.5-VL and
+Qwen3-VL exhibit robustness against text-density perturbations, which had caused performance
+drops on both the OCR and NIAH tasks. Additionally, Qwen3-VL-8B maintains competitive performance under visual artifacts, achieving 38% accuracy in the JPEG split. These results suggest
+that, for models capable of leveraging native-resolution inputs, input modality does not appear to be
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+the bottleneck for context understanding. High-level semantic information seems easier to preserve
+under visual text compression than fine-grained character details.
+To directly compare the VQA performance between visual text compression (using the default rendering configuration) and the traditional text-based baseline, we provide each model the context
+as text instead of as rendered images. fig. 4 plots the performance for each model. While most
+models perform better with the text-based context, both Glyph and GLM-4.1V-9B exhibit significant performance degradation relative to their text-only baselines. While the former can likely be
+attributed to its specialized visual text compression training, GLM-4.1V-9B’s weaker performance
+likely stems from limited text-only capabilities, which can constrain its reasoning ability regardless
+of input modality. This limitation has been noted by the community and acknowledged by the GLM
+team in the GLM-4.6V release. 1
+To analyze performance as a function of document length, we aggregate results across all rendering variants into five context-length intervals and provide results in table 5. Across most models,
+performance peaks at intermediate context lengths (24–32k) and degrades noticeably as the context
+extends to 48k and 64k tokens. This pattern suggests models fail to utilize very long contexts, likely
+due to the increased presence of noisy information. Models with shorter maximum context windows exhibit more pronounced failures. In particular, InternVL-3.5-8B and Qianfan-VL-8B show
+substantially reduced accuracy in the 48–64k interval due to their 32k context limitation.
+Model
+8-16k
+16-24k
+24-32k
+32-48k
+48-64k
+Qwen3-VL-8B
+40.21
+39.48
+44.53
+31.70
+23.97
+Qwen3-VL-2B
+29.62
+34.80
+36.55
+37.63
+27.55
+Qwen2.5-VL-7B
+40.74
+36.10
+42.43
+42.85
+23.46
+InternVL3.5-8B
+16.40
+26.75
+33.61
+19.86
+6.12
+Kimi-VL-A3B
+37.56
+35.84
+42.43
+31.35
+32.65
+Glyph
+29.10
+30.64
+26.89
+26.82
+21.93
+Gemma3-27B
+19.57
+34.02
+30.67
+28.91
+22.95
+Gemma3-12B
+36.50
+29.61
+26.05
+25.08
+26.53
+Qianfan-VL-8B
+14.28
+36.88
+37.39
+5.92
+3.57
+GLM-V4.6
+21.69
+36.10
+39.91
+40.76
+15.81
+GLM-V4.1-9B
+5.29
+27.01
+18.06
+14.98
+12.24
+Table 5: VQA Accuracy (%) by context-length interval.
+CONCLUSION
+We present FICO-BENCH, a benchmark for evaluating vision-language models under optic compression. Experiments across OCR, multi-key NIAH, and long-context VQA show a clear efficiencyfidelity trade-off: low-level textual recognition is highly sensitive to compression and density
+shifts, while high-level semantic reasoning remains comparatively robust. Native-resolution models
+achieve strong peak accuracy but degrade sharply under resolution changes. In contrast, fixedresolution and tiling-based models trade peak performance for greater robustness. FICO-BENCH
+offers a unified protocol and valuable insights for selecting rendering configurations that balance
+token savings with reliability and motivate future development of compression-aware modeling.
+While our analysis demonstrates that compression ratio substantially affects performance, this study
+does not comprehensively characterize the scaling relationship between compression rate and model
+performance across diverse, realistic evaluation contexts. Future research should expand dataset
+diversity to incorporate long-horizon agentic tasks, which offer more robust assessments of visual
+text compression efficacy in real-world applications.
+Furthermore, our current benchmarks employ uniform, text-heavy structures that limit generalizability. Subsequent work should develop benchmarks featuring heterogeneous layouts and multimodal
+content—including images, tables, and other visual elements alongside textual information—to better evaluate VLM capabilities in practical scenarios such as web navigation and document analysis.
+1https://huggingface.co/zai-org/GLM-4.6V
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+REFERENCES
+Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng,
+Wei Ding, Chang Gao, Chunjiang Ge, Wenbin Ge, Zhifang Guo, Qidong Huang, Jie Huang, Fei
+Huang, Binyuan Hui, Shutong Jiang, Zhaohai Li, Mingsheng Li, Mei Li, Kaixin Li, Zicheng
+Lin, Junyang Lin, Xuejing Liu, Jiawei Liu, Chenglong Liu, Yang Liu, Dayiheng Liu, Shixuan
+Liu, Dunjie Lu, Ruilin Luo, Chenxu Lv, Lingchen Men, Xuancheng Ren, Xingzhang Ren, Sibo
+Song, Yuchong Sun, Jun Tang, Jianhong Tu, Jianqiang Wan, Peng Wang, Pengfei Wang, Qiuyue
+Wang, Yuxuan Wang, Tianbao Xie, Yiheng Xu, Haiyang Xu, Jin Xu, Zhibo Yang, Mingkun Yang,
+Jianxin Yang, An Yang, Bowen Yu, Fei Zhang, Hang Zhang, Xi Zhang, Bo Zheng, Humen Zhong,
+Jingren Zhou, Fan Zhou, Jing Zhou, Yuanzhi Zhu, and Ke Zhu. Qwen3-vl technical report, 2025a.
+URL https://arxiv.org/abs/2511.21631.
+Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang,
+Shijie Wang, Jun Tang, et al. Qwen2. 5-vl technical report. arXiv preprint arXiv:2502.13923,
+2025b.
+Yushi Bai, Xin Lv, Jiajie Zhang, Hongchang Lyu, Jiankai Tang, Zhidian Huang, Zhengxiao Du,
+Xiao Liu, Aohan Zeng, Lei Hou, Yuxiao Dong, Jie Tang, and Juanzi Li. Longbench: A bilingual, multitask benchmark for long context understanding. In Lun-Wei Ku, Andre Martins, and
+Vivek Srikumar (eds.), Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), ACL 2024, Bangkok, Thailand, August 11-16,
+2024, pp. 3119–3137. Association for Computational Linguistics, 2024. doi: 10.18653/V1/2024.
+ACL-LONG.172. URL https://doi.org/10.18653/v1/2024.acl-long.172.
+Yushi Bai, Shangqing Tu, Jiajie Zhang, Hao Peng, Xiaozhi Wang, Xin Lv, Shulin Cao, Jiazheng Xu,
+Lei Hou, Yuxiao Dong, Jie Tang, and Juanzi Li. Longbench v2: Towards deeper understanding
+and reasoning on realistic long-context multitasks. In Wanxiang Che, Joyce Nabende, Ekaterina
+Shutova, and Mohammad Taher Pilehvar (eds.), Proceedings of the 63rd Annual Meeting of the
+Association for Computational Linguistics (Volume 1: Long Papers), ACL 2025, Vienna, Austria,
+July 27 - August 1, 2025, pp. 3639–3664. Association for Computational Linguistics, 2025c. URL
+https://aclanthology.org/2025.acl-long.183/.
+Qiguang Chen, Libo Qin, Jinhao Liu, Dengyun Peng, Jiannan Guan, Peng Wang, Mengkang Hu,
+Yuhang Zhou, Te Gao, and Wanxiang Che. Towards reasoning era: A survey of long chain-ofthought for reasoning large language models. arXiv preprint arXiv:2503.09567, 2025.
+Jiale Cheng, Yusen Liu, Xinyu Zhang, Yulin Fei, Wenyi Hong, Ruiliang Lyu, Weihan Wang, Zhe
+Su, Xiaotao Gu, Xiao Liu, et al. Glyph: Scaling context windows via visual-text compression.
+arXiv preprint arXiv:2510.17800, 2025.
+Cheng Cui, Ting Sun, Suyin Liang, Tingquan Gao, Zelun Zhang, Jiaxuan Liu, Xueqing Wang,
+Changda Zhou, Hongen Liu, Manhui Lin, Yue Zhang, Yubo Zhang, Handong Zheng, Jing Zhang,
+Jun Zhang, Yi Liu, Dianhai Yu, and Yanjun Ma. Paddleocr-vl: Boosting multilingual document
+parsing via a 0.9b ultra-compact vision-language model, 2025. URL https://arxiv.org/
+abs/2510.14528.
+Daxiang Dong, Mingming Zheng, Dong Xu, Bairong Zhuang, Wenyu Zhang, Chunhua Luo, Haoran
+Wang, Zijian Zhao, Jie Li, Yuxuan Li, et al. Qianfan-vl: Domain-enhanced universal visionlanguage models. arXiv preprint arXiv:2509.18189, 2025.
+Angang Du, Bohong Yin, Bowei Xing, Bowen Qu, Bowen Wang, Cheng Chen, Chenlin Zhang,
+Chenzhuang Du, Chu Wei, Congcong Wang, Dehao Zhang, Dikang Du, Dongliang Wang, Enming Yuan, Enzhe Lu, Fang Li, Flood Sung, Guangda Wei, Guokun Lai, Han Zhu, Hao Ding,
+Hao Hu, Hao Yang, Hao Zhang, Haoning Wu, Haotian Yao, Haoyu Lu, Heng Wang, Hongcheng
+Gao, Huabin Zheng, Jiaming Li, Jianlin Su, Jianzhou Wang, Jiaqi Deng, Jiezhong Qiu, Jin
+Xie, Jinhong Wang, Jingyuan Liu, Junjie Yan, Kun Ouyang, Liang Chen, Lin Sui, Longhui Yu,
+Mengfan Dong, Mengnan Dong, Nuo Xu, Pengyu Cheng, Qizheng Gu, Runjie Zhou, Shaowei
+Liu, Sihan Cao, Tao Yu, Tianhui Song, Tongtong Bai, Wei Song, Weiran He, Weixiao Huang,
+Weixin Xu, Xiaokun Yuan, Xingcheng Yao, Xingzhe Wu, Xinxing Zu, Xinyu Zhou, Xinyuan
+Wang, Y. Charles, Yan Zhong, Yang Li, Yangyang Hu, Yanru Chen, Yejie Wang, Yibo Liu, Yibo
+Miao, Yidao Qin, Yimin Chen, Yiping Bao, Yiqin Wang, Yongsheng Kang, Yuanxin Liu, Yulun
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Du, Yuxin Wu, Yuzhi Wang, Yuzi Yan, Zaida Zhou, Zhaowei Li, Zhejun Jiang, Zheng Zhang,
+Zhilin Yang, Zhiqi Huang, Zihao Huang, Zijia Zhao, Ziwei Chen, and Zongyu Lin.
+Kimivl technical report. CoRR, abs/2504.07491, 2025. doi: 10.48550/ARXIV.2504.07491. URL
+https://doi.org/10.48550/arXiv.2504.07491.
+Tao Ge, Jing Hu, Lei Wang, Xun Wang, Si-Qing Chen, and Furu Wei. In-context autoencoder for
+context compression in a large language model, 2024. URL https://arxiv.org/abs/
+2307.06945.
+Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces, 2024.
+URL https://arxiv.org/abs/2312.00752.
+Wenyi Hong, Wenmeng Yu, Xiaotao Gu, Guo Wang, Guobing Gan, Haomiao Tang, Jiale Cheng,
+Ji Qi, Junhui Ji, Lihang Pan, et al. Glm-4.1 v-thinking: Towards versatile multimodal reasoning
+with scalable reinforcement learning. arXiv preprint arXiv:2507.01006, 2025.
+Cheng-Ping Hsieh, Simeng Sun, Samuel Kriman, Shantanu Acharya, Dima Rekesh, Fei Jia, Yang
+Zhang, and Boris Ginsburg. Ruler: What’s the real context size of your long-context language
+models?, 2024. URL https://arxiv.org/abs/2404.06654.
+DeLesley Hutchins,
+Imanol Schlag,
+Yuhuai Wu,
+Ethan Dyer,
+and Behnam Neyshabur.
+Block-recurrent transformers.
+In Sanmi Koyejo, S. Mohamed, A. Agarwal, Danielle
+Belgrave,
+K.
+Cho,
+and
+A.
+Oh
+(eds.),
+Advances
+in
+Neural
+Information
+Processing
+Systems
+35:
+Annual
+Conference
+on
+Neural
+Information
+Processing
+Systems
+2022,
+NeurIPS 2022,
+New Orleans,
+LA, USA, November 28 - December 9,
+2022,
+2022.
+URL
+http://papers.nips.cc/paper_files/paper/2022/hash/
+d6e0bbb9fc3f4c10950052ec2359355c-Abstract-Conference.html.
+Huiqiang Jiang, Qianhui Wu, Chin-Yew Lin, Yuqing Yang, and Lili Qiu. Llmlingua: Compressing
+prompts for accelerated inference of large language models, 2023. URL https://arxiv.
+org/abs/2310.05736.
+Carlos E. Jimenez, John Yang, Alexander Wettig, Shunyu Yao, Kexin Pei, Ofir Press, and Karthik R.
+Narasimhan.
+Swe-bench: Can language models resolve real-world github issues?
+In The
+Twelfth International Conference on Learning Representations, ICLR 2024, Vienna, Austria,
+May 7-11, 2024. OpenReview.net, 2024. URL https://openreview.net/forum?id=
+VTF8yNQM66.
+Gregory Kamradt. Needle in a haystack - pressure testing llms, 2023. URL https://github.
+com/gkamradt/LLMTest_NeedleInAHaystack.
+Angelos Katharopoulos, Apoorv Vyas, Nikolaos Pappas, and Franc¸ois Fleuret. Transformers are
+rnns: Fast autoregressive transformers with linear attention. In International conference on machine learning, pp. 5156–5165. PMLR, 2020.
+Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E.
+Gonzalez, Hao Zhang, and Ion Stoica. Efficient memory management for large language model
+serving with pagedattention. In Proceedings of the ACM SIGOPS 29th Symposium on Operating
+Systems Principles, 2023.
+Vladimir I. Levenshtein. Binary codes capable of correcting deletions, insertions, and reversals. Soviet physics. Doklady, 10:707–710, 1965. URL https://api.semanticscholar.org/
+CorpusID:60827152.
+Yubo Ma, Yuhang Zang, Liangyu Chen, Meiqi Chen, Yizhu Jiao, Xinze Li, Xinyuan Lu,
+Ziyu Liu, Yan Ma, Xiaoyi Dong, Pan Zhang, Liangming Pan, Yu-Gang Jiang, Jiaqi Wang,
+Yixin Cao, and Aixin Sun.
+MMLONGBENCH-DOC: benchmarking long-context document understanding with visualizations.
+In Amir Globersons, Lester Mackey, Danielle
+Belgrave, Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and Cheng Zhang (eds.), Advances
+in Neural Information Processing Systems 38:
+Annual Conference on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 -
+15, 2024, 2024.
+URL http://papers.nips.cc/paper_files/paper/2024/
+hash/ae0e43289bffea0c1fa34633fc608e92-Abstract-Datasets_and_
+Benchmarks_Track.html.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Minesh Mathew, Dimosthenis Karatzas, and C. V. Jawahar. Docvqa: A dataset for VQA on document images. In IEEE Winter Conference on Applications of Computer Vision, WACV 2021,
+Waikoloa, HI, USA, January 3-8, 2021, pp. 2199–2208. IEEE, 2021. doi: 10.1109/WACV48630.
+2021.00225. URL https://doi.org/10.1109/WACV48630.2021.00225.
+Junbo Niu, Zheng Liu, Zhuangcheng Gu, Bin Wang, Linke Ouyang, Zhiyuan Zhao, Tao Chu,
+Tianyao He, Fan Wu, Qintong Zhang, Zhenjiang Jin, Guang Liang, Rui Zhang, Wenzheng Zhang,
+Yuan Qu, Zhifei Ren, Yuefeng Sun, Yuanhong Zheng, Dongsheng Ma, Zirui Tang, Boyu Niu,
+Ziyang Miao, Hejun Dong, Siyi Qian, Junyuan Zhang, Jingzhou Chen, Fangdong Wang, Xiaomeng Zhao, Liqun Wei, Wei Li, Shasha Wang, Ruiliang Xu, Yuanyuan Cao, Lu Chen, Qianqian Wu, Huaiyu Gu, Lindong Lu, Keming Wang, Dechen Lin, Guanlin Shen, Xuanhe Zhou,
+Linfeng Zhang, Yuhang Zang, Xiaoyi Dong, Jiaqi Wang, Bo Zhang, Lei Bai, Pei Chu, Weijia Li, Jiang Wu, Lijun Wu, Zhenxiang Li, Guangyu Wang, Zhongying Tu, Chao Xu, Kai
+Chen, Yu Qiao, Bowen Zhou, Dahua Lin, Wentao Zhang, and Conghui He.
+Mineru2.5: A
+decoupled vision-language model for efficient high-resolution document parsing, 2025. URL
+https://arxiv.org/abs/2509.22186.
+Linke Ouyang,
+Yuan Qu,
+Hongbin Zhou,
+Jiawei Zhu,
+Rui Zhang,
+Qunshu Lin,
+Bin
+Wang, Zhiyuan Zhao, Man Jiang, Xiaomeng Zhao, Jin Shi, Fan Wu, Pei Chu, Minghao Liu, Zhenxiang Li, Chao Xu, Bo Zhang, Botian Shi, Zhongying Tu, and Conghui
+He.
+Omnidocbench:
+Benchmarking diverse PDF document parsing with comprehensive annotations.
+In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2025, Nashville, TN, USA, June 11-15, 2025, pp. 24838–24848. Computer Vision Foundation / IEEE, 2025.
+doi:
+10.1109/CVPR52734.2025.02313.
+URL
+https://openaccess.thecvf.com/content/CVPR2025/html/Ouyang_
+OmniDocBench_Benchmarking_Diverse_PDF_Document_Parsing_with_
+Comprehensive_Annotations_CVPR_2025_paper.html.
+Michael Poli, Stefano Massaroli, Eric Nguyen, Daniel Y. Fu, Tri Dao, Stephen Baccus, Yoshua
+Bengio, Stefano Ermon, and Christopher R´e. Hyena hierarchy: Towards larger convolutional
+language models, 2023. URL https://arxiv.org/abs/2302.10866.
+Xinkuan Qiu, Meina Kan, Yongbin Zhou, and Shiguang Shan. Benchmarking multimodal large
+language models against image corruptions. In Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 9014–9023, 2025.
+Stefano Rando, Luca Romani, Alessio Sampieri, Luca Franco, John Yang, Yuta Kyuragi, Fabio
+Galasso, and Tatsunori Hashimoto. Longcodebench: Evaluating coding llms at 1m context windows. arXiv preprint arXiv:2505.07897, 2025.
+ReportLab Inc. Reportlab toolkit, 2024. URL https://www.reportlab.com/.
+Zhihong Shao, Yuxiang Luo, Chengda Lu, ZZ Ren, Jiewen Hu, Tian Ye, Zhibin Gou, Shirong Ma,
+and Xiaokang Zhang. Deepseekmath-v2: Towards self-verifiable mathematical reasoning. arXiv
+preprint arXiv:2511.22570, 2025.
+Weiwei Sun, Miao Lu, Zhan Ling, Kang Liu, Xuesong Yao, Yiming Yang, and Jiecao Chen. Scaling
+long-horizon llm agent via context-folding, 2025. URL https://arxiv.org/abs/2510.
+11967.
+Yi Tay, Mostafa Dehghani, Dara Bahri, and Donald Metzler. Efficient transformers: A survey.
+CoRR, abs/2009.06732, 2020. URL https://arxiv.org/abs/2009.06732.
+Gemma Team. Gemma 3 technical report. CoRR, abs/2503.19786, 2025. doi: 10.48550/ARXIV.
+2503.19786. URL https://doi.org/10.48550/arXiv.2503.19786.
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez,
+Lukasz Kaiser, and Illia Polosukhin. Attention is all you need. In Isabelle Guyon, Ulrike von
+Luxburg, Samy Bengio, Hanna M. Wallach, Rob Fergus, S. V. N. Vishwanathan, and Roman
+Garnett (eds.), Advances in Neural Information Processing Systems 30: Annual Conference on
+Neural Information Processing Systems 2017, December 4-9, 2017, Long Beach, CA, USA, pp.
+5998–6008, 2017. URL https://proceedings.neurips.cc/paper/2017/hash/
+3f5ee243547dee91fbd053c1c4a845aa-Abstract.html.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Hengyi Wang, Haizhou Shi, Shiwei Tan, Weiyi Qin, Wenyuan Wang, Tunyu Zhang, Akshay Nambi,
+Tanuja Ganu, and Hao Wang. Multimodal needle in a haystack: Benchmarking long-context
+capability of multimodal large language models. In Luis Chiruzzo, Alan Ritter, and Lu Wang
+(eds.), Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technologies, NAACL 2025 - Volume 1:
+Long Papers, Albuquerque, New Mexico, USA, April 29 - May 4, 2025, pp. 3221–3241. Association for Computational Linguistics, 2025a. doi: 10.18653/V1/2025.NAACL-LONG.166. URL
+https://doi.org/10.18653/v1/2025.naacl-long.166.
+Weiyun Wang, Shuibo Zhang, Yiming Ren, Yuchen Duan, Tiantong Li, Shuo Liu, Mengkang Hu,
+Zhe Chen, Kaipeng Zhang, Lewei Lu, et al. Needle in a multimodal haystack. Advances in Neural
+Information Processing Systems, 37:20540–20565, 2024.
+Weiyun Wang, Zhangwei Gao, Lixin Gu, Hengjun Pu, Long Cui, Xingguang Wei, Zhaoyang
+Liu, Linglin Jing, Shenglong Ye, Jie Shao, Zhaokai Wang, Zhe Chen, Hongjie Zhang, Ganlin
+Yang, Haomin Wang, Qi Wei, Jinhui Yin, Wenhao Li, Erfei Cui, Guanzhou Chen, Zichen Ding,
+Changyao Tian, Zhenyu Wu, JingJing Xie, Zehao Li, Bowen Yang, Yuchen Duan, Xuehui Wang,
+Zhi Hou, Haoran Hao, Tianyi Zhang, Songze Li, Xiangyu Zhao, Haodong Duan, Nianchen Deng,
+Bin Fu, Yinan He, Yi Wang, Conghui He, Botian Shi, Junjun He, Yingtong Xiong, Han Lv, Lijun
+Wu, Wenqi Shao, Kaipeng Zhang, Huipeng Deng, Biqing Qi, Jiaye Ge, Qipeng Guo, Wenwei
+Zhang, Songyang Zhang, Maosong Cao, Junyao Lin, Kexian Tang, Jianfei Gao, Haian Huang,
+Yuzhe Gu, Chengqi Lyu, Huanze Tang, Rui Wang, Haijun Lv, Wanli Ouyang, Limin Wang, Min
+Dou, Xizhou Zhu, Tong Lu, Dahua Lin, Jifeng Dai, Weijie Su, Bowen Zhou, Kai Chen, Yu Qiao,
+Wenhai Wang, and Gen Luo. Internvl3.5: Advancing open-source multimodal models in versatility, reasoning, and efficiency. CoRR, abs/2508.18265, 2025b. doi: 10.48550/ARXIV.2508.18265.
+URL https://doi.org/10.48550/arXiv.2508.18265.
+Haoran Wei, Yaofeng Sun, and Yukun Li. Deepseek-ocr: Contexts optical compression. arXiv
+preprint arXiv:2510.18234, 2025.
+Ling Xing, Alex Jinpeng Wang, Rui Yan, Xiangbo Shu, and Jinhui Tang. Vision-centric token
+compression in large language model. arXiv preprint arXiv:2502.00791, 2025.
+Songlin Yang, Jan Kautz, and Ali Hatamizadeh. Gated delta networks: Improving mamba2 with
+delta rule. In The Thirteenth International Conference on Learning Representations, ICLR 2025,
+Singapore, April 24-28, 2025. OpenReview.net, 2025. URL https://openreview.net/
+forum?id=r8H7xhYPwz.
+Hongli Yu, Tinghong Chen, Jiangtao Feng, Jiangjie Chen, Weinan Dai, Qiying Yu, Ya-Qin Zhang,
+Wei-Ying Ma, Jingjing Liu, Mingxuan Wang, and Hao Zhou. Memagent: Reshaping long-context
+LLM with multi-conv rl-based memory agent. CoRR, abs/2507.02259, 2025. doi: 10.48550/
+ARXIV.2507.02259. URL https://doi.org/10.48550/arXiv.2507.02259.
+Jingyang Yuan, Huazuo Gao, Damai Dai, Junyu Luo, Liang Zhao, Zhengyan Zhang, Zhenda Xie,
+Yuxing Wei, Lean Wang, Zhiping Xiao, Yuqing Wang, Chong Ruan, Ming Zhang, Wenfeng
+Liang, and Wangding Zeng.
+Native sparse attention: Hardware-aligned and natively trainable sparse attention.
+In Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar (eds.), Proceedings of the 63rd Annual Meeting of the Association for
+Computational Linguistics (Volume 1: Long Papers), ACL 2025, Vienna, Austria, July 27 -
+August 1, 2025, pp. 23078–23097. Association for Computational Linguistics, 2025a.
+URL
+https://aclanthology.org/2025.acl-long.1126/.
+Qianhao Yuan, Jie Lou, Zichao Li, Jiawei Chen, Yaojie Lu, Hongyu Lin, Le Sun, Debing Zhang, and
+Xianpei Han. Memsearcher: Training llms to reason, search and manage memory via end-to-end
+reinforcement learning. arXiv preprint arXiv:2511.02805, 2025b.
+Jiawei Zhang, Tianyu Pang, Chao Du, Yi Ren, Bo Li, and Min Lin. Benchmarking large multimodal
+models against common corruptions. arXiv preprint arXiv:2401.11943, 2024.
+Hongbo Zhao, Meng Wang, Fei Zhu, Wenzhuo Liu, Bolin Ni, Fanhu Zeng, Gaofeng Meng, and
+Zhaoxiang Zhang. Vtcbench: Can vision-language models understand long context with visiontext compression?, 2025. URL https://arxiv.org/abs/2512.15649.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Anni Zou, Wenhao Yu, Hongming Zhang, Kaixin Ma, Deng Cai, Zhuosheng Zhang, Hai Zhao,
+and Dong Yu. DOCBENCH: A benchmark for evaluating llm-based document reading systems.
+CoRR, abs/2407.10701, 2024. doi: 10.48550/ARXIV.2407.10701. URL https://doi.org/
+10.48550/arXiv.2407.10701.
+A
+INFERENCE HYPERPARAMETERS
+Model Family
+Temp.
+Top-k
+Top-p
+Min-p
+Rep. Pen.
+Gemma3 Family
+1.0
+0.95
+0.0
+1.0
+Qwen3 Family
+0.7
+0.8
+–
+1.0
+Qwen2.5
+0.01
+–
+–
+–
+1.05
+Kimi-VL-A3B
+0.2
+–
+–
+–
+–
+Glyph
+1.0
+–
+–
+–
+–
+GLM-4.6V
+0.8
+0.6
+–
+–
+GLM-4.1V-9B
+0.8
+0.6
+–
+–
+InternVL3.5
+–
+–
+–
+–
+–
+Qianfan-VL-8B
+–
+–
+–
+–
+–
+PaddleOCR-VL
+–
+–
+–
+–
+–
+DeepSeek-OCR
+–
+–
+–
+–
+–
+Table 6: Inference hyperparameters used across all evaluated model families. “–” denotes parameters that are not applicable or not explicitly set. For DeepSeek-OCR, we use the recommended logits
+processor provided by the official implementation.
+B
+COMMON OCR FAILURE EXAMPLES
+Failure Mode
+Example Output
+Refusal
+I’m unable to convert this PDF image to Markdown format as requested. The image contains very dense academic text with numerous references and citations that are challenging to convert accurately.
+Code Switch
+2. [Zhengxing Zeng, et al. 2023.] [43] ... CVPR 2023: 要先做目
+标检测再做光流. Arxiv preprint arXiv:2303.07906.
+Repetitive Loop
+#include ¡sctrin¿ #include ¡sctrin¿ #include ¡sctrin¿ #include ¡sctrin¿ #include ¡sctrin¿ #ifndef sctrin¿ #include ¡sctrin¿ #include
+¡sctrin¿ #include ¡sctrin¿ . . .
+Table 7: Representative OCR failure modes observed in OCR-capable vision–language models.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+C
+DATASET DISTRIBUTIONS
+Figure 5: Distribution of the number of tokens per document.
+Figure 6: Distribution of the number of tokens per image.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Figure 7: Distribution of the number of pages per document.
+D
+NEEDLE DEPTH AND CONTEXT LENGTH ANALYSIS
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+(a) Gemma3-12B
+(b) Qwen2.5-VL-7B
+(c) Qwen3-VL-2B
+(d) Qwen3-VL-8B
+Figure 8: NIAH retrieval accuracy (part I).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+(a) Qianfan-VL-8B
+(b) GLM-4.1V-9B
+(c) InternVL3.5-8B
+(d) GLM-4.6V
+Figure 9: NIAH retrieval accuracy (part II).

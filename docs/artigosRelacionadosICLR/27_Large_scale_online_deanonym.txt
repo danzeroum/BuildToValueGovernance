@@ -1,0 +1,912 @@
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+LARGE-SCALE
+ONLINE
+DEANONYMIZATION
+WITH
+LLMS
+Anonymous authors
+Paper under double-blind review
+ABSTRACT
+We show that large language models erode the privacy offered by online pseudonymous accounts by enabling fully automated and highly effective deanonymization
+attacks at scale. We first demonstrate that today’s most capable LLM agents can
+deanonymize users in fully open-world settings, by autonomously searching the
+web, querying databases, and reasoning over evidence to identify real individuals
+from pseudonymous profiles alone. On the Anthropic Interviewer dataset, our agent
+replicates prior deanonymization results in minutes per target, matching what would
+take hours for a dedicated human investigator. We then design a scalable attack
+pipeline that uses LLMs to: (1) extract identity-relevant features from unstructured
+posts and comments, (2) match profiles via semantic search over large candidate
+sets, and (3) reason over top candidates to verify matches and reduce false positives.
+Unlike prior work that required structured data or manual feature engineering,
+our approach works directly on raw user content across arbitrary platforms. We
+build evaluation benchmarks with ground truth by exploiting naturally-occurring
+cross-platform links and by splitting single-user profiles into synthetic pairs. We
+evaluate on multiple settings: matching LinkedIn profiles to anonymized Hacker
+News accounts and linking users across Reddit movie discussion communities. In
+each setting, LLM-based methods substantially outperform classical baselines. Our
+results show that the practical obscurity protecting pseudonymous users online no
+longer holds and that threat models for online privacy need to be reconsidered.
+INTRODUCTION
+The principle that individuals can be uniquely identified from surprisingly few attributes has been
+understood for decades. Sweeney’s seminal work demonstrated that 87% of the U.S. population
+could be uniquely identified by just zip code, birth date, and gender (Sweeney, 2002). Narayanan and
+Shmatikov showed that anonymous Netflix ratings could be linked to public IMDb profiles using only
+a handful of movie preferences (Narayanan & Shmatikov, 2008), while De Montjoye et al. (2013)
+proved that four spatiotemporal points suffice to uniquely identify 95% of individuals in mobile phone
+datasets. Despite these vulnerabilities, the vast ecosystem of pseudonymous online accounts (Reddit
+throwaways, anonymous forums, review profiles, etc) has remained largely intact. The reason is
+simple: applying such attacks in practice has required either structured data amenable to algorithmic
+matching, or substantial manual effort by skilled investigators reserved for high-value targets (Garcia,
+2017).
+Our contributions.
+We demonstrate that large language models (LLMs) fundamentally change this
+calculus, enabling fully automated deanonymization attacks that operate on unstructured text at scale.
+Where previous approaches required predefined feature schemas, careful data alignment, and manual
+verification, LLMs can extract identity-relevant signals from arbitrary prose, efficiently search over
+millions of candidate profiles, and reason about whether two accounts belong to the same person. We
+show that the practical obscurity that has long protected pseudonymous users (the assumption that
+deanonymization, while theoretically possible, is too costly to execute broadly) no longer holds.
+We validate this thesis across three deanonymization settings, illustrated in Figure 1: (1) deanonymizing an online account to its real identity; (2) linking an identity to an unknown pseudonymous account;
+and (3) linking pseudonymous accounts of the same person across different platforms or time periods.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Figure 1: Three types of deanonymization attacks. Left: linking pseudonymous profiles to real
+identities (Section 2). Middle: linking known identities to pseudonymous accounts (Section 4). Right:
+linking pseudonymous profiles across platforms (Section 5).
+These settings capture distinct threat models (e.g., doxxing of an online account, a stalker targeting a
+victim, or an adversary consolidating a user’s activity across contexts) and pose different technical
+challenges.
+For the first setting, we demonstrate that state-of-the-art LLM agents show early signs of being
+able to perform end-to-end deanonymization fully autonomously on the open web. This is the most
+challenging setup we consider, which highlights the paradigm shift that LLMs bring about in online
+privacy. Given only an anonymous online profile, our LLM agents autonomously search the web,
+query databases, enumerate candidate identities, and reason over evidence to identify which identity
+the profile belongs to. In a study of Hacker News and Reddit profiles, these agents achieve 25–67%
+recall with precision 70–90%, replicating in minutes what would take hours for a dedicated human
+investigator. This capability requires no custom engineering: we simply prompt frontier agents with
+an online profile and ask the agent to uncover the identity behind it.
+For the second and third settings (linking pseudonymous accounts to an identity or across platforms)
+we develop a systematic Extract-Search-Verify (ESV) pipeline that decomposes deanonymization
+into three LLM-augmented stages. In the extraction stage, we prompt LLMs to identify and structure
+identity-relevant features from unstructured posts: biographical details, writing style, temporal
+patterns, topical interests, incidental disclosures, etc. Unlike prior work that operated on predefined
+feature vectors (e.g., numerical movie ratings (Narayanan & Shmatikov, 2008)), our approach
+captures the rich, heterogeneous signals present in natural language. In the search stage, we encode
+extracted features into dense embeddings and perform approximate nearest-neighbor search over large
+candidate sets, enabling efficient retrieval from thousands or millions of profiles. In the verification
+stage, we provide an LLM with full context for top-ranked candidates and use extended reasoning to
+assess match likelihood, eliminating false positives that similarity scores alone cannot detect.
+Our ESV pipeline substantially outperforms adaptations of prior deanonymization techniques (Narayanan & Shmatikov, 2008). Ablation studies confirm that frontier LLMs contribute at
+each pipeline stage: the verification step alone, which uses multi-step reasoning to rank candidates,
+improves precision at fixed recall substantially.
+An orthogonal contribution of our work is an evaluation framework for large-scale deanonymization attacks, which we believe can be broadly useful for follow-up studies. Indeed, evaluating
+deanonymization attacks at scale poses inherent challenges, since ground-truth labels are difficult
+to obtain without compromising the privacy of real users. As a result, previous work evaluated
+scale through synthetic data (Narayanan & Shmatikov, 2009) and relied on manual verification
+or guess-work to validate attacks on real data (Narayanan & Shmatikov, 2008). We propose an
+alternative that balances ecological validity with research ethics. We identify profiles that are not fully
+anonymous (for instance, a Hacker News account whose “about” field links to a LinkedIn profile)
+then render them pseudonymous for evaluation by removing all direct identifiers. We then measure
+whether our methods can recover the removed link. Although this approach may not capture the
+behavior of the most privacy-conscious users, it provides verifiable ground truth at scale and enables
+rigorous comparison across methods.
+Implications.
+Our findings have significant implications for online privacy. The average online user
+has long operated under an implicit threat model in which pseudonymity provides adequate protection
+because targeted deanonymization requires prohibitive effort (which would thus be reserved for highvalue targets). LLMs invalidate this assumption. They do not so by exceeding human capability—the
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+signals our models exploit are ones that a skilled investigator would also recognize—but by reducing
+cost.
+When privacy attacks against “anonymized” structured data were introduced, it became rapidly clear
+that the only effective mitigation was simply not to release such data at all (Narayanan & Shmatikov,
+2008). However, the unstructured text that enables our attacks is the very content that makes online
+communities valuable. We therefore argue that privacy expectations, platform policies, and social
+norms that govern pseudonymous participation online require urgent reconsideration. We hope that
+this work can spark that conversation.
+AI AGENTS CAN FIND REAL IDENTITIES FROM ANONYMIZED USER DATA
+The most direct form of a deanonymization attack is to discover someone’s real identity based on
+their pseudonymous online posts. To evaluate whether LLM agents can perform this attack, we
+construct different datasets that closely mimic this scenario, but where we have a known ground truth
+correspondence of the pseudonymous and real identities.
+We anonymize profiles by removing information that a direct web search would resolve to a specific
+person, while retaining information that requires reasoning to be identifying. We remove personal
+URLs, social media handles, and GitHub repositories (which directly identify the owner), generalize
+unique project names (e.g., “Founded C# Inn” becomes “Founded a programming community”), and
+retain institutions, demographics, interests, and colleague names (which are too broad to identify
+the profile owner alone). The goal is to remove enough information to create a task that would be
+nontrivial for a motivated human with access to a web search engine. To evaluate, we start from
+profiles with known identities, apply this anonymization, and check whether the agent recovers the
+correct person. We do this only for evaluation purposes; any in-the-wild attack on pseudonymous
+profiles would skip this step entirely.
+In our setting, the agent receives a text description of a person (derived from their pseudonymous
+posts) and attempts to find their real identity by searching the web, cross-referencing sources, and
+reasoning over evidence.
+Our pipeline proceeds as follows:
+1. Summarize the user’s posts into a profile containing stated and inferred facts about demographics, career history, interests, and so on.
+2. Generate a search query from the profile. Anonymize the query by removing names, handles,
+and unique identifiers that would enable direct search.
+3. Pass the anonymized query to an LLM agent with web search tools. The agent iteratively
+searches, cross-references findings, and attempts to identify the person.
+Following Li (2026), to prevent misuse, we do not publish the agent, exact prompts, or tool configurations used.
+A simple agentic setup works. We find the default settings of a commonly used agent with minimal
+prompting work well. The main practical challenges are (1) selecting which user comments to include
+in the summary; (2) anonymizing the profile enough to make the task nontrivial; (3) retrying when the
+agent refuses to do the task; (4) making sure the agent does not output a match when it is not certain.
+2.1
+RESULTS
+We evaluate our agentic pipeline on three ground-truth datasets starting from Hacker News and Reddit
+profiles. In the interest of research ethics, we do not evaluate our method on any truly pseudonymous accounts on Hacker News and Reddit. We additionally report deanonymization of genuinely
+pseudonymous Anthropic Interviewer transcripts that were the subject of prior deanonymization
+research (Li, 2026).
+Hacker News →LinkedIn. We collect 338 Hacker News (HN) users who linked a LinkedIn profile
+in their HN bio, providing verified real-world identities as ground truth. We summarize each user’s
+HN activity (comments and stories) into a structured profile, anonymize it following the procedure
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+described above, and pass it to the agent. The agent correctly identifies 226 of 338 targets (67%) at
+90% precision (95% CI: 86–93%; 25 incorrect identifications, 86 abstentions).
+Reddit academics. We curate 25 identifiable Reddit users posting on academic subreddits whose
+usernames reveal their real names. We manually verified each ground-truth identity, excluding
+ambiguous cases. Then we anonymize their profiles to remove any direct identifiers, such as names
+or paper titles; but preserve any research interests or institutions they mention on their social media
+profile. The agent correctly identifies 13 of 25 (52%) with 72% precision (5 incorrect, 7 abstentions).
+Reddit career discussions. We collect 36 users who posted their own LinkedIn URL for resume
+review on a software engineering career subreddit. We manually check each ground-truth identity,
+excluding ambiguous cases as good as possible. After anonymizing their Reddit profiles, the agent
+correctly identifies 9 of 36 (25%) at 90% precision (1 incorrect, 26 abstentions). The lower recall
+likely reflects that career discussion posts are less uniquely identifying: when we remove direct
+identifiers, many user’s comments discuss generic software engineering topics without mentioning
+employers, projects, or credentials that would distinguish them from other users.
+Anthropic Interviewer transcripts. Anthropic publicly released transcripts of 125 AI-conducted
+interviews with scientists (Handa et al., 2025; Anthropic, 2025), in which participants described their
+research projects in detail. Li (2026) showed that LLM agents with web search can match project
+descriptions in these transcripts to published papers; specifically, they use a task decomposition
+approach (Jones et al., 2024) to bypass safeguards by breaking down the attack into individually
+benign tasks. They ultimately run their attack on 24 scientists conversations and recover 6 identities.
+We attack the same dataset with our pipeline, without task decomposition. Concretely, we constructing
+profiles from transcripts in a similar way as we do for Hacker News and Reddit users; and then
+run the agentic search on 33 scientists that describe their research in enough detail to be searchable
+(as judged by an LLM). We skip the anonymization step here: the transcripts by design contain no
+platform handles or usernames, and we report deanonymization judged by a human, following the
+precedent set by Li (2026).
+SCALABLE DEANONYMIZATION FRAMEWORK WITH LLMS
+While the previous case study demonstrates that AI agents can deanonymize users autonomously, it
+has notable shortcomings.
+As a solution, we introduce a deanonymization framework based on the seminal work of Narayanan
+& Shmatikov (2008). Their attack serves as a “classical” baseline, which is restricted to structured
+data and conventional algorithms. Inspired by this classical method, we introduce a deanonymization
+framework consisting of (mostly) independent components. Our framework allows us to systematically demonstrate how LLMs can augment and improve typically deanonymization attacks.
+We first define our threat model and deanonymization framework in Section 3.1 and Section 3.2,
+respectively. In Section 3.3, we then introduce an evaluation procedure to quantify the effectiveness
+of LLM-based deanonymization for different settings.
+3.1
+THREAT MODEL
+We build upon Narayanan & Shmatikov (2008), which introduces large-scale deanonymization
+attacks by reconstructing micro-data. Micro-data is information at the level of an individual, such as
+“gave Twilight a 5-star rating”, “lives in Texas”, or “never capitalizes sentences”. This information
+alone may not be identifying. However, it can identify a pseudonymous account by matching their
+micro-data against a database of micro-data with known identities. The attack by Narayanan &
+Shmatikov (2008) (henceforth termed the “Narayanan-attack”) does precisely this: it reconstructs
+anonymized user data from the Netflix Prize competition by matching movie ratings to public IMDb
+profiles.
+We use a simpler attack model that focuses on matching instead of reconstruction. Our goal is to
+empirically demonstrate that LLMs effectively deanonymize pseudonymous online identities; therefore, we forgo reconstruction of micro-data and instead just consider matching profiles. Concretely,
+our attacker is given a query user profile and a set of candidate user profiles. Given those inputs,
+the attacker either returns a best-guess match of the query user in the candidate set or abstains. The
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+attacker’s goal is to produce a correct guess if the query user has a corresponding candidate profile,
+and it should abstain if there is no matching candidate.
+The matching problem’s difficulty depends on two key factors: the size of the candidate set and how
+likely the query user is to have a matching candidate. First, larger candidate sets are trivially harder:
+Given only two candidates (one of which is a correct match), even random guessing correctly guesses
+about half of all queries. In contrast, identifying the correct user in 10k candidates requires a much
+stronger attacker. Second, if there is no matching candidate for a given query user, then any guess
+(i.e., not abstaining) is an error. Thus, the probability of a query user being matchable affects the
+attacker’s precision.
+We explicitly instantiate the attack model in terms of difficulty. For simplicity, we generally use a
+fixed candidate set for each setting, and we assume a best-case scenario where every query user has a
+true match in the candidate set.
+3.2
+DEANONYMIZATION FRAMEWORK
+Our deanonymization framework structures around the Narayanan-attack’s four main components.
+This allows us to study different LLM-based deanonymization attacks in a systematic framework and
+enables a direct comparison to classical methods. Concretely, our framework defines deanonymization
+attacks through the following four steps:
+1. Micro-data: The attack first needs to obtain micro-data for query and candidate users. The
+original Narayanan-attack directly receives structured micro-data in the form of Netflix and
+IMDb rating vectors as its input. For arbitrary online profiles, we can use LLMs to extract
+semi-structured summaries from unstructured posts and comments.
+2. Scoring function: For every query-candidate pair, the attack then calculates a similarity
+score between the two profiles’ micro-data. This might be a weighted inner product between
+binary vectors of micro-data or the cosine similarity between LLM embeddings.
+3. Record selection: Based on the similarity scores, the attack selects a “best-guess” candidate
+per query user. For example, this could be the highest-scoring candidate or an LLM picking
+the best out of a few high-scoring candidates.
+4. Matching criterion: Finally, the matching criterion decides whether to output a “bestguess” candidate or to abstain. We use a threshold-based approach to control the attack’s
+confidence, either explicitly (e.g., by thresholding a similarity-based confidence as in the
+Narayanan-attack), or implicitly (e.g., by ranking query-candidate pairs and abstaining for
+low-raking ones).
+The classical Narayanan-attack requires structured micro-data. Users of pseudomized platforms, such
+as Reddit, inadvertently reveal lots of information. However, because most of it is only available as
+unstructured text, the Narayanan-attack can only utilize a small subset of the available micro-data
+(e.g., subreddit memberships). Thus, while powerful, the Narayanan-attack is limited to specific
+settings where sufficient structured micro-data is available.
+LLMs can process and reason over unstructured micro-data. LLMs excel at extracting information
+from unstructured text. Thus, they enable a larger class of deanonymization attacks while potentially
+exploiting much more micro-data. Additionally, in contrast to classical algorithms, LLMs have
+moderate reasoning and deduction capabilities. Those capabilities, as we will demonstrate, enable
+highly effective deanonymization for domains with limited structured micro-data—where classical
+attacks fail.
+3.3
+EVALUATION
+We instantiate our deanonymization framework in settings with verifiable ground truth. To obtain
+such ground truth, we use two approaches: First, we search for user profiles that explicitly link
+themselves to other platforms (e.g., a Hacker News user posts their LinkedIn account). Since those
+profiles trivially expose links, we carefully sanitize them. In practice, we found only few users who
+explicitly link their pseudonymous account to other platforms. Hence, as a second option, we split a
+single user’s profile into two semantically distinct parts (e.g., temporally). Those splits provide the
+strongest source of ground truth information at the cost of being less realistic.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Verifiable ground truth introduces distributional biases. The corresponding profiles are likely easier
+to deanonymize than an average profile: the very fact that ground truth exists implies that the user
+may not have cared about anonymity in the first place. Similarly, two split-profiles of a single user
+are inherently alike, whereas two pseudonymous accounts of the same person (e.g., an official and a
+pseudonymous alt account) might expose more heterogeneous micro-data.
+We thus focus on methods with very few false positives. Due to the aforementioned biases, our
+evaluation on ground truth settings might overestimate an attack’s recall (how many users are
+successfully deanonymized). But we argue that the false positive rate (i.e., the likelihood of a
+wrong guess instead of abstaining) does transfer to real-world attacks; there is no reason why a
+well-calibrated attacker should make more wrong guesses on the average internet profile than on our
+ground truth profiles. Similar to Narayanan & Shmatikov (2008), we hence focus on attacks with a
+very low false positive rate. This ensures that, whenever our attacks do return a guess, the guess is
+likely to be correct—independent of the setting.
+Concretely, we report Recall@Precision for high precision values. Informally, recall measures the
+fraction of correct attacker guesses, while precision measures how many non-abstentions are correct.
+We hence define recall (or True Positive Rate (TPR)) as the fraction of matchable users (i.e., users
+with a corresponding match in their candidate set) that the attacker guesses correctly, and precision
+as the fraction of all non-abstentions that are correct. Since all our attacks return guesses with a
+confidence score, we use a confidence threshold to control precision.
+FINDING HACKER NEWS ACCOUNTS OF LINKEDIN USERS
+We begin our evaluation with cross-platform matching between LinkedIn and Hacker News, where
+ground truth comes from users who explicitly linked their accounts. This setting closely mirrors a
+real-world attack.
+We construct a dataset to simulate the task of finding a known person’s pseudonymous account. We
+collect 995 users with a known matching between their LinkedIn profiles and Hacker News (HN)
+accounts (ground truth is established by users who posted their LinkedIn URL in their HN bio),
+drawn from a candidate pool of approximately 89,000 active HN users. The LinkedIn side represents
+the known identity with real professional profiles. The HN side serves as the anonymized target: we
+remove names, URLs, and other direct identifiers from bios using an LLM to prevent trivial matching.
+The task is to match a LinkedIn profile to the corresponding LLM-anonymized HN account.
+Narayanan-attack baseline. As a baseline, we adapt the approach of Narayanan & Shmatikov (2008)
+to professional attributes: programming languages, cities, companies, schools, job roles, and seniority
+levels. Each user is represented as a binary vector over 332 attributes, and we rank candidates by
+rarity-weighted Jaccard similarity.
+LLM-based embeddings outperform hand-crafted features. Following the framework introduced in
+Section 3, we compare the Narayanan-attack baseline against our LLM-based approach. Instead of
+manually extracting structured attributes into binary vectors, we use an LLM to summarize each user’s
+activity (comments, stories, and other posts) into a biographical profile, which is then embedded to
+allow efficient comparison across all users. Figure 2a shows the precision-recall tradeoff for both
+methods. The embedding-based approach substantially outperforms the NS-method baseline across
+all metrics, which ranks 5.1% of candidates correctly as the Top 1 match.
+LLM re-ranking further improves matching. Beyond embeddings, we apply LLM-based re-ranking
+to the top-100 candidates retrieved by embedding similarity. The embedding search selects a limited
+number of candidates, which the LLM can then verify with constant cost per query user. As shown in
+Figure 2a, re-ranking yields substantial gains in precision and recall over the other methods. The
+ability of LLMs to select from a number of candidate and use reasoning complements embeddingbased retrieval.
+Scaling to larger candidate pools. A crucial question for any deanonymization attack is how performance scales with candidate pool size. Here, we evaluate how matching accuracy degrades as the
+candidate pool grows from 1k to 89k users. As shown in Figure 2b, accuracy decreases apparently
+log-linearly with pool size: top-1 accuracy drops from 60% at 1k candidates to 43% at 89k, while
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Recall (% of all queries)
+Precision (%, logit scale)
+Verify (LLM)
+Search (embeddigns)
+Narayanan (baseline)
+(a) Precision-recall curves.
+1,000
+10,000
+100,000
+1,000,000
+Candidate pool size
+Accuracy (%)
+Top-1 accuracy
+Top-100 accuracy
+(b) Scaling with candidate pool size.
+Figure 2: LinkedIn to Hacker News matching. (a) Precision-recall curves comparing methods: LLMbased embeddings outperform the Narayanan-attack baseline, and LLM re-ranking of the top-100
+candidates further improves performance. (b) Matching accuracy vs. candidate pool size. Dashed
+lines show log-linear extrapolation to larger pools.
+Table 1: Recall at different precision thresholds for HN-LinkedIn cross-dataset user matching (995
+queries). LLM reranking uses Grok 4.1 Fast (xAI, 2025). 95% Wilson CIs shown.
+Method
+90% Prec
+98% Prec
+99% Prec
+Embeddings only
+8.4%
+1.2%
+1.2%
+separation
+(6.9–10.3)
+(0.7–2.1)
+(0.7–2.1)
+LLM rerank
+67.9%
+63.5%
+42.0%
+Grok 4.1 Fast
+(65.0–70.8)
+(60.5–66.5)
+(39.0–45.1)
+top-100 recall remains above 70%. Log-linear extrapolation to 1M candidates suggests top-1 recall
+around 34%.
+LINKING USERS ACROSS REDDIT MOVIE COMMUNITIES
+To enable direct comparison with the classical Netflix Prize deanonymization attack (Narayanan &
+Shmatikov, 2008), where users were identified across Netflix and IMDb based on movie preferences,
+we construct a separate experiment using only movie-related Reddit activity. This provides a clean
+comparison: both methods operate on the same micro-data features (subjective movie reviews) but
+differ in how they represent users—we use transformer-derived text embeddings, while Narayanan &
+Shmatikov (2008) relied on hand-crafted features.
+This setup mimics a situation in which a user maintains pseudonymous accounts on different platforms
+discussing similar topics. In our case, the communities discuss either mainstream movies (r/movies)
+or more niche alternatives. This also provides a method to understand the relationship between how
+much micro-data someone shares and how identifiable they become: unlike most online activity,
+movie discussions offer an intuitive discrete metric—the number of movies discussed and the overlap
+of shared movies across datasets.
+Our Reddit movies dataset consists of different movie discussion communities (“subreddits”) from
+2024. We collected data from six movie-related subreddits, partitioning r/movies (the largest general
+movie discussion community) from five smaller specialized communities (r/horror, r/MovieSuggestions, r/Letterboxd, r/TrueFilm, and r/MovieDetails); we refer to the union of these five as the
+alternative movie communities. Crucially, we use LLMs to convert unstructured Reddit submissions—
+which may contain discussions, recommendations, or casual mentions—into structured movie reviews
+with movie titles, ratings, and dates. Ratings are typically estimated by the LLM based on sentiment.
+This transformation allows us to construct user profiles consisting solely of movie reviews, which
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Recall (% of all queries)
+Precision (%, logit scale)
+Verify (LLM)
+Search (embeddings)
+Narayanan (baseline)
+(a) Precision-recall curve for Reddit matching.
+3-4
+5-9
+10+
+Overall
+Number of Shared Movies
+Recall (%)
+90% precision
+98% precision
+99% precision
+(b) Recall by number of shared movies.
+Figure 3: (a) Precision-recall curves comparing high reasoning verification with simple classifiers
+based on the relative gap between the two best matches (separation) by cosine similarity of transformerderived embeddings, as well as a hand-crafted vector method analogous to the Narayanan-attack. (b)
+Recall at precision thresholds by number of shared movies, using GPT-5.2 high reasoning. Users
+who share more movies are substantially easier to identify: at 90% precision, recall increases from
+3.4% (1 shared movie) to 49.8% (10+ shared movies).
+Stage 1: Re-ranking Top-k nearest neighbors
+Query: Neon Horizon 7/10 “loved Timothee in the
+rooftop fight”
+A: Neon Horizon 8/10 “great visuals”
+B: Neon Horizon 6/10 “Timothee carried it, that rooftop
+scene was insane”
+C: Blade Runner 10/10 “masterpiece”
+LLM Output: B (conf: 0.85). “A lacks actor/scene details.
+C wrong movie. B matches on Timothee + rooftop.”
+Stage 2: Verification of selected match
+Query: “loved Timothee in the rooftop fight, the choreography with the neon signs was so good”
+B: “Timothee carried it, that rooftop scene with all the
+neon lighting was insane”
+LLM Output: MATCH (conf: 0.94). “Both mention Timothee, rooftop scene, and neon aesthetic—three specific
+details unlikely to co-occur by chance.”
+Figure 4: Two-stage matching of movie reviews with simplified synthetic user profiles. Stage 1
+re-ranks candidates based on truncated profiles from embedding search; Stage 2 verifies the top match
+using full profile text. Bold text highlights discriminating details used by the LLM.
+can be transformed into Netflix rating vectors analogous to Narayanan & Shmatikov (2008). Profiles
+contain only movie reviews, they do not contain any other micro-data which may be used to match
+users.
+This Reddit movies dataset provides a challenging matching task: users share an average of 2.5
+movies between datasets, with 48% of users sharing only a single movie across their r/movies and
+alternative movie communities accounts. We filter to users with at least one shared movie, as users
+with no overlap cannot be reasonably matched by movie reviews. This leaves us with 9781 users. We
+use fuzzy string matching of movie titles to determine the number of shared movies across splits.
+The model outputs a confidence score for each match decision via function calling; this allows us to
+use a threshold to trade off precision and recall. Figure 4 shows example confidence values for both
+re-ranking and verification stages.
+Using GPT-5.2 (OpenAI, 2025), we evaluate whether setting reasoning effort to low or high affects
+matching performance. High reasoning significantly outperforms low reasoning across all thresholds:
+at 90% precision, high reasoning achieves 8.5% recall compared to 5.2% for low reasoning (a 63%
+relative improvement). At 99% precision, high reasoning achieves 2.8% recall versus 1.4% for low
+reasoning (a 100% relative improvement). These differences are statistically significant (p < 0.05).
+Our results demonstrate that increased reasoning effort (test-time compute) substantially improves
+deanonymization success.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Users who share more content are substantially easier to identify. As shown in Figure 3b, recall
+increases sharply with the number of shared movies: at 90% precision, recall rises from 3.4% for
+users with one shared movie to 49.8% for users with ten or more.
+RELATED WORK
+Deanonymization attacks predate LLMs but were limited to structured data or high manual effort.
+Narayanan & Shmatikov (2008) demonstrated that movie ratings can uniquely identify individuals
+across platforms: by matching Netflix Prize data against public IMDb profiles, they deanonymized
+users at scale using statistical techniques on structured micro-data. Their work established the threat
+model we build upon, showing that even sparse, seemingly innocuous data can be identifying when
+matched against auxiliary datasets. The same authors showed that social graph structure alone can
+deanonymize users by matching connection patterns across networks (Narayanan & Shmatikov, 2009).
+Wondracek et al. (2010) exploited group membership information to deanonymize social network
+users, showing that the groups a user joins are often sufficient to uniquely identify them. More
+recently, Ederer et al. (2024) deanonymized users of the Economics Job Market Rumors forum by
+exploiting weaknesses in its username generation scheme, recovering IP addresses for 66% of posts.
+These classical approaches required either structured features, exploitable technical vulnerabilities, or
+graph structure—none could operate on unstructured text at scale.
+Stylometry identifies users through writing style (Stamatatos, 2009; Tyo et al., 2022); our approach
+relies on semantic information—what users write about—rather than how they write.
+LLMs enable inference of personal attributes from unstructured text. Staab et al. (2024) show that
+LLMs can infer personal attributes such as location, occupation, and income from text with high
+accuracy, demonstrating privacy risks beyond training data memorization. Du et al. (2025a) extend
+this line of work with AutoProfiler, a system of four specialized LLM agents that collaboratively
+extract sensitive attributes from pseudonymous platform activity. They report 85-92% accuracy in
+attribute extraction, demonstrating that automated profiling can be deployed at web scale. However,
+their evaluation of actual deanonymization—linking extracted attributes to real identities—relies on
+manual LinkedIn searches and reports k-anonymity metrics rather than the high-precision matching
+we focus on. Conversely, Staab et al. (2025) show that LLMs can be used to anonymize text while
+preserving utility, suggesting a potential defensive application of the same capabilities. Du et al.
+(2025b) survey emerging privacy risks from LLM deployment, distinguishing training-time data
+leakage from deployment-time threats such as automated profiling and social engineering.
+Recent work has begun exploring LLM-based deanonymization directly. Li (2026) showed that
+agentic LLMs can deanonymize interview participants via web search, demonstrating that LLM
+agents make re-identification attacks low-effort: with a few natural-language prompts, off-the-shelf
+tools can search the web, cross-reference details, and propose matches. Their work on the Anthropic
+Interviewer dataset (Handa et al., 2025; Anthropic, 2025) recovered 6 of 24 scientist identities by
+matching project descriptions to published papers, using task decomposition (Jones et al., 2024) to
+bypass safeguards. Nyffenegger et al. (2024) evaluate LLM re-identification capabilities on court
+decisions, finding that despite high re-identification rates on Wikipedia, even the best LLMs struggled
+with anonymized legal documents—suggesting that deanonymization difficulty depends heavily
+on domain-specific context. Our work extends this line of research by developing a systematic
+framework for LLM-based deanonymization and evaluating it across multiple platforms and attack
+settings.
+More broadly, deanonymization is one of many ways LLMs empower adversaries: Carlini et al.
+(2025) argue that LLMs alter the economics of cyberattacks by enabling tailored attacks on a userby-user basis, and Heiding et al. (2024) demonstrate that LLM agents can autonomously construct
+comprehensive profiles for spear phishing.
+DISCUSSION
+Deanonymization is one instance of AI acting as an “information microscope” that makes previously
+manual and expensive attacks scalable (Hammond, 2025). Our papers shows LLMs democratize
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+deanonymization, the asymmetry between attack cost and defense cost may force a fundamental
+reassessment of what can be considered private online.
+What do our findings mean for the future of privacy? Governments could link pseudonymous
+accounts to real identities for surveillance of dissidents or activists; corporations could connect forum
+posts to customer profiles for hyper-targeted advertising; attackers could build profiles at scale for
+personalized social engineering.
+Our evaluation relies on ground truth datasets that may overestimate real-world success rates. Users
+who publicly link their accounts or share identifying information may still share more information than
+they would for truly pseudonymous accounts, even considering our anonymization step. However,
+measuring deanonymization performance requires ground truth, and we cannot verify matches
+for users who have not revealed their identities. That our methods work across a broad range of
+experimental setups suggests they generalize beyond any single evaluation setting.
+Platforms should assume that pseudonymous users can be linked across accounts and to real identities
+at scale, influencing decisions on data access policies; users should likewise not assume that posting
+under a pseudonym provides meaningful protection. Rate limiting API access, detecting automated
+scraping, and restricting bulk data exports may slow but not prevent these attacks; LLM providers
+could also monitor model use to detect deanonymization attempts (Sumers et al., 2025).
+Classical anonymization frameworks such as k-anonymity (Sweeney, 2002) and differential privacy (Dwork, 2006; Dwork & Roth, 2014) were designed for structured databases with explicit
+identifiers and assume attackers use direct matching or statistical queries. These frameworks do not
+account for the types of attacks we demonstrate; data releases should consider such threats when
+evaluating privacy risks.
+Do models use reasoning or memorization?
+One might wonder whether LLMs succeed at
+deanonymization because they memorized Reddit or Hacker News data during training. The fact
+that increasing reasoning effort substantially improves performance (Section 5) provides tentative
+evidence that reasoning plays a significant role. The training data for LLMs is typically not openly
+revealed, making it challenging to isolate these factors. We suspect that Hacker News and Reddit are
+part of most training corpora but LinkedIn profiles are not. More broadly, even if memorization plays
+a role, this does not diminish the privacy implications: many social media platforms are included in
+LLM training corpora, so the deanonymization threat would only be reduced for platforms excluded
+from training data.
+CONCLUSION
+We demonstrate that LLMs enable deanonymization of pseudonymous online accounts at scale,
+outperforming classical methods. Across cross-platform matching, profile splitting, and agentic web
+search, LLM-based methods consistently achieve higher recall at equivalent precision compared
+to classical baselines based on hand-crafted features. In many cases, they can perform attacks that
+wouldn’t have previously been possible.
+These attacks require only publicly available models and standard APIs. Our pipeline uses only
+publicly available embedding models, standard LLM APIs, and LLM-agent scaffolding, placing them
+within reach of moderately resourced adversaries.
+The assumption that pseudonymity provides meaningful protection online is no longer valid. Users
+who post under persistent usernames should assume that adversaries can link their accounts to real
+identities or to each other, and that the probability rises with each piece of micro-data they post.
+Refusal is not a meaningful barrier to deanonymization misuse in today’s models. Li (2026) report
+successfully executing a task decomposition strategy to bypass refusal. We find this is even less
+of an issue with the particular AI agent we use, and that with properly formatted queries, the
+deanonymization task can be fully specified to the agent with low overall refusal rates.
+REFERENCES
+Anthropic. Anthropic interviewer dataset, December 2025. URL https://huggingface.
+co/datasets/Anthropic/AnthropicInterviewer.
+Archived
+at
+https:
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+//web.archive.org/web/20251207050016/https://huggingface.co/
+datasets/Anthropic/AnthropicInterviewer.
+Nicholas Carlini, Milad Nasr, Edoardo Debenedetti, Barry Wang, Christopher A. Choquette-Choo,
+Daphne Ippolito, Florian Tramèr, and Matthew Jagielski. LLMs unlock new paths to monetizing
+exploits. arXiv preprint arXiv:2505.11449, 2025. URL https://arxiv.org/abs/2505.
+11449.
+Yves-Alexandre De Montjoye, César A Hidalgo, Michel Verleysen, and Vincent D Blondel. Unique
+in the crowd: The privacy bounds of human mobility. Scientific reports, 3(1):1376, 2013.
+Yuntao Du, Zitao Li, Bolin Ding, Yaliang Li, Hanshen Xiao, Jingren Zhou, and Ninghui Li. Automated
+profile inference with language model agents. arXiv preprint arXiv:2505.12402, 2025a.
+Yuntao Du et al. Beyond data privacy: New privacy risks for Large Language Models. arXiv preprint
+arXiv:2509.14278, 2025b.
+Cynthia Dwork. Differential privacy. In International Colloquium on Automata, Languages and
+Programming (ICALP), volume 4052, pp. 1–12, 2006.
+Cynthia Dwork and Aaron Roth. The algorithmic foundations of differential privacy. Foundations
+and Trends in Theoretical Computer Science, 9(3-4):211–407, 2014.
+Florian Ederer, Paul Goldsmith-Pinkham, and Kyle Jensen. Anonymity and identity online. arXiv
+preprint arXiv:2409.15948, 2024.
+Jennifer Lynnae Garcia.
+The evidentiary trail down Silk Road.
+2017.
+URL https:
+//www.researchgate.net/publication/319164300_The_Evidentiary_
+Trail_Down_Silk_Road.
+Samuel Hammond.
+AI and Leviathan: Part I.
+Second Best, 2025.
+URL https://www.
+secondbest.ca/p/ai-and-leviathan-part-i.
+Karina Handa, Max Stern, Sandy Huang, Jessica Hong, Esin Durmus, Miles McCain, Grace
+Yun, Alex Alt, Tiffany Millar, Alex Tamkin, Julia Leibrock, Stuart Ritchie, and Deep Ganguli. Introducing anthropic interviewer: What 1,250 professionals told us about working with
+AI, 2025.
+URL https://anthropic.com/research/anthropic-interviewer.
+Archived
+at
+https://web.archive.org/web/20251204184855/https://www.
+anthropic.com/research/anthropic-interviewer.
+Fred Heiding, Simon Lermen, Andrew Kao, Bruce Schneier, and Arun Vishwanath. Evaluating Large
+Language Models’ capability to launch fully automated spear phishing campaigns: Validated on
+human subjects. arXiv preprint arXiv:2412.00586, 2024. URL https://arxiv.org/abs/
+2412.00586.
+Erik Jones, Anca Dragan, and Jacob Steinhardt. Adversaries can misuse combinations of safe models.
+arXiv preprint arXiv:2406.14595, 2024.
+Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal,
+Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, and Douwe
+Kiela. Retrieval-augmented generation for knowledge-intensive NLP tasks. In Advances in Neural
+Information Processing Systems, volume 33, pp. 9459–9474, 2020.
+Tianshi Li. Agentic LLMs as powerful deanonymizers: Re-identification of participants in the
+Anthropic Interviewer Dataset. arXiv preprint arXiv:2601.05918, 2026.
+Arvind Narayanan and Vitaly Shmatikov. Robust de-anonymization of large sparse datasets. In 2008
+IEEE Symposium on Security and Privacy (sp 2008), pp. 111–125, 2008. doi: 10.1109/SP.2008.33.
+Arvind Narayanan and Vitaly Shmatikov. De-anonymizing Social Networks. In 2009 30th IEEE
+Symposium on Security and Privacy, pp. 173–187. IEEE, 2009. doi: 10.1109/SP.2009.22.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Alex Nyffenegger, Matthias Stürmer, and Joel Niklaus. Anonymity at risk? assessing re-identification
+capabilities of Large Language Models in court decisions. In Findings of the Association for
+Computational Linguistics: NAACL 2024, pp. 2433–2462, Mexico City, Mexico, jun 2024.
+Association for Computational Linguistics. doi: 10.18653/v1/2024.findings-naacl.157. URL
+https://aclanthology.org/2024.findings-naacl.157/.
+OpenAI.
+Gpt-5.2 system card.
+Technical report, OpenAI, December 2025.
+URL
+https://cdn.openai.com/pdf/3a4153c8-c748-4b71-8e31-aecbde944f8d/
+oai_5_2_system-card.pdf. Technical report on GPT-5.2 model capabilities and safety
+evaluations.
+Robin Staab, Mark Vero, Mislav Balunovi´c, and Martin Vechev. Beyond memorization: Violating
+privacy via inference with Large Language Models. In International Conference on Learning
+Representations, 2024. URL https://openreview.net/forum?id=ySXVKYNzad.
+Robin Staab, Mark Vero, Mislav Balunovic, and Martin T. Vechev. Large Language Models are
+advanced anonymizers. In International Conference on Learning Representations, 2025. URL
+https://openreview.net/forum?id=82p8VHRsaK.
+Efstathios Stamatatos. A survey of modern authorship attribution methods. Journal of the American
+Society for information Science and Technology, 60(3):538–556, 2009.
+Theodore Sumers, Raj Agarwal, Nathan Bailey, Tim Belonax, Brian Clarke, Jasmine Deng, Evan Frondorf, Kyla Guru, Keegan Hankes, Jacob Klein, Lynx Lean, Kevin Lin, Linda Petrini, Madeleine
+Tucker, Ethan Perez, Mrinank Sharma, and Nikhil Saxena. Monitoring computer use via hierarchical summarization, 2025. URL https://alignment.anthropic.com/2025/
+summarization-for-monitoring.
+Latanya Sweeney. k-anonymity: A model for protecting privacy. International Journal of Uncertainty,
+Fuzziness and Knowledge-Based Systems, 10(5):557–570, 2002.
+Jacob Tyo, Bhuwan Dhingra, and Zachary C Lipton. On the state of the art in authorship attribution
+and authorship verification. arXiv preprint arXiv:2209.06869, 2022.
+Gilbert Wondracek, Thorsten Holz, Engin Kirda, and Christopher Kruegel. A practical attack to deanonymize social network users. In 2010 IEEE Symposium on Security and Privacy, pp. 223–238.
+IEEE, 2010. doi: 10.1109/SP.2010.21.
+xAI. Grok 4.1 fast and agent tools api. https://x.ai/news/grok-4-1-fast, November
+2025. Agentic tool-calling model with 2M token context window.
+A
+ETHICAL CONSIDERATIONS
+Stakeholder Analysis.
+The primary stakeholders are social media users whose privacy could be
+compromised by deanonymization attacks. General social media users who post under pseudonyms
+expecting privacy, vulnerable populations who depend on anonymity (activists, abuse survivors,
+whistleblowers), and the specific users whose data we used in experiments (Reddit users, HN users,
+etc.). Secondary stakeholders include platforms, researchers, potential malicious actors, and society
+broadly.
+Potential Harms.
+The primary potential harm is that publishing this research could inspire malicious deanonymization attacks. Concrete harms include stalking and harassment, doxxing of activists
+or vulnerable individuals, corporate surveillance and targeted manipulation, government surveillance
+and suppression of dissent, and chilling effects on free speech if people fear being identified. However,
+these capabilities already exist in deployed LLMs; we are not introducing novel attack vectors but
+documenting existing risks.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Potential Benefits.
+The primary benefit is raising awareness of privacy risks that already exist
+due to widely available LLM capabilities. Users can make informed decisions about what they
+share online and add better privacy measures. Platforms can develop better privacy protections and
+reconsider making data publicly available, such as for LLM training. Policymakers can consider
+appropriate regulations and LLM providers can consider adding additional safety guardrails that
+prevent large scale misuse. The security community can develop defenses and metrics, similar to
+concepts such as k-anonymity. Before a dataset is irreversibly publicly released, researchers could
+study whether the information could be used by LLM agents to identify individuals.
+Mitigations.
+To mitigate harm, we designed our experimental methodology to avoid harming
+individuals. Most experiments do not deanonymize individuals—we used synthetically constructed
+datasets (profile splitting, LLM-anonymized data). In the case of the Anthropic interview dataset,
+a previous paper had already performed a similar attack (Anthropic, 2025). We do not reveal any
+names or identities in this paper. We do not release our matching pipeline code or processed datasets.
+Decision to Publish.
+We believe the benefits of publication outweigh the risks because these
+capabilities are already widely available. Any moderately sophisticated actor can already do this
+using readily available LLMs and embedding models. By documenting the threat, we enable defensive
+responses. Responsible disclosure: the privacy community and platforms need to know about these
+risks. Not publishing would leave users unaware and unprotected.
+B
+OPEN SCIENCE
+We do not release code, prompts, or processed datasets associated with this work. Releasing these
+artifacts would lower the barrier to conducting deanonymization attacks.
+C
+PROFILE ANONYMIZATION PROCEDURE
+To prevent trivial deanonymization via unique identifiers while preserving semantic content relevant
+to our matching task, we apply anonymization rules based on whether searching the identifier online
+would directly reveal the profile owner.
+Category
+Example
+Search Result
+Action
+Personal URL
+knuth.stanford.edu
+Finds Donald Knuth
+Remove
+Blog URL
+karpathy.bearblog.dev
+Finds Andrej Karpathy
+Remove
+Social handle
+u/spez
+Finds Steve Huffman
+Remove
+GitHub repo
+flask
+Finds Armin Ronacher
+Remove
+GitHub handle
+torvalds
+Finds Linus Torvalds
+Remove
+Named bootcamp
+“F*****”
+Finds creator
+Generalize to
+“founded a bootcamp”
+Founded project
+“C# Inn”
+Finds founder
+Generalize to
+“a programming community”
+Mentioned colleague
+Yann LeCun
+Too broad
+Keep
+Local business
+Cafe Carpe Diem
+Finds the cafe
+Keep
+Institution
+UCLA
+Too broad
+Keep
+Demographics
+Male, 40s
+Too broad
+Keep
+Interests
+plays chess
+Too broad
+Keep
+Tech stack
+uses LaTeX
+Too broad
+Keep
+Table 2: Anonymization rules for profile data. We remove direct identifiers, generalize unique project
+names, and keep information that does not uniquely identify the profile owner.
+Remove entirely.
+We delete lines containing personal website/blog URLs, social media handles,
+and GitHub repository names or handles—any identifier where searching online directly reveals the
+profile owner.
+Generalize.
+We replace unique project names with generic descriptions (e.g., “Founder of C# Inn”
+becomes “Founded a programming community”).
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+Keep as-is.
+We retain colleague names (searching finds them, not the profile owner), local business
+names (searching finds the business, not its patrons), institution names, locations, demographics,
+interests, and technical skills.
+D
+NARAYANAN-ATTACK BASELINE DETAILS
+We adapt the approach of Narayanan & Shmatikov (2008) to our datasets. The original work used
+a binary matching kernel; we use a smooth kernel that accounts for rating similarity and temporal
+proximity.
+LinkedIn to Hacker News.
+For professional profile matching, each user is represented as a binary
+vector x ∈{0, 1}d where d = 332 is the vocabulary size, with each dimension corresponding to an
+attribute (e.g., skill_python, company_google). Given a query user with feature set Fa and
+a candidate with feature set Fb, we compute weighted Jaccard similarity:
+sim(a, b) =
+P
+f∈Fa∩Fb wf
+P
+f∈Fa∪Fb wf
+where the rarity weight wf = 1/ log(1+cf) downweights common attributes, and cf is the frequency
+of feature f across all users. For each query user, we rank all candidates by descending similarity.
+Reddit movies.
+For movie review matching, we use a weighted similarity that accounts for rating
+agreement and temporal proximity:
+sim(a, b) =
+P
+m∈Ma∩Mb wm · sm
+P
+m∈Ma∪Mb wm
+where Ma, Mb are the sets of movies rated by users a and b. The per-movie similarity combines a
+rating kernel and a temporal kernel:
+sm = kβ
+r · k1−β
+t
+kr = exp
+
+−|rm
+a −rm
+b |
+σr
+
+,
+kt = exp
+
+−|tm
+a −tm
+b |
+σt
+
+where rm
+a is user a’s rating for movie m and tm
+a is the timestamp (in days). The rarity weight
+wm = 1/ log(1 + cm) downweights popular movies, where cm is the total rating count for movie m.
+We use σr = 1.0, σt = 40.0 days, and β = 0.5.
+E
+SCALING ANALYSIS FOR LINKEDIN TO HN MATCHING
+We evaluate how matching accuracy scales with candidate pool size by subsampling from our full
+90k HN user pool. Table 3 shows top-1 and top-100 accuracy at different pool sizes.
+Table 3: Matching accuracy vs. candidate pool size for LinkedIn to HN matching. Starred rows show
+extrapolated values.
+Candidate pool
+Top-1
+Top-100
+1k
+60.1%
+91.0%
+4k
+56.5%
+86.5%
+11k
+51.9%
+82.5%
+31k
+46.7%
+77.2%
+90k
+42.8%
+71.7%
+500k*
+36.3%
+65.4%
+1M*
+33.5%
+62.5%
+Accuracy degrades log-linearly with pool size. We use a log-linear fit to extrapolate to 500k and 1M
+candidate pools, shown in italics in Table 3.
+
+Submitted to ICLR 2026 Workshop on Agents in the Wild. Do not distribute.
+F
+RECALL BY SHARED MOVIES
+Table 4 provides a detailed breakdown of recall at different precision thresholds, stratified by the
+number of movies a user discussed in both r/movies and the alternative movie communities. Users
+with more shared movies are substantially easier to identify.
+Table 4: Recall at precision thresholds by number of shared movies (9,781 total queries), using high
+reasoning verification. 95% Wilson confidence intervals shown below each value.
+#Shared
+Bucket Size
+90% Prec
+98% Prec
+99% Prec
+4,729
+3.4%
+1.6%
+1.2%
+(2.9–3.9)
+(1.3–2.0)
+(1.0–1.6)
+1,867
+7.4%
+4.0%
+2.4%
+(6.3–8.7)
+(3.2–4.9)
+(1.8–3.1)
+3–4
+1,826
+11.0%
+4.8%
+3.1%
+(9.7–12.5)
+(3.9–5.8)
+(2.4–4.0)
+5–9
+1,118
+24.9%
+11.8%
+7.4%
+(22.4–27.5)
+(10.0–13.8)
+(6.0–9.1)
+10+
+49.8%
+29.0%
+18.3%
+(43.5–56.1)
+(23.7–35.1)
+(13.9–23.6)
+Overall
+9,781
+8.5%
+3.8%
+2.8%
+(8.0–9.1)
+(3.4–4.2)
+(2.4–3.1)
+G
+REASONING EFFORT COMPARISON
+Table 5 compares recall at different precision thresholds when using low versus high reasoning effort
+on GPT-5.2.
+Table 5: Recall at different precision thresholds for cross-dataset user matching. Ground truth is
+defined as matching usernames across r/movies and the alternative movie communities (9,781 total
+queries). 95% Wilson confidence intervals shown below each value.
+Method
+90% Prec
+98% Prec
+99% Prec
+Rerank only
+2.5%
+0.0%
+0.0%
+Grok 4.1 Fast
+(2.3–2.9)
+Low reasoning
+5.2%
+2.0%
+1.4%
+GPT 5.2
+(4.8–5.7)
+(1.7–2.3)
+(1.1–1.6)
+High reasoning
+8.5%
+3.8%
+2.8%
+GPT 5.2
+(8.0–9.1)
+(3.4–4.2)
+(2.4–3.1)
