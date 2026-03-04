@@ -103,6 +103,7 @@ class WebhookDispatcher:
         self.load_config()
 
     def load_config(self) -> None:
+        self._targets = []
         """Load webhook targets from YAML config."""
         if not self._config_path.exists():
             logger.warning("Webhook config not found: %s", self._config_path)
