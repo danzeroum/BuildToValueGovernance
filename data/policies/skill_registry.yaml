@@ -1,0 +1,13 @@
+# Skill Provenance Registry — PROP-031 (v1.5.1)
+# Toda skill/plugin deve ter entrada aqui com BLAKE3 + HMAC-SHA256.
+# Gatekeeper rejeita com BLOCK qualquer skill ausente ou revogada.
+version: "1.0.0"
+skills:
+  - id: "file_reader_v1"
+    description: "Leitura de arquivos locais — read-only"
+    blake3: ""        # preencher no registro
+    hmac_sha256: ""   # preencher no registro
+    reversibility: "Reversible"
+    temporality: "Bufferable"
+    revoked: false
+    registered_at: 20260304
