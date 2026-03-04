@@ -41,6 +41,23 @@ from .mercy_algorithm import MercyCalculator
 from .profile_manager import Profile, ProfileManager
 from .policy_signer import PolicySigner, PolicySigningError
 from .ffi_client import TechnicalEvidence, Finding
+from .persuasion_guard import (
+    PersuasionGuard,
+    AnnotatedCoT,
+    BiasDeclarationV2,
+    PersuasionGuardUnavailableError,
+)
+
+
+def _validate_persuasion_guard_startup(guard: "PersuasionGuard") -> None:
+    """Confirma guard configurado (ADR-0049 D2). Falha explícita em startup."""
+    decl = guard.bias_declaration
+    if not decl.checker_model_family:
+        raise ValueError("PersuasionGuard.checker_model_family ausente (ADR-0049 D1)")
+    logger.info(
+        "PersuasionGuard startup OK: model=%s checker=%s",
+        decl.model_family, decl.checker_model_family,
+    )
 
 
 
@@ -176,6 +193,7 @@ class EthicalContextEngine:
         safe_evaluator: Optional[SafeExpressionEvaluator] = None,
         contestability_loop: Optional[ContestabilityLoop] = None,
         bias_guardian: Optional[BiasGuardian] = None,
+        persuasion_guard: Optional["PersuasionGuard"] = None,
     ):
         self.trust_calculator = trust_calculator or TrustScoreCalculator()
         self.mercy_calculator = mercy_calculator or MercyCalculator()
@@ -188,6 +206,9 @@ class EthicalContextEngine:
         self.policy_signer = policy_signer or PolicySigner()
         self.contestability_loop = contestability_loop or ContestabilityLoop()
         self.bias_guardian = bias_guardian or BiasGuardian()
+        self.persuasion_guard: Optional[PersuasionGuard] = persuasion_guard
+        if persuasion_guard is not None:
+            _validate_persuasion_guard_startup(persuasion_guard)
 
         self.bias_declaration = {
             'model_version': '1.0.0-unified',
@@ -438,6 +459,7 @@ class EthicalContextEngine:
         technical_verdict: TechnicalVerdict,
         evidence: TechnicalEvidence,
         context: EthicalContext,
+        annotated_cot: Optional[AnnotatedCoT] = None,
     ) -> EthicalDecision:
         """Governance decision (contestability, transparency)."""
         composite_risk = evidence.composite_risk
@@ -475,6 +497,12 @@ class EthicalContextEngine:
             verdict, adjusted_severity, evidence, context, mercy_factor
         )
 
+        if annotated_cot is not None and annotated_cot.has_suspicious_claims:
+            factors.append(
+                f"persuasion_score={annotated_cot.persuasion_score:.2f} "
+                f"high_suspicion={annotated_cot.high_suspicion_count}"
+            )
+
         decision = EthicalDecision(
             verdict=verdict,
             adjusted_severity=adjusted_severity,
@@ -486,7 +514,7 @@ class EthicalContextEngine:
             contributing_factors=factors,
             contestable=True,
             appeal_deadline=datetime.now() + timedelta(hours=24),
-            bias_declaration=self.bias_declaration.copy(),
+            bias_declaration=self._build_bias_declaration(annotated_cot),
         )
 
         try:
@@ -706,6 +734,166 @@ class EthicalContextEngine:
             f"{ethical_context.user_id or ''}"
         )
         return f"DEC-{hashlib.sha256(content.encode()).hexdigest()[:16]}"
+
+
+    # ============================================================================
+    # PERSUASION GUARD — decide_with_cot (ADR-0049)
+    # ============================================================================
+
+    def decide_with_cot(
+        self,
+        evidence: TechnicalEvidence,
+        request_metadata: RequestMetadata,
+        cot: str,
+        ethical_context: Optional[EthicalContext] = None,
+        profile_name: str = "default",
+    ) -> UnifiedDecision:
+        """
+        Decisão unificada com proteção CoT (ADR-0049).
+
+        Guard ausente ou UNAVAILABLE → BLOCK com explain_decision (D3, fail-secure).
+        cot original NÃO passado ao julgamento — apenas AnnotatedCoT (D4).
+        """
+        if self.persuasion_guard is None:
+            logger.warning("decide_with_cot: persuasion_guard ausente → BLOCK (ADR-0049 D3)")
+            return self._block_cot_guard_unavailable(
+                evidence, request_metadata, ethical_context, profile_name,
+                reason="persuasion_guard_not_configured",
+            )
+        try:
+            annotated_cot = self.persuasion_guard.annotate_cot(cot)
+        except PersuasionGuardUnavailableError as exc:
+            logger.warning("decide_with_cot: guard unavailable → BLOCK: %s", exc)
+            return self._block_cot_guard_unavailable(
+                evidence, request_metadata, ethical_context, profile_name,
+                reason="persuasion_guard_runtime_unavailable",
+            )
+        return self._decide_with_annotated_cot(
+            evidence, request_metadata, annotated_cot, ethical_context, profile_name,
+        )
+
+    def _decide_with_annotated_cot(
+        self,
+        evidence: TechnicalEvidence,
+        request_metadata: RequestMetadata,
+        annotated_cot: AnnotatedCoT,
+        ethical_context: Optional[EthicalContext],
+        profile_name: str,
+    ) -> UnifiedDecision:
+        """Executa decide() com AnnotatedCoT injetado na camada de governança."""
+        start = time.perf_counter()
+        self.metrics["decisions_total"] += 1
+        if not self.profile_manager:
+            raise ValueError("ProfileManager required for decisions")
+        if ethical_context is None:
+            ethical_context = self._generate_ethical_context(request_metadata)
+        tech_start = time.perf_counter()
+        technical_verdict = self._decide_technical(evidence, request_metadata, profile_name)
+        tech_time = (time.perf_counter() - tech_start) * 1000
+        self.metrics["technical_decisions"] += 1
+        gov_start = time.perf_counter()
+        ethical_decision = self._decide_governance(
+            technical_verdict, evidence, ethical_context, annotated_cot=annotated_cot,
+        )
+        gov_time = (time.perf_counter() - gov_start) * 1000
+        self.metrics["governance_decisions"] += 1
+        if ethical_decision.mercy_applied:
+            self.metrics["mercy_applied"] += 1
+        total_time = (time.perf_counter() - start) * 1000
+        alpha = 0.1
+        self.metrics["avg_technical_time_ms"] = (
+            alpha * tech_time + (1 - alpha) * self.metrics["avg_technical_time_ms"]
+        )
+        self.metrics["avg_governance_time_ms"] = (
+            alpha * gov_time + (1 - alpha) * self.metrics["avg_governance_time_ms"]
+        )
+        decision_id = self._generate_decision_id(evidence, request_metadata, ethical_context)
+        return UnifiedDecision(
+            decision_id=decision_id,
+            timestamp=int(time.time()),
+            technical_verdict=technical_verdict,
+            ethical_decision=ethical_decision,
+            evidence_hash=evidence.hash,
+            request_metadata=request_metadata,
+            ethical_context=ethical_context,
+            profile_name=profile_name,
+            total_processing_time_ms=total_time,
+            technical_time_ms=tech_time,
+            governance_time_ms=gov_time,
+        )
+
+    def _block_cot_guard_unavailable(
+        self,
+        evidence: TechnicalEvidence,
+        request_metadata: RequestMetadata,
+        ethical_context: Optional[EthicalContext],
+        profile_name: str,
+        reason: str = "persuasion_guard_unavailable",
+    ) -> UnifiedDecision:
+        """BLOCK imediato quando PersuasionGuard indisponível (ADR-0049 D3).
+
+        Contestável via SLA 24h (Rawls). explain_decision com razão (Levinas).
+        """
+        self.metrics["decisions_total"] += 1
+        now = int(time.time())
+        if ethical_context is None:
+            ethical_context = self._generate_ethical_context(request_metadata)
+        rationale = (
+            f"BLOCK automático: PersuasionGuard indisponível ({reason}). "
+            "Julgamento de CoT sem checker validado não é confiável (ADR-0049 D3). "
+            "Contestável via SLA 24h (Rawls)."
+        )
+        technical_verdict = TechnicalVerdict(
+            action=ActionType.BLOCK,
+            confidence=1.0,
+            rule_id="ADR-0049-D3-FAILSECURE",
+            rationale=rationale,
+        )
+        ethical_decision = EthicalDecision(
+            verdict=ActionType.BLOCK,
+            adjusted_severity=1.0,
+            confidence=1.0,
+            context=ethical_context,
+            mercy_applied=False,
+            mercy_factor=None,
+            rationale=rationale,
+            contributing_factors=[f"persuasion_guard_{reason}"],
+            contestable=True,
+            appeal_deadline=datetime.now() + timedelta(hours=24),
+            bias_declaration={
+                **self.bias_declaration,
+                "persuasion_guard": {"status": "unavailable", "reason": reason},
+            },
+        )
+        try:
+            ethical_decision.signature = self._sign_decision(ethical_decision)
+            ethical_decision.signed_at = now
+        except Exception:
+            pass
+        decision_id = self._generate_decision_id(evidence, request_metadata, ethical_context)
+        return UnifiedDecision(
+            decision_id=decision_id,
+            timestamp=now,
+            technical_verdict=technical_verdict,
+            ethical_decision=ethical_decision,
+            evidence_hash=evidence.hash,
+            request_metadata=request_metadata,
+            ethical_context=ethical_context,
+            profile_name=profile_name,
+            total_processing_time_ms=0.0,
+            technical_time_ms=0.0,
+            governance_time_ms=0.0,
+        )
+
+    def _build_bias_declaration(
+        self,
+        annotated_cot: Optional[AnnotatedCoT] = None,
+    ) -> dict:
+        """Constrói bias_declaration com AnnotatedCoT se disponível (Levinas)."""
+        bd = self.bias_declaration.copy()
+        if annotated_cot is not None:
+            bd["persuasion_guard"] = annotated_cot.to_explain_dict()
+        return bd
 
     # ============================================================================
     # COMPATIBILITY API
