@@ -297,6 +297,108 @@ class TestPersistence:
         assert loop2.metrics['appeals_accepted'] == 1
 
 # ═══════════════════════════════════════════════════════════════════════════
+# ADR-047: STRUCTURED MEDIATION PROTOCOL
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestStructuredMediation:
+    """Testes do protocolo de mediação estruturada (ADR-047)."""
+
+    def test_mediator_recommendation_stored(self, loop):
+        appeal = loop.submit_appeal(
+            audit_trail_id=701,
+            user_id="u-mediation",
+            reason="Policy applied outside declared trust boundary scope.",
+        )
+        resolved = loop.resolve_appeal(
+            appeal_id=appeal.appeal_id,
+            accepted=True,
+            reviewer_notes="Confirmed: scope_mismatch — policy was internal only.",
+            reviewer_id="reviewer@btv.ai",
+            mediator_recommendation="accept_appeal",
+        )
+        assert resolved.mediator_recommendation == "accept_appeal"
+
+    def test_invalid_mediator_recommendation_ignored(self, loop):
+        appeal = loop.submit_appeal(
+            audit_trail_id=702,
+            user_id="u-invalid-rec",
+            reason="False positive on CPF validator using ABNT test data.",
+        )
+        resolved = loop.resolve_appeal(
+            appeal_id=appeal.appeal_id,
+            accepted=False,
+            reviewer_notes="Reviewed and rejected.",
+            reviewer_id="reviewer@btv.ai",
+            mediator_recommendation="invalid_value_xyz",
+        )
+        # Valor inválido deve ser ignorado (não armazenado)
+        assert resolved.mediator_recommendation is None
+
+    def test_invalid_grounds_filtered_by_validated_grounds(self, loop):
+        appeal = loop.submit_appeal(
+            audit_trail_id=703,
+            user_id="u-grounds",
+            reason="False positive on CPF validator using ABNT test data.",
+        )
+        appeal.grounds = ["false_positive", "rawls_equity", "invalid_ground_xyz"]
+        valid = appeal.validated_grounds()
+        assert "false_positive" in valid
+        assert "rawls_equity" in valid
+        assert "invalid_ground_xyz" not in valid
+
+    def test_evidence_hash_stored_on_appeal(self, loop):
+        appeal = loop.submit_appeal(
+            audit_trail_id=704,
+            user_id="u-hash",
+            reason="Technical error in evidence — BLAKE3 hash mismatch found.",
+        )
+        appeal.evidence_hash = "abc123def456blake3hashvalue"
+        assert appeal.evidence_hash == "abc123def456blake3hashvalue"
+
+    def test_educate_recommendation_no_penalty(self, loop):
+        appeal = loop.submit_appeal(
+            audit_trail_id=705,
+            user_id="u-educate",
+            reason="First offense — educational context, not malicious intent.",
+        )
+        loop.resolve_appeal(
+            appeal_id=appeal.appeal_id,
+            accepted=False,
+            reviewer_notes="Not a FP but user needs guidance.",
+            reviewer_id="reviewer@btv.ai",
+            mediator_recommendation="educate",
+        )
+
+        class FakeTrustStore:
+            def __init__(self):
+                self.calls = []
+            def adjust(self, user_id, delta):
+                self.calls.append((user_id, delta))
+
+        ts = FakeTrustStore()
+        loop.adjust_trust_after_appeal(appeal.appeal_id, ts)
+        # educate → delta = 0.0 (Gilligan: não penaliza)
+        assert ts.calls[0][1] == 0.0
+
+    def test_backward_compat_without_new_fields(self, loop):
+        """resolve_appeal sem mediator_recommendation funciona identicamente."""
+        appeal = loop.submit_appeal(
+            audit_trail_id=706,
+            user_id="u-compat",
+            reason="Testing backward compatibility of resolve_appeal signature.",
+        )
+        resolved = loop.resolve_appeal(
+            appeal_id=appeal.appeal_id,
+            accepted=True,
+            reviewer_notes="Approved without mediation fields.",
+            reviewer_id="reviewer@btv.ai",
+            # mediator_recommendation omitido intencionalmente
+        )
+        assert resolved.status.value == "accepted"
+        assert resolved.mediator_recommendation is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":

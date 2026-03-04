@@ -136,11 +136,10 @@ class ContestabilityLoop:
     def __init__(
         self,
         sla_hours: int = 24,
-        db_path: Optional[str] = None,
+        db_path: str = "data/appeals.db",
     ) -> None:
         self.sla_hours = sla_hours
-        import os as _os
-        self.db_path = db_path or _os.environ.get("BTV_APPEALS_DB", "data/appeals.db")
+        self.db_path = db_path
         self.appeals: Dict[str, Appeal] = {}
         self.metrics: Dict[str, Any] = {
             'appeals_submitted': 0,
@@ -401,11 +400,8 @@ class ContestabilityLoop:
 
     def get_metrics(self) -> Dict[str, Any]:
         return {
-            'appeals_submitted':  self.metrics.get('appeals_submitted', 0),
-            'appeals_accepted':   self.metrics.get('appeals_accepted', 0),
-            'appeals_rejected':   self.metrics.get('appeals_rejected', 0),
-            'sla_violations':     self.metrics.get('sla_violations', 0),
-            'pending_appeals':    len(self.list_pending_appeals()),
+            **self.metrics,
+            'pending_appeals': len(self.list_pending_appeals()),
             'sla_compliance_rate': self.get_sla_compliance_rate(),
             'appeal_success_rate': self.get_appeal_success_rate(),
         }
