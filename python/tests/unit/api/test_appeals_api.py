@@ -11,13 +11,28 @@ from buildtovalue.api.app import app
 
 @pytest.fixture
 def client(tmp_path):
-    """TestClient with fresh ContestabilityLoop."""
-    from buildtovalue.api import app as app_module
-    from buildtovalue.governance.contestability_loop import ContestabilityLoop
+    """TestClient with fresh ContestabilityLoop — isolated per test."""
+    import os
+    os.environ.pop("BTV_API_KEYS", None)
+    os.environ["BTV_ENV"] = "development"
 
+    # Aponta o DB para tmp_path ANTES do lifespan rodar
     db = str(tmp_path / "test_appeals.db")
-    app_module._contestability_loop = ContestabilityLoop(sla_hours=24, db_path=db)
-    return TestClient(app)
+    os.environ["BTV_APPEALS_DB"] = db
+
+    from buildtovalue.governance.contestability_loop import ContestabilityLoop
+    import buildtovalue.api.app as app_module
+
+    # Força reset do singleton para o lifespan recriar com o DB correto
+    app_module._contestability_loop = None
+
+    from fastapi.testclient import TestClient
+    with TestClient(app_module.app) as c:
+        yield c
+
+    # Limpeza
+    os.environ.pop("BTV_APPEALS_DB", None)
+    app_module._contestability_loop = None
 
 
 # ═══════════════════════════════════════════════════════════════

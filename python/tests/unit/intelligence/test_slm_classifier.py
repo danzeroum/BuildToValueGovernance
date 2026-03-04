@@ -34,11 +34,13 @@ def mock_classifier():
 def _mock_llm_response(intent: str, risk: float, confidence: float):
     return {
         "choices": [{
-            "text": json.dumps({
-                "intent": intent,
-                "risk": risk,
-                "confidence": confidence,
-            })
+            "message": {
+                "content": json.dumps({
+                    "intent": intent,
+                    "risk": risk,
+                    "confidence": confidence,
+                })
+            }
         }]
     }
 
@@ -131,14 +133,14 @@ class TestParsing:
         assert r.intent == IntentLabel.UNKNOWN
 
     def test_clamped_risk(self, mock_classifier):
-        mock_classifier._llm.return_value = _mock_llm_response("benign", 1.5, -0.5)
+        mock_classifier._llm.create_chat_completion.return_value = _mock_llm_response("benign", 1.5, -0.5)
         r = mock_classifier.classify("test")
         assert r.risk == 1.0
         assert r.confidence == 0.0
 
     def test_code_block_stripped(self, mock_classifier):
         wrapped = '```json\n{"intent": "benign", "risk": 0.1, "confidence": 0.9}\n```'
-        mock_classifier._llm.return_value = {"choices": [{"text": wrapped}]}
+        mock_classifier._llm.create_chat_completion.return_value = {"choices": [{"message": {"content": wrapped}}]}
         r = mock_classifier.classify("test")
         assert r.intent == IntentLabel.BENIGN
 
@@ -151,21 +153,21 @@ class TestAmbiguityZone:
 
     def test_zero_findings_triggers_slm(self, mock_classifier):
         mock_classifier._llm.return_value = _mock_llm_response("benign", 0.1, 0.9)
-        r = mock_classifier.classify_if_ambiguous("hello", finding_count=0, max_confidence=0.0)
+        r = mock_classifier.classify_if_ambiguous("hello", finding_count=0, critical_count=0)
         assert r is not None
         assert r.intent == IntentLabel.BENIGN
 
     def test_low_confidence_triggers_slm(self, mock_classifier):
         mock_classifier._llm.return_value = _mock_llm_response("prompt_injection", 0.8, 0.7)
-        r = mock_classifier.classify_if_ambiguous("test", finding_count=1, max_confidence=0.3)
+        r = mock_classifier.classify_if_ambiguous("test", finding_count=1, critical_count=0)
         assert r is not None
 
     def test_high_confidence_skips_slm(self, mock_classifier):
-        r = mock_classifier.classify_if_ambiguous("test", finding_count=2, max_confidence=0.9)
+        r = mock_classifier.classify_if_ambiguous("test", finding_count=5, critical_count=1)
         assert r is None  # Deterministic methods are confident
 
     def test_medium_confidence_skips_slm(self, mock_classifier):
-        r = mock_classifier.classify_if_ambiguous("test", finding_count=1, max_confidence=0.6)
+        r = mock_classifier.classify_if_ambiguous("test", finding_count=3, critical_count=1)
         assert r is None
 
 
