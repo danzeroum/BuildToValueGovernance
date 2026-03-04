@@ -91,7 +91,7 @@ Categories:
 Input: {input_text}
 
 Respond with ONLY a JSON object, no other text:
-{{"intent": "<category>", "risk": <0.0-1.0>, "confidence": <0.0-1.0>}}"""
+{{"intent": "benign", "risk": 0.15, "confidence": 0.90}}"""
 
 
 # ─────────────────────────────────────────────────────────────
@@ -216,11 +216,14 @@ class SLMClassifier:
         try:
             prompt = CLASSIFICATION_PROMPT.format(input_text=safe_input)
 
-            result = self._llm(
-                prompt,
+            result = self._llm.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": "You are a security classifier. Respond with valid JSON only. No explanation."},
+                    {"role": "user", "content": prompt},
+                ],
                 max_tokens=64,
                 temperature=0.0,
-                stop=["\n\n", "```"],
+                response_format={"type": "json_object"},
             )
 
             elapsed = (time.perf_counter() - start) * 1000
@@ -229,7 +232,7 @@ class SLMClassifier:
                 self._metrics["timeouts"] += 1
                 logger.warning("SLM timeout: %.1fms > %dms", elapsed, self._timeout_ms)
 
-            raw = result["choices"][0]["text"].strip()
+            raw = result["choices"][0]["message"]["content"].strip()
             classification = self._parse_output(raw, elapsed)
 
             self._metrics["classifications"] += 1
@@ -247,25 +250,35 @@ class SLMClassifier:
             return self._fail_open(str(e), start)
 
     def classify_if_ambiguous(
-        self,
-        text: str,
-        finding_count: int,
-        max_confidence: float,
+            self,
+            text: str,
+            finding_count: int,
+            critical_count: int,
     ) -> Optional[SLMClassification]:
         """
-        Only classify if in the ambiguity zone:
-        - Zero findings, OR
-        - All findings have confidence < 0.5
+        Entry point para zona de ambiguidade.
 
-        Returns None if not in ambiguity zone (skip SLM).
+        Filosofia (Levinas): Só aciona SLM quando o kernel não tem certeza.
+        Filosofia (Jonas): Fail-open — nunca bloqueia por falha do SLM.
+
+        Triggers:
+          - finding_count == 0 (nenhum achado determinístico)
+          - finding_count <= 2 AND critical_count == 0 (baixa confiança)
+
+        Returns None se SLM indisponível ou fora da zona de ambiguidade.
         """
-        if finding_count == 0:
-            return self.classify(text)
+        if not self._loaded:
+            return None
 
-        if max_confidence < 0.5:
-            return self.classify(text)
+        in_ambiguity_zone = (
+                finding_count == 0
+                or (finding_count <= 2 and critical_count == 0)
+        )
+        if not in_ambiguity_zone:
+            return None
 
-        return None  # Deterministic methods are confident enough
+        return self.classify(text)
+
 
     def get_metrics(self) -> Dict[str, Any]:
         avg = 0.0

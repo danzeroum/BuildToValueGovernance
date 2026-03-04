@@ -1,10 +1,14 @@
 //! POST /v1/validate — Scan + Policy + Governance (República Algorítmica).
 //! Gap #4: Profile-aware governance (sector whitelist via Python).
+//! ADR-043: verdict_id gerado pelo Rust antes do scan, imutável até o cliente.
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
+use ulid::Ulid;
+use buildtovalue_kernel::network::IpRisk;
+use buildtovalue_kernel::session_guard::SessionTracker;
 
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
@@ -57,6 +61,17 @@ struct GovernanceRequest {
     profile: Option<String>,
     /// Full input text for sector trigger matching (Opção A).
     input_text: String,
+    /// ADR-043: ID gerado pelo Rust, passado ao Python para uso sem modificação.
+    verdict_id: String,
+    /// Confiança máxima entre findings (0.0-1.0).
+    max_finding_confidence: f32,
+    entropy: f32,
+    total_chars: u32,
+    blake3_hash: String,
+    /// ADR-044: contexto de rede e sessão
+    ip_risk: String,
+    ip_jurisdiction: String,
+    drift_level: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -85,15 +100,52 @@ struct ScanResult {
     hard_blocked: bool,
     hard_block_term: Option<String>,
     matched_policies: Vec<String>,
+    max_finding_confidence: f32,
+    entropy: f32,
+    total_chars: u32,
+    blake3_hash: String,
+    drift_level: String,  // ADR-044
+}
+
+// ── HELPERS ADR-044 ──────────────────────────────────────────────
+
+fn extract_client_ip(headers: &axum::http::HeaderMap) -> String {
+    headers.get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .or_else(|| headers.get("X-Real-IP")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string()))
+        .unwrap_or_else(|| "0.0.0.0".to_string())
+}
+
+fn ip_risk_to_str(risk: IpRisk) -> &'static str {
+    match risk {
+        IpRisk::Low      => "Low",
+        IpRisk::Medium   => "Medium",
+        IpRisk::High     => "High",
+        IpRisk::Critical => "Critical",
+    }
 }
 
 // ── HANDLER ───────────────────────────────────────────────────
 
 pub async fn validate_handler(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<ValidateRequest>,
 ) -> Result<Json<ValidateResponse>, StatusCode> {
     let start = Instant::now();
+
+    // ADR-043: Rust gera verdict_id antes de qualquer processamento.
+    let verdict_id = format!("VRD-{}", Ulid::new());
+
+    // ADR-044: classificar IP e jurisdição antes do scan
+    let client_ip = extract_client_ip(&headers);
+    let ip_class = state.ip_classifier.classify(&client_ip);
+    let ip_risk_str = ip_risk_to_str(ip_class.risk).to_string();
+    let ip_jurisdiction = state.jurisdiction_mapper.classify(&client_ip).country_code.to_string();
 
     // ── EXECUTIVO: Rust scan + policy (sync block) ────────────
     let scan = {
@@ -121,6 +173,29 @@ pub async fn validate_handler(
             PolicyAction::Allow => "ALLOW",
         };
 
+        let max_conf = findings.iter()
+            .map(|f| f.confidence as f32 / 255.0)
+            .fold(0.0_f32, f32::max);
+
+        // ADR-044: drift calculado dentro do bloco onde evidence existe
+        let drift_level = {
+            use buildtovalue_kernel::session_guard::SessionTracker;
+            let sid: u128 = req.session_id
+                .as_deref().and_then(|s| s.parse().ok()).unwrap_or(0);
+            if let Ok(mut tracker) = state.session_tracker.lock() {
+                let result = tracker.track(sid, &evidence);
+                match result.level {
+                    buildtovalue_kernel::session_guard::DriftLevel::None   => "None",
+                    buildtovalue_kernel::session_guard::DriftLevel::Low    => "LOW",
+                    buildtovalue_kernel::session_guard::DriftLevel::Medium => "MEDIUM",
+                    buildtovalue_kernel::session_guard::DriftLevel::High     => "HIGH",
+                    buildtovalue_kernel::session_guard::DriftLevel::Critical => "CRITICAL",
+                }.to_string()
+            } else {
+                "None".to_string()
+            }
+        };
+
         ScanResult {
             finding_count: evidence.finding_count as u32,
             critical_count: evidence.critical_count as u32,
@@ -129,6 +204,11 @@ pub async fn validate_handler(
             hard_blocked: eval.hard_blocked,
             hard_block_term: eval.hard_block_term,
             matched_policies: eval.matched_policies,
+            max_finding_confidence: max_conf,
+            entropy: evidence.stats.entropy,
+            total_chars: evidence.stats.total_chars,
+            blake3_hash: format!("{:016x}", evidence.original_request_hash),
+            drift_level,
         }
     };
 
@@ -147,6 +227,14 @@ pub async fn validate_handler(
             session_id: req.session_id.clone(),
             profile: req.profile.clone(),
             input_text: req.input.clone(),
+            verdict_id: verdict_id.clone(),  // ADR-043
+            max_finding_confidence: scan.max_finding_confidence,
+            entropy: scan.entropy,
+            total_chars: scan.total_chars,
+            blake3_hash: scan.blake3_hash.clone(),
+            ip_risk: ip_risk_str,
+            ip_jurisdiction,
+            drift_level: scan.drift_level.clone(),
         };
 
         match state.http_client
@@ -165,22 +253,25 @@ pub async fn validate_handler(
     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     // ── MERGE: Executivo + Judiciário ─────────────────────────
-    let (final_action, mercy_applied, verdict_id, rationale, signature, contestable, appeal_hours) =
+    // ADR-043: verdict_id gerado pelo Rust é o fallback garantido.
+    // Python devolve o mesmo ID; se vier vazio (erro), usa o local.
+    let (final_action, mercy_applied, final_verdict_id, rationale, signature, contestable, appeal_hours) =
         if let Some(ref v) = verdict {
             (
                 v.action.clone(),
                 v.mercy_applied,
-                v.verdict_id.clone(),
+                if v.verdict_id.is_empty() { verdict_id.clone() } else { v.verdict_id.clone() },
                 v.rationale.clone(),
                 v.signature.clone(),
                 v.contestable,
                 v.appeal_deadline_hours,
             )
         } else {
+            // Python indisponível: ID local garante ledger + appeal funcionais.
             (
                 scan.policy_action.clone(),
                 false,
-                String::new(),
+                verdict_id.clone(),
                 String::new(),
                 String::new(),
                 !scan.hard_blocked,
@@ -256,7 +347,7 @@ pub async fn validate_handler(
             scan.finding_count,
             scan.critical_count,
             scan.hard_blocked,
-            verdict_id,
+            final_verdict_id,
             latency_ms,
         );
         let _ = std::fs::create_dir_all("data/ledger");
@@ -297,7 +388,7 @@ pub async fn validate_handler(
         message,
         hard_blocked: scan.hard_blocked,
         matched_policies: scan.matched_policies,
-        verdict_id,
+        verdict_id: final_verdict_id,
         signature,
         rationale,
     }))

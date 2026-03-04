@@ -16,7 +16,7 @@ use crate::validators::brazilian::{CpfValidator, CnpjValidator};
 use crate::validators::communication::{EmailValidator, PhoneValidator};
 use crate::validators::financial::CreditCardValidator;
 use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, LanguageDetector};
-use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector};
+use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector, Normalizer};
 use crate::security::PromptInjectionDetector;
 // ---------------------------------------------------------------------
 // PIPELINE STAGE
@@ -57,6 +57,8 @@ impl Gatekeeper {
     pub fn new() -> Self {
         let pipeline = vec![
             // Stage 1: Deobfuscate
+            StageEntry { module: Box::new(Normalizer::new()),     stage: PipelineStage::Deobfuscate },
+            StageEntry { module: Box::new(Base64Detector::new()), stage: PipelineStage::Deobfuscate },
             StageEntry { module: Box::new(Base64Detector::new()), stage: PipelineStage::Deobfuscate },
             StageEntry { module: Box::new(HexDecoder::new()), stage: PipelineStage::Deobfuscate },
             StageEntry { module: Box::new(LeetspeakDetector::new()), stage: PipelineStage::Deobfuscate },

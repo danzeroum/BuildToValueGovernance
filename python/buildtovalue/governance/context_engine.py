@@ -148,6 +148,7 @@ class EthicalContextEngine:
         self,
         evidence: RustEvidence,
         context: RequestContext,
+        external_verdict_id: Optional[str] = None,  # ADR-043
     ) -> EthicalVerdict:
         """
         Main entry point. Produces signed, explainable verdict.
@@ -157,7 +158,11 @@ class EthicalContextEngine:
         """
         now = int(time.time())
         self._verdict_counter += 1
-        verdict_id = f"VRD-{now}-{self._verdict_counter:06d}"
+        # ADR-043: usar ID externo (Rust) se fornecido; fallback para legado
+        if external_verdict_id:
+            verdict_id = external_verdict_id
+        else:
+            verdict_id = f"VRD-{now}-{self._verdict_counter:06d}"
 
         # ── Step 1: Trust score ────────────────────────────
         trust = self._trust_scores.get(context.session_id, 0.5)

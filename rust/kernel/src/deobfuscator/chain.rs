@@ -5,6 +5,7 @@
 use crate::core::module::{Module, ScanContext};
 use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
 use crate::evidence::Finding;
+use crate::deobfuscator::normalizer::Normalizer;
 use crate::deobfuscator::base64::Base64Detector;
 use crate::deobfuscator::hex::HexDecoder;
 use crate::deobfuscator::leetspeak::LeetspeakDetector;
@@ -50,6 +51,8 @@ impl DeobfuscatorChain {
         let start = Instant::now();
         let mut current = input.to_string();
         let mut layers: Vec<ChainLayer> = Vec::new();
+        let (normalized, _) = Normalizer::new().normalize(input);
+        let mut current = normalized;
 
         for depth in 0..MAX_CHAIN_DEPTH {
             if start.elapsed().as_micros() as u64 > CHAIN_OVERHEAD_LIMIT_US {
