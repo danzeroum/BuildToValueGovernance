@@ -1,0 +1,44 @@
+# PROP-035 — Post-Update Golden Test Suite
+# Dispara em mudança de model_registry.yaml ou das próprias golden suites.
+# Falha bloqueia deploy (exit 1).
+name: Alignment Regression
+
+on:
+  push:
+    paths:
+      - 'data/policies/model_registry.yaml'
+      - 'tests/alignment/golden_suite/**'
+  pull_request:
+    paths:
+      - 'data/policies/model_registry.yaml'
+      - 'tests/alignment/golden_suite/**'
+
+jobs:
+  golden_tests:
+    name: Golden Suite — Alignment Regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd python
+          pip install -e ".[dev]"
+
+      - name: Run alignment golden suite
+        run: |
+          cd python
+          python -m pytest tests/alignment/golden_suite/ -v --tb=short
+        # Fail-secure: qualquer falha bloqueia o deploy
+        continue-on-error: false
+
+      - name: Block deploy on failure
+        if: failure()
+        run: |
+          echo "❌ ALIGNMENT REGRESSION DETECTED — deploy bloqueado"
+          exit 1
