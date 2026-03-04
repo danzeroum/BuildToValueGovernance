@@ -232,7 +232,11 @@ class SLMClassifier:
                 self._metrics["timeouts"] += 1
                 logger.warning("SLM timeout: %.1fms > %dms", elapsed, self._timeout_ms)
 
-            raw = result["choices"][0]["message"]["content"].strip()
+            try:
+                raw = result["choices"][0]["message"]["content"].strip()
+            except (KeyError, IndexError, TypeError) as struct_err:
+                logger.warning("SLM output malformed: %s", struct_err)
+                return self._parse_output("", elapsed)
             classification = self._parse_output(raw, elapsed)
 
             self._metrics["classifications"] += 1
