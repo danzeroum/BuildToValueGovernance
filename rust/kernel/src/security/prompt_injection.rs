@@ -228,9 +228,147 @@ impl PromptInjectionDetector {
     }
 }
 
+      // ─────────────────────────────────────────────────────────────
+    // CONTEXT WHITELIST — P2 (Red Team RT-003 + RT-006)
+    // Pares (palavra_trigger, contexto_seguro): se o input contém
+    // o contexto_seguro, a palavra_trigger não dispara.
+    // ─────────────────────────────────────────────────────────────
+
+    const CONTEXT_WHITELIST: &[(&str, &[&str])] = &[
+        // "ignore" – contextos técnicos e cotidianos
+        ("ignore", &[
+            "git ignore", ".gitignore", "gitignore",
+            "ignore error", "ignore warning", "ignore file",
+            "ignore the noise", "ignore case", "ignore list",
+            "eslint ignore", "pylint ignore", "lint ignore",
+            "ignore whitespace", "ignore changes", "ignore exception",
+            "ignore dependency", "svn ignore", "docker ignore",
+            "ignore certificate", "ignore ssl", "ignore rule",
+            "ignore the fact", "ignore this message",
+        ]),
+        // "bypass" – redes, sistemas e hardware
+        ("bypass", &[
+            "bypass cache", "cache bypass", "bypass queue",
+            "bypass traffic", "bypass capacitor",
+            "cdn bypass", "proxy bypass", "bypass dns",
+            "bypass throttle", "bypass interceptor", "bypass middleware",
+            "bypass filter", "bypass circuit", "bypass valve",
+        ]),
+        // "override" – programação, configurações, herança
+        ("override", &[
+            "override method", "method override", "@override",
+            "function override", "override in java", "override in kotlin",
+            "override in python", "override in c",
+            "router override", "config override",
+            "override default", "override settings", "override variable",
+            "override value", "override behavior", "override property",
+            "css override", "override annotation", "override keyword",
+        ]),
+        // "kill" – administração de sistemas e processos
+        ("kill", &[
+            "kill process", "kill the process", "kill -9",
+            "kill port", "pkill", "killall",
+            "kill switch", "kill session", "kill connection",
+            "kill task", "kill container", "kill docker",
+            "kill screen", "zombie process", "kill thread",
+            "kill job", "kill signal",
+        ]),
+        // "system" – perguntas informativas e terminologia técnica
+        ("system", &[
+            "system requirements", "operating system",
+            "file system", "system message", "what does",
+            "what is", "o que significa", "system error",
+            "system mode", "safe mode", "system architecture",
+            "system design", "system monitor", "system call",
+            "system update", "system crash", "system log",
+            "linux system", "windows system", "system administrator",
+            "system configuration", "system settings",
+        ]),
+        // "disable" – ações comuns do usuário
+        ("disable", &[
+            "disable antivirus", "disable notifications",
+            "how to disable", "como desabilitar", "como desativar",
+            "disable debug", "disable logging", "disable breakpoint",
+            "disable service", "disable auto-update", "disable ssl",
+            "disable feature", "disable account",
+        ]),
+        // "dump" – depuração e bancos de dados
+        ("dump", &[
+            "memory dump", "dump memory", "heap dump",
+            "thread dump", "core dump", "database dump",
+            "sql dump", "dump database", "packet dump",
+            "tcpdump", "dump file", "dump log", "object dump",
+        ]),
+        // "execute" – execução de código/consultas
+        ("execute", &[
+            "execute query", "execute script", "execute command",
+            "execute code", "execute sql", "execute batch",
+            "execute function", "execute process", "execute permission",
+            "execute statement", "execute program",
+        ]),
+        // "root" – administração e estrutura de diretórios
+        ("root", &[
+            "root directory", "root user", "root folder",
+            "root path", "root access", "root element",
+            "root privileges", "super user", "root certificate",
+            "root cause", "root node",
+        ]),
+        // "drop" – banco de dados e interface
+        ("drop", &[
+            "drop table", "drop database", "drop index",
+            "drag and drop", "drop down", "dropdown menu",
+            "drop shadow", "drop constraint", "drop column",
+            "drop view", "drop trigger",
+        ]),
+        // "fatal" – mensagens de erro
+        ("fatal", &[
+            "fatal error", "fatal exception", "fatal signal",
+            "fatal crash", "fatal failure",
+        ]),
+        // "emergency" – situações reais (não ataques)
+        ("emergency", &[
+            "emergency contact", "emergency number", "emergency exit",
+            "emergency plan", "emergency procedure",
+        ]),
+        // "hack" – uso coloquial não malicioso
+        ("hack", &[
+            "hackathon", "life hack", "hack together",
+            "hack day", "ethical hacking", "white hat",
+        ]),
+        // "poison" – contextos médicos ou químicos
+        ("poison", &[
+            "poison control", "poison ivy", "poison oak",
+            "food poisoning", "poison dart", "rat poison",
+        ]),
+        // "steal" – expressões idiomáticas
+        ("steal", &[
+            "steal the show", "steal a glance", "steal time",
+        ]),
+    ];
+
+    /// Retorna true se o input está em contexto seguro (whitelist).
+    /// Case-insensitive. Verifica se qualquer contexto seguro está presente.
+    fn is_whitelisted(input: &str) -> bool {
+        let lower = input.to_lowercase();
+        for (trigger, safe_contexts) in CONTEXT_WHITELIST {
+            if lower.contains(trigger) {
+                if safe_contexts.iter().any(|ctx| lower.contains(ctx)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+
+
 impl Module for PromptInjectionDetector {
+
     fn scan(&self, input: &str, ctx: &mut ScanContext) -> Vec<Finding> {
         if input.len() < MIN_INPUT_LENGTH {
+            return Vec::new();
+        }
+        if is_whitelisted(input) {
             return Vec::new();
         }
 

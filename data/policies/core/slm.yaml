@@ -5,5 +5,5 @@ slm:
   n_ctx: 512
   n_threads: 4
   n_gpu_layers: 35
-  timeout_ms: 2000
+  timeout_ms: 20000
   max_input_tokens: 256

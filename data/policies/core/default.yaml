@@ -19,6 +19,14 @@ hard_blocks:
   - "/etc/passwd"
   - "../../"
   - "rm -rf"
+  - "ignore as instruções anteriores"
+  - "desconsidere suas regras"
+  - "ignore previous instructions"
+  - "forget all previous"
+  - "system: you are now"
+  - "senha:"
+  - "password:"
+  - "login: root"
 
 policies:
   - id: "block-cpf-high"
