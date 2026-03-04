@@ -303,6 +303,10 @@ policies:
 
     /// Avalia com filtro de trust_boundary.
     ///
+    /// INVARIANTE (ADR-045): Hard blocks absolutos são verificados apenas via
+    /// evaluate_full() que recebe o input bruto. Este método não recebe input
+    /// — hard blocks aqui seriam falsos positivos por ausência de contexto.
+    ///
     /// `scan_trust_boundary`: perímetro em que o scan está sendo executado.
     ///   "public"    → recebe políticas public (mais restritivo)
     ///   "federated" → recebe políticas public + federated
