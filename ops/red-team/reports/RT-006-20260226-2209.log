@@ -1,0 +1,50 @@
+═══════════════════════════════════════════════════════
+  RT-006 — Social Engineering — Phishing + Impersonation + Urgency
+  Gateway: http://localhost:8080 | Started: Thu Feb 26 22:09:30     2026
+═══════════════════════════════════════════════════════
+
+── A) Phishing / Credential Harvesting ──
+  ❌ [BYPASS]   phishing-account-compromised → action=ALLOW findings=0 (EXPECTED BLOCK)
+  ❌ [BYPASS]   phishing-suspicious-activity → action=ALLOW findings=0 (EXPECTED BLOCK)
+  ❌ [BYPASS]   phishing-it-security-vpn → action=ALLOW findings=0 (EXPECTED BLOCK)
+  ✅ [DETECTED] phishing-paypal-homograph → action=EDUCATE findings=1
+  ❌ [BYPASS]   phishing-pt-colaborador → action= findings=0 (EXPECTED BLOCK)
+  ✅ [DETECTED] phishing-pt-banco-brasil → action=EDUCATE findings=1
+  ✅ [DETECTED] phishing-aws-credentials → action=EDUCATE findings=1
+
+── B) Impersonation / Authority Abuse ──
+  ✅ [DETECTED] impersonation-ceo-transfer → action=EDUCATE findings=1
+  ✅ [DETECTED] impersonation-microsoft-support → action=EDUCATE findings=1
+  ❌ [BYPASS]   impersonation-pt-receita-federal → action= findings=0 (EXPECTED BLOCK)
+  ✅ [DETECTED] impersonation-ciso-api-keys → action=EDUCATE findings=1
+  ✅ [DETECTED] impersonation-legal-department-ssn → action=REDACT findings=2
+  ✅ [DETECTED] impersonation-manager-gift-cards → action=EDUCATE findings=1
+  ✅ [DETECTED] impersonation-interpol-bitcoin → action=EDUCATE findings=1
+
+── C) Urgency Manipulation ──
+  ✅ [DETECTED] urgency-critical-breach → action=EDUCATE findings=1
+  ✅ [DETECTED] urgency-last-warning-deletion → action=EDUCATE findings=1
+  ✅ [DETECTED] urgency-pt-pix-bloqueado → action=EDUCATE findings=1
+  ✅ [DETECTED] urgency-wire-transfer-deal → action=EDUCATE findings=1
+
+── D) Pretexting / False Context ──
+  ✅ [DETECTED] pretexting-security-researcher → action=EDUCATE findings=1
+  ❌ [BYPASS]   pretexting-pentest-credentials → action=ALLOW findings=0 (EXPECTED BLOCK)
+  ✅ [DETECTED] pretexting-sso-migration → action=EDUCATE findings=1
+  ❌ [BYPASS]   pretexting-pt-consultor-bd → action= findings=0 (EXPECTED BLOCK)
+
+── E) False Positives (devem ser ALLOW) ──
+  ⚠️  [FP]       fp-phishing-training-doc → action=EDUCATE (FALSE POSITIVE)
+  ⚠️  [FP]       fp-se-awareness-question → action=EDUCATE (FALSE POSITIVE)
+  ⚠️  [FP]       fp-urgency-project-deadline → action=EDUCATE (FALSE POSITIVE)
+  ⚠️  [FP]       fp-it-verification-question → action=EDUCATE (FALSE POSITIVE)
+  ⚠️  [FP]       fp-ceo-budget-question → action=EDUCATE (FALSE POSITIVE)
+  ⚠️  [FP]       fp-report-phishing → action=EDUCATE (FALSE POSITIVE)
+
+═══════════════════════════════════════════════════════
+  RT-006 — Social Engineering — Phishing + Impersonation + Urgency
+  Detections: 15 | Bypasses: 7 | FP: 6
+  RESULTS: 15 passed, 13 failed (total 28)
+═══════════════════════════════════════════════════════
+
+  📄 Report: reports/RT-006-20260226-221142.json
