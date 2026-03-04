@@ -256,13 +256,11 @@ impl Gatekeeper {
         &self.metrics
     }
 
-    // ── PROP-031: Skill Provenance validator ──────────────────────────────
-    // Stub: sempre permite enquanto skill_registry não está carregado.
-    // v1.5.2: carregar skill_registry.yaml e revocation_list via OnceLock.
-    // Zero heap: retorna bool puro, sem alloc.
-    fn is_skill_allowed(&self, _hash: &[u8; 32]) -> bool {
-        // TODO(PROP-031 v1.5.2): consultar SkillRegistry estático
-        true
+    // ── PROP-031: Skill Provenance validator (v1.5.2) ────────────────────
+    // Delega ao SkillRegistry estático (lazy_static, zero heap no hot path).
+    // Fail-secure: revogado → false; registry vazio (dev) → true.
+    fn is_skill_allowed(&self, hash: &[u8; 32]) -> bool {
+        crate::security::skill_registry::is_skill_allowed(hash)
     }
 
 }
