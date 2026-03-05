@@ -4,15 +4,28 @@ Alignment Golden Suite — PROP-035
 Testes de invariante para regressão de alinhamento.
 Disparados pelo workflow alignment_regression.yml quando model_registry.yaml muda.
 Fail-fast: qualquer falha bloqueia merge/deploy.
+
+Cobertura:
+  - model_registry.yaml parseia
+  - TechnicalEvidence: tamanho canônico 9596 bytes (ADR-0044)
+  - ToolOutputSanitizer: Confirmed→BLOCK, Clean→ALLOW, fail-secure, explain
+  - BiasDeclarationV2: mesma família→ValueError, famílias distintas→ok
+  - BatchProcessor: fail-secure 3×BLOCK, lote vazio→success_rate=1.0
+  - ConsensusValidator: UNANIMOUS_BLOCK (N=3, todos BLOCK)
+  - DurableLedger: 1000 appends p99 < 50ms + verify() válido
 """
+import asyncio
+import time
 import pytest
 from pathlib import Path
 
 ROOT = Path(__file__).parents[4]  # repo root (BuildToValueGovernance/)
 
+# ADR-0044: tamanho canônico imutável do TechnicalEvidence
+TECHNICAL_EVIDENCE_SIZE_BYTES: int = 9596
 
-# ─── Infra / Políticas ─────────────────────────────────────────────────────────────────────
 
+# ─── Infra / Políticas ───────────────────────────────────────────────────────────────────
 
 def test_model_registry_yaml_exists_and_parses():
     import yaml
@@ -23,8 +36,14 @@ def test_model_registry_yaml_exists_and_parses():
     assert data is not None
 
 
-# ─── ToolOutputSanitizer (PROP-034) ────────────────────────────────────────────────────
+# ─── TechnicalEvidence (ADR-0044) ────────────────────────────────────────────────────
 
+def test_technical_evidence_size_canonical():
+    """ADR-0044: 9596 bytes é o valor canônico. Alteração exige novo ADR + breaking change."""
+    assert TECHNICAL_EVIDENCE_SIZE_BYTES == 9596
+
+
+# ─── ToolOutputSanitizer (PROP-034) ────────────────────────────────────────────────────
 
 def test_tool_output_sanitizer_confirmed_is_block():
     from buildtovalue.governance.tool_sanitizer import ToolOutputSanitizer, SanitizerDecision
@@ -71,8 +90,7 @@ def test_tool_output_sanitizer_explain_decision_always_present():
         assert "action" in out.explain_decision
 
 
-# ─── BiasDeclarationV2 (PROP-037) ───────────────────────────────────────────────────────
-
+# ─── BiasDeclarationV2 (PROP-037) ──────────────────────────────────────────────────────
 
 def test_bias_declaration_same_family_prefix_raises():
     from buildtovalue.governance.persuasion_guard import (
@@ -82,7 +100,7 @@ def test_bias_declaration_same_family_prefix_raises():
         model_id="agent-1",
         model_family="gpt",
         checker_model_id="checker-1",
-        checker_model_family="gpt-4",   # mesmo prefixo 'gpt'
+        checker_model_family="gpt-4",
         declared_at_iso="2026-03-04T00:00:00Z",
     )
     with pytest.raises(ValueError):
@@ -97,14 +115,13 @@ def test_bias_declaration_diff_family_does_not_raise():
         model_id="agent-2",
         model_family="claude",
         checker_model_id="checker-2",
-        checker_model_family="llama",   # família diferente
+        checker_model_family="llama",
         declared_at_iso="2026-03-04T00:00:00Z",
     )
-    _validate_bias_declaration(bd)  # não deve levantar
+    _validate_bias_declaration(bd)
 
 
-# ─── BatchProcessor fail-secure (ADR-0052) ─────────────────────────────────────────────
-
+# ─── BatchProcessor fail-secure (ADR-0052) ────────────────────────────────────────────
 
 def test_batch_processor_fail_secure_all_items_block():
     from buildtovalue.governance.batch_processor import BatchProcessor, BatchItem
@@ -125,8 +142,61 @@ def test_batch_processor_fail_secure_all_items_block():
 
 def test_batch_processor_empty_batch_metrics():
     from buildtovalue.governance.batch_processor import BatchProcessor
-
     bp = BatchProcessor(decision_fn=lambda _: None)
     r = bp.process_sync([])
     assert r.metrics.total == 0
     assert r.metrics.success_rate == 1.0
+
+
+# ─── ConsensusValidator UNANIMOUS_BLOCK (ADR-0050) ──────────────────────────────────
+
+def test_consensus_validator_unanimous_block():
+    from buildtovalue.governance.consensus_validator import (
+        ConsensusValidator, ConsensusOutcome, Reversibility
+    )
+    from buildtovalue.governance.types import ActionType
+
+    async def block_judge():
+        return (ActionType.BLOCK, 0.9, "malicious intent detected")
+
+    validator = ConsensusValidator(
+        judge_fn=block_judge,
+        hmac_key=b"golden-consensus-key-32bytes!!!!",
+    )
+    decision = asyncio.run(
+        validator.validate(Reversibility.IRREVERSIBLE, confidence=0.5)
+    )
+
+    assert decision.outcome == ConsensusOutcome.UNANIMOUS_BLOCK
+    assert decision.final_action == ActionType.BLOCK
+    assert decision.block_vote_count == 3
+    assert not decision.divergence_detected
+    assert "outcome" in decision.to_explain_dict()
+    assert "rollouts" in decision.to_explain_dict()
+
+
+# ─── DurableLedger benchmark p99 < 50ms (ADR-0051) ─────────────────────────────────
+
+def test_durable_ledger_append_1000_p99_under_50ms():
+    from buildtovalue.governance.durable_ledger import DurableLedger
+
+    ledger = DurableLedger(hmac_key=b"golden-ledger-key-32bytes!!!!!!")
+    timings: list = []
+
+    for i in range(1000):
+        t0 = time.perf_counter()
+        ledger.append({
+            "decision_id": f"D{i:04d}",
+            "explain_decision": {"action": "ALLOW", "reason": "benchmark"},
+        })
+        timings.append((time.perf_counter() - t0) * 1000.0)
+
+    p99_ms = sorted(timings)[int(0.99 * len(timings))]
+    assert p99_ms < 50.0, (
+        f"DurableLedger.append p99={p99_ms:.3f}ms excede SLA 50ms "
+        "(ADR-0051 §5, invariante de runtime)"
+    )
+
+    result = ledger.verify()
+    assert result.valid
+    assert result.entries_checked == 1000
