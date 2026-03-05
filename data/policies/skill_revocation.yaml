@@ -1,0 +1,4 @@
+# Skill Revocation List — PROP-031 (v1.5.1)
+# Skills com blake3 presente aqui são BLOQUEADAS independente do registry.
+version: "1.0.0"
+revoked_hashes: []

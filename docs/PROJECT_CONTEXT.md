@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT.md — BuildToValue v2.1
 
 > Documento de contexto para AI Squad. Colar no início de cada chat de IA.
-> Última atualização: 25 fevereiro 2026.
+> Última atualização: 04 março 2026.
 
 ## O que é
 
@@ -19,12 +19,13 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 | Analyze | EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, LanguageDetector (ADR-034) | 4 |
 | Validate | CpfValidator, CnpjValidator, EmailValidator, CreditCardValidator, PhoneValidator, PromptInjectionDetector (ADR-028), SsnValidator | 7 |
 | **Não wired** | NhsValidator, VatValidator, IbanValidator (ADR-035 — código existe, falta integrar) | 3 |
+| **Ledger** | DurableLedger, WriteAheadLog, EffectLog (ADR-0048, PROP-029 ✅) | 3 |
 
 **Structs canônicos (tamanhos verificados compile-time):**
 
 | Struct | Tamanho | Arquivo |
 |:---|:---|:---|
-| TechnicalEvidence | 9632 bytes | evidence/technical.rs |
+| TechnicalEvidence | 9600 bytes | evidence/technical.rs |
 | ScanContextFlags | 64 bytes | core/module.rs |
 | Finding | 144 bytes | evidence/finding.rs |
 | LedgerEntry | 384 bytes | ledger/entry.rs |
@@ -67,6 +68,8 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 
 **Componentes ativos:**
 - BiasGuardian (ADR-036): `DivergenceLevel.OK/WARNING/BLOCK`, thresholds FNR 5/8pp, FPR 3/6pp
+- PersuasionGuard (ADR-0049, PROP-037 ✅): AnnotatedCoT, BiasDeclarationV2, HMAC-SHA256, heuristicos paper 209
+- GoalDriftSentinel (ADR-0038, PROP-038 ✅): Rust kernel + Python governance, drift ABORT fail-secure
 - ContestabilityLoop: submit/status/resolve/expire, SLA 24h
 - TrustScoreCalculator: get/set/adjust, decay temporal, cache TTL
 - MercyCalculator: mercy_score baseado em trust + first_offense + risk
@@ -110,14 +113,15 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 | K: Red-team & Governance | 036-039 | ✅ Implementados |
 | L: Gateway & Obs v2.0 | 040-041 | ✅ Implementados |
 | M: Policy Automation | 042 | 📝 ADR only (v1.9) |
+| N: Effect + CoT Safety | 0048-0049 | ✅ Implementados (PROP-029, PROP-037) |
 
 ### Débitos Técnicos Ativos
 
 | # | Débito | Prioridade | Estimativa |
 |:---|:---|:---:|:---:|
 | DT-001 | NHS/VAT/IBAN wired no Gatekeeper pipeline (Stage 3.5a) | ✅ Fechado v1.7.0 | — |
-| DT-002 | `bias_guardian` tipado como `Any` no ethical_context_engine.py | Baixa | 5min |
-| DT-003 | ADR-036.md enum values minúsculas vs código maiúsculas | Baixa | 5min |
+| DT-002 | `bias_guardian` tipado como `Any` no ethical_context_engine.py | ✅ Fechado — falso positivo (tipo correto) | — |
+| DT-003 | ADR-036.md enum values minúsculas vs código maiúsculas | ✅ Fechado — falso positivo (ambos uppercase) | — |
 | DT-004 | e2e mercy/compliance (4 fails) — schema mismatch governance | Média | 2-4h |
 | DT-005 | `ethical_context_engine.py` excede 200 linhas | Média | Decomposição T1.3 |
 | DT-006 | `bridge.rs` em bindings/ tem placeholder Gatekeeper (não usa real) | Média | 1h |
@@ -132,7 +136,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 - Heap allocations no hot path
 - Lógica de negócio em `bindings/`
 - Microserviços, gRPC, Node.js
-- Referência a 9596 bytes (valor correto: 9632)
+- Referência a 9596 ou 9632 bytes (valor correto: 9600)
 - `lazy_static!` para patterns que podem usar `PatternRegistry` (ADR-033)
 
 ### Dependências Principais
