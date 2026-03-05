@@ -28,12 +28,12 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Tuple, Protocol, runtime_checkable
+from typing import Dict, List, Optional, Tuple, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
 
-# ─── Enums ────────────────────────────────────────────────────────────────────
+# ─── Enums ───────────────────────────────────────────────────────────────────────
 
 class ClaimSuspicion(Enum):
     LOW    = "low"
@@ -46,7 +46,7 @@ class GuardStatus(Enum):
     UNAVAILABLE = "unavailable"
 
 
-# ─── Exceptions ───────────────────────────────────────────────────────────────
+# ─── Exceptions ────────────────────────────────────────────────────────────────
 
 class PersuasionGuardUnavailableError(RuntimeError):
     """
@@ -55,7 +55,7 @@ class PersuasionGuardUnavailableError(RuntimeError):
     """
 
 
-# ─── Protocol ─────────────────────────────────────────────────────────────────
+# ─── Protocol ───────────────────────────────────────────────────────────────────
 
 @runtime_checkable
 class FactCheckerProtocol(Protocol):
@@ -75,15 +75,18 @@ class FactCheckerProtocol(Protocol):
     def check_claim(self, claim: str, context: str) -> Tuple[bool, float]: ...
 
 
-# ─── Dataclasses ──────────────────────────────────────────────────────────────
+# ─── Dataclasses ────────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class BiasDeclarationV2:
     """
-    BiasDeclaration extendida (ADR-0049 D1).
+    BiasDeclaration extendida (ADR-0049 D1 / v2.0).
 
     checker_model_family DEVE diferir de model_family.
     Validação: comparação case-insensitive do prefixo até primeiro hífen ou ponto.
+
+    to_explain_dict() — serialização completa para explain_decision e
+    DurableLedger (Levinas: transparência total do processo de avaliação).
     """
     model_id:             str
     model_family:         str
@@ -93,6 +96,26 @@ class BiasDeclarationV2:
     known_limitations:    Tuple[str, ...]  = field(default_factory=tuple)
     false_positive_rate:  float            = 0.05
     false_negative_rate:  float            = 0.02
+    calibration_date:     Optional[str]    = None  # ISO date da última calibração
+
+    def to_explain_dict(self) -> Dict[str, object]:
+        """
+        Serialização auditável para explain_decision e DurableLedger.
+
+        Todos os campos incluídos — sem omissões (Levinas: responsabilidade total).
+        known_limitations como list para JSON-serializabilidade.
+        """
+        return {
+            "model_id":             self.model_id,
+            "model_family":         self.model_family,
+            "checker_model_id":     self.checker_model_id,
+            "checker_model_family": self.checker_model_family,
+            "declared_at_iso":      self.declared_at_iso,
+            "false_positive_rate":  self.false_positive_rate,
+            "false_negative_rate":  self.false_negative_rate,
+            "calibration_date":     self.calibration_date,
+            "known_limitations":    list(self.known_limitations),
+        }
 
 
 @dataclass(frozen=True)
@@ -124,7 +147,7 @@ class AnnotatedCoT:
     annotation_time_iso: str
     checker_model_id:    str
     hmac_sha256:         str           # HMAC da anotação completa
-    persuasion_score:    float         # 0.0 (limpo) → 1.0 (máxima suspeição)
+    persuasion_score:    float         # 0.0 (limpo) → 1.0 (máxima suseição)
 
     @property
     def high_suspicion_count(self) -> int:
@@ -134,7 +157,7 @@ class AnnotatedCoT:
     def has_suspicious_claims(self) -> bool:
         return any(f.suspicion != ClaimSuspicion.LOW for f in self.flags)
 
-    def to_explain_dict(self) -> dict:
+    def to_explain_dict(self) -> Dict[str, object]:
         """Formato para explain_decision (obrigatório ADR-0049)."""
         return {
             "cot_hash_sha256":      self.cot_hash_sha256,
@@ -154,7 +177,7 @@ class AnnotatedCoT:
         }
 
 
-# ─── Padrões heurísticos (paper 209) ─────────────────────────────────────────
+# ─── Padrões heurísticos (paper 209) ─────────────────────────────────────────────────
 
 _PERSUASION_PATTERNS: List[Tuple[re.Pattern, str, ClaimSuspicion]] = [
     (
@@ -190,7 +213,7 @@ _PERSUASION_PATTERNS: List[Tuple[re.Pattern, str, ClaimSuspicion]] = [
 ]
 
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
+# ─── Helpers ──────────────────────────────────────────────────────────────────────
 
 def _normalize_family(family: str) -> str:
     """
@@ -241,7 +264,7 @@ def _compute_annotation_hmac(
     return mac.hexdigest()
 
 
-# ─── PersuasionGuard ──────────────────────────────────────────────────────────
+# ─── PersuasionGuard ─────────────────────────────────────────────────────────────────
 
 class PersuasionGuard:
     """
@@ -388,13 +411,13 @@ class PersuasionGuard:
         return merged
 
 
-# ─── Helpers de instância extraídos (funções puras, testáveis) ────────────────
+# ─── Helpers de instância extraídos (funções puras, testáveis) ────────────────────────
 
 def _calculate_persuasion_score(flags: List[ClaimFlag]) -> float:
     """
     Score de persuasão 0.0–1.0.
 
-    Média ponderada por nível de suspeição.
+    Média ponderada por nível de suseição.
     """
     if not flags:
         return 0.0
