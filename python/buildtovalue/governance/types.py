@@ -16,13 +16,14 @@ class ActionType(Enum):
     """
     Proportional response actions (Levinas: educate before punish).
 
-    Severity order: ALLOW < LOG < EDUCATE < REDACT < BLOCK
+    Severity order: ALLOW < LOG < EDUCATE < REDACT < BLOCK < ESCALATE_HUMAN
     """
-    ALLOW = "ALLOW"
-    LOG = "LOG"
-    EDUCATE = "EDUCATE"
-    REDACT = "REDACT"
-    BLOCK = "BLOCK"
+    ALLOW          = "ALLOW"
+    LOG            = "LOG"
+    EDUCATE        = "EDUCATE"
+    REDACT         = "REDACT"
+    BLOCK          = "BLOCK"
+    ESCALATE_HUMAN = "escalate_human"
 
 
 ACTION_SEVERITY: Dict[ActionType, int] = {
@@ -31,6 +32,7 @@ ACTION_SEVERITY: Dict[ActionType, int] = {
     ActionType.EDUCATE: 2,
     ActionType.REDACT: 3,
     ActionType.BLOCK: 4,
+    ActionType.ESCALATE_HUMAN: 5,
 }
 
 
