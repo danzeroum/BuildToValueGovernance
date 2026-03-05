@@ -1,5 +1,6 @@
-//! Technical Evidence v2.5.0 – 9600 bytes fixos.
+//! Technical Evidence v2.5.1 – 9600 bytes fixos.
 //! ADR-017: executed_modules expandido de u8 para u32.
+//! Wire 4: _reserved_metadata[41..73] = skill_mac_tag (PROP-031/supply_guard).
 
 use serde::{Deserialize, Serialize};
 use crate::core::types::{
@@ -55,6 +56,12 @@ pub struct TechnicalEvidence {
     pub _reserved: [u8; 5],    // ADR-017: era [u8; 8], agora [u8; 5] (-3 bytes)
 
     // === METADADOS RESERVADOS (7072 bytes) ===
+    // Layout Wire 4:
+    //   [0..8]   pattern_epoch
+    //   [8..40]  skill_hash      (PROP-031)
+    //   [40]     goal_drift_flag (PROP-038, bit 0)
+    //   [41..73] skill_mac_tag   (PROP-031/supply_guard, Wire 4)
+    //   [73..]   disponível para expansão futura
     #[serde(with = "serde_reserved")]
     pub _reserved_metadata: [u8; 7072],
 
@@ -177,8 +184,7 @@ impl TechnicalEvidence {
         self.calculate_hash() == self.hash
     }
 
-
-    // ── PROP-031: Skill Provenance (reserved_metadata[8..40]) ──────────────
+    // ── PROP-031: Skill Hash (reserved_metadata[8..40]) ──────────────────────
 
     /// Retorna o skill_hash BLAKE3 armazenado em _reserved_metadata[8..40].
     /// Zeros indicam ausência de skill registrada.
@@ -197,6 +203,28 @@ impl TechnicalEvidence {
     /// Retorna true se skill_hash foi definido (≠ zeros).
     pub fn has_skill_hash(&self) -> bool {
         self._reserved_metadata[8..40].iter().any(|&b| b != 0)
+    }
+
+    // ── PROP-031: Skill MAC Tag (reserved_metadata[41..73]) ─────────────────
+    // Wire 4: MAC tag do supply_guard (BLAKE3 keyed-hash, ADR-031b).
+    // Layout: [8..40] skill_hash | [40] goal_drift_flag | [41..73] mac_tag
+    // Zero heap: operações sobre slice existente, sem alloc.
+
+    /// Retorna o MAC tag de 32 bytes armazenado em _reserved_metadata[41..73].
+    pub fn get_skill_mac_tag(&self) -> &[u8; 32] {
+        self._reserved_metadata[41..73]
+            .try_into()
+            .expect("slice de tamanho fixo 32")
+    }
+
+    /// Grava o MAC tag em _reserved_metadata[41..73].
+    pub fn set_skill_mac_tag(&mut self, tag: &[u8; 32]) {
+        self._reserved_metadata[41..73].copy_from_slice(tag);
+    }
+
+    /// Retorna true se mac_tag foi definido (≠ zeros).
+    pub fn has_skill_mac_tag(&self) -> bool {
+        self._reserved_metadata[41..73].iter().any(|&b| b != 0)
     }
 
     pub fn to_bytes(&self) -> [u8; EVIDENCE_SIZE] {
