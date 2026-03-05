@@ -121,7 +121,7 @@ def test_consensus_decision_to_explain_dict_keys():
     assert "final_action"        in explain
     assert "rollouts"            in explain
     assert "divergence_detected" in explain
-    assert explain["rollouts"][0]["action"] == "block"
+    assert explain["rollouts"][0]["action"] == "BLOCK"
 
 
 # ─── Fast path: reversible ────────────────────────────────────────────────────
