@@ -1,4 +1,4 @@
-//! Gatekeeper v2.6.2 — Pipeline de estágios (F1.5-05)
+//! Gatekeeper v2.6.3 — Pipeline de estágios (F1.5-05)
 //!
 //! Estágios ordenados:
 //! 1. Deobfuscate: normaliza input (Base64, Hex, Leetspeak)
@@ -8,9 +8,11 @@
 //! 4. Finalize: bias aggregation, hash, métricas
 //!
 //! Wire 2 (PROP-034a): InterceptorChain com ToolScreen no pré-voo.
+//! Wire 3 (P-035):     Adapter normaliza + hasha input antes do pipeline.
 
 use crate::core::module::{Module, ScanContext};
 use crate::core::types::BiasDeclaration;
+use crate::core::adapter::{adapt, AdaptError}; // Wire 3: P-035
 use crate::evidence::TechnicalEvidence;
 use std::time::Instant;
 use crate::validators::us::SsnValidator;
@@ -62,24 +64,24 @@ impl Gatekeeper {
     pub fn new() -> Self {
         let pipeline = vec![
             // Stage 1: Deobfuscate
-            StageEntry { module: Box::new(Normalizer::new()),     stage: PipelineStage::Deobfuscate },
-            StageEntry { module: Box::new(Base64Detector::new()), stage: PipelineStage::Deobfuscate },
-            StageEntry { module: Box::new(Base64Detector::new()), stage: PipelineStage::Deobfuscate },
-            StageEntry { module: Box::new(HexDecoder::new()), stage: PipelineStage::Deobfuscate },
+            StageEntry { module: Box::new(Normalizer::new()),       stage: PipelineStage::Deobfuscate },
+            StageEntry { module: Box::new(Base64Detector::new()),   stage: PipelineStage::Deobfuscate },
+            StageEntry { module: Box::new(Base64Detector::new()),   stage: PipelineStage::Deobfuscate },
+            StageEntry { module: Box::new(HexDecoder::new()),       stage: PipelineStage::Deobfuscate },
             StageEntry { module: Box::new(LeetspeakDetector::new()), stage: PipelineStage::Deobfuscate },
             // Stage 2: Analyze
             StageEntry { module: Box::new(EntropyCalculator::new()), stage: PipelineStage::Analyze },
-            StageEntry { module: Box::new(ZScoreCalculator::new()), stage: PipelineStage::Analyze },
+            StageEntry { module: Box::new(ZScoreCalculator::new()),  stage: PipelineStage::Analyze },
             StageEntry { module: Box::new(CharRatioAnalyzer::new()), stage: PipelineStage::Analyze },
-            StageEntry { module: Box::new(LanguageDetector::new()), stage: PipelineStage::Analyze },
+            StageEntry { module: Box::new(LanguageDetector::new()),  stage: PipelineStage::Analyze },
             // Stage 3: Validate
-            StageEntry { module: Box::new(CpfValidator::new()), stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(CnpjValidator::new()), stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(EmailValidator::new()), stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(CreditCardValidator::new()), stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(PhoneValidator::new()), stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(CpfValidator::new()),         stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(CnpjValidator::new()),        stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(EmailValidator::new()),       stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(CreditCardValidator::new()),  stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(PhoneValidator::new()),       stage: PipelineStage::Validate },
             StageEntry { module: Box::new(PromptInjectionDetector::new()), stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(SsnValidator::new()), stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(SsnValidator::new()),         stage: PipelineStage::Validate },
         ];
 
         // Wire 2: PROP-034a — registra ToolScreen no InterceptorChain
@@ -97,18 +99,55 @@ impl Gatekeeper {
         let start = Instant::now();
         let mut evidence = TechnicalEvidence::new(audit_trail_id);
 
-        // Input hash
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(input.as_bytes());
+        // ── Wire 3: P-035 Adapter — normalização + hash BLAKE3 canônico ───────
+        // Executado antes de qualquer outro estágio.
+        // Fail-secure: vazio ou > 64 KiB → finding Critical + early return.
+        // Zero heap: AdaptedInput é Copy, BLAKE3 opera sobre slice.
+        let adapted = match adapt(input) {
+            Ok(a) => a,
+            Err(AdaptError::Empty) => {
+                log::warn!(
+                    "P-035 Adapter: input vazio — BLOCK audit={}",
+                    audit_trail_id
+                );
+                evidence.add_finding(crate::evidence::Finding::new(
+                    crate::core::types::ValidatorModule::Unknown,
+                    crate::core::types::TechnicalSeverity::Critical(255),
+                    "ADAPTER_EMPTY",
+                    "empty_or_whitespace_input",
+                    "adapter_p035",
+                ));
+                evidence.processing_time_us = start.elapsed().as_micros() as u64;
+                evidence.finalize().ok();
+                return evidence;
+            }
+            Err(AdaptError::InputTooLarge { size }) => {
+                log::warn!(
+                    "P-035 Adapter: input oversized ({} bytes) — BLOCK audit={}",
+                    size, audit_trail_id
+                );
+                evidence.add_finding(crate::evidence::Finding::new(
+                    crate::core::types::ValidatorModule::Unknown,
+                    crate::core::types::TechnicalSeverity::Critical(255),
+                    "ADAPTER_INPUT_TOO_LARGE",
+                    "input_exceeds_64kib",
+                    "adapter_p035",
+                ));
+                evidence.processing_time_us = start.elapsed().as_micros() as u64;
+                evidence.finalize().ok();
+                return evidence;
+            }
+        };
+
+        // Hash canônico do input normalizado (derivado pelo Adapter, sem recomputação)
         evidence.original_request_hash = u64::from_le_bytes(
-            hasher.finalize().as_bytes()[0..8].try_into().unwrap()
+            adapted.blake3_hash[0..8].try_into().unwrap()
         );
-        evidence.input_size = input.len() as u32;
+        evidence.input_size = adapted.normalized_len as u32;
 
         // ── Wire 2: PROP-034a ToolScreen — pré-voo heurístico ─────────────
-        // Executado antes de qualquer estágio do pipeline.
-        // Fail-secure: panic no hook → catch_unwind em InterceptorChain → Block.
-        // Zero heap: ToolScreen.classify() opera em slice + to_lowercase() justificado.
+        // Fail-secure: panic no hook → catch_unwind em hooks.rs → Block.
+        // Zero heap: classify() stack-only; to_lowercase() já justificado.
         let (intercept_action, _) = self.interceptor_chain.run_request(input);
         if let InterceptAction::Block(ref reason) = intercept_action {
             log::warn!(
@@ -128,15 +167,12 @@ impl Gatekeeper {
         }
 
         // ── PROP-031: Skill Provenance Check ──────────────────────────────
-        // Se skill_hash foi definido no contexto, valida contra registry.
         // Fail-secure: skill desconhecida ou revogada → BLOCK imediato.
         // Zero heap: apenas leitura de slice estático.
         if evidence.has_skill_hash() {
             let hash = evidence.get_skill_hash();
             if !self.is_skill_allowed(hash) {
-                log::warn!(
-                    "PROP-031: skill_hash não registrado ou revogado — BLOCK"
-                );
+                log::warn!("PROP-031: skill_hash não registrado ou revogado — BLOCK");
                 evidence.add_finding(crate::evidence::Finding::new(
                     crate::core::types::ValidatorModule::Unknown,
                     crate::core::types::TechnicalSeverity::Critical(255),
@@ -148,7 +184,6 @@ impl Gatekeeper {
                 return evidence;
             }
         }
-
 
         let mut ctx = ScanContext::default();
         ctx.flags.jurisdiction_bitmask = crate::core::module::ScanContextFlags::JURISDICTION_ALL;
@@ -294,7 +329,6 @@ impl Gatekeeper {
     fn is_skill_allowed(&self, hash: &[u8; 32]) -> bool {
         crate::security::skill_registry::is_skill_allowed(hash)
     }
-
 }
 
 impl Default for Gatekeeper {
