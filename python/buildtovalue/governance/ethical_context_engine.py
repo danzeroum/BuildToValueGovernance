@@ -47,6 +47,7 @@ from .persuasion_guard import (
     BiasDeclarationV2,
     PersuasionGuardUnavailableError,
 )
+from .gilligan import GilliganStage  # Wire 1: PROP-030/Care
 
 
 def _validate_persuasion_guard_startup(guard: "PersuasionGuard") -> None:
@@ -194,6 +195,7 @@ class EthicalContextEngine:
         contestability_loop: Optional[ContestabilityLoop] = None,
         bias_guardian: Optional[BiasGuardian] = None,
         persuasion_guard: Optional["PersuasionGuard"] = None,
+        gilligan_stage: Optional[GilliganStage] = None,  # Wire 1: PROP-030/Care
     ):
         self.trust_calculator = trust_calculator or TrustScoreCalculator()
         self.mercy_calculator = mercy_calculator or MercyCalculator()
@@ -209,6 +211,7 @@ class EthicalContextEngine:
         self.persuasion_guard: Optional[PersuasionGuard] = persuasion_guard
         if persuasion_guard is not None:
             _validate_persuasion_guard_startup(persuasion_guard)
+        self.gilligan_stage: GilliganStage = gilligan_stage or GilliganStage()  # Wire 1
 
         self.bias_declaration = {
             'model_version': '1.0.0-unified',
@@ -502,6 +505,12 @@ class EthicalContextEngine:
                 f"persuasion_score={annotated_cot.persuasion_score:.2f} "
                 f"high_suspicion={annotated_cot.high_suspicion_count}"
             )
+
+        # Wire 1: Gilligan/Care P-030 — nó ativo no pipeline judicial
+        gilligan_result = self.gilligan_stage.evaluate(
+            evidence, context.__dict__, technical_verdict.trust_score
+        )
+        factors.append(gilligan_result.explain_decision())
 
         decision = EthicalDecision(
             verdict=verdict,
