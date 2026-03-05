@@ -1,4 +1,4 @@
-//! Gatekeeper v2.6.1 — Pipeline de estágios (F1.5-05)
+//! Gatekeeper v2.6.2 — Pipeline de estágios (F1.5-05)
 //!
 //! Estágios ordenados:
 //! 1. Deobfuscate: normaliza input (Base64, Hex, Leetspeak)
@@ -6,6 +6,8 @@
 //! 3. Validate: detecta PII/violações (CPF, CNPJ, Email, Phone, CC)
 //!    3.5. Re-scan: deobfuscator chaining + re-validate decoded text
 //! 4. Finalize: bias aggregation, hash, métricas
+//!
+//! Wire 2 (PROP-034a): InterceptorChain com ToolScreen no pré-voo.
 
 use crate::core::module::{Module, ScanContext};
 use crate::core::types::BiasDeclaration;
@@ -18,6 +20,8 @@ use crate::validators::financial::CreditCardValidator;
 use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, LanguageDetector};
 use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector, Normalizer};
 use crate::security::PromptInjectionDetector;
+use crate::interceptor::{InterceptorChain, InterceptAction, ToolScreen}; // Wire 2: PROP-034a
+
 // ---------------------------------------------------------------------
 // PIPELINE STAGE
 // ---------------------------------------------------------------------
@@ -51,6 +55,7 @@ pub struct GatekeeperMetrics {
 pub struct Gatekeeper {
     pipeline: Vec<StageEntry>,
     metrics: GatekeeperMetrics,
+    interceptor_chain: InterceptorChain, // Wire 2: PROP-034a
 }
 
 impl Gatekeeper {
@@ -77,9 +82,14 @@ impl Gatekeeper {
             StageEntry { module: Box::new(SsnValidator::new()), stage: PipelineStage::Validate },
         ];
 
+        // Wire 2: PROP-034a — registra ToolScreen no InterceptorChain
+        let mut interceptor_chain = InterceptorChain::new();
+        interceptor_chain.add_request_hook(Box::new(ToolScreen::new()));
+
         Self {
             pipeline,
             metrics: GatekeeperMetrics::default(),
+            interceptor_chain,
         }
     }
 
@@ -94,6 +104,28 @@ impl Gatekeeper {
             hasher.finalize().as_bytes()[0..8].try_into().unwrap()
         );
         evidence.input_size = input.len() as u32;
+
+        // ── Wire 2: PROP-034a ToolScreen — pré-voo heurístico ─────────────
+        // Executado antes de qualquer estágio do pipeline.
+        // Fail-secure: panic no hook → catch_unwind em InterceptorChain → Block.
+        // Zero heap: ToolScreen.classify() opera em slice + to_lowercase() justificado.
+        let (intercept_action, _) = self.interceptor_chain.run_request(input);
+        if let InterceptAction::Block(ref reason) = intercept_action {
+            log::warn!(
+                "PROP-034a: ToolScreen bloqueou input — reason={} audit={}",
+                reason, audit_trail_id
+            );
+            evidence.add_finding(crate::evidence::Finding::new(
+                crate::core::types::ValidatorModule::Unknown,
+                crate::core::types::TechnicalSeverity::Critical(255),
+                "TOOL_SCREEN_BLOCKED",
+                reason,
+                "tool_screen_p034a",
+            ));
+            evidence.processing_time_us = start.elapsed().as_micros() as u64;
+            evidence.finalize().ok();
+            return evidence;
+        }
 
         // ── PROP-031: Skill Provenance Check ──────────────────────────────
         // Se skill_hash foi definido no contexto, valida contra registry.
