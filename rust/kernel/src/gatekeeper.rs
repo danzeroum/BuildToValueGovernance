@@ -95,6 +95,29 @@ impl Gatekeeper {
         );
         evidence.input_size = input.len() as u32;
 
+        // ── PROP-031: Skill Provenance Check ──────────────────────────────
+        // Se skill_hash foi definido no contexto, valida contra registry.
+        // Fail-secure: skill desconhecida ou revogada → BLOCK imediato.
+        // Zero heap: apenas leitura de slice estático.
+        if evidence.has_skill_hash() {
+            let hash = evidence.get_skill_hash();
+            if !self.is_skill_allowed(hash) {
+                log::warn!(
+                    "PROP-031: skill_hash não registrado ou revogado — BLOCK"
+                );
+                evidence.add_finding(crate::evidence::Finding::new(
+                    crate::core::types::ValidatorModule::Unknown,
+                    crate::core::types::TechnicalSeverity::Critical(255),
+                    "SKILL_PROVENANCE",
+                    "skill_not_registered",
+                    "skill_hash_blocked",
+                ));
+                evidence.finalize().ok();
+                return evidence;
+            }
+        }
+
+
         let mut ctx = ScanContext::default();
         ctx.flags.jurisdiction_bitmask = crate::core::module::ScanContextFlags::JURISDICTION_ALL;
 
@@ -232,6 +255,14 @@ impl Gatekeeper {
     pub fn get_metrics(&self) -> &GatekeeperMetrics {
         &self.metrics
     }
+
+    // ── PROP-031: Skill Provenance validator (v1.5.2) ────────────────────
+    // Delega ao SkillRegistry estático (lazy_static, zero heap no hot path).
+    // Fail-secure: revogado → false; registry vazio (dev) → true.
+    fn is_skill_allowed(&self, hash: &[u8; 32]) -> bool {
+        crate::security::skill_registry::is_skill_allowed(hash)
+    }
+
 }
 
 impl Default for Gatekeeper {

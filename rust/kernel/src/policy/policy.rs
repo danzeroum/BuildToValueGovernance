@@ -57,7 +57,7 @@ impl ThreatModel {
     pub fn applies_to_scan(&self, scan_boundary: &str) -> bool {
         let scan_level   = Self::boundary_level(scan_boundary);
         let policy_level = Self::boundary_level(&self.trust_boundary);
-        scan_level >= policy_level
+        scan_level <= policy_level
     }
 }
 

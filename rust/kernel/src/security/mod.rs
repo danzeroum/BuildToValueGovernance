@@ -26,4 +26,4 @@ pub fn init_security() {
     log::info!("- PII masking: Enabled");
     log::info!("- Prompt injection detection: Enabled (ADR-028)");
     log::info!("- Pattern registry: Enabled (ADR-033, epoch={})", pattern_registry::REGISTRY.current_epoch());
-}
+}pub mod skill_registry;
