@@ -1,4 +1,4 @@
-//! Gatekeeper v2.6.3 — Pipeline de estágios (F1.5-05)
+//! Gatekeeper v2.6.4 — Pipeline de estágios (F1.5-05)
 //!
 //! Estágios ordenados:
 //! 1. Deobfuscate: normaliza input (Base64, Hex, Leetspeak)
@@ -9,11 +9,13 @@
 //!
 //! Wire 2 (PROP-034a): InterceptorChain com ToolScreen no pré-voo.
 //! Wire 3 (P-035):     Adapter normaliza + hasha input antes do pipeline.
+//! Wire 4 (PROP-031):  supply_guard::verify_skill() valida MAC + registry.
 
 use crate::core::module::{Module, ScanContext};
 use crate::core::types::BiasDeclaration;
 use crate::core::adapter::{adapt, AdaptError}; // Wire 3: P-035
 use crate::evidence::TechnicalEvidence;
+use crate::security::supply_guard::{verify_skill, SupplyGuardResult}; // Wire 4: PROP-031
 use std::time::Instant;
 use crate::validators::us::SsnValidator;
 use crate::validators::brazilian::{CpfValidator, CnpjValidator};
@@ -23,6 +25,11 @@ use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, 
 use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector, Normalizer};
 use crate::security::PromptInjectionDetector;
 use crate::interceptor::{InterceptorChain, InterceptAction, ToolScreen}; // Wire 2: PROP-034a
+
+/// Chave MAC do kernel para PROP-031 (ADR-031b).
+/// Em produção: substituir por variável de ambiente ou HSM.
+/// Zero heap: &[u8] literal estático.
+const KERNEL_MAC_KEY: &[u8] = b"btv-kernel-supply-guard-v1";
 
 // ---------------------------------------------------------------------
 // PIPELINE STAGE
@@ -64,24 +71,24 @@ impl Gatekeeper {
     pub fn new() -> Self {
         let pipeline = vec![
             // Stage 1: Deobfuscate
-            StageEntry { module: Box::new(Normalizer::new()),       stage: PipelineStage::Deobfuscate },
-            StageEntry { module: Box::new(Base64Detector::new()),   stage: PipelineStage::Deobfuscate },
-            StageEntry { module: Box::new(Base64Detector::new()),   stage: PipelineStage::Deobfuscate },
-            StageEntry { module: Box::new(HexDecoder::new()),       stage: PipelineStage::Deobfuscate },
+            StageEntry { module: Box::new(Normalizer::new()),        stage: PipelineStage::Deobfuscate },
+            StageEntry { module: Box::new(Base64Detector::new()),    stage: PipelineStage::Deobfuscate },
+            StageEntry { module: Box::new(Base64Detector::new()),    stage: PipelineStage::Deobfuscate },
+            StageEntry { module: Box::new(HexDecoder::new()),        stage: PipelineStage::Deobfuscate },
             StageEntry { module: Box::new(LeetspeakDetector::new()), stage: PipelineStage::Deobfuscate },
             // Stage 2: Analyze
-            StageEntry { module: Box::new(EntropyCalculator::new()), stage: PipelineStage::Analyze },
-            StageEntry { module: Box::new(ZScoreCalculator::new()),  stage: PipelineStage::Analyze },
-            StageEntry { module: Box::new(CharRatioAnalyzer::new()), stage: PipelineStage::Analyze },
-            StageEntry { module: Box::new(LanguageDetector::new()),  stage: PipelineStage::Analyze },
+            StageEntry { module: Box::new(EntropyCalculator::new()),  stage: PipelineStage::Analyze },
+            StageEntry { module: Box::new(ZScoreCalculator::new()),   stage: PipelineStage::Analyze },
+            StageEntry { module: Box::new(CharRatioAnalyzer::new()),  stage: PipelineStage::Analyze },
+            StageEntry { module: Box::new(LanguageDetector::new()),   stage: PipelineStage::Analyze },
             // Stage 3: Validate
-            StageEntry { module: Box::new(CpfValidator::new()),         stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(CnpjValidator::new()),        stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(EmailValidator::new()),       stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(CreditCardValidator::new()),  stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(PhoneValidator::new()),       stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(CpfValidator::new()),          stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(CnpjValidator::new()),         stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(EmailValidator::new()),        stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(CreditCardValidator::new()),   stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(PhoneValidator::new()),        stage: PipelineStage::Validate },
             StageEntry { module: Box::new(PromptInjectionDetector::new()), stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(SsnValidator::new()),         stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(SsnValidator::new()),          stage: PipelineStage::Validate },
         ];
 
         // Wire 2: PROP-034a — registra ToolScreen no InterceptorChain
@@ -100,16 +107,12 @@ impl Gatekeeper {
         let mut evidence = TechnicalEvidence::new(audit_trail_id);
 
         // ── Wire 3: P-035 Adapter — normalização + hash BLAKE3 canônico ───────
-        // Executado antes de qualquer outro estágio.
         // Fail-secure: vazio ou > 64 KiB → finding Critical + early return.
         // Zero heap: AdaptedInput é Copy, BLAKE3 opera sobre slice.
         let adapted = match adapt(input) {
             Ok(a) => a,
             Err(AdaptError::Empty) => {
-                log::warn!(
-                    "P-035 Adapter: input vazio — BLOCK audit={}",
-                    audit_trail_id
-                );
+                log::warn!("P-035 Adapter: input vazio — BLOCK audit={}", audit_trail_id);
                 evidence.add_finding(crate::evidence::Finding::new(
                     crate::core::types::ValidatorModule::Unknown,
                     crate::core::types::TechnicalSeverity::Critical(255),
@@ -139,13 +142,13 @@ impl Gatekeeper {
             }
         };
 
-        // Hash canônico do input normalizado (derivado pelo Adapter, sem recomputação)
+        // Hash canônico do input normalizado (derivado pelo Adapter)
         evidence.original_request_hash = u64::from_le_bytes(
             adapted.blake3_hash[0..8].try_into().unwrap()
         );
         evidence.input_size = adapted.normalized_len as u32;
 
-        // ── Wire 2: PROP-034a ToolScreen — pré-voo heurístico ─────────────
+        // ── Wire 2: PROP-034a ToolScreen — pré-voo heurístico ─────────────────
         // Fail-secure: panic no hook → catch_unwind em hooks.rs → Block.
         // Zero heap: classify() stack-only; to_lowercase() já justificado.
         let (intercept_action, _) = self.interceptor_chain.run_request(input);
@@ -166,22 +169,31 @@ impl Gatekeeper {
             return evidence;
         }
 
-        // ── PROP-031: Skill Provenance Check ──────────────────────────────
-        // Fail-secure: skill desconhecida ou revogada → BLOCK imediato.
-        // Zero heap: apenas leitura de slice estático.
+        // ── Wire 4 / PROP-031: Supply Guard — MAC + registry ──────────────────
+        // verify_skill() = BLAKE3-MAC (constant_time_eq) + is_skill_allowed().
+        // Fail-secure: InvalidMac ou NotAllowed → BLOCK imediato.
+        // Zero heap: verify_skill() opera sobre arrays fixos na stack.
         if evidence.has_skill_hash() {
             let hash = evidence.get_skill_hash();
-            if !self.is_skill_allowed(hash) {
-                log::warn!("PROP-031: skill_hash não registrado ou revogado — BLOCK");
-                evidence.add_finding(crate::evidence::Finding::new(
-                    crate::core::types::ValidatorModule::Unknown,
-                    crate::core::types::TechnicalSeverity::Critical(255),
-                    "SKILL_PROVENANCE",
-                    "skill_not_registered",
-                    "skill_hash_blocked",
-                ));
-                evidence.finalize().ok();
-                return evidence;
+            let mac_tag = evidence.get_skill_mac_tag();
+            match verify_skill(hash, mac_tag, KERNEL_MAC_KEY) {
+                SupplyGuardResult::Allowed => {}
+                SupplyGuardResult::Blocked(ref reason) => {
+                    log::warn!(
+                        "PROP-031: supply_guard::verify_skill falhou — {:?} — BLOCK audit={}",
+                        reason, audit_trail_id
+                    );
+                    evidence.add_finding(crate::evidence::Finding::new(
+                        crate::core::types::ValidatorModule::Unknown,
+                        crate::core::types::TechnicalSeverity::Critical(255),
+                        "SKILL_PROVENANCE",
+                        "supply_guard_blocked",
+                        "supply_guard_p031",
+                    ));
+                    evidence.processing_time_us = start.elapsed().as_micros() as u64;
+                    evidence.finalize().ok();
+                    return evidence;
+                }
             }
         }
 
@@ -321,13 +333,6 @@ impl Gatekeeper {
 
     pub fn get_metrics(&self) -> &GatekeeperMetrics {
         &self.metrics
-    }
-
-    // ── PROP-031: Skill Provenance validator (v1.5.2) ────────────────────
-    // Delega ao SkillRegistry estático (lazy_static, zero heap no hot path).
-    // Fail-secure: revogado → false; registry vazio (dev) → true.
-    fn is_skill_allowed(&self, hash: &[u8; 32]) -> bool {
-        crate::security::skill_registry::is_skill_allowed(hash)
     }
 }
 
