@@ -1,8 +1,9 @@
-//! Durable Ledger v2.5.0 — Sovereign Trust OS
+//! Durable Ledger v2.5.1 — Sovereign Trust OS
 //! F1.5-04: Recovery < 5s + Chain Integrity Verification
+//! Wire 5 (PROP-005): SessionAggregator integrado ao append() (Fourth Estate).
 
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::fs::OpenOptions;
 use std::io::{Write, Read, Seek, SeekFrom};
 use tokio::sync::mpsc;
@@ -11,6 +12,8 @@ use anyhow::{Result, Context};
 use crate::ledger::entry::LedgerEntry;
 use crate::ledger::wal::{WriteAheadLog as WalStore, WalConfig};
 use crate::ledger::remote::S3Config;
+use crate::ledger::session_agg::{SessionAggregator, SessionAggregate, SessionEvent}; // Wire 5
+use crate::core::types::RiskLevel; // Wire 5
 use crate::evidence::TechnicalEvidence;
 
 // ---------------------------------------------------------------------
@@ -46,6 +49,7 @@ pub struct DurableLedger {
     remote_tx: mpsc::UnboundedSender<LedgerEntry>,
     last_entry_id: Arc<RwLock<u64>>,
     last_entry_hash: Arc<RwLock<[u8; 32]>>,
+    session_agg: Mutex<SessionAggregator>, // Wire 5: PROP-005 Fourth Estate
 }
 
 impl DurableLedger {
@@ -108,6 +112,9 @@ impl DurableLedger {
             remote_tx,
             last_entry_id: Arc::new(RwLock::new(last_id)),
             last_entry_hash: Arc::new(RwLock::new(last_hash)),
+            // Wire 5: ring buffer pré-alocado, session_id=0 (global ledger)
+            // Zero heap após new(): [Option<SessionEvent>; 256] stack-allocated.
+            session_agg: Mutex::new(SessionAggregator::new(0)),
         })
     }
 
@@ -135,7 +142,40 @@ impl DurableLedger {
             .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
         *last_hash_write = entry.entry_hash;
 
+        // ── Wire 5: PROP-005 Session Aggregator — Fourth Estate ─────────────────
+        // Executado após persistência bem-sucedida (WAL + disk).
+        // Fail-safe: lock poison → skip (append já foi persistido com sucesso).
+        // Zero heap: SessionEvent é Copy; ring buffer pré-alocado em new().
+        let risk_level = match evidence.composite_risk as u32 {
+            0..=29  => RiskLevel::Safe,
+            30..=59 => RiskLevel::Low,
+            60..=79 => RiskLevel::High,
+            _       => RiskLevel::Critical,
+        };
+        let session_event = SessionEvent::new(
+            evidence.timestamp as u64,
+            risk_level,
+            evidence.composite_risk,
+            evidence.critical_count > 0,
+            evidence.stats.has_pii,
+        );
+        if let Ok(mut agg) = self.session_agg.lock() {
+            agg.push(session_event);
+        } else {
+            log::warn!("PROP-005: session_agg lock poisoned — evento descartado, entry_id={}", *last_id);
+        }
+
         Ok(*last_id)
+    }
+
+    // -----------------------------------------------------------------
+    // SESSION AGGREGATE (PROP-005 / Fourth Estate)
+    // -----------------------------------------------------------------
+
+    /// Retorna métricas agregadas da sessão para leitura pelo Fourth Estate.
+    /// Retorna None se o lock estiver envenenado (não deve ocorrer em operação normal).
+    pub fn get_session_aggregate(&self) -> Option<SessionAggregate> {
+        self.session_agg.lock().ok().map(|agg| agg.aggregate())
     }
 
     // -----------------------------------------------------------------

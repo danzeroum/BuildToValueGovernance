@@ -47,13 +47,7 @@ from .persuasion_guard import (
     BiasDeclarationV2,
     PersuasionGuardUnavailableError,
 )
-from .consensus_validator import (
-    ConsensusValidator,
-    ConsensusDecision,
-    ConsensusOutcome,
-    Reversibility,
-    CONFIDENCE_THRESHOLD,
-)
+from .gilligan import GilliganStage  # Wire 1: PROP-030/Care
 
 
 def _validate_persuasion_guard_startup(guard: "PersuasionGuard") -> None:
@@ -201,7 +195,7 @@ class EthicalContextEngine:
         contestability_loop: Optional[ContestabilityLoop] = None,
         bias_guardian: Optional[BiasGuardian] = None,
         persuasion_guard: Optional["PersuasionGuard"] = None,
-        consensus_validator: Optional[ConsensusValidator] = None,
+        gilligan_stage: Optional[GilliganStage] = None,  # Wire 1: PROP-030/Care
     ):
         self.trust_calculator = trust_calculator or TrustScoreCalculator()
         self.mercy_calculator = mercy_calculator or MercyCalculator()
@@ -217,7 +211,7 @@ class EthicalContextEngine:
         self.persuasion_guard: Optional[PersuasionGuard] = persuasion_guard
         if persuasion_guard is not None:
             _validate_persuasion_guard_startup(persuasion_guard)
-        self.consensus_validator: Optional[ConsensusValidator] = consensus_validator
+        self.gilligan_stage: GilliganStage = gilligan_stage or GilliganStage()  # Wire 1
 
         self.bias_declaration = {
             'model_version': '1.0.0-unified',
@@ -512,6 +506,12 @@ class EthicalContextEngine:
                 f"high_suspicion={annotated_cot.high_suspicion_count}"
             )
 
+        # Wire 1: Gilligan/Care P-030 — nó ativo no pipeline judicial
+        gilligan_result = self.gilligan_stage.evaluate(
+            evidence, context.__dict__, technical_verdict.trust_score
+        )
+        factors.append(gilligan_result.explain_decision())
+
         decision = EthicalDecision(
             verdict=verdict,
             adjusted_severity=adjusted_severity,
@@ -534,144 +534,6 @@ class EthicalContextEngine:
             decision.signature = None
 
         return decision
-
-    # ============================================================================
-    # CONSENSUS VALIDATOR — judge_with_consensus (ADR-0050, PROP-032)
-    # ============================================================================
-
-    async def judge_with_consensus(
-        self,
-        evidence: TechnicalEvidence,
-        request_metadata: RequestMetadata,
-        reversibility: Reversibility = Reversibility.REVERSIBLE,
-        ethical_context: Optional[EthicalContext] = None,
-        profile_name: str = "default",
-    ) -> UnifiedDecision:
-        """
-        Decisao com Multi-Run Consensus (ADR-0050).
-
-        Fast path se: consensus_validator ausente, REVERSIBLE ou confidence >= THRESHOLD.
-        Sem ProfileManager: retorna decisao basica fail-safe por composite_risk.
-        """
-        self.metrics["decisions_total"] += 1
-        if ethical_context is None:
-            ethical_context = self._generate_ethical_context(request_metadata)
-
-        if not self.profile_manager:
-            return self._make_basic_decision(
-                evidence, request_metadata, ethical_context, profile_name
-            )
-
-        tech_start = time.perf_counter()
-        technical_verdict = self._decide_technical(evidence, request_metadata, profile_name)
-        tech_time = (time.perf_counter() - tech_start) * 1000
-        self.metrics["technical_decisions"] += 1
-
-        gov_start = time.perf_counter()
-        if (
-            self.consensus_validator is None
-            or reversibility != Reversibility.IRREVERSIBLE
-        ):
-            ethical_decision = self._decide_governance(
-                technical_verdict, evidence, ethical_context
-            )
-        else:
-            ethical_decision = await self._decide_governance_consensus(
-                technical_verdict, evidence, ethical_context,
-                reversibility, request_metadata, profile_name,
-            )
-        gov_time = (time.perf_counter() - gov_start) * 1000
-        self.metrics["governance_decisions"] += 1
-
-        if ethical_decision.mercy_applied:
-            self.metrics["mercy_applied"] += 1
-
-        decision_id = self._generate_decision_id(evidence, request_metadata, ethical_context)
-        total_time = tech_time + gov_time
-
-        return UnifiedDecision(
-            decision_id=decision_id,
-            timestamp=int(time.time()),
-            technical_verdict=technical_verdict,
-            ethical_decision=ethical_decision,
-            evidence_hash=evidence.hash,
-            request_metadata=request_metadata,
-            ethical_context=ethical_context,
-            profile_name=profile_name,
-            total_processing_time_ms=total_time,
-            technical_time_ms=tech_time,
-            governance_time_ms=gov_time,
-        )
-
-    async def _decide_governance_consensus(
-        self,
-        technical_verdict: TechnicalVerdict,
-        evidence: TechnicalEvidence,
-        ethical_context: EthicalContext,
-        reversibility: Reversibility,
-        request_metadata: RequestMetadata,
-        profile_name: str,
-    ) -> EthicalDecision:
-        """Executa consenso async, substitui TechnicalVerdict com resultado (ADR-0050)."""
-        assert self.consensus_validator is not None
-        consensus = await self.consensus_validator.validate(
-            reversibility, technical_verdict.confidence
-        )
-        override = TechnicalVerdict(
-            action=consensus.final_action,
-            confidence=technical_verdict.confidence,
-            rule_id=technical_verdict.rule_id,
-            rationale=consensus.escalation_reason or technical_verdict.rationale,
-            mercy_score=technical_verdict.mercy_score,
-            trust_score=technical_verdict.trust_score,
-            context_factors={
-                **technical_verdict.context_factors,
-                "consensus": consensus.to_explain_dict(),
-            },
-        )
-        return self._decide_governance(override, evidence, ethical_context)
-
-    def _make_basic_decision(
-        self,
-        evidence: TechnicalEvidence,
-        request_metadata: RequestMetadata,
-        ethical_context: EthicalContext,
-        profile_name: str,
-    ) -> UnifiedDecision:
-        """Decisao basica quando ProfileManager nao configurado (fail-safe fallback)."""
-        now = int(time.time())
-        action = ActionType.BLOCK if evidence.composite_risk >= 0.5 else ActionType.ALLOW
-        rationale = "ProfileManager ausente: decisao basica por composite_risk."
-        technical_verdict = TechnicalVerdict(
-            action=action, confidence=0.5, rule_id=None, rationale=rationale,
-        )
-        ethical_decision = EthicalDecision(
-            verdict=action,
-            adjusted_severity=evidence.composite_risk,
-            confidence=0.5,
-            context=ethical_context,
-            mercy_applied=False,
-            mercy_factor=None,
-            rationale=rationale,
-            contributing_factors=["no_profile_manager"],
-            contestable=True,
-            appeal_deadline=datetime.now() + timedelta(hours=24),
-            bias_declaration=self.bias_declaration.copy(),
-        )
-        decision_id = self._generate_decision_id(evidence, request_metadata, ethical_context)
-        return UnifiedDecision(
-            decision_id=decision_id,
-            timestamp=now,
-            technical_verdict=technical_verdict,
-            ethical_decision=ethical_decision,
-            evidence_hash=evidence.hash,
-            request_metadata=request_metadata,
-            ethical_context=ethical_context,
-            profile_name=profile_name,
-            total_processing_time_ms=0.0,
-            technical_time_ms=0.0,
-            governance_time_ms=0.0,
-        )
 
     # ============================================================================
     # HELPERS

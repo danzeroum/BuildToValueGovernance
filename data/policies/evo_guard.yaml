@@ -1,0 +1,45 @@
+# EVO-Guard Policy v1.0.0 — Legislative (PROP-035)
+# Governa a evolução de modelos: version gates, capability thresholds, ethical drift checks.
+# Policy-as-Code: princípios Rawls (equidade) + Jonas (responsabilidade).
+# Fail-secure: BLOCK em qualquer condição de erro (parse, missing, version mismatch).
+
+id: evo_guard_v1
+version: "1.0.0"
+description: >
+  Evolution Guard — previne expansão descontrolada de capacidades de agentes de IA.
+  Impõe aprovação por estágios para novas versões de modelos e classes de capacidade.
+
+gates:
+  model_version:
+    require_ethical_review: true
+    review_sla_hours: 24          # SLA de contestação alinhado ao Judiciary
+    auto_approve_patch: false      # patches também requerem revisão
+
+  capability_classes:
+    allowed:
+      - text_generation
+      - code_assist
+      - summarization
+      - classification
+    require_committee_approval:
+      - autonomous_execution
+      - network_access
+      - file_write
+      - process_spawn
+
+thresholds:
+  max_composite_risk_for_new_capability: 20.0   # acima disso → bloqueio automático
+  min_trust_score_for_escalation: 0.70
+  max_bias_delta_per_version: 0.05              # drift máximo de viés por release
+
+drift_detection:
+  enabled: true
+  sentinel_module: "GoalDriftSentinel"          # python/buildtovalue/governance/goal_drift_sentinel.py
+  alert_target: "ContextSanitizer"              # P-038: drift alert → ContextSanitizer
+  check_interval_requests: 100
+
+fail_secure:
+  on_missing_policy: BLOCK
+  on_parse_error: BLOCK
+  on_version_mismatch: BLOCK
+  on_committee_timeout: BLOCK                   # ausência de aprovação = bloqueio
