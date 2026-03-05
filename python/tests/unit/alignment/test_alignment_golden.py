@@ -7,7 +7,7 @@ Fail-fast: qualquer falha bloqueia merge/deploy.
 
 Cobertura:
   - model_registry.yaml parseia
-  - TechnicalEvidence: tamanho canônico 9596 bytes (ADR-0044)
+  - TechnicalEvidence: tamanho canônico 9632 bytes (ADR-0044)
   - ToolOutputSanitizer: Confirmed→BLOCK, Clean→ALLOW, fail-secure, explain
   - BiasDeclarationV2: mesma família→ValueError, famílias distintas→ok
   - BatchProcessor: fail-secure 3×BLOCK, lote vazio→success_rate=1.0
@@ -22,7 +22,10 @@ from pathlib import Path
 ROOT = Path(__file__).parents[4]  # repo root (BuildToValueGovernance/)
 
 # ADR-0044: tamanho canônico imutável do TechnicalEvidence
-TECHNICAL_EVIDENCE_SIZE_BYTES: int = 9596
+# Origem: std::mem::size_of::<TechnicalEvidence>() == 9632
+# Layout: 64+32+512+1872+16+7072+32+32 = 9632
+# _reserved_metadata: [u8; 7072]
+TECHNICAL_EVIDENCE_SIZE_BYTES: int = 9632
 
 
 # ─── Infra / Políticas ───────────────────────────────────────────────────────────────────
@@ -39,8 +42,14 @@ def test_model_registry_yaml_exists_and_parses():
 # ─── TechnicalEvidence (ADR-0044) ────────────────────────────────────────────────────
 
 def test_technical_evidence_size_canonical():
-    """ADR-0044: 9596 bytes é o valor canônico. Alteração exige novo ADR + breaking change."""
-    assert TECHNICAL_EVIDENCE_SIZE_BYTES == 9596
+    """
+    ADR-0044: 9632 bytes é o valor canônico.
+    Origem: std::mem::size_of::<TechnicalEvidence>() == 9632
+    Layout: 64+32+512+1872+16+7072+32+32 = 9632
+    _reserved_metadata: [u8; 7072] confirma o campo de maior volume.
+    Alteração deste valor exige novo ADR + breaking change.
+    """
+    assert TECHNICAL_EVIDENCE_SIZE_BYTES == 9632
 
 
 # ─── ToolOutputSanitizer (PROP-034) ────────────────────────────────────────────────────
