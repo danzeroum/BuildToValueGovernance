@@ -27,21 +27,23 @@ class SanitizerDecision(str, Enum):
     BLOCK = "BLOCK"
 
 
-_INJECTION_PATTERNS: tuple[str, ...] = (
-    r"(?i)\bignore\b.*\binstruction",
-    r"(?i)<\s*system\s*>",
-    r"(?i)<\s*instruction\s*>",
-    r"(?i)<\s*prompt\s*>",
-    r"(?i)\byou are\b.{0,60}\bsystem\b",
-    r"(?i)\bdo not follow\b",
-    r"(?i)\bdeveloper\s+message\b",
-    r"(?i)\bnew\s+instruction\b",
-    r"(?i)\bassistant\s*:\s*",
-    r"(?i)\bsystem\s*:\s*",
+# antes: cada pattern tinha (?i)
+_INJECTION_PATTERNS = (
+    r"\bignore\b.*\binstruction",
+    r"<\s*system\s*>",
+    r"<\s*instruction\s*>",
+    r"<\s*prompt\s*>",
+    r"\byou are\b.{0,60}\bsystem\b",
+    r"\bdo not follow\b",
+    r"\bdeveloper\s+message\b",
+    r"\bnew\s+instruction\b",
+    r"\bassistant\s*:\s*",
+    r"\bsystem\s*:\s*",
 )
 
-_RE_SCREEN: re.Pattern[str] = re.compile("|".join(_INJECTION_PATTERNS))
-_RE_LINE: re.Pattern[str] = re.compile("|".join(_INJECTION_PATTERNS))
+_RE_SCREEN = re.compile("|".join(_INJECTION_PATTERNS), flags=re.IGNORECASE)
+_RE_LINE   = re.compile("|".join(_INJECTION_PATTERNS), flags=re.IGNORECASE)
+
 
 _CONFIDENCE_THRESHOLD: float = 0.70
 
