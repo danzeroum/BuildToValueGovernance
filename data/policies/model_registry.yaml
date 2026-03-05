@@ -1,0 +1,11 @@
+# Model Registry — PROP-035 (v1.5.1)
+# Mudanças aqui disparam alignment_regression.yml automaticamente.
+version: "1.0.0"
+models:
+  - id: "local-slm-default"
+    path: null
+    type: "gguf"
+    tamper_resistance_index: null  # preencher após TamperTest (paper 217)
+    calibration_date: 20260304
+    golden_suite_required: true
+    notes: "Stub — preencher com modelo real em v1.5.2"

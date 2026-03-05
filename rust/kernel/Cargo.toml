@@ -35,6 +35,8 @@ aws-config = { workspace = true, optional = true }
 prometheus = { workspace = true, optional = true }
 arc-swap = { workspace = true }
 whatlang = { workspace = true }
+hmac = "0.12"
+sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = { workspace = true }
