@@ -1,44 +1,47 @@
-# PROP-035 — Post-Update Golden Test Suite
-# Dispara em mudança de model_registry.yaml ou das próprias golden suites.
-# Falha bloqueia deploy (exit 1).
-name: Alignment Regression
+name: alignment_regression
 
 on:
   push:
     paths:
-      - 'data/policies/model_registry.yaml'
-      - 'tests/alignment/golden_suite/**'
+      - "data/policies/model_registry.yaml"
+      - "python/tests/unit/alignment/**"
+      - ".github/workflows/alignment_regression.yml"
   pull_request:
     paths:
-      - 'data/policies/model_registry.yaml'
-      - 'tests/alignment/golden_suite/**'
+      - "data/policies/model_registry.yaml"
+      - "python/tests/unit/alignment/**"
+      - ".github/workflows/alignment_regression.yml"
+  workflow_dispatch: {}
 
 jobs:
   golden_tests:
-    name: Golden Suite — Alignment Regression
+    name: Alignment Golden Suite (PROP-035)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
-          cd python
-          pip install -e ".[dev]"
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pyyaml
+          if [ -f python/requirements.txt ]; then pip install -r python/requirements.txt; fi
+          if [ -f python/requirements-dev.txt ]; then pip install -r python/requirements-dev.txt; fi
 
-      - name: Run alignment golden suite
+      - name: Run alignment golden tests
         run: |
           cd python
-          python -m pytest tests/alignment/golden_suite/ -v --tb=short
-        # Fail-secure: qualquer falha bloqueia o deploy
-        continue-on-error: false
+          python -m pytest -q tests/unit/alignment/test_alignment_golden.py
 
-      - name: Block deploy on failure
+      - name: Upload failure artifacts
         if: failure()
-        run: |
-          echo "❌ ALIGNMENT REGRESSION DETECTED — deploy bloqueado"
-          exit 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: alignment-regression-failure
+          path: python/.pytest_cache/
