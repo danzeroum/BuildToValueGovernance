@@ -626,7 +626,7 @@ O Bias Guardian define um protocolo de atualização que **fecha o loop filosóf
 │                                                          │
 │  1. RT-XXX roda → relatório com divergência medida      │
 │         ↓                                               │
-│  2. Bias Guardian Gate avalia nível (OK/WARN/BLOCK)     │
+│  2. Bias Guardian Gate avalia nível (OK/WARNING/BLOCK)     │
 │         ↓                                               │
 │  3. BLOCK → dev DEVE abrir PR atualizando:              │
 │     - rust/.../validators/xxx.rs (bias_declaration())   │
@@ -697,8 +697,8 @@ Scripts RT-010 a RT-012 ainda não existem (prometidos em ADR-035 mas pendentes)
 [ ] ci-red-team.yml existe em .github/workflows/
 [ ] bias-baseline.json existe em ops/red-team/ com entradas RT-001..008
 [ ] bias_guardian_gate.py retorna exit 1 para divergência FNR > 15pp
-[ ] bias_guardian_gate.py retorna exit 0 para divergência FNR entre 5pp e 15pp (warning)
-[ ] bias_guardian_gate.py retorna exit 0 para divergência FNR ≤ 5pp (ok)
+[ ] bias_guardian_gate.py retorna exit 0 para divergência FNR entre 5pp e 15pp (WARNING)
+[ ] bias_guardian_gate.py retorna exit 0 para divergência FNR ≤ 5pp (OK)
 [ ] explain_decision() retorna string não vazia para todos os DivergenceLevel
 [ ] RT-010, RT-011, RT-012 criados e integrados em run-all.sh
 [ ] lib/common.sh atualizado com rt_write_report() gerando schema_version: "2.0"
