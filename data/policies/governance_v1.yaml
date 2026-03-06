@@ -1,0 +1,73 @@
+# data/policies/governance_v1.yaml
+# PolicyEngine v1.0.0 — ADR-011 (Policy-as-Code / Legislativo)
+# Principio de Rawls: politicas publicas, contrato auditavel
+# Enum sincronizado com: DivergenceLevel (OK/WARNING/BLOCK) e PolicyAction
+
+schema_version: "1.0"
+policy_id: "governance-v1"
+description: "Politicas core de governanca etica — Republica Algoritmica"
+adr_refs: ["ADR-011", "ADR-016", "ADR-038"]
+
+rules:
+  - rule_id: "GOV-001"
+    description: "Risco critico: composite_risk > 0.9 — BLOCK imediato (Jonas)"
+    action: "BLOCK"
+    severity: "critical"
+    condition_field: "composite_risk"
+    condition_operator: "gt"
+    condition_value: 0.9
+    adr_refs: ["ADR-016", "ADR-038"]
+
+  - rule_id: "GOV-002"
+    description: "Risco alto: composite_risk > 0.7 — ESCALATE para revisao humana (Rawls)"
+    action: "ESCALATE"
+    severity: "high"
+    condition_field: "composite_risk"
+    condition_operator: "gt"
+    condition_value: 0.7
+    adr_refs: ["ADR-016"]
+
+  - rule_id: "GOV-003"
+    description: "PII detectado — REDACT obrigatorio (Levinas: protecao do outro)"
+    action: "REDACT"
+    severity: "high"
+    condition_field: "pii_detected"
+    condition_operator: "eq"
+    condition_value: "true"
+    adr_refs: ["ADR-010"]
+
+  - rule_id: "GOV-004"
+    description: "Prompt injection confirmada — BLOCK fail-secure (Jonas)"
+    action: "BLOCK"
+    severity: "critical"
+    condition_field: "prompt_injection"
+    condition_operator: "eq"
+    condition_value: "true"
+    adr_refs: ["ADR-028", "ADR-038"]
+
+  - rule_id: "GOV-005"
+    description: "Supply chain nao verificada — BLOCK (Jonas: responsabilidade preventiva)"
+    action: "BLOCK"
+    severity: "critical"
+    condition_field: "supply_guard_failed"
+    condition_operator: "eq"
+    condition_value: "true"
+    adr_refs: ["ADR-031b"]
+
+  - rule_id: "GOV-006"
+    description: "Goal drift critico detectado — BLOCK (Jonas: deriva de objetivo)"
+    action: "BLOCK"
+    severity: "critical"
+    condition_field: "goal_drift_critical"
+    condition_operator: "eq"
+    condition_value: "true"
+    adr_refs: ["ADR-038", "PROP-038"]
+
+  - rule_id: "GOV-007"
+    description: "Persuasion attack detectado — ESCALATE para humano (Levinas)"
+    action: "ESCALATE"
+    severity: "high"
+    condition_field: "persuasion_detected"
+    condition_operator: "eq"
+    condition_value: "true"
+    adr_refs: ["ADR-049", "PROP-037"]
