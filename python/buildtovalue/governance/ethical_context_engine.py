@@ -1,57 +1,50 @@
-from .contestability_loop import ContestabilityLoop
-from .bias_guardian import BiasGuardian
-
 """
-Ethical Context Engine v1.0.0 — Unified Technical-Juridical Engine
-BuildToValue Governance Layer — Algorithmic Republic
+EthicalContextEngine v1.1.0 — Orquestrador Unificado (T1.3 / v1.6.0)
 
-Combines technical security + ethical governance.
+Arquivo decomposto conforme T1.3 (divida aberta desde 89353d3):
+  ece_types.py      — dataclasses locais (Rule, TechnicalVerdict, EthicalDecision, UnifiedDecision)
+  ece_technical.py  — TechnicalLayer (regras, SafeEvaluator, trust)
+  ece_governance.py — GovernanceLayer (Gilligan, MercyFactor, assinatura)
+  ethical_context_engine.py — este arquivo, orquestrador puro
 
-Architecture:
-- Technical Layer: profile-based rules, SafeExpressionEvaluator, trust scores
-- Governance Layer: contestability (LGPD Art. 20), HMAC signatures, mercy (Gilligan)
-- Unified API: decide() returns UnifiedDecision with both layers
-
-Performance SLA: <10ms p99
-Governance: LGPD Art. 20, EU AI Act, Algorithmic Justice League
-
-NOTE: This file exceeds the 200-line limit (known debt).
-Tracked for decomposition in Phase 1 T1.3.
+API publica preservada: decide(), decide_v2(), decide_v3(), decide_with_cot(),
+EthicalContextEngineV2, EthicalContextEngineV3, EthicalContextEngineFactory.
 """
+from __future__ import annotations
 
-import time
-import logging
 import hashlib
-import json
+import logging
+import time
 from datetime import datetime, timedelta
-from dataclasses import dataclass, field, asdict
-from typing import Optional, List, Dict, Any, Tuple
-from functools import lru_cache
+from typing import Any, Dict, List, Optional
 
-from .mercy_factor import MercyFactor  # noqa: F401 (re-export for backward compat)
+from .mercy_factor import MercyFactor  # noqa: F401 — re-export backward compat
 
-from .safe_expression_evaluator import (
-    SafeExpressionEvaluator,
-    EvaluationResult,
-    SecurityError,
-    ExpressionTimeoutError,
+from .ece_types import (
+    Rule, TechnicalVerdict, EthicalDecision, UnifiedDecision,
 )
+from .ece_technical import TechnicalLayer
+from .ece_governance import GovernanceLayer
+from .safe_expression_evaluator import SafeExpressionEvaluator
 from .trust_score import TrustScoreCalculator
 from .mercy_algorithm import MercyCalculator
 from .profile_manager import Profile, ProfileManager
 from .policy_signer import PolicySigner, PolicySigningError
 from .ffi_client import TechnicalEvidence, Finding
+from .contestability_loop import ContestabilityLoop
+from .consensus_validator import ConsensusValidator, ConsensusDecision, Reversibility
+from .bias_guardian import BiasGuardian
 from .persuasion_guard import (
-    PersuasionGuard,
-    AnnotatedCoT,
-    BiasDeclarationV2,
-    PersuasionGuardUnavailableError,
+    PersuasionGuard, AnnotatedCoT, BiasDeclarationV2, PersuasionGuardUnavailableError,
 )
-from .gilligan import GilliganStage  # Wire 1: PROP-030/Care
+from .gilligan import GilliganStage
+from .types import ActionType, RequestMetadata, EthicalContext
+
+logger = logging.getLogger(__name__)
 
 
-def _validate_persuasion_guard_startup(guard: "PersuasionGuard") -> None:
-    """Confirma guard configurado (ADR-0049 D2). Falha explícita em startup."""
+def _validate_persuasion_guard_startup(guard: PersuasionGuard) -> None:
+    """Confirma guard configurado (ADR-0049 D2). Falha explicita em startup."""
     decl = guard.bias_declaration
     if not decl.checker_model_family:
         raise ValueError("PersuasionGuard.checker_model_family ausente (ADR-0049 D1)")
@@ -61,128 +54,26 @@ def _validate_persuasion_guard_startup(guard: "PersuasionGuard") -> None:
     )
 
 
+_DEFAULT_BIAS_DECLARATION: Dict[str, Any] = {
+    "model_version": "1.1.0-unified",
+    "last_calibration": datetime.now().strftime("%Y-%m-%d"),
+    "known_limitations": [
+        "Does not detect context-specific semantic violations",
+        "False positive rate: ~5% in low-confidence scenarios",
+        "Requires human review for CRITICAL operations",
+    ],
+    "false_positive_rate": 0.05,
+    "false_negative_rate": 0.02,
+    "calibration_dataset_size": 10000,
+}
 
-
-logger = logging.getLogger(__name__)
-
-# ============================================================================
-# CANONICAL TYPES (single source of truth: types.py)
-# ============================================================================
-from .types import ActionType, RequestMetadata, EthicalContext
-
-
-# ============================================================================
-# ENGINE-LOCAL DATACLASSES
-# ============================================================================
-
-@dataclass
-class Rule:
-    """Policy rule for technical evaluation."""
-    id: str
-    action: str
-    priority: int
-    domain: Optional[str] = None
-    min_risk_level: Optional[str] = None
-    required_findings: Optional[List[str]] = None
-    min_trust_score: Optional[float] = None
-    max_trust_score: Optional[float] = None
-    condition: Optional[str] = None
-
-
-@dataclass
-class TechnicalVerdict:
-    """Technical layer verdict."""
-    action: ActionType
-    confidence: float
-    rule_id: Optional[str]
-    rationale: str
-    mercy_score: float = 0.0
-    trust_score: float = 0.0
-    signature: Optional[bytes] = None
-    context_factors: Dict[str, Any] = field(default_factory=dict)
-    security_evaluation_time_ms: float = 0.0
-    expression_nodes_evaluated: int = 0
-
-
-@dataclass
-class EthicalDecision:
-    """Governance layer decision."""
-    verdict: ActionType
-    adjusted_severity: float
-    confidence: float
-    context: EthicalContext
-    mercy_applied: bool
-    mercy_factor: Optional[MercyFactor]
-    rationale: str
-    contributing_factors: List[str]
-    contestable: bool = True
-    appeal_deadline: Optional[datetime] = None
-    signature: Optional[str] = None
-    signed_at: Optional[int] = None
-    bias_declaration: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Serialize for API/ledger."""
-        result = asdict(self)
-        result['verdict'] = self.verdict.value
-        if self.appeal_deadline:
-            result['appeal_deadline'] = self.appeal_deadline.isoformat()
-        return result
-
-
-@dataclass
-class UnifiedDecision:
-    """Combined technical + governance decision."""
-    decision_id: str
-    timestamp: int
-    technical_verdict: TechnicalVerdict
-    ethical_decision: EthicalDecision
-    evidence_hash: str
-    request_metadata: RequestMetadata
-    ethical_context: EthicalContext
-    profile_name: str
-    total_processing_time_ms: float
-    technical_time_ms: float
-    governance_time_ms: float
-
-    def to_v2_verdict(self) -> TechnicalVerdict:
-        """Extract technical verdict."""
-        return self.technical_verdict
-
-    def to_v3_decision(self) -> EthicalDecision:
-        """Extract governance decision."""
-        return self.ethical_decision
-
-    def to_audit_dict(self) -> Dict[str, Any]:
-        """Format for immutable ledger."""
-        return {
-            'decision_id': self.decision_id,
-            'timestamp': self.timestamp,
-            'action': self.technical_verdict.action.value,
-            'confidence': self.technical_verdict.confidence,
-            'trust_score': self.technical_verdict.trust_score,
-            'mercy_applied': self.ethical_decision.mercy_applied,
-            'contestable': self.ethical_decision.contestable,
-            'evidence_hash': self.evidence_hash,
-            'processing_time_ms': self.total_processing_time_ms,
-            'signature': self.ethical_decision.signature,
-            'bias_declaration': self.ethical_decision.bias_declaration,
-        }
-
-
-# ============================================================================
-# ETHICAL CONTEXT ENGINE — UNIFIED
-# ============================================================================
 
 class EthicalContextEngine:
     """
-    Unified ethical decision engine.
+    Orquestrador unificado — combina TechnicalLayer e GovernanceLayer.
 
-    Combines:
-    1. Technical layer: security, performance, Rust FFI integration
-    2. Governance layer: contestability, signatures, transparency
-
-    Performance: <10ms p99 with cache
+    Performance SLA: <10ms p99 com cache.
+    Governanca: LGPD Art. 20, EU AI Act, ADR-016, ADR-038.
     """
 
     def __init__(
@@ -194,59 +85,43 @@ class EthicalContextEngine:
         safe_evaluator: Optional[SafeExpressionEvaluator] = None,
         contestability_loop: Optional[ContestabilityLoop] = None,
         bias_guardian: Optional[BiasGuardian] = None,
-        persuasion_guard: Optional["PersuasionGuard"] = None,
-        gilligan_stage: Optional[GilliganStage] = None,  # Wire 1: PROP-030/Care
-    ):
-        self.trust_calculator = trust_calculator or TrustScoreCalculator()
-        self.mercy_calculator = mercy_calculator or MercyCalculator()
+        persuasion_guard: Optional[PersuasionGuard] = None,
+        gilligan_stage: Optional[GilliganStage] = None,
+        consensus_validator: Optional[ConsensusValidator] = None,
+    ) -> None:
         self.profile_manager = profile_manager
-        self.evaluator = safe_evaluator or SafeExpressionEvaluator(
-            timeout_ms=100,
-            max_expression_length=1024,
-            max_depth=10,
-        )
-        self.policy_signer = policy_signer or PolicySigner()
         self.contestability_loop = contestability_loop or ContestabilityLoop()
         self.bias_guardian: Optional[BiasGuardian] = bias_guardian
         self.persuasion_guard: Optional[PersuasionGuard] = persuasion_guard
         if persuasion_guard is not None:
             _validate_persuasion_guard_startup(persuasion_guard)
-        self.gilligan_stage: GilliganStage = gilligan_stage or GilliganStage()  # Wire 1
 
-        self.bias_declaration = {
-            'model_version': '1.0.0-unified',
-            'last_calibration': datetime.now().strftime('%Y-%m-%d'),
-            'known_limitations': [
-                'Does not detect context-specific semantic violations',
-                'False positive rate: ~5% in low-confidence scenarios',
-                'Requires human review for CRITICAL operations',
-            ],
-            'false_positive_rate': 0.05,
-            'false_negative_rate': 0.02,
-            'calibration_dataset_size': 10000,
-        }
-
+        self.bias_declaration: Dict[str, Any] = _DEFAULT_BIAS_DECLARATION.copy()
         self._profile_cache: Dict[str, Profile] = {}
-        self._decision_cache = lru_cache(maxsize=1000)
-
-        self.metrics = {
-            'decisions_total': 0,
-            'technical_decisions': 0,
-            'governance_decisions': 0,
-            'mercy_applied': 0,
-            'contests_submitted': 0,
-            'security_violations': 0,
-            'timeouts': 0,
-            'cache_hits': 0,
-            'avg_technical_time_ms': 0.0,
-            'avg_governance_time_ms': 0.0,
+        self.metrics: Dict[str, Any] = {
+            "decisions_total": 0, "technical_decisions": 0,
+            "governance_decisions": 0, "mercy_applied": 0,
+            "contests_submitted": 0, "security_violations": 0,
+            "timeouts": 0, "cache_hits": 0,
+            "avg_technical_time_ms": 0.0, "avg_governance_time_ms": 0.0,
         }
 
-        logger.info("EthicalContextEngine v1.0.0 initialized")
+        _trust = trust_calculator or TrustScoreCalculator()
+        _mercy = mercy_calculator or MercyCalculator()
+        _eval = safe_evaluator or SafeExpressionEvaluator(
+            timeout_ms=100, max_expression_length=1024, max_depth=10
+        )
+        _signer = policy_signer or PolicySigner()
+        _gilligan = gilligan_stage or GilliganStage()
 
-    # ============================================================================
-    # UNIFIED API
-    # ============================================================================
+        self._technical = TechnicalLayer(
+            _trust, _mercy, _eval, self.metrics, self._profile_cache, profile_manager
+        )
+        self._governance = GovernanceLayer(_signer, _gilligan, self.bias_declaration)
+        self.consensus_validator: Optional[ConsensusValidator] = consensus_validator
+        logger.info("EthicalContextEngine v1.1.0 initialized")
+
+    # ── API publica unificada ─────────────────────────────────────────────────
 
     def decide(
         self,
@@ -254,500 +129,42 @@ class EthicalContextEngine:
         request_metadata: RequestMetadata,
         ethical_context: Optional[EthicalContext] = None,
         profile_name: str = "default",
+        _annotated_cot: Optional[AnnotatedCoT] = None,
     ) -> UnifiedDecision:
-        """
-        Unified ethical decision (technical + governance).
-
-        Returns:
-            UnifiedDecision with both layers.
-
-        Raises:
-            ValueError: If profile_manager not configured.
-        """
-        start_total = time.perf_counter()
-        self.metrics['decisions_total'] += 1
-
         if not self.profile_manager:
             raise ValueError("ProfileManager required for decisions")
-
         if ethical_context is None:
-            ethical_context = self._generate_ethical_context(request_metadata)
+            ethical_context = self._generate_context(request_metadata)
+        start = time.perf_counter()
+        self.metrics["decisions_total"] += 1
 
-        # Technical layer
-        tech_start = time.perf_counter()
-        technical_verdict = self._decide_technical(
-            evidence, request_metadata, profile_name
-        )
-        tech_time = (time.perf_counter() - tech_start) * 1000
-        self.metrics['technical_decisions'] += 1
+        t0 = time.perf_counter()
+        tv = self._technical.decide(evidence, request_metadata, profile_name)
+        tech_ms = (time.perf_counter() - t0) * 1000
+        self.metrics["technical_decisions"] += 1
 
-        # Governance layer
-        gov_start = time.perf_counter()
-        ethical_decision = self._decide_governance(
-            technical_verdict, evidence, ethical_context
-        )
-        gov_time = (time.perf_counter() - gov_start) * 1000
-        self.metrics['governance_decisions'] += 1
+        g0 = time.perf_counter()
+        ed = self._governance.decide(tv, evidence, ethical_context, _annotated_cot)
+        gov_ms = (time.perf_counter() - g0) * 1000
+        self.metrics["governance_decisions"] += 1
 
-        if ethical_decision.mercy_applied:
-            self.metrics['mercy_applied'] += 1
-
-        total_time = (time.perf_counter() - start_total) * 1000
-
-        # EMA for latency tracking
-        alpha = 0.1
-        self.metrics['avg_technical_time_ms'] = (
-            alpha * tech_time + (1 - alpha) * self.metrics['avg_technical_time_ms']
-        )
-        self.metrics['avg_governance_time_ms'] = (
-            alpha * gov_time + (1 - alpha) * self.metrics['avg_governance_time_ms']
-        )
-
-        decision_id = self._generate_decision_id(
-            evidence, request_metadata, ethical_context
-        )
+        if ed.mercy_applied:
+            self.metrics["mercy_applied"] += 1
+        self._update_ema(tech_ms, gov_ms)
 
         return UnifiedDecision(
-            decision_id=decision_id,
+            decision_id=self._decision_id(evidence, request_metadata, ethical_context),
             timestamp=int(time.time()),
-            technical_verdict=technical_verdict,
-            ethical_decision=ethical_decision,
+            technical_verdict=tv,
+            ethical_decision=ed,
             evidence_hash=evidence.hash,
             request_metadata=request_metadata,
             ethical_context=ethical_context,
             profile_name=profile_name,
-            total_processing_time_ms=total_time,
-            technical_time_ms=tech_time,
-            governance_time_ms=gov_time,
+            total_processing_time_ms=(time.perf_counter() - start) * 1000,
+            technical_time_ms=tech_ms,
+            governance_time_ms=gov_ms,
         )
-
-    # ============================================================================
-    # TECHNICAL LAYER
-    # ============================================================================
-
-    def _decide_technical(
-        self,
-        evidence: TechnicalEvidence,
-        context: RequestMetadata,
-        profile_name: str,
-    ) -> TechnicalVerdict:
-        """Technical decision (security, performance)."""
-        self.metrics['cache_hits'] += 1
-
-        profile = self._load_profile_cached(profile_name)
-        risk_level = self._calculate_risk_level(evidence)
-        trust_score = self.trust_calculator.calculate(
-            context.session_id, context.user_role
-        )
-
-        action, matched_rule, eval_time, nodes = self._apply_technical_rules(
-            evidence, context, profile, risk_level, trust_score
-        )
-
-        mercy_score = self.mercy_calculator.calculate(
-            evidence=evidence,
-            context=context.__dict__,
-            trust_score=trust_score,
-        )
-
-        rationale = self._build_technical_rationale(
-            evidence, context, matched_rule, mercy_score, trust_score, risk_level
-        )
-
-        return TechnicalVerdict(
-            action=action,
-            confidence=0.95 if matched_rule else 0.5,
-            rule_id=matched_rule.id if matched_rule else None,
-            rationale=rationale,
-            mercy_score=mercy_score,
-            trust_score=trust_score,
-            context_factors={
-                "risk_level": risk_level,
-                "finding_count": evidence.finding_count,
-                "critical_count": evidence.critical_count,
-                "domain": context.domain,
-            },
-            security_evaluation_time_ms=eval_time,
-            expression_nodes_evaluated=nodes,
-        )
-
-    def _apply_technical_rules(
-        self,
-        evidence: TechnicalEvidence,
-        context: RequestMetadata,
-        profile: Profile,
-        risk_level: str,
-        trust_score: float,
-    ) -> Tuple[ActionType, Optional[Rule], float, int]:
-        """Apply profile rules with safe evaluator."""
-        total_eval_time = 0.0
-        total_nodes = 0
-
-        sorted_rules = sorted(
-            profile.rules, key=lambda r: r.priority, reverse=True
-        )
-
-        for rule in sorted_rules:
-            matches, eval_time, nodes = self._technical_rule_matches(
-                rule, evidence, context, risk_level, trust_score
-            )
-            total_eval_time += eval_time
-            total_nodes += nodes
-
-            if matches:
-                try:
-                    action = ActionType[rule.action]
-                    return action, rule, total_eval_time, total_nodes
-                except KeyError:
-                    logger.error(f"Invalid action in rule {rule.id}: {rule.action}")
-                    continue
-
-        # Fallback
-        if evidence.finding_count + evidence.critical_count == 0:
-            return ActionType.ALLOW, None, total_eval_time, total_nodes
-        return ActionType.LOG, None, total_eval_time, total_nodes
-
-    def _technical_rule_matches(
-        self,
-        rule: Rule,
-        evidence: TechnicalEvidence,
-        context: RequestMetadata,
-        risk_level: str,
-        trust_score: float,
-    ) -> Tuple[bool, float, int]:
-        """Check if a technical rule matches current context."""
-        eval_time = 0.0
-        nodes = 0
-
-        if rule.domain and context.domain != rule.domain:
-            return False, eval_time, nodes
-
-        if rule.min_risk_level:
-            levels = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
-            if levels.index(risk_level) < levels.index(rule.min_risk_level):
-                return False, eval_time, nodes
-
-        if rule.min_trust_score and trust_score < rule.min_trust_score:
-            return False, eval_time, nodes
-        if rule.max_trust_score and trust_score > rule.max_trust_score:
-            return False, eval_time, nodes
-
-        if rule.condition:
-            eval_context = self._build_technical_eval_context(
-                evidence, context, risk_level, trust_score
-            )
-            try:
-                result = self.evaluator.evaluate(rule.condition, eval_context)
-                eval_time = result.execution_time_ms
-                nodes = result.nodes_evaluated
-                if not result.success:
-                    if 'timeout' in result.error.lower():
-                        self.metrics['timeouts'] += 1
-                    return False, eval_time, nodes
-                if not result.value:
-                    return False, eval_time, nodes
-            except SecurityError as e:
-                self.metrics['security_violations'] += 1
-                logger.error(f"Security violation in rule {rule.id}: {e}")
-                return False, eval_time, nodes
-
-        return True, eval_time, nodes
-
-    # ============================================================================
-    # GOVERNANCE LAYER
-    # ============================================================================
-
-    def _decide_governance(
-        self,
-        technical_verdict: TechnicalVerdict,
-        evidence: TechnicalEvidence,
-        context: EthicalContext,
-        annotated_cot: Optional[AnnotatedCoT] = None,
-    ) -> EthicalDecision:
-        """Governance decision (contestability, transparency)."""
-        composite_risk = evidence.composite_risk
-
-        technical_uncertainty = self._calculate_technical_uncertainty(evidence)
-
-        mercy_factor = MercyFactor(
-            technical_uncertainty=technical_uncertainty,
-            first_offense=context.is_first_offense,
-            trust_score=context.trust_score,
-            violation_severity=composite_risk,
-        ).calculate()
-
-        adjusted_severity = composite_risk
-        if mercy_factor.should_apply_mercy:
-            adjusted_severity = max(
-                0.0, composite_risk - mercy_factor.mercy_adjustment
-            )
-            logger.info(
-                f"Mercy applied: {composite_risk:.2f} -> {adjusted_severity:.2f}"
-            )
-
-        verdict = self._determine_final_verdict(
-            technical_verdict.action,
-            adjusted_severity,
-            context,
-            mercy_factor.should_apply_mercy,
-        )
-
-        confidence = self._calculate_governance_confidence(
-            evidence, technical_uncertainty, mercy_factor.should_apply_mercy
-        )
-
-        rationale, factors = self._build_governance_rationale(
-            verdict, adjusted_severity, evidence, context, mercy_factor
-        )
-
-        if annotated_cot is not None and annotated_cot.has_suspicious_claims:
-            factors.append(
-                f"persuasion_score={annotated_cot.persuasion_score:.2f} "
-                f"high_suspicion={annotated_cot.high_suspicion_count}"
-            )
-
-        # Wire 1: Gilligan/Care P-030 — nó ativo no pipeline judicial
-        gilligan_result = self.gilligan_stage.evaluate(
-            evidence, context.__dict__, technical_verdict.trust_score
-        )
-        factors.append(gilligan_result.explain_decision())
-
-        decision = EthicalDecision(
-            verdict=verdict,
-            adjusted_severity=adjusted_severity,
-            confidence=confidence,
-            context=context,
-            mercy_applied=mercy_factor.should_apply_mercy,
-            mercy_factor=mercy_factor if mercy_factor.should_apply_mercy else None,
-            rationale=rationale,
-            contributing_factors=factors,
-            contestable=True,
-            appeal_deadline=datetime.now() + timedelta(hours=24),
-            bias_declaration=self._build_bias_declaration(annotated_cot),
-        )
-
-        try:
-            decision.signature = self._sign_decision(decision)
-            decision.signed_at = int(time.time())
-        except PolicySigningError as e:
-            logger.error(f"Failed to sign decision: {e}")
-            decision.signature = None
-
-        return decision
-
-    # ============================================================================
-    # HELPERS
-    # ============================================================================
-
-    def _generate_ethical_context(
-        self, request_metadata: RequestMetadata
-    ) -> EthicalContext:
-        return EthicalContext(
-            user_id=request_metadata.agent_id,
-            session_id=request_metadata.session_id,
-            user_role=request_metadata.user_role,
-            domain=request_metadata.domain,
-            timestamp=request_metadata.timestamp,
-        )
-
-    def _load_profile_cached(self, profile_name: str) -> Profile:
-        if profile_name in self._profile_cache:
-            return self._profile_cache[profile_name]
-        if not self.profile_manager:
-            raise ValueError("ProfileManager not configured")
-        profile = self.profile_manager.load_profile(profile_name)
-        self._profile_cache[profile_name] = profile
-        return profile
-
-    def _calculate_risk_level(self, evidence: TechnicalEvidence) -> str:
-        risk = evidence.composite_risk
-        if risk >= 80:
-            return "CRITICAL"
-        elif risk >= 60:
-            return "HIGH"
-        elif risk >= 30:
-            return "MEDIUM"
-        return "LOW"
-
-    def _build_technical_eval_context(
-        self,
-        evidence: TechnicalEvidence,
-        context: RequestMetadata,
-        risk_level: str,
-        trust_score: float,
-    ) -> Dict[str, Any]:
-        finding_titles = {
-            f.title for f in (evidence.findings + evidence.critical)
-        }
-        return {
-            'finding_count': evidence.finding_count,
-            'critical_count': evidence.critical_count,
-            'composite_risk': evidence.composite_risk,
-            'risk_level': risk_level,
-            'trust_score': trust_score,
-            'agent_id': context.agent_id,
-            'session_id': context.session_id,
-            'user_role': context.user_role,
-            'domain': context.domain,
-            'has_cpf': 'CPF_PATTERN_DETECTED' in finding_titles,
-            'has_cnpj': 'CNPJ_PATTERN_DETECTED' in finding_titles,
-            'has_pii': any(
-                t in finding_titles
-                for t in [
-                    'CPF_PATTERN_DETECTED',
-                    'CNPJ_PATTERN_DETECTED',
-                    'EMAIL_DETECTED',
-                ]
-            ),
-            'max_severity': (
-                max([f.severity for f in evidence.findings] + [0.0])
-                if evidence.findings
-                else 0.0
-            ),
-            'total_findings': evidence.finding_count + evidence.critical_count,
-            'is_high_risk': risk_level in ['HIGH', 'CRITICAL'],
-            'is_trusted': trust_score >= 0.7,
-        }
-
-    def _build_technical_rationale(
-        self,
-        evidence: TechnicalEvidence,
-        context: RequestMetadata,
-        rule: Optional[Rule],
-        mercy_score: float,
-        trust_score: float,
-        risk_level: str,
-    ) -> str:
-        parts = []
-        if evidence.finding_count > 0:
-            parts.append(
-                f"Detected {evidence.finding_count} findings "
-                f"({evidence.critical_count} critical)"
-            )
-        if rule:
-            parts.append(f"Rule applied: {rule.id}")
-        parts.append(f"Risk level: {risk_level}")
-        parts.append(f"Trust score: {trust_score:.2f}")
-        if mercy_score > 0.5:
-            parts.append(f"Technical mercy: {mercy_score:.2f}")
-        return ". ".join(parts) + "."
-
-    def _calculate_technical_uncertainty(
-        self, evidence: Dict[str, Any]
-    ) -> float:
-        finding_count = evidence.get('finding_count', 0)
-        composite_risk = evidence.get('composite_risk', 0.0)
-        uncertainty = 0.0
-        if finding_count < 2:
-            uncertainty += 0.3
-        if 0.4 <= composite_risk <= 0.6:
-            uncertainty += 0.4
-        return min(uncertainty, 1.0)
-
-    def _determine_final_verdict(
-        self,
-        technical_action: ActionType,
-        adjusted_severity: float,
-        context: EthicalContext,
-        mercy_applied: bool,
-    ) -> ActionType:
-        if context.educational_mode and context.criticality != "CRITICAL":
-            return ActionType.EDUCATE
-        if not mercy_applied:
-            return technical_action
-        if adjusted_severity >= 0.8:
-            return ActionType.BLOCK
-        elif adjusted_severity >= 0.6:
-            return ActionType.REDACT
-        elif adjusted_severity >= 0.4:
-            return ActionType.EDUCATE
-        elif adjusted_severity >= 0.2:
-            return ActionType.LOG
-        return ActionType.ALLOW
-
-    def _calculate_governance_confidence(
-        self,
-        evidence: Dict[str, Any],
-        uncertainty: float,
-        mercy_applied: bool,
-    ) -> float:
-        base_confidence = 0.8
-        base_confidence -= uncertainty * 0.3
-        if mercy_applied:
-            base_confidence -= 0.1
-        finding_count = evidence.get('finding_count', 0)
-        if finding_count >= 3:
-            base_confidence += 0.1
-        return max(0.5, min(base_confidence, 0.95))
-
-    def _build_governance_rationale(
-        self,
-        verdict: ActionType,
-        adjusted_severity: float,
-        evidence: Dict[str, Any],
-        context: EthicalContext,
-        mercy: MercyFactor,
-    ) -> Tuple[str, List[str]]:
-        factors = []
-        finding_count = evidence.get('finding_count', 0)
-        critical_count = evidence.get('critical_count', 0)
-        if finding_count > 0:
-            factors.append(f"{finding_count} violations detected")
-        if critical_count > 0:
-            factors.append(f"{critical_count} critical")
-        factors.append(f"adjusted severity: {adjusted_severity:.2f}")
-        if context.is_first_offense:
-            factors.append("first offense")
-        if context.trust_score > 0.7:
-            factors.append(f"high trust score ({context.trust_score:.2f})")
-        if mercy.should_apply_mercy:
-            factors.append(mercy.rationale)
-        rationale = (
-            f"Verdict: {verdict.value}. "
-            f"Severity: {adjusted_severity:.2f}. "
-            f"Factors: {', '.join(factors)}."
-        )
-        return rationale, factors
-
-    def _sign_decision(self, decision: EthicalDecision) -> str:
-        try:
-            policy_data = {
-                'verdict': decision.verdict.value,
-                'adjusted_severity': decision.adjusted_severity,
-                'context': decision.context.__dict__,
-                'timestamp': decision.signed_at or int(time.time()),
-            }
-            signed = self.policy_signer.sign_policy(
-                policy_data, signer="ethical_context_engine"
-            )
-            return signed.signature.signature
-        except Exception as e:
-            logger.error(f"Error signing decision: {e}")
-            content = (
-                f"{decision.verdict.value}"
-                f"{decision.adjusted_severity}"
-                f"{decision.signed_at}"
-            )
-            return hashlib.sha256(content.encode()).hexdigest()[:32]
-
-    def _generate_decision_id(
-        self,
-        evidence: TechnicalEvidence,
-        request_metadata: RequestMetadata,
-        ethical_context: EthicalContext,
-    ) -> str:
-        content = (
-            f"{evidence.hash}"
-            f"{request_metadata.session_id}"
-            f"{request_metadata.timestamp}"
-            f"{ethical_context.user_id or ''}"
-        )
-        return f"DEC-{hashlib.sha256(content.encode()).hexdigest()[:16]}"
-
-
-    # ============================================================================
-    # PERSUASION GUARD — decide_with_cot (ADR-0049)
-    # ============================================================================
 
     def decide_with_cot(
         self,
@@ -757,156 +174,25 @@ class EthicalContextEngine:
         ethical_context: Optional[EthicalContext] = None,
         profile_name: str = "default",
     ) -> UnifiedDecision:
-        """
-        Decisão unificada com proteção CoT (ADR-0049).
-
-        Guard ausente ou UNAVAILABLE → BLOCK com explain_decision (D3, fail-secure).
-        cot original NÃO passado ao julgamento — apenas AnnotatedCoT (D4).
-        """
+        """Decisao com CoT protegido (ADR-0049). Guard ausente -> BLOCK (Jonas)."""
+        from .ece_governance import build_cot_block_decision
+        if ethical_context is None:
+            ethical_context = self._generate_context(request_metadata)
         if self.persuasion_guard is None:
-            logger.warning("decide_with_cot: persuasion_guard ausente → BLOCK (ADR-0049 D3)")
-            return self._block_cot_guard_unavailable(
-                evidence, request_metadata, ethical_context, profile_name,
-                reason="persuasion_guard_not_configured",
+            return build_cot_block_decision(
+                evidence, request_metadata, ethical_context,
+                "persuasion_guard_not_configured", self.bias_declaration, self._decision_id
             )
         try:
-            annotated_cot = self.persuasion_guard.annotate_cot(cot)
-        except PersuasionGuardUnavailableError as exc:
-            logger.warning("decide_with_cot: guard unavailable → BLOCK: %s", exc)
-            return self._block_cot_guard_unavailable(
-                evidence, request_metadata, ethical_context, profile_name,
-                reason="persuasion_guard_runtime_unavailable",
+            annotated = self.persuasion_guard.annotate_cot(cot)
+        except PersuasionGuardUnavailableError:
+            return build_cot_block_decision(
+                evidence, request_metadata, ethical_context,
+                "persuasion_guard_runtime_unavailable", self.bias_declaration, self._decision_id
             )
-        return self._decide_with_annotated_cot(
-            evidence, request_metadata, annotated_cot, ethical_context, profile_name,
-        )
+        return self.decide(evidence, request_metadata, ethical_context, profile_name, _annotated_cot=annotated)
 
-    def _decide_with_annotated_cot(
-        self,
-        evidence: TechnicalEvidence,
-        request_metadata: RequestMetadata,
-        annotated_cot: AnnotatedCoT,
-        ethical_context: Optional[EthicalContext],
-        profile_name: str,
-    ) -> UnifiedDecision:
-        """Executa decide() com AnnotatedCoT injetado na camada de governança."""
-        start = time.perf_counter()
-        self.metrics["decisions_total"] += 1
-        if not self.profile_manager:
-            raise ValueError("ProfileManager required for decisions")
-        if ethical_context is None:
-            ethical_context = self._generate_ethical_context(request_metadata)
-        tech_start = time.perf_counter()
-        technical_verdict = self._decide_technical(evidence, request_metadata, profile_name)
-        tech_time = (time.perf_counter() - tech_start) * 1000
-        self.metrics["technical_decisions"] += 1
-        gov_start = time.perf_counter()
-        ethical_decision = self._decide_governance(
-            technical_verdict, evidence, ethical_context, annotated_cot=annotated_cot,
-        )
-        gov_time = (time.perf_counter() - gov_start) * 1000
-        self.metrics["governance_decisions"] += 1
-        if ethical_decision.mercy_applied:
-            self.metrics["mercy_applied"] += 1
-        total_time = (time.perf_counter() - start) * 1000
-        alpha = 0.1
-        self.metrics["avg_technical_time_ms"] = (
-            alpha * tech_time + (1 - alpha) * self.metrics["avg_technical_time_ms"]
-        )
-        self.metrics["avg_governance_time_ms"] = (
-            alpha * gov_time + (1 - alpha) * self.metrics["avg_governance_time_ms"]
-        )
-        decision_id = self._generate_decision_id(evidence, request_metadata, ethical_context)
-        return UnifiedDecision(
-            decision_id=decision_id,
-            timestamp=int(time.time()),
-            technical_verdict=technical_verdict,
-            ethical_decision=ethical_decision,
-            evidence_hash=evidence.hash,
-            request_metadata=request_metadata,
-            ethical_context=ethical_context,
-            profile_name=profile_name,
-            total_processing_time_ms=total_time,
-            technical_time_ms=tech_time,
-            governance_time_ms=gov_time,
-        )
-
-    def _block_cot_guard_unavailable(
-        self,
-        evidence: TechnicalEvidence,
-        request_metadata: RequestMetadata,
-        ethical_context: Optional[EthicalContext],
-        profile_name: str,
-        reason: str = "persuasion_guard_unavailable",
-    ) -> UnifiedDecision:
-        """BLOCK imediato quando PersuasionGuard indisponível (ADR-0049 D3).
-
-        Contestável via SLA 24h (Rawls). explain_decision com razão (Levinas).
-        """
-        self.metrics["decisions_total"] += 1
-        now = int(time.time())
-        if ethical_context is None:
-            ethical_context = self._generate_ethical_context(request_metadata)
-        rationale = (
-            f"BLOCK automático: PersuasionGuard indisponível ({reason}). "
-            "Julgamento de CoT sem checker validado não é confiável (ADR-0049 D3). "
-            "Contestável via SLA 24h (Rawls)."
-        )
-        technical_verdict = TechnicalVerdict(
-            action=ActionType.BLOCK,
-            confidence=1.0,
-            rule_id="ADR-0049-D3-FAILSECURE",
-            rationale=rationale,
-        )
-        ethical_decision = EthicalDecision(
-            verdict=ActionType.BLOCK,
-            adjusted_severity=1.0,
-            confidence=1.0,
-            context=ethical_context,
-            mercy_applied=False,
-            mercy_factor=None,
-            rationale=rationale,
-            contributing_factors=[f"persuasion_guard_{reason}"],
-            contestable=True,
-            appeal_deadline=datetime.now() + timedelta(hours=24),
-            bias_declaration={
-                **self.bias_declaration,
-                "persuasion_guard": {"status": "unavailable", "reason": reason},
-            },
-        )
-        try:
-            ethical_decision.signature = self._sign_decision(ethical_decision)
-            ethical_decision.signed_at = now
-        except Exception:
-            pass
-        decision_id = self._generate_decision_id(evidence, request_metadata, ethical_context)
-        return UnifiedDecision(
-            decision_id=decision_id,
-            timestamp=now,
-            technical_verdict=technical_verdict,
-            ethical_decision=ethical_decision,
-            evidence_hash=evidence.hash,
-            request_metadata=request_metadata,
-            ethical_context=ethical_context,
-            profile_name=profile_name,
-            total_processing_time_ms=0.0,
-            technical_time_ms=0.0,
-            governance_time_ms=0.0,
-        )
-
-    def _build_bias_declaration(
-        self,
-        annotated_cot: Optional[AnnotatedCoT] = None,
-    ) -> dict:
-        """Constrói bias_declaration com AnnotatedCoT se disponível (Levinas)."""
-        bd = self.bias_declaration.copy()
-        if annotated_cot is not None:
-            bd["persuasion_guard"] = annotated_cot.to_explain_dict()
-        return bd
-
-    # ============================================================================
-    # COMPATIBILITY API
-    # ============================================================================
+        # ── Compatibilidade v2/v3 ─────────────────────────────────────────────────
 
     def decide_v2(
         self,
@@ -914,8 +200,7 @@ class EthicalContextEngine:
         context: RequestMetadata,
         profile_name: str,
     ) -> TechnicalVerdict:
-        """V2-compatible API (technical layer only)."""
-        return self._decide_technical(evidence, context, profile_name)
+        return self._technical.decide(evidence, context, profile_name)
 
     def decide_v3(
         self,
@@ -924,126 +209,136 @@ class EthicalContextEngine:
         policy_action: str = "BLOCK",
     ) -> EthicalDecision:
         """V3-compatible API (governance layer only)."""
-        mock_verdict = TechnicalVerdict(
-            action=ActionType[policy_action],
-            confidence=0.8,
-            rule_id=None,
-            rationale=f"Policy action: {policy_action}",
-            trust_score=context.trust_score,
+        from .ece_governance import _MockEvidence
+        mock_tv = TechnicalVerdict(
+            action=ActionType[policy_action], confidence=0.8, rule_id=None,
+            rationale=f"Policy action: {policy_action}", trust_score=context.trust_score,
+        )
+        return self._governance.decide(mock_tv, _MockEvidence(technical_evidence), context)
+
+    # ── Helpers internos ──────────────────────────────────────────────────────
+
+    def _generate_context(self, m: RequestMetadata) -> EthicalContext:
+        return EthicalContext(
+            user_id=m.agent_id, session_id=m.session_id,
+            user_role=m.user_role, domain=m.domain, timestamp=m.timestamp,
         )
 
-        class MockEvidence:
-            def __init__(self, data: Dict[str, Any]):
-                self._data = data
-                self.__dict__.update(data)
-                self.findings: list = []
-                self.critical: list = []
-                if 'stats' not in data:
-                    self.stats = type(
-                        'Stats', (),
-                        {'has_pii': data.get('critical_count', 0) > 0},
-                    )()
+    def _decision_id(
+        self,
+        e: TechnicalEvidence,
+        m: RequestMetadata,
+        c: EthicalContext,
+    ) -> str:
+        content = f"{e.hash}{m.session_id}{m.timestamp}{c.user_id or ''}"
+        return f"DEC-{hashlib.sha256(content.encode()).hexdigest()[:16]}"
 
-            def get(self, key: str, default: Any = None) -> Any:
-                return self._data.get(key, default)
+    def _update_ema(self, tech_ms: float, gov_ms: float) -> None:
+        a = 0.1
+        self.metrics["avg_technical_time_ms"] = (
+            a * tech_ms + (1 - a) * self.metrics["avg_technical_time_ms"]
+        )
+        self.metrics["avg_governance_time_ms"] = (
+            a * gov_ms + (1 - a) * self.metrics["avg_governance_time_ms"]
+        )
 
-        evidence = MockEvidence(technical_evidence)
-        return self._decide_governance(mock_verdict, evidence, context)
+    def _decide_annotated(
+        self,
+        evidence: TechnicalEvidence,
+        request_metadata: RequestMetadata,
+        annotated: AnnotatedCoT,
+        ethical_context: Optional[EthicalContext],
+        profile_name: str,
+    ) -> UnifiedDecision:
+        if not self.profile_manager:
+            raise ValueError("ProfileManager required for decisions")
+        if ethical_context is None:
+            ethical_context = self._generate_context(request_metadata)
+        start = time.perf_counter()
+        self.metrics["decisions_total"] += 1
+        t0 = time.perf_counter()
+        tv = self._technical.decide(evidence, request_metadata, profile_name)
+        tech_ms = (time.perf_counter() - t0) * 1000
+        self.metrics["technical_decisions"] += 1
+        g0 = time.perf_counter()
+        ed = self._governance.decide(tv, evidence, ethical_context, annotated)
+        gov_ms = (time.perf_counter() - g0) * 1000
+        self.metrics["governance_decisions"] += 1
+        if ed.mercy_applied:
+            self.metrics["mercy_applied"] += 1
+        self._update_ema(tech_ms, gov_ms)
+        return UnifiedDecision(
+            decision_id=self._decision_id(evidence, request_metadata, ethical_context),
+            timestamp=int(time.time()),
+            technical_verdict=tv,
+            ethical_decision=ed,
+            evidence_hash=evidence.hash,
+            request_metadata=request_metadata,
+            ethical_context=ethical_context,
+            profile_name=profile_name,
+            total_processing_time_ms=(time.perf_counter() - start) * 1000,
+            technical_time_ms=tech_ms,
+            governance_time_ms=gov_ms,
+        )
 
-    # ============================================================================
-    # METRICS
-    # ============================================================================
+    # ── Metricas ──────────────────────────────────────────────────────────────
+
+    async def judge_with_consensus(
+        self,
+        evidence: TechnicalEvidence,
+        request_metadata: RequestMetadata,
+        reversibility: Reversibility = Reversibility.REVERSIBLE,
+        ethical_context: Optional[EthicalContext] = None,
+        profile_name: str = "default",
+    ) -> UnifiedDecision:
+        """Decisao com consenso opcional. Guard ausente -> decide() direto (Jonas)."""
+        from .ece_governance import build_mock_decision
+        self.metrics["decisions_total"] += 1
+        if ethical_context is None:
+            ethical_context = self._generate_context(request_metadata)
+        if self.profile_manager is None:
+            decision = build_mock_decision(
+                evidence, request_metadata, ethical_context, self._decision_id, profile_name
+            )
+        else:
+            decision = self.decide(evidence, request_metadata, ethical_context, profile_name)
+        if self.consensus_validator is not None:
+            await self.consensus_validator.validate(reversibility, decision.technical_verdict.confidence)
+        return decision
 
     def get_metrics(self) -> Dict[str, Any]:
-        """Return unified metrics."""
-        total = max(self.metrics['decisions_total'], 1)
+        total = max(self.metrics["decisions_total"], 1)
         return {
             **self.metrics,
-            'mercy_rate': self.metrics['mercy_applied'] / total,
-            'security_violation_rate': self.metrics['security_violations'] / total,
-            'total_avg_time_ms': (
-                self.metrics['avg_technical_time_ms']
-                + self.metrics['avg_governance_time_ms']
+            "mercy_rate": self.metrics["mercy_applied"] / total,
+            "security_violation_rate": self.metrics["security_violations"] / total,
+            "total_avg_time_ms": (
+                self.metrics["avg_technical_time_ms"]
+                + self.metrics["avg_governance_time_ms"]
             ),
         }
 
     def get_bias_declaration(self) -> Dict[str, Any]:
-        """Return BiasDeclaration for transparency."""
         return self.bias_declaration.copy()
 
     def reset_metrics(self) -> None:
-        """Reset metrics (useful for tests)."""
-        self.metrics = {
-            'decisions_total': 0,
-            'technical_decisions': 0,
-            'governance_decisions': 0,
-            'mercy_applied': 0,
-            'contests_submitted': 0,
-            'security_violations': 0,
-            'timeouts': 0,
-            'cache_hits': 0,
-            'avg_technical_time_ms': 0.0,
-            'avg_governance_time_ms': 0.0,
-        }
+        for k in self.metrics:
+            self.metrics[k] = 0 if isinstance(self.metrics[k], int) else 0.0
         self._profile_cache.clear()
         logger.info("Metrics reset")
 
 
-# ============================================================================
-# COMPATIBILITY ALIASES
-# ============================================================================
-
+# ── Compatibilidade v2/v3 + Factory ──────────────────────────────────────────
 class EthicalContextEngineV2(EthicalContextEngine):
-    """Backward-compatible alias (technical layer only)."""
-    def decide(self, *args, **kwargs):
-        return self.decide_v2(*args, **kwargs)
-
+    def decide(self, *args: Any, **kwargs: Any) -> Any: return self.decide_v2(*args, **kwargs)
 
 class EthicalContextEngineV3(EthicalContextEngine):
-    """Backward-compatible alias (governance layer only)."""
-    def decide(self, *args, **kwargs):
-        return self.decide_v3(*args, **kwargs)
-
-
-# ============================================================================
-# FACTORY
-# ============================================================================
+    def decide(self, *args: Any, **kwargs: Any) -> Any: return self.decide_v3(*args, **kwargs)
 
 class EthicalContextEngineFactory:
-    """Factory for creating engines with different compatibility modes."""
-
     @staticmethod
-    def create_v2_compatible(
-        trust_calculator: Optional[TrustScoreCalculator] = None,
-        mercy_calculator: Optional[MercyCalculator] = None,
-        profile_manager: Optional[ProfileManager] = None,
-    ) -> EthicalContextEngineV2:
-        return EthicalContextEngineV2(
-            trust_calculator=trust_calculator,
-            mercy_calculator=mercy_calculator,
-            profile_manager=profile_manager,
-        )
-
+    def create_v2_compatible(tc=None, mc=None, pm=None): return EthicalContextEngineV2(tc, mc, pm)
     @staticmethod
-    def create_v3_compatible(
-        trust_calculator: Optional[TrustScoreCalculator] = None,
-        policy_signer: Optional[PolicySigner] = None,
-    ) -> EthicalContextEngineV3:
-        return EthicalContextEngineV3(
-            trust_calculator=trust_calculator,
-            policy_signer=policy_signer,
-        )
-
+    def create_v3_compatible(tc=None, ps=None): return EthicalContextEngineV3(tc, policy_signer=ps)
     @staticmethod
-    def create_unified(
-        trust_calculator: Optional[TrustScoreCalculator] = None,
-        mercy_calculator: Optional[MercyCalculator] = None,
-        profile_manager: Optional[ProfileManager] = None,
-        policy_signer: Optional[PolicySigner] = None,
-    ) -> EthicalContextEngine:
-        return EthicalContextEngine(
-            trust_calculator=trust_calculator,
-            mercy_calculator=mercy_calculator,
-            profile_manager=profile_manager,
-            policy_signer=policy_signer,
-        )
+    def create_unified(tc=None, mc=None, pm=None, ps=None): return EthicalContextEngine(tc, mc, pm, ps)
