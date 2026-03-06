@@ -192,7 +192,7 @@ class EthicalContextEngine:
             )
         return self.decide(evidence, request_metadata, ethical_context, profile_name, _annotated_cot=annotated)
 
-        # ── Compatibilidade v2/v3 ─────────────────────────────────────────────────
+    # ── Compatibilidade v2/v3 ─────────────────────────────────────────────────
 
     def decide_v2(
         self,
@@ -242,44 +242,7 @@ class EthicalContextEngine:
             a * gov_ms + (1 - a) * self.metrics["avg_governance_time_ms"]
         )
 
-    def _decide_annotated(
-        self,
-        evidence: TechnicalEvidence,
-        request_metadata: RequestMetadata,
-        annotated: AnnotatedCoT,
-        ethical_context: Optional[EthicalContext],
-        profile_name: str,
-    ) -> UnifiedDecision:
-        if not self.profile_manager:
-            raise ValueError("ProfileManager required for decisions")
-        if ethical_context is None:
-            ethical_context = self._generate_context(request_metadata)
-        start = time.perf_counter()
-        self.metrics["decisions_total"] += 1
-        t0 = time.perf_counter()
-        tv = self._technical.decide(evidence, request_metadata, profile_name)
-        tech_ms = (time.perf_counter() - t0) * 1000
-        self.metrics["technical_decisions"] += 1
-        g0 = time.perf_counter()
-        ed = self._governance.decide(tv, evidence, ethical_context, annotated)
-        gov_ms = (time.perf_counter() - g0) * 1000
-        self.metrics["governance_decisions"] += 1
-        if ed.mercy_applied:
-            self.metrics["mercy_applied"] += 1
-        self._update_ema(tech_ms, gov_ms)
-        return UnifiedDecision(
-            decision_id=self._decision_id(evidence, request_metadata, ethical_context),
-            timestamp=int(time.time()),
-            technical_verdict=tv,
-            ethical_decision=ed,
-            evidence_hash=evidence.hash,
-            request_metadata=request_metadata,
-            ethical_context=ethical_context,
-            profile_name=profile_name,
-            total_processing_time_ms=(time.perf_counter() - start) * 1000,
-            technical_time_ms=tech_ms,
-            governance_time_ms=gov_ms,
-        )
+    # ── Metricas ──────────────────────────────────────────────────────────────
 
     # ── Metricas ──────────────────────────────────────────────────────────────
 
@@ -319,7 +282,20 @@ class EthicalContextEngine:
         }
 
     def get_bias_declaration(self) -> Dict[str, Any]:
-        return self.bias_declaration.copy()
+        return self._build_bias_declaration()
+
+    def _build_bias_declaration(self) -> Dict[str, Any]:
+        """Bias declaration enriquecida com status do BiasGuardian (ADR-036, Jonas).
+
+        Type guard explicito: bias_guardian nunca invocado sem verificacao.
+        Principio de Jonas: responsabilidade proporcional — declarar estado real.
+        """
+        bd = self.bias_declaration.copy()
+        if self.bias_guardian is not None:
+            bd["bias_guardian_active"] = True
+        else:
+            bd["bias_guardian_active"] = False
+        return bd
 
     def reset_metrics(self) -> None:
         for k in self.metrics:
