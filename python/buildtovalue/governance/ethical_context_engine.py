@@ -207,7 +207,7 @@ class EthicalContextEngine:
         )
         self.policy_signer = policy_signer or PolicySigner()
         self.contestability_loop = contestability_loop or ContestabilityLoop()
-        self.bias_guardian = bias_guardian or BiasGuardian()
+        self.bias_guardian: Optional[BiasGuardian] = bias_guardian
         self.persuasion_guard: Optional[PersuasionGuard] = persuasion_guard
         if persuasion_guard is not None:
             _validate_persuasion_guard_startup(persuasion_guard)
