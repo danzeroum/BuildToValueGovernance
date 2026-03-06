@@ -1,9 +1,9 @@
 # ADR-036: Red-team Formal e Bias Guardian
 
-**Status:** 🆕 PROPOSTO  
+**Status:** 🔄 EM IMPLEMENTAÇÃO  
 **Data:** 24 de fevereiro de 2026  
 **Autores:** IA Arquiteta (Claude Sonnet 4.6) — validado por Staff Engineer  
-**Versão alvo:** v1.7.0  
+**Versão alvo:** v1.6.0  
 **Impacto:**
 ```
 ops/red-team/                          — protocolo + scripts novos
