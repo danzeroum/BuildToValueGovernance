@@ -49,7 +49,6 @@ impl DeobfuscatorChain {
     /// Attempt chained deobfuscation up to MAX_CHAIN_DEPTH layers.
     pub fn deobfuscate(&self, input: &str) -> ChainResult {
         let start = Instant::now();
-        let mut current = input.to_string();
         let mut layers: Vec<ChainLayer> = Vec::new();
         let (normalized, _) = Normalizer::new().normalize(input);
         let mut current = normalized;

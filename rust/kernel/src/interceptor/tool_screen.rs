@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn high_non_ascii_detected() {
-        let payload = "\x80\x81\x82\x83hello\x84\x85\x86\x87world\x88\x89\x8a\x8b";
+        let payload = "\u{80}\u{81}\u{82}\u{83}hello\u{84}\u{85}\u{86}\u{87}world\u{88}\u{89}\u{8a}\u{8b}";
         assert!(matches!(screen().classify(payload), ToolScreenResult::Suspicious { .. }));
     }
 
