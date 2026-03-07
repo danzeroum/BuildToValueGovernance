@@ -157,7 +157,7 @@ impl DurableLedger {
             risk_level,
             evidence.composite_risk,
             evidence.critical_count > 0,
-            evidence.stats.has_pii,
+            evidence.critical_count > 0,
         );
         if let Ok(mut agg) = self.session_agg.lock() {
             agg.push(session_event);
