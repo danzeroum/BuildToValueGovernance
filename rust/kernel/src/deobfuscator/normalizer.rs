@@ -306,22 +306,8 @@ impl Normalizer {
             if i + 12 >= len {
                 break;
             }
-            let w = &chars[i..i + 13];
-            let digit_or_o = |c: char| c.is_ascii_digit() || c == 'O' || c == 'o';
-
-            let is_cpf_pattern =
-                w[0].is_ascii_digit() && w[1].is_ascii_digit() && w[2].is_ascii_digit()
-                && w[3] == '.'
-                && w[4].is_ascii_digit() && w[5].is_ascii_digit() && w[6].is_ascii_digit()
-                && w[7] == '.'
-                && w[8].is_ascii_digit() && w[9].is_ascii_digit() && w[10].is_ascii_digit()
-                && w[11] == '-'
-                && digit_or_o(w[12]);
-
-            let has_o = w[12] == 'O' || w[12] == 'o'
-                || (i + 13 < len && (chars[i + 13] == 'O' || chars[i + 13] == 'o'));
-
-            if is_cpf_pattern && has_o {
+            let window_str: String = chars[i..].iter().take(14).collect();
+            if Self::looks_like_cpf_with_letter_o(&window_str) {
                 if result[i + 12] == 'O' || result[i + 12] == 'o' {
                     result[i + 12] = '0';
                 }
