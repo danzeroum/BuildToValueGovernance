@@ -8,7 +8,7 @@
 //! Filosofia (Jonas): pattern_epoch rastreável no TechnicalEvidence —
 //! toda decisão sabe qual versão de detectores a gerou.
 
-use arc_swap::ArcSwap;
+use arc_swap::{ArcSwap, Guard};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -138,14 +138,11 @@ impl PatternRegistry {
         }
     }
 
-    /// Retorna o snapshot atual. Operação lock-free no hot path.
     #[inline]
-    pub fn load(&self) -> arc_swap::Guard<Arc<PatternSnapshot>> {
+    pub fn load(&self) -> Guard<Arc<PatternSnapshot>> {
         self.snapshot.load()
     }
 
-    /// Substitui o snapshot (hot-reload). Incrementa epoch.
-    /// Chamado apenas pelo PolicyTester (ADR-042) e testes.
     pub fn reload(&self, new_patterns: Vec<CompiledPattern>) {
         let epoch = EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
         self.snapshot.store(Arc::new(PatternSnapshot {
@@ -154,7 +151,6 @@ impl PatternRegistry {
         }));
     }
 
-    /// Epoch atual — escrito no TechnicalEvidence._reserved_metadata.
     #[inline]
     pub fn current_epoch(&self) -> u64 {
         self.snapshot.load().epoch

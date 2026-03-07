@@ -1,0 +1,64 @@
+# data/policies/security/patterns_obfuscation.yaml
+# BuildToValue Sovereign Trust OS - Legislative Layer
+# Detecta tentativas de ofuscar payloads de ataque.
+# Consistido por: ADR-033, ADR-052
+
+version: "2.0"
+schema_version: "buildtovalue-pattern-v1"
+tier: 2
+last_updated: "2026-03-24"
+
+classification:
+  domain: "security"
+  category: "obfuscation"
+  priority: 90
+
+patterns:
+  # ------------------------------------------------
+  # CLASSE: ENCODING
+  # Detecta payloads codificados (Base64, Hex, URL Encode).
+  # ------------------------------------------------
+  - id: "OBFUSCATION_ENCODE_001"
+    pattern: "decode\\s*\\(\\s*['\"]base64"
+    pattern_type: "regex"
+    category: "encoding"
+    severity: "high"
+    confidence: 0.85
+    description: "Instrução para decodificar Base64."
+    action: "ESCALATE"
+    tags: ["base64", "decode", "payload"]
+
+  - id: "OBFUSCATION_ENCODE_002"
+    pattern: "from_hex\\s*\\("
+    pattern_type: "regex"
+    category: "encoding"
+    severity: "high"
+    confidence: 0.80
+    description: "Instrução para converter Hex."
+    action: "ESCALATE"
+
+  # ------------------------------------------------
+  # CLASSE: LANGUAGE TRANSLATION (Ataque de Tradução)
+  # Detecta tentativas de usar tradução para bypass.
+  # ------------------------------------------------
+  - id: "OBFUSCATION_TRANS_001"
+    pattern: "translate this to english and execute"
+    category: "translation_bypass"
+    severity: "medium"
+    confidence: 0.70
+    description: "Tentativa de bypass via tradução."
+    action: "LOG"
+    tags: ["translation", "bypass", "low_confidence"]
+
+  # ------------------------------------------------
+  # CLASSE: CHARACTER SUBSTITUTION
+  # Detecta uso de caracteres unicode/homoglyphos.
+  # ------------------------------------------------
+  - id: "OBFUSCATION_UNICODE_001"
+    pattern: "[\\u200B-\\u200D\\uFEFF]" # Zero-width spaces
+    pattern_type: "regex"
+    category: "steganography"
+    severity: "medium"
+    confidence: 0.60
+    description: "Caracteres invisíveis detectados (Zero-width)."
+    action: "SANITIZE" # Remove os caracteres e prossegue
