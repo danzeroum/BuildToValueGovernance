@@ -17,3 +17,10 @@
 __pycache__/
 *.pyc
 *.pyo
+
+# Arquivos gerados — nunca commitar
+**/__pycache__/
+*.pyc
+*.pyo
+python/data/*.db
+rust/gateway/data/
