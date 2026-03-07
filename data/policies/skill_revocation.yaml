@@ -1,4 +1,6 @@
-# Skill Revocation List — PROP-031 (v1.5.1)
-# Skills com blake3 presente aqui são BLOQUEADAS independente do registry.
-version: "1.0.0"
-revoked_hashes: []
+# Skill Revocation List — PROP-031 / ADR-031b
+# Hashes BLAKE3 de skills revogadas (CRL analogico).
+# Uma skill aqui e SEMPRE bloqueada, independente do allowed_list.
+# Fail-secure: hash revogado -> BLOCK imediato, sem excecao.
+schema_version: "1.0"
+revoked: []
