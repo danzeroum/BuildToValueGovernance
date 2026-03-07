@@ -12,7 +12,6 @@ pub mod ledger;
 pub mod network;
 pub mod output_guard;
 pub mod policy;
-pub mod security;
 pub mod session_guard;
 pub mod statistics;
 pub mod validators;
@@ -32,6 +31,13 @@ pub use validators::Validator;
 pub const KERNEL_VERSION: &str = "1.0.0";
 pub const PROJECT_VERSION: &str = "1.0";
 pub const PROTOCOL_VERSION: u16 = 3;
+
+// Adicionar em rust/kernel/src/lib.rs
+
+pub mod security {
+    pub mod prompt_injection;
+    // ... outros módulos
+}
 
 pub fn version_info() -> String {
     format!(
