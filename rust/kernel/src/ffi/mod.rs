@@ -5,6 +5,7 @@
 
 pub mod bridge;
 pub mod validators_ffi;
+pub mod kernel_ffi;
 
 pub use bridge::{RustKernel, PyTechnicalEvidence, PyBiasDeclaration, PyBatchResult};
 pub use validators_ffi::{

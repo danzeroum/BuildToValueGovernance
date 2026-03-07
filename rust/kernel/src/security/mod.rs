@@ -18,9 +18,9 @@ pub mod supply_guard;
 pub use audit::{ProbingDetector, ProbingStats};
 pub use session_guard::{SessionGuard, SessionToken, SessionError, SessionStats};
 pub use output_guard::{OutputGuard, ContentAnalysis, OutputError, PiiMaskResult};
+pub use supply_guard::{verify_skill, SupplyGuardResult};
+pub use pattern_registry::REGISTRY;
 pub use prompt_injection::PromptInjectionDetector;
-pub use pattern_registry::{PatternRegistry, PatternSnapshot, REGISTRY};
-pub use supply_guard::{verify_skill, SupplyGuardResult, SupplyGuardReason};
 
 pub fn init_security() {
     log::info!("Security module initialized (v2.6.0)");

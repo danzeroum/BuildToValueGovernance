@@ -1,0 +1,41 @@
+# data/policies/security/sensitivity_weights.yaml
+# BuildToValue - Legislative Layer for Sensitivity Accumulation.
+# Combate ataques de "Script Kiddie Uplift" (Paper 65).
+#
+# Conceito: Ações individuais podem ser benignas, mas a soma gera risco.
+
+version: "1.0"
+schema: "sensitivity-v1"
+
+# Limiar de intervenção (0-100)
+intervention_threshold: 75.0
+
+# Decaimento temporal (reduz peso de interações antigas)
+# Ex: 0.95 significa que a cada minuto o peso reduz 5%
+temporal_decay_factor: 0.95
+
+# Pesos por Categoria de Finding
+finding_weights:
+  pii_detected: 15.0
+  prompt_injection_suspicious: 20.0
+  high_entropy: 5.0
+  sensitive_topic: 10.0
+
+# Pesos por Tópico Sensível (Semantic Detection)
+# Estes são somados se detectados no input/output
+topic_weights:
+  # Química / Explosivos
+  chemistry_precursors: 10.0
+  explosive_synthesis: 30.0
+
+  # Ciberataques
+  network_scanning: 10.0
+  exploit_code: 25.0
+
+  # Engenharia Social
+  impersonation: 15.0
+  manipulation_tactics: 20.0
+
+  # Financeiro
+  transaction_authorization: 20.0
+  credential_access: 25.0
