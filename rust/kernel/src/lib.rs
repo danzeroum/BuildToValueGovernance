@@ -42,6 +42,7 @@ pub mod security {
     pub mod output_guard;
     pub mod session_guard;
     pub mod skill_registry;
+    pub use prompt_injection::PromptInjectionDetector;
     pub mod signing;
 }
 
