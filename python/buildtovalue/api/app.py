@@ -768,6 +768,23 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
 
     # ── Step 6: Update trust + respond ────────────────────────
     update_trust(session_id, verdict.final_action)
+
+    # ── Over-refusal telemetry (ADR-041 + Art.104/168) ────────
+    # Proxy: usuario estabelecido (trust > 0.7) + mercy reconheceu
+    # contexto legitimo (S1-S3) mas action ainda nao foi ALLOW.
+    _BENIGN_MERCY = {"S1_CRITICAL_OVERRIDE", "S2_LEGAL", "S3_RESEARCH"}
+    if (
+        verdict.trust_score > 0.7
+        and verdict.mercy_scenario in _BENIGN_MERCY
+        and verdict.final_action != "ALLOW"
+    ):
+        from buildtovalue.observability.metrics import BENIGN_REFUSAL_TOTAL
+        BENIGN_REFUSAL_TOTAL.labels(
+            action=verdict.final_action,
+            mercy_scenario=verdict.mercy_scenario,
+            domain=getattr(context, "domain", None) or "general",
+        ).inc()
+
     latency = (time.perf_counter() - start) * 1000
     rationale = verdict.explanation + sector_note + cumulative_note
 
