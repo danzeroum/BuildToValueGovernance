@@ -24,3 +24,9 @@ __pycache__/
 *.pyo
 python/data/*.db
 rust/gateway/data/
+ops/runtime/*.db
+**/__pycache__/
+rust/Cargo.lock
+ece_check.txt
+patch_consensus.py
+reports/
