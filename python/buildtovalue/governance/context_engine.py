@@ -260,6 +260,29 @@ class EthicalContextEngine:
         from .mercy_scenarios import SEVERITY_ACTION
         return SEVERITY_ACTION.get(severity, "BLOCK")
 
+
+    def _dp_noise(self, value: float, sensitivity: float = 0.1, epsilon: float = 1.0) -> float:
+        """
+        Mecanismo de Laplace para Differential Privacy (ADR-038 + Art.16).
+
+        Adiciona ruido calibrado nos scores REPORTADOS na explicacao.
+        NAO afeta scores usados na decisao — apenas o que e exibido ao usuario.
+
+        Jonas: responsabilidade de nao expor scores precisos que permitam
+               engenharia reversa do modelo de risco.
+        scale = sensitivity / epsilon = 0.1 / 1.0 = 0.1
+        """
+        import random
+        scale = sensitivity / epsilon
+        # Laplace(0, scale) via inversa da CDF
+        u = random.uniform(-0.5, 0.5)
+        noise = -scale * (1 if u >= 0 else -1) * (1 - 2 * abs(u)) ** (-1) if u != 0 else 0.0
+        # Alternativa mais simples e numericamente segura:
+        import math
+        u2 = random.random() - 0.5
+        noise = -scale * math.copysign(1, u2) * math.log(1 - 2 * abs(u2) + 1e-10)
+        return max(0.0, min(1.0, round(value + noise, 2)))
+
     def _explain_decision(
         self,
         evidence: RustEvidence,
@@ -273,16 +296,21 @@ class EthicalContextEngine:
         Generate human-readable explanation (obrigatório).
         Levinas: transparency is non-negotiable.
         """
+        # DP: ruido Laplace nos scores reportados (nao afeta decisao)
+        r_risk    = self._dp_noise(evidence.composite_risk)
+        r_trust   = self._dp_noise(trust)
+        r_mercy   = self._dp_noise(mercy_score)
+        r_entropy = self._dp_noise(evidence.entropy)
         parts = [
             f"Evidence: {evidence.finding_count} findings, "
             f"{evidence.critical_count} critical, "
-            f"risk={evidence.composite_risk:.2f}, "
-            f"entropy={evidence.entropy:.2f}.",
+            f"risk={r_risk:.2f}, "
+            f"entropy={r_entropy:.2f}.",
 
             f"Context: domain={context.domain}, role={context.user_role}, "
             f"ip_risk={context.ip_risk}, drift={context.drift_level}.",
 
-            f"Trust: {trust:.2f}. Mercy: {mercy_score:.2f}.",
+            f"Trust: {r_trust:.2f}. Mercy: {r_mercy:.2f}.",
 
             f"Policy recommended: {evidence.policy_action}.",
         ]
