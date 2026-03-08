@@ -36,7 +36,13 @@ pub const PROTOCOL_VERSION: u16 = 3;
 
 pub mod security {
     pub mod prompt_injection;
-    // ... outros módulos
+    pub mod pattern_registry;
+    pub mod supply_guard;
+    pub mod audit;
+    pub mod output_guard;
+    pub mod session_guard;
+    pub mod skill_registry;
+    pub mod signing;
 }
 
 pub fn version_info() -> String {

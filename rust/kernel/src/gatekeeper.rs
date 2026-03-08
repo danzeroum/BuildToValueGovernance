@@ -5,13 +5,11 @@
 //! 2. Analyze: preenche statistics (Entropy, ZScore, CharRatio)
 //! 3. Validate: detecta PII/violações (CPF, CNPJ, Email, Phone, CC)
 //!    3.5. Re-scan: deobfuscator chaining + re-validate decoded text
-//! 4. Accumulate: Session Sensitivity scoring (Wire 5 - ADR-046)
 //! 5. Finalize: bias aggregation, hash, métricas
 //!
 //! Wire 2 (PROP-034a): InterceptorChain com ToolScreen no pré-voo.
 //! Wire 3 (P-035):     Adapter normaliza + hasha input antes do pipeline.
 //! Wire 4 (PROP-031):  supply_guard::verify_skill() valida MAC + registry.
-//! Wire 5 (ADR-046):   SensitivityAccumulator previne "Script Kiddie Uplift".
 
 use crate::core::module::{Module, ScanContext};
 use crate::core::types::BiasDeclaration;
@@ -27,9 +25,7 @@ use crate::validators::financial::CreditCardValidator;
 use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, LanguageDetector};
 use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector, Normalizer};
 use crate::interceptor::{InterceptorChain, InterceptAction, ToolScreen}; // Wire 2: PROP-034a
-use crate::ffi::kernel_ffi::GLOBAL_ACCUMULATOR; // Wire 5: Global State
 use crate::security::prompt_injection::PromptInjectionDetector;
-use crate::session_guard::AccumulatorVerdict; // Import do tipo de retorno
 
 /// Chave MAC do kernel para PROP-031 (ADR-031b).
 /// Em produção: substituir por variável de ambiente ou HSM.
@@ -61,7 +57,6 @@ pub struct GatekeeperMetrics {
     pub critical_findings: u64,
     pub avg_latency_ms: f32,
     pub p99_latency_ms: f32,
-    pub session_escalations: u64, // Contador de escaladas
 }
 
 // ---------------------------------------------------------------------
@@ -71,7 +66,6 @@ pub struct Gatekeeper {
     pipeline: Vec<StageEntry>,
     metrics: GatekeeperMetrics,
     interceptor_chain: InterceptorChain, // Wire 2: PROP-034a
-    // Removido field sensitivity_accumulator para usar o GLOBAL_ACCUMULATOR diretamente.
     // Isso resolve o erro de Clone e garante estado compartilhado.
 }
 
@@ -103,7 +97,6 @@ impl Gatekeeper {
         let mut interceptor_chain = InterceptorChain::new();
         interceptor_chain.add_request_hook(Box::new(ToolScreen::new()));
 
-        // Wire 5: Não inicializamos localmente. Usamos GLOBAL_ACCUMULATOR.
 
         Self {
             pipeline,
@@ -283,34 +276,6 @@ impl Gatekeeper {
             }
         }
 
-        // ── Wire 5: ADR-046 Session Sensitivity Accumulation ────────────────────
-        let session_score = self.calculate_sensitivity_score(&evidence);
-
-        // CORREÇÃO: Usar GLOBAL_ACCUMULATOR diretamente (Singleton)
-        let verdict: AccumulatorVerdict = {
-            let mut acc = GLOBAL_ACCUMULATOR.lock().unwrap();
-            acc.add_event(audit_trail_id, "findings", session_score)
-        };
-
-        if !verdict.safe {
-            log::warn!(
-                "ADR-046: Sensitivity Accumulator TRIGGERED for session {} (Score: {:.2} >= Threshold: {:.2})",
-                audit_trail_id, verdict.current_score, verdict.threshold
-            );
-
-            evidence.add_finding(crate::evidence::Finding::new(
-                crate::core::types::ValidatorModule::Unknown,
-                crate::core::types::TechnicalSeverity::Critical(255),
-                "SESSION_SENSITIVITY_EXCEEDED",
-                "session_risk_accumulation",
-                "session_sensitivity_adr046",
-            ).with_confidence(95));
-
-            self.metrics.session_escalations += 1;
-        }
-
-        // Stage 5: Finalize
-        evidence.stats = ctx.stats;
         evidence.bias = BiasDeclaration::new(
             max_fpr, max_fnr,
             if oldest_calibration == u32::MAX { 0 } else { oldest_calibration },
@@ -335,10 +300,6 @@ impl Gatekeeper {
         evidence
     }
 
-    fn calculate_sensitivity_score(&self, evidence: &TechnicalEvidence) -> f32 {
-        // Proxy: Score baseado no risco composto
-        evidence.composite_risk * 50.0
-    }
 
     pub fn module_count(&self) -> usize { self.pipeline.len() }
 
