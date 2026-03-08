@@ -95,6 +95,15 @@ def init_db():
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
+    # Colunas v1.9: post-penalty analysis (ADR-039)
+    for _col in [
+        "ALTER TABLE sessions ADD COLUMN last_entropy REAL NOT NULL DEFAULT 0.0",
+        "ALTER TABLE sessions ADD COLUMN last_action TEXT NOT NULL DEFAULT ''",
+    ]:
+        try:
+            conn.execute(_col)
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -102,15 +111,27 @@ def init_db():
 def db_get_session(session_id: str) -> dict:
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute(
-        "SELECT trust_score, offenses, total_requests "
+        "SELECT trust_score, offenses, total_requests, last_entropy, last_action "
         "FROM sessions WHERE session_id = ?",
         (session_id,),
     ).fetchone()
     conn.close()
     if row:
-        return {"trust_score": row[0], "offenses": row[1], "total_requests": row[2]}
-    return {"trust_score": 0.5, "offenses": 0, "total_requests": 0}
+        return {"trust_score": row[0], "offenses": row[1], "total_requests": row[2],
+                "last_entropy": row[3], "last_action": row[4]}
+    return {"trust_score": 0.5, "offenses": 0, "total_requests": 0,
+            "last_entropy": 0.0, "last_action": ""}
 
+
+def db_update_session_state(session_id: str, last_entropy: float, last_action: str):
+    """Persiste last_entropy e last_action (ADR-039 post-penalty analysis)."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE sessions SET last_entropy=?, last_action=? WHERE session_id=?",
+        (last_entropy, last_action, session_id),
+    )
+    conn.commit()
+    conn.close()
 
 def db_update_session(session_id: str, trust_score: float, offense_delta: int):
     conn = sqlite3.connect(DB_PATH)
@@ -767,6 +788,19 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             logger.warning("Output schema validation error: %s", e)
 
     # ── Step 6: Update trust + respond ────────────────────────
+    # Post-penalty behavioral analysis (ADR-039 + Art.65/213)
+    if session_id:
+        prev = db_get_session(session_id)
+        if prev["last_action"] in ("BLOCK", "EDUCATE") and prev["last_entropy"] > 0.0:
+            from buildtovalue.governance.trust_score import TrustScoreCalculator
+            _tc = TrustScoreCalculator()
+            _tc.adjust_post_penalty(
+                session_id=session_id,
+                pre_block_entropy=prev["last_entropy"],
+                post_block_entropy=req.entropy,
+                subsequent_action=verdict.final_action,
+            )
+        db_update_session_state(session_id, req.entropy, verdict.final_action)
     update_trust(session_id, verdict.final_action)
 
     # ── Over-refusal telemetry (ADR-041 + Art.104/168) ────────
