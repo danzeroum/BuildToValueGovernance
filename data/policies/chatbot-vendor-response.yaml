@@ -1,0 +1,38 @@
+id: chatbot-vendor-response-v1
+version: "1.0"
+description: "Padrões de exfiltração e injection na resposta do vendor. ADR-0031."
+applies_to:
+  profile_id: "external-chatbot"
+  action_names: ["llm_vendor_response_display"]
+
+bias_declaration:
+  calibration_date: "2026-03-08"
+  fpr_estimated: 0.03
+  fnr_estimated: 0.05
+  notes: "FNR 5% reflete limitação de detecção de exfiltração esteganográfica."
+
+rules:
+  # Injection patterns detectados na resposta: BLOCK
+  - name: block_injection_in_response
+    conditions:
+      findings.prompt_injection: { gt: 0 }
+    verdict: BLOCK
+    explain: >
+      Resposta do vendor contém padrões de prompt injection.
+      Possível exfiltração via resposta maliciosa. Resposta bloqueada.
+
+  # CPF/CNPJ na resposta quando não estava no input: BLOCK
+  - name: block_pii_exfiltration
+    conditions:
+      findings.cpf: { gt: 0 }
+      agent_metadata.action_subtype: "vendor_response"
+    verdict: BLOCK
+    explain: >
+      Resposta do vendor contém CPF/dados brasileiros.
+      Possível exfiltração de dados de outros usuários.
+
+  # Default: ALLOW (resposta sanitizada é exibida)
+  - name: allow_clean_response
+    conditions:
+      default: true
+    verdict: ALLOW

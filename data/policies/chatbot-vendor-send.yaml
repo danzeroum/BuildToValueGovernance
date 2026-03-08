@@ -1,0 +1,60 @@
+id: chatbot-vendor-send-v1
+version: "1.0"
+description: "Regras por mensagem enviada a vendor LLM externo. ADR-0031."
+applies_to:
+  profile_id: "external-chatbot"
+  action_names: ["llm_vendor_send"]
+
+bias_declaration:
+  calibration_date: "2026-03-08"
+  fpr_estimated: 0.01
+  fnr_estimated: 0.00
+  notes: "Bloqueios são determinísticos (sanitize obrigatório, RESTRICTED nunca sai)."
+
+rules:
+  # Transmissão sem sanitização prévia: BLOCK incondicional
+  - name: block_unsanitized_send
+    conditions:
+      agent_metadata.sanitized_before_send: false
+    verdict: BLOCK
+    explain: >
+      Transmissão bloqueada: sanitização prévia obrigatória para
+      mensagens enviadas a vendors externos (ADR-0031, Gate 1).
+      Implemente POST /v1/sanitize antes de /v1/validate.
+
+  # Dado RESTRICTED nunca sai do perímetro
+  - name: block_restricted_data
+    conditions:
+      agent_metadata.data_classification: "RESTRICTED"
+    verdict: BLOCK
+    explain: >
+      Dado classificado como RESTRICTED nunca pode ser enviado
+      a vendor externo. Processe localmente ou anonimize antes.
+
+  # Retenção de dado pessoal > 0 dias sem DPA: BLOCK em saúde/jurídico
+  - name: block_sensitive_sector_no_zdr
+    conditions:
+      sector_id: { in: ["health", "legal"] }
+      agent_metadata.pii_detected: true
+      agent_metadata.vendor_data_retention_days: { gt: 0 }
+    verdict: BLOCK
+    explain: >
+      Setores saúde/jurídico com PII detectado exigem Zero Data Retention.
+      Vendor retém dados por {{ vendor_data_retention_days }} dias.
+
+  # PII detectado sem DPA: EDUCATE (permite mas registra)
+  - name: educate_pii_no_dpa
+    conditions:
+      agent_metadata.pii_detected: true
+      agent_metadata.has_dpa: false
+    verdict: EDUCATE
+    explain: >
+      PII detectado na mensagem e vendor sem DPA formal.
+      Considere assinar DPA para conformidade LGPD Art. 33.
+      Transmissão permitida mas registrada para auditoria.
+
+  # Default: ALLOW
+  - name: allow_safe_transmission
+    conditions:
+      default: true
+    verdict: ALLOW
