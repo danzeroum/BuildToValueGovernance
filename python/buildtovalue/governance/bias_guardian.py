@@ -18,10 +18,12 @@ from dataclasses import dataclass
 
 # Importações internas (Iteração 2 e 4)
 from .model_integrity import (
-    verify_model_integrity, 
-    get_tri, 
     ModelStatus,
-    get_model_info
+    get_model_info,
+)
+from .model_integrity_verifier import (
+    verify_model_integrity,
+    get_tri,
 )
 from .exceptions import SecurityViolation, IntegrityCheckFailed
 

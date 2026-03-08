@@ -9,10 +9,12 @@ from unittest.mock import Mock
 from buildtovalue.governance.model_integrity import (
     is_known_abliterated,
     get_model_info,
-    verify_model_integrity,
     ModelStatus,
+)
+from buildtovalue.governance.model_integrity_verifier import (
+    verify_model_integrity,
     AbliterationDetector,
-    IntegrityVerifier
+    IntegrityVerifier,
 )
 
 
