@@ -17,7 +17,7 @@ pub enum AdaptError {
 
 /// Resultado do Adapter: hash BLAKE3 + tamanho normalizado.
 /// Copy: sem heap.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AdaptedInput {
     /// BLAKE3 hash do input normalizado (trimmed).
     pub blake3_hash: [u8; HASH_SIZE],
