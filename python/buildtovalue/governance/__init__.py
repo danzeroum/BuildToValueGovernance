@@ -17,6 +17,7 @@ from .trust_score import TrustScoreCalculator
 from .context_engine import EthicalContextEngine
 from .contestability_loop import ContestabilityLoop
 from .sensitivity_accumulator import SessionSensitivityAccumulator, SensitivityState
+from .bias_guardian import DivergenceLevel
 # Re-export V3 alias for backward compatibility with tests
 from .ethical_context_engine import EthicalContextEngineV3
 
@@ -39,4 +40,5 @@ __all__ = [
     # ADR-046: Hybrid Alignment
     "SessionSensitivityAccumulator",
     "SensitivityState",
+    "DivergenceLevel",
 ]

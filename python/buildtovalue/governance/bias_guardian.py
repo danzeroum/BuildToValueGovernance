@@ -12,6 +12,7 @@ Referências:
 """
 
 import logging
+from enum import Enum
 from typing import Optional, Callable, Dict, Any
 from dataclasses import dataclass
 
@@ -159,3 +160,12 @@ def check_model(model_id: str) -> GuardianVerdict:
 def run_safe(model_id: str, func: Callable, *args, **kwargs) -> Any:
     """Atalho para execução segura."""
     return _default_guardian.safe_evaluate(model_id, func, *args, **kwargs)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADR-036: DivergenceLevel enum (maiúsculas conforme spec)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DivergenceLevel(Enum):
+    OK      = "OK"
+    WARNING = "WARNING"
+    BLOCK   = "BLOCK"
