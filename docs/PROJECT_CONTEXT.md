@@ -112,7 +112,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 | J: Multi-lang Foundation | 032-035 | ✅ Implementados (035 sem wiring) |
 | K: Red-team & Governance | 036-039 | ✅ Implementados |
 | L: Gateway & Obs v2.0 | 040-041 | ✅ Implementados |
-| M: Policy Automation | 042 | 📝 ADR only (v1.9) |
+| M: Policy Automation | 042 | ✅ Implementado (21 testes, CaseCategory, CI gate) |
 | N: Effect + CoT Safety | 0048-0049 | ✅ Implementados (PROP-029, PROP-037) |
 
 ### Débitos Técnicos Ativos
