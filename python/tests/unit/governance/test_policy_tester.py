@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 from buildtovalue.governance.policy_tester import (
     PolicyTester,
     BlindTestCase,
-    TestCategory,
+    CaseCategory,
     SYNTHETIC_DATASET,
 )
 
@@ -40,9 +40,9 @@ class TestDataset:
     def test_covers_all_categories(self, tester):
         cases = tester._build_cases(seed=42)
         cats = {c.category for c in cases}
-        assert TestCategory.HARD_BLOCK in cats
-        assert TestCategory.BENIGN_TECHNICAL in cats
-        assert TestCategory.INSTRUCTION_OVERRIDE in cats
+        assert CaseCategory.HARD_BLOCK in cats
+        assert CaseCategory.BENIGN_TECHNICAL in cats
+        assert CaseCategory.INSTRUCTION_OVERRIDE in cats
 
     def test_dataset_size(self):
         assert len(SYNTHETIC_DATASET) >= 15
