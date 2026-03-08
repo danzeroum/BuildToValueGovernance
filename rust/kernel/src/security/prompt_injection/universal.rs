@@ -37,6 +37,7 @@ pub struct ThreatSignal {
     pub confidence: u8,
 }
 
+#[allow(dead_code)]
 /// Padrão estático otimizado.
 pub struct StaticPattern {
     pub id: &'static str,

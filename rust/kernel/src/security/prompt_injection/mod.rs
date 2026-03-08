@@ -15,6 +15,7 @@ pub use universal::{detect_tier0, Severity, ThreatCategory, ThreatSignal};
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
+#[allow(dead_code)]
 
 const INSTRUCTION_DENSITY_THRESHOLD: f32 = 0.15;
 const MIN_INPUT_LENGTH: usize = 10;
@@ -32,6 +33,7 @@ impl Default for PromptInjectionDetector {
 impl PromptInjectionDetector {
     pub fn new() -> Self { Self }
 
+    #[allow(dead_code)]
     fn instruction_density(input: &str) -> f32 {
         let words: Vec<&str> = input.split_whitespace().collect();
         if words.is_empty() { return 0.0; }
