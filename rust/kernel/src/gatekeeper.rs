@@ -239,6 +239,9 @@ impl Gatekeeper {
             }
         }
 
+        // Propagar stats do ctx para evidence (entropy, char_ratio, etc.)
+        evidence.stats = ctx.stats;
+
         // Stage 3.5a: Jurisdiction-gated PII
         {
             use crate::validators::{NhsValidator, VatValidator, IbanValidator};
