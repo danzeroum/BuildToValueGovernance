@@ -47,3 +47,4 @@ from .blind_evaluator import BlindEvaluator, BlindVerdict
 from .synthetic_dataset import SyntheticDatasetGenerator
 from .model_integrity import ModelStatus, get_model_info, normalize_id, is_known_abliterated
 from .model_integrity_verifier import AbliterationDetector, IntegrityVerifier, verify_model_integrity
+from .agent_pdp import ActionImpact, AgentVerdict, AgentAction, AgentContext, AgentDecisionRequest, VerdictEnvelope, BiasSummary

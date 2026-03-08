@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://buildtovalue.io/spec/agent-pdp-v1.json",
+  "title": "AgentDecisionRequest",
+  "description": "BTV External Agent PDP contract — ADR-029 v1.0",
+  "type": "object",
+  "required": ["schema_version", "request_id", "agent_id", "session_id", "action", "parameters_hash", "timestamp_utc"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "request_id": { "type": "string", "format": "uuid" },
+    "agent_id": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "action": {
+      "type": "object",
+      "required": ["name", "impact"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "impact": { "type": "string", "enum": ["Safe", "Destructive", "Irreversible"] },
+        "capabilities": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "parameters_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "parameters_preview": { "type": "object" },
+    "context": {
+      "type": "object",
+      "properties": {
+        "profile_id": { "type": "string" },
+        "sector_id": { "type": "string", "enum": ["finance", "health", "legal", "general"] },
+        "session_trust_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "agent_metadata": { "type": "object" }
+      }
+    },
+    "timestamp_utc": { "type": "string", "format": "date-time" }
+  }
+}
