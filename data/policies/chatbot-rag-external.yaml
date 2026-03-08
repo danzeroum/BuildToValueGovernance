@@ -1,0 +1,38 @@
+id: chatbot-rag-external-v1
+version: "1.0"
+description: "Anti-injection para chunks RAG em prompts de vendors externos. ADR-0031."
+applies_to:
+  profile_id: "external-chatbot"
+  action_names: ["rag_chunk_inject", "rag_chunk_inject_conf"]
+
+bias_declaration:
+  calibration_date: "2026-03-08"
+  fpr_estimated: 0.05
+  fnr_estimated: 0.02
+  notes: "RESTRICTED bloqueado localmente antes do gate."
+
+rules:
+  # Injection no chunk: BLOCK
+  - name: block_injected_chunk
+    conditions:
+      findings.prompt_injection: { gt: 0 }
+    verdict: BLOCK
+    explain: >
+      Chunk RAG contém padrões de prompt injection.
+      Documento malicioso bloqueado de injeção no prompt externo.
+
+  # Chunk CONFIDENTIAL com vendor sem DPA: EDUCATE
+  - name: educate_confidential_no_dpa
+    conditions:
+      agent_metadata.data_classification: "CONFIDENTIAL"
+      agent_metadata.has_dpa: false
+    verdict: EDUCATE
+    explain: >
+      Chunk CONFIDENTIAL sendo injetado em prompt de vendor sem DPA.
+      Considere DPA para conformidade. Chunk permitido mas registrado.
+
+  # Default: ALLOW
+  - name: allow_safe_chunk
+    conditions:
+      default: true
+    verdict: ALLOW
