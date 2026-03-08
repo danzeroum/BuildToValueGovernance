@@ -9,6 +9,8 @@ set -uo pipefail
 
 GATEWAY="http://localhost:8080"
 GOVERNANCE="http://localhost:8000"
+# DT-004 FIX: API key lida do ambiente (fallback = chave de dev)
+BTV_API_KEY="${BTV_API_KEY:-btv-dev-key}"
 PASS=0
 FAIL=0
 SKIP=0
@@ -26,6 +28,7 @@ check() {
         PASS=$((PASS + 1))
     else
         echo "  ❌ $name: expected $field~$expected, got $actual"
+        echo "     DEBUG: $(echo "$response" | head -c 300)"
         FAIL=$((FAIL + 1))
     fi
 }
@@ -39,6 +42,7 @@ check_gte() {
         PASS=$((PASS + 1))
     else
         echo "  ❌ $name: expected $field>=$min, got $actual"
+        echo "     DEBUG: $(echo "$response" | head -c 300)"
         FAIL=$((FAIL + 1))
     fi
 }
@@ -57,28 +61,28 @@ validate() {
     body="$body}"
     curl -s --max-time 20 -X POST "$GATEWAY/v1/validate" \
         -H "Content-Type: application/json" \
+        -H "X-BTV-API-Key: $BTV_API_KEY" \
         -d "$body"
 }
 
 sanitize() {
     curl -s --max-time 10 -X POST "$GATEWAY/v1/sanitize" \
         -H "Content-Type: application/json" \
+        -H "X-BTV-API-Key: $BTV_API_KEY" \
         -d "{\"text\": \"$1\"}"
 }
 
-# Em ops/e2e-tests.sh, atualizar a função decide():
+# DT-004 FIX A: decide() normaliza campos obrigatórios do DecideRequest (Pydantic)
+# e envia X-BTV-API-Key. Todos os campos com default=None/0 precisam estar presentes
+# para evitar 422 Unprocessable Entity silencioso.
 decide() {
     local json="$1"
-    # Se o payload não contém os campos obrigatórios do schema atual,
-    # injeta valores padrão via python para garantir compatibilidade.
     local normalized
     normalized=$(python -c "
 import sys, json as j
 
-# Payload original (pode ser legado ou completo)
 d = j.loads('''$json''')
 
-# Defaults para campos obrigatórios que o endpoint exige (Pydantic)
 defaults = {
     'entropy': 2.0,
     'total_chars': max(len(d.get('input_text', '')), 10),
@@ -86,6 +90,9 @@ defaults = {
     'max_finding_confidence': 0.0,
     'profile': '',
     'session_id': '',
+    'ip_risk': 'Low',
+    'ip_jurisdiction': 'XX',
+    'drift_level': 'None',
 }
 
 for k, v in defaults.items():
@@ -97,7 +104,15 @@ print(j.dumps(d))
 
     curl -s --max-time 20 -X POST "$GOVERNANCE/v1/decide" \
         -H "Content-Type: application/json" \
+        -H "X-BTV-API-Key: $BTV_API_KEY" \
         -d "$normalized"
+}
+
+# DT-004 FIX B: gov_get — wrapper para GET no governance com API key
+gov_get() {
+    local path="$1"
+    curl -s --max-time 10 "$GOVERNANCE$path" \
+        -H "X-BTV-API-Key: $BTV_API_KEY"
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -193,12 +208,15 @@ if [[ "$SANITIZED" == *"***"* ]]; then
     PASS=$((PASS + 1))
 else
     echo "  ❌ PII not masked"
+    echo "     DEBUG: $R" | head -c 300
     FAIL=$((FAIL + 1))
 fi
 check_gte "Mask count" "masked_count" 2 "$R"
 
 # ─────────────────────────────────────────────────────────────
 # 5. Mercy Flow (Gilligan) — via governance direct
+# DT-004 FIX C: payloads agora passam pela função decide() que normaliza
+# campos obrigatórios (entropy, total_chars, blake3_hash, max_finding_confidence)
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "═══ 5. Mercy Flow (direct governance) ═══"
@@ -206,25 +224,45 @@ echo "═══ 5. Mercy Flow (direct governance) ═══"
 SESSION="mercy-e2e-$(date +%s)"
 echo "  Building trust (10 clean messages, session=$SESSION)..."
 for i in $(seq 1 10); do
-    decide "{\"finding_count\":0,\"critical_count\":0,\"composite_risk\":0.0,\"action\":\"ALLOW\",\"hard_blocked\":false,\"matched_policies\":[],\"session_id\":\"$SESSION\",\"profile\":\"\",\"input_text\":\"mensagem limpa $i\"}" > /dev/null
+    decide "{
+        \"finding_count\": 0,
+        \"critical_count\": 0,
+        \"composite_risk\": 0.0,
+        \"action\": \"ALLOW\",
+        \"hard_blocked\": false,
+        \"matched_policies\": [],
+        \"session_id\": \"$SESSION\",
+        \"input_text\": \"mensagem limpa $i\"
+    }" > /dev/null
 done
 
-R=$(curl -s --max-time 5 "$GOVERNANCE/v1/trust/$SESSION" || echo "{}")
+R=$(gov_get "/v1/trust/$SESSION")
 TRUST=$(echo "$R" | python -c "import sys,json; print(json.load(sys.stdin).get('trust_score',0))" 2>/dev/null || echo "0")
 REQS=$(echo "$R" | python -c "import sys,json; print(json.load(sys.stdin).get('total_requests',0))" 2>/dev/null || echo "0")
 echo "  Trust: $TRUST, Requests: $REQS"
 
-# Now test with PII — mercy should soften
-R=$(decide "{\"finding_count\":1,\"critical_count\":0,\"composite_risk\":0.5,\"action\":\"REDACT\",\"hard_blocked\":false,\"matched_policies\":[\"email->Redact\"],\"session_id\":\"$SESSION\",\"profile\":\"\",\"input_text\":\"email teste@gmail.com\"}")
+# Mercy test: finding_count=1, composite_risk=0.5, high trust → deve abrandar
+R=$(decide "{
+    \"finding_count\": 1,
+    \"critical_count\": 0,
+    \"composite_risk\": 0.5,
+    \"action\": \"REDACT\",
+    \"hard_blocked\": false,
+    \"matched_policies\": [\"email->Redact\"],
+    \"session_id\": \"$SESSION\",
+    \"input_text\": \"email teste@gmail.com\"
+}")
 ACTION=$(echo "$R" | python -c "import sys,json; print(json.load(sys.stdin).get('action',''))" 2>/dev/null || echo "")
 MERCY=$(echo "$R" | python -c "import sys,json; print(json.load(sys.stdin).get('mercy_applied',''))" 2>/dev/null || echo "")
 echo "  Action: $ACTION, Mercy: $MERCY"
 TOTAL=$((TOTAL + 1))
-if [[ "$MERCY" == "True" || "$ACTION" == "LOG" || "$ACTION" == "EDUCATE" || "$ACTION" == "ALLOW"  || "$ACTION" == "REDACT" ]]; then
+if [[ "$MERCY" == "True" || "$ACTION" == "LOG" || "$ACTION" == "EDUCATE" \
+   || "$ACTION" == "ALLOW" || "$ACTION" == "REDACT" ]]; then
     echo "  ✅ Mercy flow: action softened or mercy applied"
     PASS=$((PASS + 1))
 else
     echo "  ❌ Mercy flow: expected leniency, got action=$ACTION mercy=$MERCY"
+    echo "     DEBUG: $(echo "$R" | python -c 'import sys,json; d=json.load(sys.stdin); print(d.get("detail", d.get("rationale","no detail")))' 2>/dev/null)"
     FAIL=$((FAIL + 1))
 fi
 
@@ -234,7 +272,7 @@ fi
 echo ""
 echo "═══ 6. Trust Score ═══"
 
-R=$(curl -s --max-time 5 "$GOVERNANCE/v1/trust/$SESSION" || echo "{}")
+R=$(gov_get "/v1/trust/$SESSION")
 check "Trust score exists" "session_id" "$SESSION" "$R"
 
 # ─────────────────────────────────────────────────────────────
@@ -243,13 +281,23 @@ check "Trust score exists" "session_id" "$SESSION" "$R"
 echo ""
 echo "═══ 7. Appeals ═══"
 
-# Get a verdict_id directly from governance
-R_VERDICT=$(decide "{\"finding_count\":1,\"critical_count\":1,\"composite_risk\":0.75,\"action\":\"BLOCK\",\"hard_blocked\":false,\"matched_policies\":[\"cpf->Block\"],\"session_id\":\"appeal-test\",\"profile\":\"\",\"input_text\":\"CPF 123.456.789-09\"}")
+R_VERDICT=$(decide "{
+    \"finding_count\": 1,
+    \"critical_count\": 1,
+    \"composite_risk\": 0.75,
+    \"action\": \"BLOCK\",
+    \"hard_blocked\": false,
+    \"matched_policies\": [\"cpf->Block\"],
+    \"session_id\": \"appeal-test\",
+    \"input_text\": \"CPF 123.456.789-09\"
+}")
 VERDICT_ID=$(echo "$R_VERDICT" | python -c "import sys,json; print(json.load(sys.stdin).get('verdict_id',''))" 2>/dev/null || echo "")
 echo "  Verdict to appeal: $VERDICT_ID"
+
 if [[ -n "$VERDICT_ID" && "$VERDICT_ID" != "None" && "$VERDICT_ID" != "" ]]; then
     R=$(curl -s --max-time 10 -X POST "$GOVERNANCE/v1/appeals" \
         -H "Content-Type: application/json" \
+        -H "X-BTV-API-Key: $BTV_API_KEY" \
         -d "{\"audit_trail_id\": 9999, \"user_id\": \"e2e-tester\", \"reason\": \"E2E test appeal - contestability verification\"}")
     check "Appeal submitted" "status" "pending" "$R"
 
@@ -259,8 +307,9 @@ if [[ -n "$VERDICT_ID" && "$VERDICT_ID" != "None" && "$VERDICT_ID" != "" ]]; the
     if [[ -n "$APPEAL_ID" && "$APPEAL_ID" != "None" ]]; then
         R=$(curl -s --max-time 10 -X POST "$GOVERNANCE/v1/appeals/$APPEAL_ID/resolve" \
             -H "Content-Type: application/json" \
-            -d "{\"reviewer_notes\": \"E2E confirmed false positive\", \"new_action\": \"ALLOW\"}")
-        check "Appeal resolved" "status" "approved" "$R"
+            -H "X-BTV-API-Key: $BTV_API_KEY" \
+            -d "{\"accepted\": true, \"reviewer_id\": \"e2e-reviewer\", \"reviewer_notes\": \"E2E confirmed false positive\"}")
+        check "Appeal resolved" "status" "accepted" "$R"
     else
         skip "Appeal resolve" "no appeal_id returned"
     fi
@@ -271,29 +320,24 @@ fi
 
 # ─────────────────────────────────────────────────────────────
 # 8. Compliance
+# DT-004 FIX D: adiciona X-BTV-API-Key (endpoint exige require_api_key)
+# Rota é exclusiva do governance (:8000) — não proxeada pelo gateway
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "═══ 8. Compliance ═══"
 
-R=$(curl -s --max-time 10 "$GOVERNANCE/v1/compliance/report/EU_AI_ACT" 2>/dev/null || echo "")
-TOTAL=$((TOTAL + 1))
-if echo "$R" | python -c "import sys,json; d=json.load(sys.stdin); assert 'framework' in d" 2>/dev/null; then
-    echo "  ✅ EU AI Act report: valid"
-    PASS=$((PASS + 1))
-else
-    echo "  ❌ EU AI Act report failed"
-    FAIL=$((FAIL + 1))
-fi
-
-R=$(curl -s --max-time 10 "$GOVERNANCE/v1/compliance/report/LGPD" 2>/dev/null || echo "")
-TOTAL=$((TOTAL + 1))
-if echo "$R" | python -c "import sys,json; d=json.load(sys.stdin); assert 'framework' in d" 2>/dev/null; then
-    echo "  ✅ LGPD report: valid"
-    PASS=$((PASS + 1))
-else
-    echo "  ❌ LGPD report failed"
-    FAIL=$((FAIL + 1))
-fi
+for FW in "EU_AI_ACT" "LGPD"; do
+    R=$(gov_get "/v1/compliance/report/$FW")
+    TOTAL=$((TOTAL + 1))
+    if echo "$R" | python -c "import sys,json; d=json.load(sys.stdin); assert 'framework' in d" 2>/dev/null; then
+        echo "  ✅ $FW report: valid"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ $FW report failed"
+        echo "     DEBUG: $(echo "$R" | head -c 300)"
+        FAIL=$((FAIL + 1))
+    fi
+done
 
 # ─────────────────────────────────────────────────────────────
 # 9. Metrics
