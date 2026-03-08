@@ -450,3 +450,24 @@ BENIGN_REFUSAL_RATE = Gauge(
     "btv_benign_refusal_rate",
     "Taxa movel (ultima hora) de recusas em requisicoes potencialmente benignas",
 )
+
+# -- Action Graph Observability (ADR-041) --
+from prometheus_client import Counter, Histogram, Gauge
+
+ACTION_TRANSITION_TOTAL = Counter(
+    "btv_action_transition_total",
+    "Transicoes de acao entre requests consecutivos na mesma sessao",
+    ["from_action", "to_action"],
+)
+
+ACTION_SEQUENCE_ESCALATION_TOTAL = Counter(
+    "btv_action_sequence_escalation_total",
+    "Sequencias que escalaram severidade (ex: ALLOW->BLOCK)",
+    ["pattern"],
+)
+
+ACTION_SEQUENCE_DEPTH = Histogram(
+    "btv_action_sequence_depth",
+    "Numero de requests por sessao antes de atingir BLOCK",
+    buckets=[1, 2, 3, 5, 8, 13, 21],
+)
