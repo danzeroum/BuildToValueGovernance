@@ -801,6 +801,28 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                 subsequent_action=verdict.final_action,
             )
         db_update_session_state(session_id, req.entropy, verdict.final_action)
+
+        # Action Graph telemetry (ADR-041)
+        prev_action = prev["last_action"]
+        curr_action = verdict.final_action
+        if prev_action:
+            from buildtovalue.observability.metrics import (
+                ACTION_TRANSITION_TOTAL,
+                ACTION_SEQUENCE_ESCALATION_TOTAL,
+            )
+            ACTION_TRANSITION_TOTAL.labels(
+                from_action=prev_action,
+                to_action=curr_action,
+            ).inc()
+            _ESCALATION_MAP = {
+                ("ALLOW", "BLOCK"):   "ALLOW_to_BLOCK",
+                ("EDUCATE", "BLOCK"): "EDUCATE_to_BLOCK",
+                ("LOG", "BLOCK"):     "LOG_to_BLOCK",
+                ("ALLOW", "EDUCATE"): "ALLOW_to_EDUCATE",
+            }
+            pattern = _ESCALATION_MAP.get((prev_action, curr_action))
+            if pattern:
+                ACTION_SEQUENCE_ESCALATION_TOTAL.labels(pattern=pattern).inc()
     update_trust(session_id, verdict.final_action)
 
     # ── Over-refusal telemetry (ADR-041 + Art.104/168) ────────
