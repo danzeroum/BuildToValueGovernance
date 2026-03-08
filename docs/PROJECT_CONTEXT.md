@@ -15,10 +15,10 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 
 | Estágio | Módulos | Qtd |
 |:---|:---|:---:|
-| Deobfuscate | Base64Detector, HexDecoder, LeetspeakDetector | 3 |
+| Deobfuscate | Normalizer, Base64Detector, HexDecoder, LeetspeakDetector | 4 |
 | Analyze | EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, LanguageDetector (ADR-034) | 4 |
 | Validate | CpfValidator, CnpjValidator, EmailValidator, CreditCardValidator, PhoneValidator, PromptInjectionDetector (ADR-028), SsnValidator | 7 |
-| **Não wired** | NhsValidator, VatValidator, IbanValidator (ADR-035 — código existe, falta integrar) | 3 |
+| **Stage 3.5a** | NhsValidator (UK), VatValidator, IbanValidator (EU) — jurisdiction-gated via JURISDICTION_ALL (ADR-035 ✅) | 3 |
 | **Ledger** | DurableLedger, WriteAheadLog, EffectLog (ADR-0048, PROP-029 ✅) | 3 |
 
 **Structs canônicos (tamanhos verificados compile-time):**
