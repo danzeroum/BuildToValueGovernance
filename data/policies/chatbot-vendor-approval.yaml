@@ -1,0 +1,70 @@
+id: chatbot-vendor-approval-v1
+version: "1.0"
+description: "Quais vendors LLM externos são aprovados por sector_id. ADR-0031."
+applies_to:
+  profile_id: "external-chatbot"
+  action_names: ["vendor_approve"]
+
+bias_declaration:
+  calibration_date: "2026-03-08"
+  fpr_estimated: 0.02
+  fnr_estimated: 0.00
+  notes: "Baseado em requisitos regulatórios LGPD Art. 33 e setoriais."
+
+rules:
+  # Setor saúde: exige Zero Data Retention
+  - name: block_health_no_zdr
+    conditions:
+      sector_id: "health"
+      agent_metadata.has_zero_data_retention: false
+    verdict: BLOCK
+    explain: >
+      Setor saúde exige Zero Data Retention (ZDR) ativo no vendor.
+      Configure ZDR no contrato Enterprise antes de habilitar este vendor.
+
+  # Setor jurídico: exige DPA assinado
+  - name: block_legal_no_dpa
+    conditions:
+      sector_id: "legal"
+      agent_metadata.has_dpa: false
+    verdict: BLOCK
+    explain: >
+      Setor jurídico exige Data Processing Agreement (DPA) assinado
+      com o vendor. Consulte o departamento jurídico.
+
+  # Setor financeiro: retenção máxima 0 dias para dados fora do Brasil
+  - name: block_finance_foreign_retention
+    conditions:
+      sector_id: "finance"
+      agent_metadata.data_residency: { not_in: ["BR", "EU"] }
+      agent_metadata.has_dpa: false
+    verdict: BLOCK
+    explain: >
+      Setor financeiro: vendor fora do Brasil/UE sem DPA viola
+      LGPD Art. 33. Exige DPA ou dados devem permanecer no Brasil.
+
+  # Setor RH: retenção máxima 30 dias
+  - name: block_hr_long_retention
+    conditions:
+      sector_id: "hr"
+      agent_metadata.vendor_data_retention_days: { gt: 30 }
+    verdict: BLOCK
+    explain: >
+      Setor RH: vendor retém dados por mais de 30 dias.
+      Dados de RH com PII violam LGPD Art. 5, X (minimização).
+
+  # Vendor sem DPA em qualquer setor: EDUCATE (não BLOCK — setor geral)
+  - name: educate_no_dpa_general
+    conditions:
+      agent_metadata.has_dpa: false
+      agent_metadata.has_zero_data_retention: false
+    verdict: EDUCATE
+    explain: >
+      Vendor sem DPA formal. Recomendado assinar DPA antes de usar
+      em produção com dados pessoais. Permitido para testes.
+
+  # Default: ALLOW
+  - name: allow_approved_vendor
+    conditions:
+      default: true
+    verdict: ALLOW
