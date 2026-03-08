@@ -293,3 +293,42 @@ class TrustScoreCalculator:
         )
         self.record_activity(activity)
         return new_score
+    def adjust_post_penalty(
+        self,
+        session_id: str,
+        pre_block_entropy: float,
+        post_block_entropy: float,
+        subsequent_action: str,
+    ) -> float:
+        """
+        Analisa comportamento apos BLOCK para refinar trust.
+
+        Levinas: distinguir erro genuino de escalada adversarial.
+        Jonas: registrar padrao para responsabilidade auditavel.
+
+        Returns: delta aplicado (positivo=recuperacao, negativo=penalidade).
+        """
+        import time
+        entropy_delta = post_block_entropy - pre_block_entropy
+
+        # Recuou: entropia caiu — provavelmente falso positivo ou confusao
+        if entropy_delta < -0.3 and subsequent_action == "ALLOW":
+            delta = +0.05
+            result = "post_penalty_recovery"
+        # Escalou: entropia cresceu — sinal de adversario adaptativo
+        elif entropy_delta > 0.2:
+            delta = -0.10
+            result = "post_penalty_escalation"
+        else:
+            return 0.0
+
+        activity = UserActivity(
+            session_id=session_id,
+            timestamp=int(time.time()),
+            action="post_penalty_analysis",
+            result=result,
+        )
+        self.record_activity(activity)
+        self.adjust(session_id, delta)
+        return delta
+
