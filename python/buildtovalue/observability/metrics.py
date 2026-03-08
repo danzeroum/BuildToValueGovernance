@@ -435,3 +435,18 @@ def record_sla_compliance(total_resolved: int, within_sla: int):
     """Atualiza gauge de SLA compliance após cada resolução ou expiração."""
     rate = within_sla / total_resolved if total_resolved > 0 else 1.0
     APPEAL_SLA_COMPLIANCE.set(rate)
+
+# ── Over-refusal calibration (ADR-041 + Art.104/168) ─────────
+# Proxy: trust > 0.7 AND mercy_scenario S1-S3 AND action != ALLOW
+
+BENIGN_REFUSAL_TOTAL = Counter(
+    "btv_benign_refusal_total",
+    "Requisicoes provavelmente benignas que receberam BLOCK ou EDUCATE "
+    "(trust > 0.7 AND mercy_scenario IN S1-S3 AND action != ALLOW)",
+    ["action", "mercy_scenario", "domain"],
+)
+
+BENIGN_REFUSAL_RATE = Gauge(
+    "btv_benign_refusal_rate",
+    "Taxa movel (ultima hora) de recusas em requisicoes potencialmente benignas",
+)
