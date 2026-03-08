@@ -84,19 +84,23 @@ pub struct PolicySet {
     pub policies: Vec<Policy>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyMetadata {
     pub name: String,
+    #[allow(dead_code)]
     pub description: String,
     pub created_at: String,
     pub updated_at: String,
     pub author: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Policy {
     pub id: String,
     pub name: String,
+    #[allow(dead_code)]
     pub description: String,
     pub enabled: bool,
     pub priority: u32,
