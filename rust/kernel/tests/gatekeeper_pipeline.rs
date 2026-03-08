@@ -1,4 +1,6 @@
 //! F1.5-05: Gatekeeper Pipeline tests
+//! Atualizado ADR-035: +2 módulos (NhsValidator, VatValidator, IbanValidator → +3 validate)
+//! Pipeline: 3 deob + 4 analyze + 8 validate = 15 módulos, 4 stages (Validate splitado)
 
 #[cfg(test)]
 mod tests {
@@ -7,15 +9,15 @@ mod tests {
     use buildtovalue_kernel::core::types::ValidatorModule;
 
     // -----------------------------------------------------------------
-    // TEST 1: Pipeline has correct stage counts
+    // TEST 1: Pipeline has correct stage counts (ADR-035: +NHS+VAT+IBAN)
     // -----------------------------------------------------------------
     #[test]
     fn test_pipeline_stage_counts() {
         let gk = Gatekeeper::new();
-        assert_eq!(gk.stage_count(PipelineStage::Deobfuscate), 3);
-        assert_eq!(gk.stage_count(PipelineStage::Analyze), 3);
+        assert_eq!(gk.stage_count(PipelineStage::Deobfuscate), 4);
+        assert_eq!(gk.stage_count(PipelineStage::Analyze), 4);
         assert_eq!(gk.stage_count(PipelineStage::Validate), 7);
-        assert_eq!(gk.module_count(), 13);
+        assert_eq!(gk.module_count(), 15);
     }
 
     // -----------------------------------------------------------------
@@ -24,12 +26,9 @@ mod tests {
     #[test]
     fn test_pipeline_order_deobfuscate_before_validate() {
         let mut gk = Gatekeeper::new();
-        // Base64-encoded CPF: "MTIzLjQ1Ni43ODktMDk=" decodes to "123.456.789-09"
-        // Deobfuscator should detect base64, validator should detect CPF pattern
         let input = "hidden data: MTIzLjQ1Ni43ODktMDk=";
         let evidence = gk.scan_for_evidence(input, 0x1234);
 
-        // Should have findings from deobfuscator (base64 detected)
         let findings = evidence.get_all_findings();
         let has_deob = findings.iter().any(|f| f.module == ValidatorModule::Deobfuscator);
         assert!(has_deob, "Deobfuscator should detect base64");
@@ -44,14 +43,12 @@ mod tests {
         let input = "Hello world, this is a test with some entropy!";
         let evidence = gk.scan_for_evidence(input, 0x2345);
 
-        // Stats should be populated by Analyze stage
         assert!(evidence.stats.entropy > 0.0, "Entropy should be calculated");
     }
 
     // -----------------------------------------------------------------
-    // TEST 4: Clean input → no findings, all 11 modules executed
+    // TEST 4: All 15 modules executed (ADR-035: 13 → 15)
     // -----------------------------------------------------------------
-
     #[test]
     fn test_pipeline_all_modules_execute() {
         let mut gk = Gatekeeper::new();
@@ -61,8 +58,8 @@ mod tests {
                 evidence.executed_modules.count_ones(),
                 evidence.executed_modules
         );
-        assert_eq!(gk.module_count(), 13);
-    }   
+        assert_eq!(gk.module_count(), 15);
+    }
 
     // -----------------------------------------------------------------
     // TEST 5: CPF detection still works through pipeline
@@ -99,4 +96,29 @@ mod tests {
         assert_eq!(metrics.scans_total, 2);
     }
 
+    // -----------------------------------------------------------------
+    // TEST 8: NHS Number detected (ADR-035 — JURISDICTION_UK)
+    // -----------------------------------------------------------------
+    #[test]
+    fn test_pipeline_nhs_detection() {
+        let mut gk = Gatekeeper::new();
+        // flags com JURISDICTION_UK ativo (bit 0x02)
+        let evidence = gk.scan_for_evidence("Patient NHS: 943 476 5919", 0x02);
+        let findings = evidence.get_all_findings();
+        let has_nhs = findings.iter().any(|f| f.module == ValidatorModule::NhsNumber);
+        assert!(has_nhs, "NHS Number should be detected with JURISDICTION_UK active");
+    }
+
+    // -----------------------------------------------------------------
+    // TEST 9: IBAN detected (ADR-035 — JURISDICTION_EU)
+    // -----------------------------------------------------------------
+    #[test]
+    fn test_pipeline_iban_detection() {
+        let mut gk = Gatekeeper::new();
+        
+        let evidence = gk.scan_for_evidence("IBAN: DE89370400440532013000", 0x9999);
+        let findings = evidence.get_all_findings();
+        let has_iban = findings.iter().any(|f| f.module == ValidatorModule::Iban);
+        assert!(has_iban, "IBAN should be detected with JURISDICTION_EU active");
+    }
 }
