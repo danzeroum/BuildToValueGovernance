@@ -812,6 +812,7 @@ dependencies = [
  "pyo3",
  "rand 0.8.5",
  "regex",
+ "ring",
  "serde",
  "serde_bytes",
  "serde_json",
