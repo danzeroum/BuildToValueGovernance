@@ -11,6 +11,7 @@ Invariantes:
 - HMAC-SHA256 em todo DriftReport (Jonas)
 - Fail-secure: excecao -> ESCALATE assinado, nunca silencio
 - Drift assimetrico: eficiencia > seguranca = vetor critico
+- Inputs normalizados na fronteira (_normalize): nunca score 0 por case mismatch
 
 Filosofia: Jonas (responsabilidade preventiva), Rawls (SLA 24h contestavel).
 """
@@ -24,6 +25,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
+
+from ._normalize import normalize_drift_level, normalize_action
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -139,7 +142,11 @@ class GoalDriftSentinel:
         drift_level:   str,
         policy_action: str,
     ) -> DriftReport:
-        score = DRIFT_SCORE.get(drift_level, 0)
+        # Sprint 0 — Gaps 15/2/4: normalizar na fronteira antes de qualquer uso
+        drift_level   = normalize_drift_level(drift_level)  # suporta 'LOW'→'Low' (Rust)
+        policy_action = normalize_action(policy_action)     # suporta 'allow'→'ALLOW'
+        score = DRIFT_SCORE[drift_level]                    # sempre válido após normalização
+
         win   = self._get_or_create(session_id)
         win.scores.append(score)
         win.actions.append(policy_action)
