@@ -1,7 +1,7 @@
-# PROJECT_CONTEXT.md — BuildToValue v2.1
+# PROJECT_CONTEXT.md — BuildToValue v2.1.2
 
 > Documento de contexto para AI Squad. Colar no início de cada chat de IA.
-> Última atualização: 04 março 2026.
+> Última atualização: 08 março 2026.
 
 ## O que é
 
@@ -18,6 +18,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 | Deobfuscate | Normalizer, Base64Detector, HexDecoder, LeetspeakDetector | 4 |
 | Analyze | EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, LanguageDetector (ADR-034) | 4 |
 | Validate | CpfValidator, CnpjValidator, EmailValidator, CreditCardValidator, PhoneValidator, PromptInjectionDetector (ADR-028), SsnValidator | 7 |
+| **Sensitive** | ConsentValidator, ConsentRevocationValidator (LGPD Art.7/Art.8§5) | 2 |
 | **Stage 3.5a** | NhsValidator (UK), VatValidator, IbanValidator (EU) — jurisdiction-gated via JURISDICTION_ALL (ADR-035 ✅) | 3 |
 | **Ledger** | DurableLedger, WriteAheadLog, EffectLog (ADR-0048, PROP-029 ✅) | 3 |
 
@@ -114,6 +115,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 | L: Gateway & Obs v2.0 | 040-041 | ✅ Implementados |
 | M: Policy Automation | 042 | ✅ Implementado (21 testes, CaseCategory, CI gate) |
 | N: Effect + CoT Safety | 0048-0049 | ✅ Implementados (PROP-029, PROP-037) |
+| O: Model Integrity | 052 | ✅ Implementado (fail-secure UNKNOWN→BLOCK, blacklist Heretic +6, ops/ci_gate_g0.py) |
 
 ### Débitos Técnicos Ativos
 
@@ -136,6 +138,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 - Heap allocations no hot path
 - Lógica de negócio em `bindings/`
 - Microserviços, gRPC, Node.js
+- Singleton global em módulos Python de runtime (usar `IntegrityVerifier()` por chamada ou `Depends()` no FastAPI)
 - Referência a 9596 ou 9632 bytes (valor correto: 9600)
 - `lazy_static!` para patterns que podem usar `PatternRegistry` (ADR-033)
 
