@@ -1,5 +1,5 @@
 """
-SessionSensitivityAccumulator v1.0.0 — ADR-046
+SessionSensitivityAccumulator v1.1.0 — ADR-046
 
 Acumula sensitivity tags por sessão com base em findings observados
 ao longo do tempo. Expõe risco cumulativo ao EthicalContextEngine
@@ -7,9 +7,14 @@ para que decisões considerem o histórico semântico (Hybrid Alignment).
 
 Filosofia:
   - Hybrid Alignment (ICLR 2026, paper 147): ponte neural↔simbólico
-  - Jonas: acúmulo rastreado = responsabilidade sobre o que foi fornecido
+  - Jonas: acúmulo rastreado = responsabilidade sobre o que foi fornecido;
+    frequência indica intenção, não acidente
   - Levinas: proteger contra combinações perigosas mesmo quando cada
     request individual é legítimo
+
+Changelog v1.1.0 (Sprint 1, Gaps 6 e 7):
+  - Gap 6: tag_counts agora alimenta _frequency_boost() no cumulative_risk
+  - Gap 7: metrics["combinations_detected"] conta apenas novas descobertas
 
 Performance: O(1) por request (dict lookup + set operations)
 Limite de linhas: ≤ 200 (invariante AI Squad)
@@ -44,12 +49,6 @@ FINDING_TO_SENSITIVITY: Dict[str, str] = {
 
 # Combinações perigosas: cada tag isolada pode ser legítima;
 # a combinação cross-session cruza threshold de risco.
-# Rationale de cada par (Jonas: responsabilidade por impactos combinados):
-#   PII_BRAZILIAN + FINANCIAL   → fraude CPF + cartão
-#   PII_CONTACT + PII_BRAZILIAN → dossier pessoal completo
-#   SECURITY_INJECTION + PII_*  → exfiltração via injection
-#   PII_US_GOV + FINANCIAL      → fraude identidade federal
-#   PII_UK_HEALTH + PII_CONTACT → dados sensíveis de saúde + contato
 DANGEROUS_COMBINATIONS: List[frozenset] = [
     frozenset({"PII_BRAZILIAN",  "FINANCIAL"}),
     frozenset({"PII_CONTACT",    "PII_BRAZILIAN"}),
@@ -63,6 +62,14 @@ COMBINATION_RISK_BOOST: float = 0.15   # por combinação ativa (cap 1.0 no tota
 SESSION_TTL_SECONDS:    int   = 1800   # 30min — alinhado com SessionTracker Rust
 MAX_TAGS_PER_SESSION:   int   = 50     # cap contra memory abuse
 MAX_SESSIONS:           int   = 10_000 # cap de sessões simultâneas
+
+# ── Gap 6: constantes de frequency boost ───────────────────────────────────
+# Jonas: repetição da mesma tag de risco alto indica sondagem intencional.
+FREQ_WEIGHT_PER_REPEAT: float = 0.02   # por repetição acima de 1 (cap: 9 repeats)
+FREQ_MAX_COUNT:         int   = 10     # satura em 10 ocorrências (0.18 max por tag)
+FREQ_HIGH_RISK_TAGS: frozenset = frozenset(
+    tag for combo in DANGEROUS_COMBINATIONS for tag in combo
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -84,6 +91,28 @@ class SensitivityState:
 
     def is_expired(self) -> bool:
         return (time.time() - self.last_seen) > SESSION_TTL_SECONDS
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MODULE-LEVEL HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _frequency_boost(tag_counts: Dict[str, int]) -> float:
+    """
+    Gap 6: converte tag_counts em sinal de risco por probing persistente.
+
+    Apenas tags em FREQ_HIGH_RISK_TAGS contribuem (tags de combinações
+    perigosas). Uma única ocorrência não gera boost (pode ser legítima);
+    repetição acima de 1 sinaliza sondagem.
+
+    Satura em FREQ_MAX_COUNT para evitar que um callermalicioso force
+    cumulative_risk=1.0 via volume puro.
+    """
+    boost = 0.0
+    for tag, count in tag_counts.items():
+        if tag in FREQ_HIGH_RISK_TAGS and count > 1:
+            boost += min(count - 1, FREQ_MAX_COUNT - 1) * FREQ_WEIGHT_PER_REPEAT
+    return boost
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -110,9 +139,9 @@ class SessionSensitivityAccumulator:
         self._sessions: Dict[str, SensitivityState] = {}
         self._max_sessions = max_sessions
         self.metrics: Dict[str, int] = {
-            "accumulations":        0,
+            "accumulations":         0,
             "combinations_detected": 0,
-            "evictions":            0,
+            "evictions":             0,
         }
 
     def accumulate(
@@ -150,7 +179,10 @@ class SessionSensitivityAccumulator:
                 state.tags.add(tag)
                 state.tag_counts[tag] += 1
 
-        # Recalcular combinações perigosas após atualizar tags
+        # Gap 7: salvar combos ativos anteriores antes de recalcular
+        # para contar apenas novas descobertas no métrics (não re-contar ja existentes)
+        previous_combos: set = set(state.active_combinations)
+
         state.active_combinations = []
         combination_boost = 0.0
         for combo in DANGEROUS_COMBINATIONS:
@@ -158,9 +190,12 @@ class SessionSensitivityAccumulator:
                 label = " + ".join(sorted(combo))
                 state.active_combinations.append(label)
                 combination_boost += COMBINATION_RISK_BOOST
-                self.metrics["combinations_detected"] += 1
+                if label not in previous_combos:  # Gap 7: apenas novas descobertas
+                    self.metrics["combinations_detected"] += 1
 
-        state.cumulative_risk = min(1.0, combination_boost)
+        # Gap 6: incorporar frequência de probing no risco cumulativo
+        freq_boost = _frequency_boost(state.tag_counts)
+        state.cumulative_risk = min(1.0, combination_boost + freq_boost)
         return state
 
     def get_state(self, session_id: str) -> Optional[SensitivityState]:
