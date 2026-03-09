@@ -1,21 +1,22 @@
 //! Ledger Entry v2.3.2
 //! Entrada imutável do ledger (384 bytes fixos).
+//! v2.4.0: verdict_id [u8;32] adicionado (ADR-043), _reserved 196→164.
 use static_assertions;
 use serde::{Deserialize, Serialize};
 use crate::core::types::{Action, EthicalVerdict, RiskLevel};
 
 // Serialização customizada para arrays de 196 bytes
-mod serde_array_196 {
+mod serde_array_164 {
     use serde::{Deserialize, Deserializer, Serializer};
 
-    pub fn serialize<S: Serializer>(arr: &[u8; 196], serializer: S) -> Result<S::Ok, S::Error> {
+    pub fn serialize<S: Serializer>(arr: &[u8; 164], serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_bytes(arr)
     }
 
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[u8; 196], D::Error> {
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[u8; 164], D::Error> {
         let bytes: Vec<u8> = Deserialize::deserialize(deserializer)?;
-        let mut arr = [0u8; 196];
-        let len = bytes.len().min(196);
+        let mut arr = [0u8; 164];
+        let len = bytes.len().min(164);
         arr[..len].copy_from_slice(&bytes[..len]);
         Ok(arr)
     }
@@ -29,6 +30,7 @@ pub enum ActionType {
     Educate = 2,
     Redact = 3,
     Block = 4,
+    Report = 5,
 }
 
 impl From<Action> for ActionType {
@@ -53,6 +55,7 @@ pub struct LedgerEntry {
     pub risk_level: RiskLevel,
     pub action: ActionType,
     pub ethical_verdict: EthicalVerdict,
+    pub verdict_id: [u8; 32],
     pub _padding_verdict: [u8; 5],
     pub previous_hash: [u8; 32],
     pub entry_hash: [u8; 32],
@@ -60,8 +63,8 @@ pub struct LedgerEntry {
     pub protocol_version: u16,
     pub schema_version: u16,
     pub producer_id: [u8; 32],
-    #[serde(with = "serde_array_196")]
-    pub _reserved: [u8; 196],
+    #[serde(with = "serde_array_164")]
+    pub _reserved: [u8; 164],
 }
 
 static_assertions::const_assert_eq!(size_of::<LedgerEntry>(), 384);
@@ -103,6 +106,7 @@ impl Default for LedgerEntry {
             risk_level: RiskLevel::Safe,
             action: ActionType::Allow,
             ethical_verdict: EthicalVerdict::Pending,
+            verdict_id: [0; 32],
             _padding_verdict: [0; 5],
             previous_hash: [0; 32],
             entry_hash: [0; 32],
@@ -110,7 +114,7 @@ impl Default for LedgerEntry {
             protocol_version: 1,
             schema_version: 1,
             producer_id: [0; 32],
-            _reserved: [0; 196],
+            _reserved: [0; 164],
         }
     }
 }
