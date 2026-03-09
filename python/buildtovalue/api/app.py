@@ -1,9 +1,14 @@
 """
-BuildToValue Governance API v2.2
+BuildToValue Governance API v2.3
 Python side of the República Algorítmica (Judiciário).
 Trust scores persist in SQLite. Appeals via ContestabilityLoop.
 SLM Classifier (ADR-027) for semantic ambiguity zone.
 EthicalContextEngine (P8) orchestrates mercy + trust + HMAC.
+
+Changelog v2.3 (Sprint 5, Gaps 10/12/14/19):
+  - Gap 12/19: TrustScoreCalculator singleton (activity_log persistido)
+  - Gap 14: adjust_post_penalty delta persistido no SQLite
+  - Gap 10: GoalDriftSentinel integrado ao pipeline; cross-signal drift×sensitivity
 """
 
 import hashlib
@@ -45,6 +50,10 @@ from buildtovalue.governance.sensitivity_accumulator import (
     SensitivityState,
 )
 from buildtovalue.governance.mercy_scenarios import ACTION_SEVERITY, SEVERITY_ACTION
+# Gap 10: GoalDriftSentinel integrado ao pipeline
+from buildtovalue.governance.goal_drift_sentinel import GoalDriftSentinel, DriftReport
+# Gap 12/19: TrustScoreCalculator como singleton (nao mais inline)
+from buildtovalue.governance.trust_score import TrustScoreCalculator
 from buildtovalue.api.auth import require_api_key
 from buildtovalue.api.routes.intelligence import get_ingestor, hydrate_from_sqlite
 from buildtovalue.intelligence.misp_ingestor import ThreatEvent as BridgeThreatEvent
@@ -361,6 +370,9 @@ def _appeal_to_response(appeal) -> AppealResponse:
         resolution_timestamp=appeal.resolution_timestamp,
         sla_deadline=appeal.sla_deadline,
         is_overdue=appeal.is_overdue(),
+        evidence_hash=getattr(appeal, "evidence_hash", None),
+        grounds=getattr(appeal, "grounds", []) or [],
+        mediator_recommendation=getattr(appeal, "mediator_recommendation", None),
     )
 
 
@@ -384,11 +396,9 @@ def _resolve_role(session_id: str) -> str:
 def _load_slm_config() -> dict:
     """Load SLM config. Env var overrides YAML."""
     import yaml
-    # Env var takes priority (Docker/CI override)
     env_path = os.environ.get("BTV_SLM_MODEL_PATH")
     if env_path:
         return {"enabled": True, "model_path": env_path}
-    # Fallback: YAML config
     candidates = [
         Path("/app/data/policies/core/slm.yaml"),
         Path(__file__).resolve().parent.parent.parent.parent / "data" / "policies" / "core" / "slm.yaml",
@@ -401,6 +411,7 @@ def _load_slm_config() -> dict:
         except Exception as e:
             logger.warning("Failed to load SLM config from %s: %s", config_path, e)
     return {}
+
 # ═══════════════════════════════════════════════════════════════
 # LIFESPAN + FASTAPI APP + ROUTERS
 # ═══════════════════════════════════════════════════════════════
@@ -409,7 +420,7 @@ def _load_slm_config() -> dict:
 async def lifespan(application):
     """Startup/shutdown lifecycle (replaces deprecated on_event)."""
     global _contestability_loop, _profile_manager, _sector_loader
-    global _slm, _ethical_engine
+    global _slm, _ethical_engine, _trust_calculator, _goal_drift_sentinel
 
     init_db()
 
@@ -425,6 +436,16 @@ async def lifespan(application):
     _sensitivity_accumulator = SessionSensitivityAccumulator()
     app.state.sensitivity_accumulator = _sensitivity_accumulator
     logger.info("SessionSensitivityAccumulator initialized")
+
+    # Gap 12/19: singleton — activity_log persiste durante toda a vida do processo
+    _trust_calculator = TrustScoreCalculator()
+    app.state.trust_calculator = _trust_calculator
+    logger.info("TrustScoreCalculator initialized as singleton (Gap 12/19)")
+
+    # Gap 10: singleton — ring buffer acumula histórico de drift por sessão
+    _goal_drift_sentinel = GoalDriftSentinel(hmac_secret=HMAC_KEY)
+    app.state.goal_drift_sentinel = _goal_drift_sentinel
+    logger.info("GoalDriftSentinel initialized as singleton (Gap 10)")
 
     policy_root = Path(os.environ.get("BTV_POLICY_DIR", "data/policies"))
     profiles_dir = policy_root / "agents"
@@ -470,7 +491,7 @@ async def lifespan(application):
     logger.info("Shutdown complete")
 
 
-app = FastAPI(title="BuildToValue Governance", version="2.2.0", lifespan=lifespan)
+app = FastAPI(title="BuildToValue Governance", version="2.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -489,29 +510,6 @@ app.include_router(webhooks_router)
 app.include_router(compliance_eval_router)
 
 # ═══════════════════════════════════════════════════════════════
-# HELPERS
-# ═══════════════════════════════════════════════════════════════
-
-def _appeal_to_response(appeal) -> AppealResponse:
-    return AppealResponse(
-        appeal_id=appeal.appeal_id,
-        audit_trail_id=appeal.audit_trail_id,
-        user_id=appeal.user_id,
-        timestamp=appeal.timestamp,
-        reason=appeal.reason,
-        evidence_provided=appeal.evidence_provided,
-        status=appeal.status.value,
-        reviewer_notes=appeal.reviewer_notes,
-        resolution_timestamp=appeal.resolution_timestamp,
-        sla_deadline=appeal.sla_deadline,
-        is_overdue=appeal.is_overdue(),
-        # ADR-047
-        evidence_hash=appeal.evidence_hash,
-        grounds=appeal.grounds or [],
-        mediator_recommendation=appeal.mediator_recommendation,
-    )
-
-# ═══════════════════════════════════════════════════════════════
 # GLOBALS
 # ═══════════════════════════════════════════════════════════════
 
@@ -522,6 +520,10 @@ _slm: Optional[SLMClassifier] = None
 _ethical_engine: Optional[EthicalContextEngine] = None
 _output_validator: Optional[OutputSchemaValidator] = None
 _sensitivity_accumulator: Optional["SessionSensitivityAccumulator"] = None
+# Gap 12/19: singleton (nao mais inline por request)
+_trust_calculator: Optional[TrustScoreCalculator] = None
+# Gap 10: singleton com ring buffer de sessões
+_goal_drift_sentinel: Optional[GoalDriftSentinel] = None
 
 # ═══════════════════════════════════════════════════════════════
 # GOVERNANCE — /v1/decide (Judiciário da República Algorítmica)
@@ -530,18 +532,20 @@ _sensitivity_accumulator: Optional["SessionSensitivityAccumulator"] = None
 @app.post("/v1/decide", response_model=DecideResponse)
 def decide(req: DecideRequest, _=Depends(require_api_key)):
     """
-    Pipeline:
+    Pipeline v2.3:
       0. Hard block → BLOCK imediato (sem mercy, sem ADR-046)
       1. ADR-046: acumular findings da sessão → cumulative_risk
+      1.5. GoalDriftSentinel: rastrear drift da sessão (Gap 10)
       2. SLM (ambiguity zone only — ADR-027)
       3. Profile/sector risk adjustment
-      4. EthicalContextEngine.decide() → mercy + trust + HMAC
-      5. Return signed, explainable, contestable verdict
+      4. Aplicar cumulative_risk + cross-signal drift×sensitivity (Gap 10)
+      5. EthicalContextEngine.decide() → mercy + trust + HMAC
+      6. Update trust + persist adjust_post_penalty delta (Gap 14)
     """
     start = time.perf_counter()
     session_id = req.session_id or "anonymous"
 
-    # ── Step 0: Hard block — sem governance, sem mercy ────────
+    # ── Step 0: Hard block — sem governance, sem mercy ──────────────────
     if req.hard_blocked:
         update_trust(session_id, "BLOCK")
         sig = sign_verdict(
@@ -566,14 +570,9 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             latency_ms=(time.perf_counter() - start) * 1000,
         )
 
-    # ── Step 1: ADR-046 — acumular sensitivity da sessão ──────
-    # Executado antes do SLM: o cumulative_risk entra no RequestContext
-    # e influencia EthicalContextEngine.decide(). Hard blocks não acumulam
-    # (já retornaram acima).
+    # ── Step 1: ADR-046 — acumular sensitivity da sessão ────────────────
     sensitivity_state = None
     if _sensitivity_accumulator is not None:
-        # matched_policies contém nomes de validators que dispararam (ex: "cpf->BLOCK")
-        # Extraímos a parte antes de "->" para obter o validator name limpo.
         findings_summary = [
             p.split("->")[0].lower()
             for p in req.matched_policies
@@ -584,7 +583,25 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             findings_summary=findings_summary,
         )
 
-    # ── Step 2: SLM classification (ambiguity zone) ───────────
+    # ── Step 1.5: GoalDriftSentinel — rastrear drift da sessão (Gap 10) ──
+    # Ring buffer Python acumula histórico; drift do Rust alimenta o sentinela.
+    # Normalização de case (Gap 15) é feita internamente pelo sentinela.
+    drift_report: Optional[DriftReport] = None
+    if _goal_drift_sentinel is not None:
+        drift_report = _goal_drift_sentinel.record_and_analyze(
+            session_id=session_id,
+            drift_level=req.drift_level,
+            policy_action=req.action,
+        )
+        if drift_report.policy_drift_detected:
+            logger.info(
+                "GoalDriftSentinel: drift detectado session=%s action=%s trend=%d%%",
+                session_id,
+                drift_report.drift_action.value,
+                drift_report.trend_pct,
+            )
+
+    # ── Step 2: SLM classification (ambiguity zone) ────────────────────
     slm_used = False
     slm_intent = None
     slm_risk = None
@@ -620,7 +637,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                     req.action, adjusted_action, slm_intent, slm_result.risk,
                 )
 
-    # ── Step 3: Profile/sector risk adjustment ────────────────
+    # ── Step 3: Profile/sector risk adjustment ───────────────────────
     sector_note = ""
     if req.profile and _profile_manager and _sector_loader and req.input_text:
         try:
@@ -645,9 +662,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         except ValueError:
             logger.warning("Profile not found: %s", req.profile)
 
-    # ── Step 4: ADR-046 — aplicar cumulative_risk ao adjusted_risk ───
-    # cumulative_risk adiciona ao risco ajustado; nunca substitui.
-    # Nota na rationale quando acúmulo influenciou decisão.
+    # ── Step 4: cumulative_risk + cross-signal drift×sensitivity (Gap 10) ──
     cumulative_note = ""
     if sensitivity_state is not None and sensitivity_state.cumulative_risk > 0.0:
         adjusted_risk = min(1.0, adjusted_risk + sensitivity_state.cumulative_risk)
@@ -663,7 +678,28 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             sensitivity_state.active_combinations,
         )
 
-    # ── Step 5: EthicalContextEngine → EthicalVerdict ─────────
+    # Gap 10: cross-signal drift × sensitivity — Jonas: sinais compostos = risco composto
+    # Drift confirmado + acúmulo de sessão > 0.3 indica vetor adversarial coordenado.
+    drift_cross_note = ""
+    if (
+        drift_report is not None
+        and drift_report.policy_drift_detected
+        and sensitivity_state is not None
+        and sensitivity_state.cumulative_risk > 0.3
+    ):
+        adjusted_risk = min(1.0, adjusted_risk + 0.15)
+        drift_cross_note = (
+            " Cross-signal (ADR-046/PROP-038): drift de objetivo detectado + "
+            f"risco cumulativo de sessão {sensitivity_state.cumulative_risk:.2f} > 0.30 "
+            "→ +0.15 risco composto."
+        )
+        logger.info(
+            "Cross-signal drift×sensitivity: session=%s drift_detected=True cumulative_risk=%.2f",
+            session_id,
+            sensitivity_state.cumulative_risk,
+        )
+
+    # ── Step 5: EthicalContextEngine → EthicalVerdict ─────────────────
     evidence = RustEvidence(
         composite_risk=adjusted_risk,
         finding_count=adjusted_finding_count,
@@ -682,7 +718,6 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         ip_jurisdiction=req.ip_jurisdiction,
         ip_risk=req.ip_risk,
         drift_level=req.drift_level,
-        # ADR-046: campos de acúmulo semântico (defaults se acumulador indisponível)
         prior_sensitivity_tags=(
             list(sensitivity_state.tags) if sensitivity_state else []
         ),
@@ -701,7 +736,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         evidence, context, external_verdict_id=req.verdict_id
     )
 
-    # ── Step 5.5: Runtime Compliance (EU AI Act) ───────────────
+    # ── Step 5.5: Runtime Compliance (EU AI Act) ────────────────────
     risk_class = None
     compliance_violations = None
     compliance_rate = None
@@ -751,7 +786,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             ]
             compliance_rate = eval_result.compliance_rate
 
-    # ── Step 5.6: Output Schema Validation (Levinas) ───────────
+    # ── Step 5.6: Output Schema Validation (Levinas) ─────────────────
     schema_violations = None
     if req.llm_output and req.profile and _profile_manager:
         try:
@@ -787,19 +822,29 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         except Exception as e:
             logger.warning("Output schema validation error: %s", e)
 
-    # ── Step 6: Update trust + respond ────────────────────────
-    # Post-penalty behavioral analysis (ADR-039 + Art.65/213)
+    # ── Step 6: Update trust + persist adjust_post_penalty (Gap 14) ──────
     if session_id:
         prev = db_get_session(session_id)
         if prev["last_action"] in ("BLOCK", "EDUCATE") and prev["last_entropy"] > 0.0:
-            from buildtovalue.governance.trust_score import TrustScoreCalculator
-            _tc = TrustScoreCalculator()
-            _tc.adjust_post_penalty(
-                session_id=session_id,
-                pre_block_entropy=prev["last_entropy"],
-                post_block_entropy=req.entropy,
-                subsequent_action=verdict.final_action,
-            )
+            # Gap 12/19: usar singleton (activity_log não é perdido)
+            # Gap 14: capturar delta e persistir no SQLite
+            if _trust_calculator is not None:
+                delta = _trust_calculator.adjust_post_penalty(
+                    session_id=session_id,
+                    pre_block_entropy=prev["last_entropy"],
+                    post_block_entropy=req.entropy,
+                    subsequent_action=verdict.final_action,
+                )
+                if delta != 0.0:
+                    # Gap 14 fix: delta era descartado; agora persiste no SQLite
+                    session_data = db_get_session(session_id)
+                    new_trust = max(0.0, min(1.0, session_data["trust_score"] + delta))
+                    # offense_delta=0: adjust_post_penalty nao é nova ofensa
+                    db_update_session(session_id, new_trust, 0)
+                    logger.info(
+                        "adjust_post_penalty persisted: session=%s delta=%.3f new_trust=%.3f",
+                        session_id, delta, new_trust,
+                    )
         db_update_session_state(session_id, req.entropy, verdict.final_action)
 
         # Action Graph telemetry (ADR-041)
@@ -825,9 +870,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                 ACTION_SEQUENCE_ESCALATION_TOTAL.labels(pattern=pattern).inc()
     update_trust(session_id, verdict.final_action)
 
-    # ── Over-refusal telemetry (ADR-041 + Art.104/168) ────────
-    # Proxy: usuario estabelecido (trust > 0.7) + mercy reconheceu
-    # contexto legitimo (S1-S3) mas action ainda nao foi ALLOW.
+    # ── Over-refusal telemetry (ADR-041 + Art.104/168) ────────────────
     _BENIGN_MERCY = {"S1_CRITICAL_OVERRIDE", "S2_LEGAL", "S3_RESEARCH"}
     if (
         verdict.trust_score > 0.7
@@ -842,7 +885,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         ).inc()
 
     latency = (time.perf_counter() - start) * 1000
-    rationale = verdict.explanation + sector_note + cumulative_note
+    rationale = verdict.explanation + sector_note + cumulative_note + drift_cross_note
 
     return DecideResponse(
         verdict_id=verdict.verdict_id,
@@ -881,7 +924,6 @@ def submit_appeal(req: AppealSubmitRequest):
             reason=req.reason,
             evidence=req.evidence,
         )
-        # ADR-047: persistir campos opcionais de mediação no objeto Appeal
         if req.evidence_hash:
             appeal.evidence_hash = req.evidence_hash
         if req.grounds:
@@ -941,7 +983,7 @@ def resolve_appeal(appeal_id: str, req: AppealResolveRequest):
             accepted=req.accepted,
             reviewer_notes=req.reviewer_notes,
             reviewer_id=req.reviewer_id,
-            mediator_recommendation=req.mediator_recommendation,  # ADR-047
+            mediator_recommendation=req.mediator_recommendation,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -960,11 +1002,13 @@ def health():
     return {
         "status": "healthy",
         "service": "btv-governance",
-        "version": "2.2.0",
+        "version": "2.3.0",
         "sessions_tracked": sessions,
         "persistence": "sqlite",
         "slm_loaded": _slm is not None and _slm.is_loaded,
         "ethical_engine": _ethical_engine is not None,
+        "trust_calculator_singleton": _trust_calculator is not None,
+        "goal_drift_sentinel": _goal_drift_sentinel is not None,
         "appeals_pending": len(_contestability_loop.list_pending_appeals()) if _contestability_loop else 0,
     }
 
@@ -1037,8 +1081,6 @@ def compliance_report(framework: str, _=Depends(require_api_key)):
             for a in report.artifacts
         ],
     }
-
-
 
 
 @app.post("/v1/compliance/classify-risk")
