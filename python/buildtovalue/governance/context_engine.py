@@ -28,6 +28,9 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 
 from .mercy_algorithm import MercyCalculator
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .policy_engine import PolicyEngine
 from .mercy_scenarios import (
     evaluate_scenarios,
     MercyScenarioResult,
@@ -137,7 +140,11 @@ class EthicalContextEngine:
     - Mercy NEVER escalates severity
     """
 
-    def __init__(self, signing_key: bytes):
+    def __init__(
+        self,
+        signing_key: bytes,
+        policy_engine: 'Optional[PolicyEngine]' = None,
+    ):
         if len(signing_key) < 32:
             raise ValueError("Signing key must be >= 32 bytes")
         self._signing_key = signing_key
@@ -145,9 +152,14 @@ class EthicalContextEngine:
         self._trust_scores: Dict[str, float] = {}  # In prod: Redis/DB
         self._violation_counts: Dict[str, int] = {}
         self._verdict_counter = 0
-        # ADR-043: threshold acima do qual REPORT é emitido em vez de ALLOW silencioso
-        # Default 0.65: risco moderado sem justificar EDUCATE (0.75) — configurável via Policy
-        self.report_threshold: float = 0.65
+        # ADR-043: threshold lido do PolicyEngine (YAML) se fornecido; fallback 0.65
+        # PolicyEngine.report_threshold já aplica floor/ceiling definidos no default.yaml
+        self._policy_engine: 'Optional[PolicyEngine]' = policy_engine
+        self.report_threshold: float = (
+            policy_engine.report_threshold
+            if policy_engine is not None
+            else 0.65
+        )
 
     def set_trust_score(self, session_id: str, score: float) -> None:
         """Set trust score externally (from TrustScoreCalculator)."""

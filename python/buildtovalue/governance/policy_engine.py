@@ -83,6 +83,8 @@ class PolicyEngine:
     def __init__(self, policies_dir: Optional[Path] = None) -> None:
         self._rules: List[PolicyRule] = []
         self._policy_source: str = "none"
+        # ADR-043: configuração de governança lida dos YAMLs (campo governance:)
+        self._governance_config: dict = {}
         _dir = policies_dir or (
             Path(__file__).parent.parent.parent.parent / "data" / "policies"
         )
@@ -120,6 +122,24 @@ class PolicyEngine:
                 self._policy_source = yaml_file.name
             except (KeyError, ValueError):
                 continue
+        # ADR-043: ler configuração de governança (governance:) se presente
+        if "governance" in data and isinstance(data["governance"], dict):
+            self._governance_config.update(data["governance"])
+
+    @property
+    def report_threshold(self) -> float:
+        """ADR-043: threshold para emissão de REPORT, lido do YAML.
+        Respeita floor (min) e ceiling (max) definidos na policy.
+        Default 0.65 se não configurado.
+        """
+        raw = self._governance_config.get("report_threshold", 0.65)
+        floor = self._governance_config.get("report_threshold_min", 0.50)
+        ceiling = self._governance_config.get("report_threshold_max", 0.85)
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            value = 0.65
+        return max(floor, min(ceiling, value))
 
     def evaluate(
         self,
