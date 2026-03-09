@@ -1,5 +1,5 @@
 """
-DurableLedger v1.0.0 — Immutable Audit Ledger
+DurableLedger v1.1.0 — Immutable Audit Ledger
 Algorithmic Republic — Auditivo Branch (ADR-0051)
 
 Invariantes:
@@ -9,6 +9,11 @@ Invariantes:
   - explain_decision obrigatório em toda entrada (Levinas: transparência)
   - Genesis: H(0) = BLAKE2b(BTV-LEDGER-GENESIS-v1.0)
   - Thread-safe: threading.Lock em append() e verify()
+
+Changelog v1.1.0 (Sprint 2, Gap 8):
+  - _verify_locked() agora verifica entry.prev_hash contra prev_hash_bytes
+    antes de qualquer outra checagem. Adulteração do campo prev_hash era
+    silenciosa em v1.0.0.
 
 NOTE: BLAKE2b (stdlib) é usado como substituto de BLAKE3 até integração
 com o kernel Rust (ADR-0051 §4). Migração sem mudança de API.
@@ -23,13 +28,13 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 
-# ─── Constantes imutáveis ─────────────────────────────────────────────────────
+# ─── Constantes imutáveis ──────────────────────────────────────────────────────────────────
 
 GENESIS_SEED: bytes = b"BTV-LEDGER-GENESIS-v1.0"
 BLAKE2B_DIGEST_SIZE: int = 32  # 256 bits
 
 
-# ─── Funções de hash puro ─────────────────────────────────────────────────────
+# ─── Funções de hash puro ───────────────────────────────────────────────────────────────
 
 def _genesis_hash() -> bytes:
     """Hash determinístico do bloco genesis."""
@@ -44,7 +49,7 @@ def _chain_hash(prev_hash: bytes, payload_bytes: bytes) -> bytes:
     return h.digest()
 
 
-# ─── Dataclasses ──────────────────────────────────────────────────────────────
+# ─── Dataclasses ─────────────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class LedgerEntry:
@@ -76,7 +81,7 @@ class LedgerVerification:
     reason:                  Optional[str] = None
 
 
-# ─── DurableLedger ────────────────────────────────────────────────────────────
+# ─── DurableLedger ───────────────────────────────────────────────────────────────────
 
 class DurableLedger:
     """
@@ -97,7 +102,7 @@ class DurableLedger:
         self._lock:            threading.Lock     = threading.Lock()
         self._prev_hash_bytes: bytes              = _genesis_hash()
 
-    # ── API pública ───────────────────────────────────────────────────────────
+    # ── API pública ─────────────────────────────────────────────────────────────────
 
     def append(self, payload: Dict[str, Any]) -> LedgerEntry:
         """
@@ -121,7 +126,7 @@ class DurableLedger:
 
     def verify(self) -> LedgerVerification:
         """
-        Verifica integridade de toda a cadeia (chain hash + HMAC).
+        Verifica integridade de toda a cadeia (prev_hash + chain hash + HMAC).
 
         Thread-safe. Complexidade O(n).
         """
@@ -137,16 +142,16 @@ class DurableLedger:
         with self._lock:
             return len(self._entries)
 
-    # ── Internos ──────────────────────────────────────────────────────────────
+    # ── Internos ────────────────────────────────────────────────────────────────────
 
     def _append_locked(self, payload: Dict[str, Any]) -> LedgerEntry:
-        sequence        = len(self._entries) + 1
-        now_iso         = datetime.utcnow().isoformat() + "Z"
-        payload_bytes   = json.dumps(payload, sort_keys=True, default=str).encode()
+        sequence         = len(self._entries) + 1
+        now_iso          = datetime.utcnow().isoformat() + "Z"
+        payload_bytes    = json.dumps(payload, sort_keys=True, default=str).encode()
         entry_hash_bytes = _chain_hash(self._prev_hash_bytes, payload_bytes)
-        entry_hash_hex  = entry_hash_bytes.hex()
-        prev_hash_hex   = self._prev_hash_bytes.hex()
-        hmac_sig        = self._sign(sequence, entry_hash_bytes, now_iso)
+        entry_hash_hex   = entry_hash_bytes.hex()
+        prev_hash_hex    = self._prev_hash_bytes.hex()
+        hmac_sig         = self._sign(sequence, entry_hash_bytes, now_iso)
 
         entry = LedgerEntry(
             sequence        = sequence,
@@ -163,6 +168,21 @@ class DurableLedger:
     def _verify_locked(self) -> LedgerVerification:
         prev_hash_bytes = _genesis_hash()
         for entry in self._entries:
+            # Gap 8 (v1.1.0): verificar prev_hash antes de qualquer outra checagem.
+            # Em v1.0.0 este campo era gravado mas nunca validado —
+            # adulteração passava silenciosamente.
+            if entry.prev_hash != prev_hash_bytes.hex():
+                return LedgerVerification(
+                    valid                  = False,
+                    entries_checked        = entry.sequence - 1,
+                    first_invalid_sequence = entry.sequence,
+                    reason                 = (
+                        f"prev_hash adulterado na entrada {entry.sequence}: "
+                        f"esperado={prev_hash_bytes.hex()[:16]}… "
+                        f"encontrado={entry.prev_hash[:16]}…"
+                    ),
+                )
+
             payload_bytes = json.dumps(
                 entry.payload, sort_keys=True, default=str
             ).encode()
