@@ -97,6 +97,8 @@ class EthicalVerdict:
     hmac_signature: str
     contestable: bool = True
     appeal_deadline: int = 0
+    # ADR-043: True quando veredicto REPORT emitido por threshold
+    report_triggered: bool = False
 
     def __post_init__(self):
         if self.appeal_deadline == 0:
@@ -116,6 +118,7 @@ class EthicalVerdict:
             "hmac_signature": self.hmac_signature,
             "contestable": self.contestable,
             "appeal_deadline": self.appeal_deadline,
+            "report_triggered": self.report_triggered,
         }
 
 
@@ -142,6 +145,9 @@ class EthicalContextEngine:
         self._trust_scores: Dict[str, float] = {}  # In prod: Redis/DB
         self._violation_counts: Dict[str, int] = {}
         self._verdict_counter = 0
+        # ADR-043: threshold acima do qual REPORT é emitido em vez de ALLOW silencioso
+        # Default 0.65: risco moderado sem justificar EDUCATE (0.75) — configurável via Policy
+        self.report_threshold: float = 0.65
 
     def set_trust_score(self, session_id: str, score: float) -> None:
         """Set trust score externally (from TrustScoreCalculator)."""
@@ -205,6 +211,23 @@ class EthicalContextEngine:
             scenario_result.final_action, context
         )
 
+        # ── Step 5b: REPORT override (ADR-043) ───────────────
+        # Emite REPORT quando risco supera threshold mas não justifica BLOCK/REDACT.
+        # Não altera output para o usuário — apenas registra e encaminha para revisão.
+        report_triggered = False
+        if (
+            final_action == "ALLOW"
+            and evidence.composite_risk >= self.report_threshold
+            and evidence.finding_count > 0
+        ):
+            final_action = "REPORT"
+            report_triggered = True
+            logger.info(
+                "REPORT emitido: risk=%.3f >= threshold=%.3f, findings=%d, session=%s",
+                evidence.composite_risk, self.report_threshold,
+                evidence.finding_count, context.session_id,
+            )
+
         # ── Step 6: explain_decision() (obrigatório) ──────
         explanation = self._explain_decision(
             evidence, context, trust, mercy_score, scenario_result, final_action
@@ -230,6 +253,7 @@ class EthicalContextEngine:
             trust_score=trust,
             explanation=explanation,
             hmac_signature=signature,
+            report_triggered=report_triggered,
         )
 
     def verify_signature(self, verdict: EthicalVerdict) -> bool:
@@ -334,6 +358,11 @@ class EthicalContextEngine:
                 f"(ip_risk={context.ip_risk}, drift={context.drift_level})."
             )
 
+        if final_action == "REPORT":
+            parts.append(
+                f"REPORT emitido: risco={evidence.composite_risk:.2f} >= threshold. "
+                "Output não alterado. Encaminhado para revisão humana (SLA 24h)."
+            )
         parts.append(
             f"Final action: {final_action}. "
             f"Contestable within 24h."
