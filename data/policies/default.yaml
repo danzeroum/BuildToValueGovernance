@@ -8,8 +8,19 @@ metadata:
   name: "BuildToValue Default Policies"
   description: "Production-ready policy set for ethical AI governance"
   created_at: "2026-02-16"
-  updated_at: "2026-02-16"
+  updated_at: "2026-03-08"
   author: "BuildToValue Security Team"
+
+# ADR-043: Threshold de risco para emissão de veredicto REPORT.
+# REPORT: output não alterado, finding auditável gerado, SLA 24h contestabilidade.
+# Abaixo deste valor + policy_action=ALLOW → ALLOW silencioso.
+# Acima deste valor + policy_action=ALLOW + findings > 0 → REPORT.
+# Nunca downgrade de BLOCK/REDACT/EDUCATE para REPORT.
+governance:
+  report_threshold: 0.65        # [0.0–1.0] configurável por operador
+  report_threshold_min: 0.50    # floor de segurança — nunca abaixo
+  report_threshold_max: 0.85    # ceiling — acima seria equivalente a EDUCATE
+  report_sla_hours: 24          # SLA contestabilidade (ADR-017)
 
 policies:
   # ═══════════════════════════════════════════════════════════════════════
