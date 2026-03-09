@@ -210,6 +210,7 @@ pub enum EthicalVerdict {
     Educate = 2,
     Redact = 3,
     Block = 4,
+    Report = 5,
 }
 
 // ---------------------------------------------------------------------
