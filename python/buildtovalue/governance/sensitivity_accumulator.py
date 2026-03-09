@@ -1,5 +1,5 @@
 """
-SessionSensitivityAccumulator v1.2.0 — ADR-046
+SessionSensitivityAccumulator v1.3.0 — ADR-046
 
 Acumula sensitivity tags por sessão com base em findings observados
 ao longo do tempo. Expõe risco cumulativo ao EthicalContextEngine
@@ -18,9 +18,13 @@ Changelog:
     - Corporativas: PII_BRAZILIAN_CORPORATE + FINANCIAL/PII_BRAZILIAN
     - Cross-jurisdicionais: PII_EU_FISCAL + FINANCIAL_EU
     - Injection expandido: SECURITY_INJECTION + PII_US_GOV/PII_UK_HEALTH/PII_EU_FISCAL
+  v1.3.0 (Sprint 5, Gaps 5/17): SessionManager LRU+TTL unificado
+    - Remove _evict_expired() O(n) scan completo
+    - Remove _evict_oldest() O(n) min() scan
+    - Substitui por SessionManager.touch() O(1) amortizado
 
-Performance: O(1) por request (dict lookup + set operations)
-Limite de linhas: ≤ 250 (atualizado com 12 combinações)
+Performance: O(1) por request (dict lookup + set operations + LRU amortizado)
+Limite de linhas: ≤ 250
 """
 
 import time
@@ -29,11 +33,13 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from collections import defaultdict
 
+from .session_manager import SessionManager
+
 logger = logging.getLogger("btv.governance.sensitivity")
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # TAXONOMIA DE SENSITIVITY TAGS
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 
 FINDING_TO_SENSITIVITY: Dict[str, str] = {
     "cpf":              "PII_BRAZILIAN",
@@ -48,68 +54,43 @@ FINDING_TO_SENSITIVITY: Dict[str, str] = {
     "prompt_injection": "SECURITY_INJECTION",
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # DANGEROUS_COMBINATIONS v1.2.0 (12 combinações)
-#
-# Rationale (Jonas: responsabilidade por impactos combinados):
-#
-# ORIGINAIS (v1.0):
-#   PII_BRAZILIAN + FINANCIAL            → fraude CPF + cartão
-#   PII_CONTACT + PII_BRAZILIAN          → dossier pessoal completo
-#   SECURITY_INJECTION + PII_BRAZILIAN   → exfiltração via injection + CPF
-#   SECURITY_INJECTION + PII_CONTACT     → exfiltração via injection + contato
-#   PII_US_GOV + FINANCIAL               → fraude identidade federal EUA
-#   PII_UK_HEALTH + PII_CONTACT          → dados sensíveis saúde + contato
-#
-# GAP 8 — Corporativas (v1.2.0):
-#   PII_BRAZILIAN_CORPORATE + FINANCIAL  → fraude corporativa CNPJ + cartão
-#   PII_BRAZILIAN_CORPORATE + PII_BRAZILIAN → sócio (CPF) + empresa (CNPJ)
-#
-# GAP 8 — Cross-jurisdicionais (v1.2.0):
-#   PII_EU_FISCAL + FINANCIAL_EU         → VAT + IBAN = fraude fiscal europeia
-#
-# GAP 18 — Injection expandido (v1.2.0):
-#   SECURITY_INJECTION + PII_US_GOV      → injection + SSN = exfiltração gov EUA
-#   SECURITY_INJECTION + PII_UK_HEALTH   → injection + NHS = exfiltração saúde UK
-#   SECURITY_INJECTION + PII_EU_FISCAL   → injection + VAT = exfiltração fiscal EU
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 DANGEROUS_COMBINATIONS: List[frozenset] = [
-    # ── Originais (v1.0) ───────────────────────────────────────────────────
+    # ── Originais (v1.0) ────────────────────────────────────────────────────────────────
     frozenset({"PII_BRAZILIAN",             "FINANCIAL"}),
     frozenset({"PII_CONTACT",               "PII_BRAZILIAN"}),
     frozenset({"SECURITY_INJECTION",        "PII_BRAZILIAN"}),
     frozenset({"SECURITY_INJECTION",        "PII_CONTACT"}),
     frozenset({"PII_US_GOV",               "FINANCIAL"}),
     frozenset({"PII_UK_HEALTH",            "PII_CONTACT"}),
-    # ── Gap 8: Corporativas (v1.2.0) ─────────────────────────────────────
+    # ── Gap 8: Corporativas (v1.2.0) ────────────────────────────────────────────────
     frozenset({"PII_BRAZILIAN_CORPORATE",   "FINANCIAL"}),
     frozenset({"PII_BRAZILIAN_CORPORATE",   "PII_BRAZILIAN"}),
-    # ── Gap 8: Cross-jurisdicionais (v1.2.0) ─────────────────────────────
+    # ── Gap 8: Cross-jurisdicionais (v1.2.0) ─────────────────────────────────────────
     frozenset({"PII_EU_FISCAL",             "FINANCIAL_EU"}),
-    # ── Gap 18: Injection expandido (v1.2.0) ────────────────────────────
+    # ── Gap 18: Injection expandido (v1.2.0) ──────────────────────────────────────
     frozenset({"SECURITY_INJECTION",        "PII_US_GOV"}),
     frozenset({"SECURITY_INJECTION",        "PII_UK_HEALTH"}),
     frozenset({"SECURITY_INJECTION",        "PII_EU_FISCAL"}),
 ]
 
-COMBINATION_RISK_BOOST: float = 0.15   # por combinação ativa (cap 1.0 no total)
+COMBINATION_RISK_BOOST: float = 0.15
 SESSION_TTL_SECONDS:    int   = 1800   # 30min — alinhado com SessionTracker Rust
-MAX_TAGS_PER_SESSION:   int   = 50     # cap contra memory abuse
-MAX_SESSIONS:           int   = 10_000 # cap de sessões simultâneas
+MAX_TAGS_PER_SESSION:   int   = 50
+MAX_SESSIONS:           int   = 10_000
 
-# Gap 6: constantes de frequency boost
-# Jonas: repetição da mesma tag de risco alto indica sondagem intencional.
 FREQ_WEIGHT_PER_REPEAT: float = 0.02
 FREQ_MAX_COUNT:         int   = 10
-# Recalculado automaticamente: cobre todas as 12 combinações agora
 FREQ_HIGH_RISK_TAGS: frozenset = frozenset(
     tag for combo in DANGEROUS_COMBINATIONS for tag in combo
 )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # STATE
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 
 @dataclass
 class SensitivityState:
@@ -125,12 +106,13 @@ class SensitivityState:
     request_count: int = 0
 
     def is_expired(self) -> bool:
+        """Belt-and-suspenders: verifica expiração baseada em last_seen do estado."""
         return (time.time() - self.last_seen) > SESSION_TTL_SECONDS
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # MODULE-LEVEL HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 
 def _frequency_boost(tag_counts: Dict[str, int]) -> float:
     """
@@ -145,9 +127,9 @@ def _frequency_boost(tag_counts: Dict[str, int]) -> float:
     return boost
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # ACCUMULATOR
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 
 class SessionSensitivityAccumulator:
     """
@@ -157,17 +139,18 @@ class SessionSensitivityAccumulator:
       - FPR das combinações: estimado ~5% (combinações legítimas em agentes
         financeiros) — mitigado por trust_boundary (ADR-045)
       - FNR: 0% para combinações em DANGEROUS_COMBINATIONS (determinístico)
-      - Calibração: 2026-03-09 (v1.2.0; YAML em v1.9+)
+      - Calibração: 2026-03-09 (v1.3.0)
 
-    Uso pelo gateway (app.py):
-      1. Após scan Rust: accumulate(session_id, findings_summary)
-      2. Antes de EthicalContextEngine.decide(): get_state(session_id)
-      3. Injetar cumulative_risk e active_combinations no RequestContext
+    v1.3.0: _evict_expired() O(n) e _evict_oldest() O(n) removidos.
+    SessionManager.touch() delega LRU+TTL com O(1) amortizado.
     """
 
     def __init__(self, max_sessions: int = MAX_SESSIONS) -> None:
         self._sessions: Dict[str, SensitivityState] = {}
-        self._max_sessions = max_sessions
+        self._session_mgr = SessionManager(
+            max_sessions=max_sessions,
+            ttl_s=SESSION_TTL_SECONDS,
+        )
         self.metrics: Dict[str, int] = {
             "accumulations":         0,
             "combinations_detected": 0,
@@ -182,21 +165,24 @@ class SessionSensitivityAccumulator:
         """
         Registra findings do request atual e retorna estado atualizado.
 
-        Args:
-            session_id: ID da sessão (opaco, não interpretado)
-            findings_summary: nomes dos validators que produziram findings
-                              (ex: ["cpf", "email"])
-
-        Returns:
-            SensitivityState atualizado com cumulative_risk e active_combinations.
+        Gap 5/17: SessionManager.touch() substitui _evict_expired() O(n)
+        e _evict_oldest() O(n). Complexidade: O(1) amortizado.
         """
-        self._evict_expired()
         self.metrics["accumulations"] += 1
 
+        # Gap 5/17: touch retorna sessões evictadas (TTL amortizado + cap LRU)
+        evicted = self._session_mgr.touch(session_id)
+        for sid in evicted:
+            self._sessions.pop(sid, None)
+            self.metrics["evictions"] += 1
+
+        # Belt-and-suspenders: estado expirado entre requests (edge case)
         state = self._sessions.get(session_id)
-        if state is None or state.is_expired():
-            if len(self._sessions) >= self._max_sessions:
-                self._evict_oldest()
+        if state is not None and state.is_expired():
+            del self._sessions[session_id]
+            state = None
+
+        if state is None:
             state = SensitivityState()
             self._sessions[session_id] = state
 
@@ -209,7 +195,6 @@ class SessionSensitivityAccumulator:
                 state.tags.add(tag)
                 state.tag_counts[tag] += 1
 
-        # Gap 7: salvar combos anteriores para contar apenas novas descobertas
         previous_combos: set = set(state.active_combinations)
 
         state.active_combinations = []
@@ -222,7 +207,6 @@ class SessionSensitivityAccumulator:
                 if label not in previous_combos:
                     self.metrics["combinations_detected"] += 1
 
-        # Gap 6: incorporar frequência de probing no risco cumulativo
         freq_boost = _frequency_boost(state.tag_counts)
         state.cumulative_risk = min(1.0, combination_boost + freq_boost)
         return state
@@ -233,21 +217,3 @@ class SessionSensitivityAccumulator:
         if state is None or state.is_expired():
             return None
         return state
-
-    def _evict_expired(self) -> None:
-        expired = [
-            sid for sid, s in self._sessions.items() if s.is_expired()
-        ]
-        for sid in expired:
-            del self._sessions[sid]
-            self.metrics["evictions"] += 1
-
-    def _evict_oldest(self) -> None:
-        if not self._sessions:
-            return
-        oldest = min(
-            self._sessions,
-            key=lambda sid: self._sessions[sid].last_seen,
-        )
-        del self._sessions[oldest]
-        self.metrics["evictions"] += 1
