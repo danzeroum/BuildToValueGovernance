@@ -14,11 +14,13 @@ pub mod pattern_registry;
 pub mod prompt_injection;
 pub mod skill_registry;
 pub mod supply_guard;
+pub mod model_integrity;
 
 pub use audit::{ProbingDetector, ProbingStats};
 pub use session_guard::{SessionGuard, SessionToken, SessionError, SessionStats};
 pub use output_guard::{OutputGuard, ContentAnalysis, OutputError, PiiMaskResult};
 pub use supply_guard::{verify_skill, SupplyGuardResult};
+pub use model_integrity::{ModelIntegrityVerifier, IntegrityResult, IntegrityViolation};
 pub use pattern_registry::REGISTRY;
 pub use prompt_injection::PromptInjectionDetector;
 
