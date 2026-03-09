@@ -9,6 +9,7 @@ Cobertura:
 """
 import math
 import pytest
+from collections import deque
 
 from buildtovalue.governance.bot_detector import (
     BotDetector,
@@ -81,6 +82,7 @@ class TestBotDetectorBotSuspect:
         """
         Injeta intervals uniformes (10ms) < threshold (50ms).
         std_dev = 0 -> BOT_SUSPECT.
+        last_ts_ms=None garante que _do_record nao appenda delta extra.
         """
         det = BotDetector(threshold_ms=50.0, min_samples=5)
         _inject_uniform_intervals(det, "sess-bot", interval_ms=10.0, count=6)
@@ -157,10 +159,20 @@ class TestBotDetectorIsolation:
 # Fail-secure
 # ─────────────────────────────────────────────
 
+class _BrokenState:
+    """
+    Estado corrompido que causa TypeError em _do_record.
+    last_ts_ms nao-numerico → delta = float - str → TypeError
+    → fail-secure ativado → NOT_BOT (Levinas).
+    """
+    last_ts_ms = "CORRUPTED"
+    intervals  = deque(maxlen=20)
+
+
 class TestBotDetectorFailSecure:
     def test_corrupted_state_returns_not_bot(self):
         det = BotDetector(min_samples=3)
-        det._sessions["corrupted"] = None  # type: ignore
+        det._sessions["corrupted"] = _BrokenState()  # type: ignore
         sig = det.record("corrupted")
         assert sig.verdict == BotVerdict.NOT_BOT
         assert "FAIL-SECURE" in sig.explain_decision
@@ -172,7 +184,7 @@ class TestBotDetectorFailSecure:
 
     def test_fail_secure_explain_has_session_id(self):
         det = BotDetector(min_samples=3)
-        det._sessions["broken"] = None  # type: ignore
+        det._sessions["broken"] = _BrokenState()  # type: ignore
         sig = det.record("broken")
         assert sig.session_id == "broken"
 
@@ -184,10 +196,13 @@ class TestBotDetectorFailSecure:
 def _inject_intervals(
     det: BotDetector, session_id: str, intervals: list[float]
 ) -> None:
-    """Injeta intervals diretamente no estado interno (bypass time.time)."""
-    from collections import deque
+    """
+    Injeta intervals diretamente no estado interno (bypass time.time).
+    last_ts_ms=None: _do_record nao computa delta extra ao ser chamado,
+    preservando os intervals injetados intactos.
+    """
     state = _SessionIntervals()
-    state.last_ts_ms = 0.0
+    state.last_ts_ms = None   # <-- critico: evita delta=time.time()*1000-0
     for iv in intervals:
         state.intervals.append(iv)
     det._sessions[session_id] = state
