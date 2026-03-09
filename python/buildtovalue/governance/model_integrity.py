@@ -83,7 +83,64 @@ ABLITERATED_MODELS: Dict[str, KnownModel] = {
         detection_date="2025-12-15",
         tamper_resistance_index=0.1
     ),
-    "abliterated-qwen2.5-7b": KnownModel(
+    # ── Heretic family (p-e-w, HuggingFace) ────────────────────────────────
+    "gemma-3-12b-it-heretic": KnownModel(
+        model_id="gemma-3-12b-it-heretic",
+        family="gemma",
+        status=ModelStatus.ABLITERATED,
+        aliases=["p-e-w/gemma-3-12b-it-heretic", "gemma3-12b-heretic"],
+        notes="Abliteration via Heretic. Refusals: 3/100 (original: 97/100). KL=0.16.",
+        detection_date="2026-01-10",
+        tamper_resistance_index=0.03,
+    ),
+    "qwen3-4b-instruct-heretic": KnownModel(
+        model_id="qwen3-4b-instruct-heretic",
+        family="qwen",
+        status=ModelStatus.ABLITERATED,
+        aliases=["p-e-w/Qwen3-4B-Instruct-2507-heretic", "qwen3-4b-heretic"],
+        notes="Abliteration via Heretic. Best uncensored <16GB VRAM (autor).",
+        detection_date="2026-01-10",
+        tamper_resistance_index=0.05,
+    ),
+    "gpt-oss-20b-heretic": KnownModel(
+        model_id="gpt-oss-20b-heretic",
+        family="gpt-oss",
+        status=ModelStatus.ABLITERATED,
+        aliases=["p-e-w/gpt-oss-20b-heretic"],
+        notes="Abliteration via Heretic.",
+        detection_date="2026-01-10",
+        tamper_resistance_index=0.05,
+    ),
+    # ── Variantes de terceiros ───────────────────────────────────────────────
+    "gemma-3-12b-it-abliterated-v2": KnownModel(
+        model_id="gemma-3-12b-it-abliterated-v2",
+        family="gemma",
+        status=ModelStatus.ABLITERATED,
+        aliases=["mlabonne/gemma-3-12b-it-abliterated-v2"],
+        notes="Abliteration por mlabonne. KL=1.04.",
+        detection_date="2026-01-15",
+        tamper_resistance_index=0.08,
+    ),
+    "gemma-3-12b-it-abliterated-huihui": KnownModel(
+        model_id="gemma-3-12b-it-abliterated-huihui",
+        family="gemma",
+        status=ModelStatus.ABLITERATED,
+        aliases=["huihui-ai/gema-3-12b-it-abliterated", "huihui-ai/gemma-3-12b-it-abliterated"],
+        notes="Abliteration por huihui-ai. KL=0.45.",
+        detection_date="2026-01-15",
+        tamper_resistance_index=0.06,
+    ),
+    # ── Supply chain (nomes genericos conhecidos) ────────────────────────────
+    "llama-3.1-8b-creative-free": KnownModel(
+        model_id="llama-3.1-8b-creative-free",
+        family="llama",
+        status=ModelStatus.ABLITERATED,
+        aliases=["llama-3.1-8b-unrestricted", "llama-3.1-8b-enhanced-free"],
+        notes="Nome generico associado a supply chain attack. Bloqueado preventivamente.",
+        detection_date="2026-03-01",
+        tamper_resistance_index=0.0,
+    ),
+        "abliterated-qwen2.5-7b": KnownModel(
         model_id="abliterated-qwen2.5-7b",
         family="qwen",
         status=ModelStatus.ABLITERATED,
