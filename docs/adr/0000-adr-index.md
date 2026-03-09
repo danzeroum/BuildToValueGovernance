@@ -1,18 +1,20 @@
+Aqui está o arquivo completo atualizado:
+
+***
+
 # ADR-0000: Architecture Decision Record Index
 
 **Status:** 🟢 ATIVO (Documento Vivo)
-**Última Atualização:** 23 de fevereiro de 2026
+**Última Atualização:** 09 de março de 2026
 **Escopo:** BuildToValue v1.0 → v3.0
 
----
+***
 
 ## 📖 Como usar este Índice
 
-Este catálogo documenta todas as decisões arquiteturais significativas (ADRs)
-tomadas no projeto.
+Este catálogo documenta todas as decisões arquiteturais significativas (ADRs) tomadas no projeto.
 
-* **Status:** ✅ Ativo (Vigente), 🚧 Em Implementação, 🔒 Planejado (Futuro),
-  ⛔ Obsoleto (Histórico), 🔮 Visão (sem spec detalhada ainda).
+* **Status:** ✅ Ativo (Vigente), 🚧 Em Implementação, 🔒 Planejado (Futuro), ⛔ Obsoleto (Histórico), 🔮 Visão (sem spec detalhada ainda).
 * **Versão:** Indica em qual release a decisão foi ou será implementada.
 
 > **Nota para Desenvolvedores:**
@@ -20,7 +22,7 @@ tomadas no projeto.
 > Se o código desviar do ADR, o Pull Request será rejeitado. Para propor
 > mudanças, crie um novo ADR e submeta para aprovação do Staff Engineer.
 
----
+***
 
 ## 🏗️ Grupo A: Fundamentos Arquiteturais (Core)
 
@@ -38,7 +40,7 @@ tomadas no projeto.
 | **0008** | **Timing Mitigation** | ✅ Ativo | v1.0 | [Ver Detalhes](./0008-side-channel-timing-mitigation.md) | Constant-time validators. ORAM blacklist lookup. T-test p=0.67. |
 | **0009** | **Modular Monolith** | ✅ Ativo | v3.0 | [Ver Detalhes](./0009-modular-monolith-pivot.md) | Estrutura v2.2 preservada. `rust/gateway/` único crate novo (v1.9+). |
 
----
+***
 
 ## 🧠 Grupo B: Governança & Transparência (v1.5 – v1.8)
 
@@ -52,8 +54,7 @@ tomadas no projeto.
 | **0038** | **EthicalContextEngine v4.0 — Pipeline Filosófico Explícito** | ✅ Planejado | v1.8.0 | [Ver Detalhes](./0038-ethical-context-engine-v4.md) | 4 estágios nomeados: Rawls→Levinas→Jonas→Gilligan. `ExplainDecision` estruturado (EU AI Act Art. 13). `pipeline_trace` auditável. Integração AppealEngine. Substitui esboço ADR-016. |
 | **0039** | **TrustScoreCalculator v2.0** | ✅ Planejado | v1.8.0 | [Ver Detalhes](./0039-trust-score-calculator-v2.md) | Fórmula 5 componentes (ADR-007) com TrustStore Protocol (InMemory\|SQLite\|Redis-ready). Fix decay overflow. `adjust()` para AppealEngine (+0.1/−0.05). `TrustExplain` estruturado. Substitui esboço ADR-007. |
 
-
----
+***
 
 ## 🛡️ Grupo C: Segurança & Detecção Avançada (v1.6 – v2.2)
 
@@ -68,19 +69,19 @@ tomadas no projeto.
 | **0015** | **Interceptor Hooks** | ✅ Futuro | v1.7 | [Ver Detalhes](./0015-interceptor-hooks.md) | Traits `RequestInterceptor`/`ResponseInterceptor`. Chain of Responsibility + fail-secure. |
 | **0028** | **Heuristic Prompt Injection Detector** | ✅ Ativo | v2.2 | [Ver Detalhes](./0028-heuristic-prompt-injection-detector.md) | Detecção heurística de prompt injection sem ML. Padrões PTBR + EN. Integra Gate 3 de RAG. |
 
----
+***
 
 ## 🔮 Grupo D: Visão de Longo Prazo
 
 *Conceitos aprovados sem especificação técnica detalhada ou com ADR formal em andamento.*
 
 | ID | Título | Status | Alvo | Resumo |
-|:---|:---|:---:|:---:|:---|
-| **0027** | **Local SLM Strategy** | 🔒 Futuro | v2.1 | Phi-4 Mini local via `btv-slm` (mmap, CPU-only). ADR formal criado. Ver Grupo I. |
+|:---|:---:|:---:|:---:|:---|
+| **0027** | **Local SLM Strategy** | 🔒 Futuro | v2.1 | Phi-4 Mini local via `btv-slm` (mmap, CPU-only). ADR formal criado. Ver Grupo H. |
 | **---** | **Angular Dashboard** | 🔮 Visão | v3.0+ | Interface Enterprise para gestão de políticas e contestabilidade. |
 | **---** | **NATS JetStream** | 🔮 Visão | v1.9+ | Logs duráveis e mensageria assíncrona. Alternativa ao S3 (ver ADR-004 Emenda v3.0). |
 
----
+***
 
 ## 🏛️ Grupo E: Governance (v1.8)
 
@@ -90,7 +91,8 @@ tomadas no projeto.
 |:---|:---|:---:|:---:|:---|:---|
 | **0017** | **Contestability Loop** | ✅ Ativo | v1.8 | [Ver Detalhes](./0017-contestability-loop.md) | Appeals HTTP: submit, status, resolve. SLA 24h. Levinas. Trust score feedback. |
 | **0037** | **Contestability Loop — AppealEngine v2.0 + SLA 24h Enforcement** | 🔒 Planejado | v1.8.0 | [Ver Detalhes](./0037-contestability-loop-appeal-engine.md) | Judiciário de segundo grau. HMAC verify antes de aceitar appeal. SLAMonitor worker ativo (Jonas). Trust bidirecional: +0.1 aceito / −0.05 rejeitado (Gilligan). Toda appeal no Ledger. Substitui esboço ADR-017. |
----
+
+***
 
 ## 🌐 Grupo F: API & Observability (v1.9 – v2.0)
 
@@ -106,8 +108,7 @@ tomadas no projeto.
 | **0040** | **Axum Gateway v2.0 — Extensões República Algorítmica** | ✅ Planejado | v1.9.0 | [Ver Detalhes](./0040-axum-gateway-v2-extensions.md) | +3 rotas: /v1/decide, /v1/appeals (proxy), /health/bias. Rate limit per-tenant (BLAKE3 hash). X-BTV-Jurisdiction → jurisdiction_bitmask. Estende ADR-018. |
 | **0041** | **Observability v2.0 — Métricas da República Algorítmica** | ✅ Planejado | v1.9.0 | [Ver Detalhes](./0041-observability-v2-republic-metrics.md) | +17 métricas: pipeline filosófico por estágio, SLA compliance rate, BiasDeclaration divergência em tempo real, mercy scenarios. 5 alerting rules. Dashboard Grafana 4 poderes. Estende ADR-019. |
 
-
----
+***
 
 ## 🧠 Grupo G: Intelligence & Compliance (v2.0 – v2.1)
 
@@ -120,7 +121,7 @@ tomadas no projeto.
 | **0022** | **Streamlit Dashboard** | ✅ Ativo | v2.0 | [Ver Detalhes](./0022-streamlit-dashboard.md) | MVP visual. 6 pages. Democratiza acesso. Angular Enterprise planejado para v3.0+. |
 | **0024** | **Threat→Policy Bridge** | ✅ Ativo | v2.1 | [Ver Detalhes](./0024-threat-policy-bridge.md) | MispIngestor→ThreatClassifier→PolicyGenerator. `enabled: false` + human-in-the-loop obrigatório. |
 
----
+***
 
 ## 🤖 Grupo H: Local Intelligence (v2.1)
 
@@ -130,7 +131,7 @@ tomadas no projeto.
 |:---|:---|:---:|:---:|:---|:---|
 | **0027** | **Local SLM Strategy** | ✅ Futuro | v2.1 | [Ver Detalhes](./0027-local-slm-strategy.md) | Phi-4 Mini via `btv-slm` (mmap, CPU-only, zero GPU). Contexto de governança local sem vendor. Alternativa soberana ao vendor externo. |
 
----
+***
 
 ## 🔗 Grupo I: Integrações de Agentes IA (v2.0+)
 
@@ -143,8 +144,9 @@ tomadas no projeto.
 | **0030** | **Chatbot — LLM Self-Hosted** | 🔒 Proposto | v2.0 | [Ver Detalhes](./0030-internal-chatbot-selfhosted-llm.md) | Perfil de integração BTV para chatbot com Llama 70B/vLLM. 5 gates: mensagem, indexação, RAG, training batch, LoRA deploy (`Irreversible`). Evidence LGPD. BiasDeclaration em treino. |
 | **0031** | **Chatbot — LLM Vendor Externo** | ✅ Proposto | v2.0 | [Ver Detalhes](./0031-external-chatbot-vendor-llm.md) | Delta do ADR-0030 para vendors externos (OpenAI, Anthropic, Google, Azure). Toda mensagem é `Irreversible`. `/v1/sanitize` obrigatório antes de cada envio. Gate de aprovação de vendor por `sector_id`. LGPD Art. 33. |
 
+***
 
-### Grupo J: v1.6 — Multilingual & Multi-tenant Foundation (ADR-0032 a ADR-0036)
+## 📐 Grupo J: v1.6 — Multilingual & Multi-tenant Foundation (ADR-0032 a ADR-0035)
 
 | ID | Título | Status | Versão | Link | Resumo |
 |:---|:---|:---:|:---:|:---|:---|
@@ -153,7 +155,21 @@ tomadas no projeto.
 | **0034** | **Language Detection Strategy** | ✅ Planejado | v1.6.1 | [Ver Detalhes](./0034-language-detection-strategy.md) | whatlang-rs no Stage 1 do pipeline. Preenche `lang_bitmask` e `lang_scores` em ScanContextFlags. Threshold 0.75 + min 20 chars. Inputs ambíguos → undetermined → apenas Tier 0. |
 | **0035** | **Multi-jurisdiction PII Validators** | ✅ Planejado | v1.7.0 | [Ver Detalhes](./0035-multi-jurisdiction-pii-validators.md) | NHS Number (Mod 11), EU VAT (DE/FR/IT/ES/PT), IBAN (Mod 97). Dispatcher por `jurisdiction_bitmask`. Novos `ValidatorModule` entries. |
 
----
+***
+
+## 🔐 Grupo K: v2.2 — Model Integrity Governance (ADR-0042, ADR-0049, ADR-0051)
+
+*Verificação de integridade de modelos AI: cadeia Python SHA-256 fast-path → Rust BLAKE3 full-path. Implementado em commit `8ee8994`, março 2026. 39 testes Python, 0 regressões.*
+
+| ID | Título | Status | Versão | Link | Resumo |
+|:---|:---|:---:|:---:|:---|:---|
+| **0042** | **PolicyEngine — Model Integrity typed accessors** | ✅ Ativo | v2.2 | [Ver Detalhes](./0042-policy-engine-model-integrity.md) | `ModelIntegrityConfig` + `AbliterationConfig` frozen dataclasses. `abliteration_threshold` clamped `[min, max]`. `manifest_path_for(model_id)`. `data/policies/security/model_integrity.yaml` (Policy-as-Code ADR-006). rglob YAML discovery. |
+| **0049** | **IntegrityVerifier** | ✅ Ativo | v2.2 | [Ver Detalhes](./0049-integrity-verifier.md) | Orquestra 4 estágios: `ManifestHashVerifier` (SHA-256) → blacklist `is_known_abliterated()` → whitelist `get_model_info()` → `AbliterationDetector`. `verify()` bool fail-secure. Cadeia de responsabilidade Python→Rust (Jonas). |
+| **0051** | **AbliterationDetector Fase 2** | ✅ Ativo | v2.2 | [Ver Detalhes](./0051-abliteration-detector-phase2.md) | 8 probes calibradas: 5 HARMFUL + 3 BENIGN. Refusal detection via NLP regex (12 padrões). `probe_timeout_ms` enfor­çado via `threading.Thread + queue.Queue` (cross-platform, sem `signal.alarm`). Timeout = recusa implícita (Jonas: fail-secure). Rawls: todas as probes idênticas para todos os modelos (blind). |
+
+> **Nota de lacuna intencional:** ADR-0043 a ADR-0048 e ADR-0050 estão reservados para ADRs intermediários identificados durante a implementação de v2.2 (ex.: `model_integrity.yaml` schema, `ManifestVerificationResult` contract). Serão formalizados no próximo ciclo de documentação.
+
+***
 
 ## 📐 Mapa de Dependências entre ADRs
 
@@ -170,9 +186,10 @@ ADR-0004 (Ledger) ──► ADR-0025 (Ledger Query)
                   ──► ADR-0029/0030/0031 (evidence_id forense)
 
 ADR-0006 (Policy-as-Code)
-  └─► ADR-0011 (Policy Engine)
+  └─► ADR-0011 (Policy Engine Rust)
   └─► ADR-0024 (Threat→Policy Bridge)
   └─► ADR-0029/0030/0031 (YAML por sector_id)
+  └─► ADR-0042 (model_integrity.yaml — Policy-as-Code para modelos AI)
 
 ADR-0017 (Contestability)
   └─► ADR-0023 (Appeals HTTP)
@@ -190,21 +207,29 @@ ADR-0028 (Heuristic Detector)
 ADR-0029 (External Agent PDP — contrato canônico)
   └─► ADR-0030 (Chatbot LLM Interna)
   └─► ADR-0031 (Chatbot LLM Externa)
+
+ADR-0042 (PolicyEngine Model Integrity)     ← Policy-as-Code (ADR-0006)
+  └─► ADR-0049 (IntegrityVerifier)
+        └─► ManifestHashVerifier (SHA-256 fast-path)
+        └─► AbliterationDetector (ADR-0051)
+        └─► Rust kernel BLAKE3 weights (ADR-0005, v2.3)
+  └─► ADR-0051 (AbliterationDetector Fase 2)
+        └─► probe_timeout_ms (threading + queue, cross-platform)
+        └─► ADR-0010 (BiasDeclaration — refusal calibration)
 ```
 
----
+***
 
 ## 📁 Arquivos de Integração Associados
 
-Os ADRs do Grupo I possuem documentos de referência de implementação
-em `docs/integrations/` (perfis prontos para copy-paste):
+Os ADRs do Grupo I possuem documentos de referência de implementação em `docs/integrations/` (perfis prontos para copy-paste):
 
 | Perfil | ADR | Arquivo | Descrição |
 |:---|:---:|:---|:---|
 | Chatbot LLM Interna | 0030 | `docs/integrations/chatbot-internal-llm.md` | Implementação completa dos 5 gates, Angular + Rust + Python, Docker Compose dev, políticas YAML. |
 | Chatbot LLM Externa | 0031 | `docs/integrations/chatbot-external-llm.md` | Delta completo: 4 gates, catálogo de vendors, políticas por sector_id, evidência LGPD Art. 33. |
 
----
+***
 
 ## 📋 Políticas YAML Versionadas por Perfil
 
@@ -222,8 +247,9 @@ em `docs/integrations/` (perfis prontos para copy-paste):
 | `data/policies/chatbot-vendor-send.yaml` | 0031 | Regras por mensagem enviada a vendor externo |
 | `data/policies/chatbot-vendor-response.yaml` | 0031 | Padrões de exfiltração na resposta do vendor |
 | `data/policies/chatbot-rag-external.yaml` | 0031 | Anti-injection para RAG em prompts externos |
+| **`data/policies/security/model_integrity.yaml`** | **0042** | **Integridade de modelos AI: hash manifest, abliteration threshold, probe_timeout_ms** |
 
----
+***
 
 ## 📝 Legenda de Status
 
@@ -235,21 +261,21 @@ em `docs/integrations/` (perfis prontos para copy-paste):
 | 🔒 | **Planejado / Proposto:** Aprovado para versão futura ou proposto aguardando implementação. Não implementar agora, mas não bloquear. |
 | 🔮 | **Visão:** Conceito aprovado, sem especificação técnica detalhada ainda. |
 
----
+***
 
 ## 📊 Estatísticas do Índice
 
 | Métrica | Valor |
 |:---|:---:|
-| Total de ADRs | 29 |
-| ✅ Ativos | 16 |
-| 🚧 Em Implementação | 1 |
-| 🔒 Planejados / Propostos | 10 |
+| Total de ADRs | 44 |
+| ✅ Ativos | 21 |
+| 🚧 Em Implementação | 2 |
+| 🔒 Planejados / Propostos | 13 |
 | ⛔ Obsoletos | 1 |
 | 🔮 Visão (sem ADR formal) | 2 |
-| Última entrada | ADR-0031 |
-| Próximo disponível | ADR-0032 |
-
+| Testes (governance Python) | 39 |
+| Última entrada | ADR-0051 |
+| Próximo disponível | ADR-0052 |
 
 ***
 
@@ -257,15 +283,9 @@ em `docs/integrations/` (perfis prontos para copy-paste):
 
 | Seção | Mudança |
 |:---|:---|
-| **Cabeçalho** | Data atualizada para 23/02/2026 |
-| **0023** | Resumo preenchido (estava vazio) |
-| **0024** | Resumo preenchido (estava vazio); versão corrigida para v2.1 |
-| **Grupo C** | Adicionado ADR-0028 (Heuristic Prompt Injection Detector) |
-| **Grupo D** | ADR-0027 (Local SLM) promovido de Visão `---` para entrada com ID, mantido como ✅ Futuro |
-| **Grupo F** | Adicionados ADR-0025 (Ledger Query API) e ADR-0026 (Webhook Notifications) |
-| **Grupo H** | Novo grupo: Local Intelligence com ADR-0027 formal |
-| **Grupo I** | Novo grupo: Integrações de Agentes IA — ADR-0029, 0030, 0031 |
-| **Mapa de dependências** | Novo — rastreia relações entre ADRs |
-| **Perfis de integração** | Nova seção — mapeia docs/integrations/ para ADRs |
-| **Políticas YAML** | Nova seção — mapeia data/policies/ para ADRs responsáveis |
-| **Estatísticas** | Nova seção — totais rápidos para onboarding |
+| **Cabeçalho** | Data atualizada para 09/03/2026 |
+| **Grupo K** | ✨ **Novo** — Model Integrity Governance: ADR-042, ADR-049, ADR-051 (✅ Ativo v2.2) |
+| **Nota de lacuna** | Reserva intencional ADR-043–048 e ADR-050 documentada |
+| **Mapa de dependências** | Adicionada cadeia `ADR-0042 → ADR-0049 → ADR-0051 → Rust BLAKE3` |
+| **Políticas YAML** | Adicionado `data/policies/security/model_integrity.yaml` (ADR-0042) |
+| **Estatísticas** | Total 44 (+3), Ativos 21 (+3), Última entrada ADR-0051, Próximo ADR-0052 |
