@@ -6,7 +6,7 @@
 schema_version: "1.0"
 policy_id: "governance-v1"
 description: "Politicas core de governanca etica — Republica Algoritmica"
-adr_refs: ["ADR-011", "ADR-016", "ADR-038"]
+adr_refs: ["ADR-011", "ADR-016", "ADR-038", "ADR-043"]
 
 rules:
   - rule_id: "GOV-001"
@@ -26,6 +26,7 @@ rules:
     condition_operator: "gt"
     condition_value: 0.7
     adr_refs: ["ADR-016"]
+    # ADR-043: ESCALATE mapeado para REPORT no EthicalContextEngine v1.9.0
 
   - rule_id: "GOV-003"
     description: "PII detectado — REDACT obrigatorio (Levinas: protecao do outro)"
@@ -71,3 +72,25 @@ rules:
     condition_operator: "eq"
     condition_value: "true"
     adr_refs: ["ADR-049", "PROP-037"]
+  - rule_id: "GOV-008"
+    description: "Risco moderado [0.65–0.9]: REPORT auditavel sem interrupcao (Rawls + Levinas)"
+    action: "REPORT"
+    severity: "medium"
+    condition_field: "composite_risk"
+    condition_operator: "between"
+    condition_value_min: 0.65
+    condition_value_max: 0.90
+    requires:
+      - field: "policy_action"
+        operator: "eq"
+        value: "ALLOW"
+      - field: "finding_count"
+        operator: "gt"
+        value: 0
+    semantics:
+      output_altered: false          # output nao e modificado
+      audit_finding_generated: true  # finding registrado no ledger
+      contestable: true              # SLA 24h (ADR-017)
+      escalates_to_human: true       # revisao humana solicitada
+    adr_refs: ["ADR-043", "ADR-017", "ADR-042"]
+    philosophical_refs: ["Rawls:fairness", "Levinas:accountability"]
