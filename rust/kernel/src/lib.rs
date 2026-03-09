@@ -32,8 +32,8 @@ pub const KERNEL_VERSION: &str = "1.0.0";
 pub const PROJECT_VERSION: &str = "1.0";
 pub const PROTOCOL_VERSION: u16 = 3;
 
-// Adicionar em rust/kernel/src/lib.rs
-
+// NOTA: este módulo é inline (com chaves) — o compilador Rust ignora
+// security/mod.rs. Sub-módulos devem ser declarados explicitamente aqui.
 pub mod security {
     pub mod prompt_injection;
     pub mod pattern_registry;
@@ -42,8 +42,21 @@ pub mod security {
     pub mod output_guard;
     pub mod session_guard;
     pub mod skill_registry;
-    pub use prompt_injection::PromptInjectionDetector;
     pub mod signing;
+    pub mod model_integrity;   // ADR-051 Fase 1
+    pub mod oblivious_cache;   // ADR-038
+
+    pub use prompt_injection::PromptInjectionDetector;
+    pub use model_integrity::{
+        ModelIntegrityVerifier,
+        IntegrityResult,
+        IntegrityViolation,
+        IntegrityViolationKind,
+        IntegrityEvent,
+        ViolationFinding,
+        sign_violation,
+        verify_finding,
+    };
 }
 
 pub fn version_info() -> String {
