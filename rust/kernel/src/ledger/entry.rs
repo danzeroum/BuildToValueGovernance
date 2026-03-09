@@ -4,6 +4,8 @@
 use static_assertions;
 use serde::{Deserialize, Serialize};
 use crate::core::types::{Action, EthicalVerdict, RiskLevel};
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
 
 // Serialização customizada para arrays de 196 bytes
 mod serde_array_164 {
@@ -70,6 +72,27 @@ pub struct LedgerEntry {
 static_assertions::const_assert_eq!(size_of::<LedgerEntry>(), 384);
 
 impl LedgerEntry {
+    /// Computa verdict_id = HMAC-SHA256(key, evidence_hash ‖ action_u8 ‖ trail_id)
+    /// ADR-043: identidade determinística e verificável do veredicto.
+    /// Zero heap: operações sobre arrays fixos na stack.
+    pub fn compute_verdict_id(
+        evidence_hash: &[u8; 32],
+        ethical_verdict: EthicalVerdict,
+        trail_id: u64,
+        signing_key: &[u8],
+    ) -> [u8; 32] {
+        type HmacSha256 = Hmac<Sha256>;
+        let mut mac = HmacSha256::new_from_slice(signing_key)
+            .unwrap_or_else(|_| HmacSha256::new_from_slice(&[0u8; 32]).expect("key válida"));
+        mac.update(evidence_hash);
+        mac.update(&[ethical_verdict as u8]);
+        mac.update(&trail_id.to_le_bytes());
+        let result = mac.finalize().into_bytes();
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&result);
+        out
+    }
+
     pub fn calculate_hash(&self) -> [u8; 32] {
         let mut hasher = blake3::Hasher::new();
         hasher.update(&self.entry_id.to_le_bytes());
@@ -87,12 +110,121 @@ impl LedgerEntry {
         self.merkle_root = *hasher.finalize().as_bytes();
     }
 
+    /// Finaliza entrada: computa entry_hash e verdict_id.
+    /// Em produção, passar signing_key via Policy (ADR-042).
+    /// Chave zero usada como default seguro — verdict_id ainda verificável internamente.
     pub fn finalize(&mut self) {
         self.entry_hash = self.calculate_hash();
+        self.verdict_id = Self::compute_verdict_id(
+            &self.entry_hash,
+            self.ethical_verdict,
+            self.entry_id,
+            &[0u8; 32],
+        );
     }
 
+    /// Finaliza com chave de assinatura do operador (produção).
+    pub fn finalize_with_key(&mut self, signing_key: &[u8]) {
+        self.entry_hash = self.calculate_hash();
+        self.verdict_id = Self::compute_verdict_id(
+            &self.entry_hash,
+            self.ethical_verdict,
+            self.entry_id,
+            signing_key,
+        );
+    }
+
+    /// Valida entry_hash e verdict_id (com chave zero — padrão interno).
     pub fn validate(&self) -> bool {
-        self.entry_hash == self.calculate_hash()
+        if self.entry_hash != self.calculate_hash() {
+            return false;
+        }
+        let expected_vid = Self::compute_verdict_id(
+            &self.entry_hash,
+            self.ethical_verdict,
+            self.entry_id,
+            &[0u8; 32],
+        );
+        self.verdict_id == expected_vid
+    }
+
+    /// Valida com chave de assinatura do operador.
+    pub fn validate_with_key(&self, signing_key: &[u8]) -> bool {
+        if self.entry_hash != self.calculate_hash() {
+            return false;
+        }
+        let expected_vid = Self::compute_verdict_id(
+            &self.entry_hash,
+            self.ethical_verdict,
+            self.entry_id,
+            signing_key,
+        );
+        self.verdict_id == expected_vid
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finalize_produces_nonzero_verdict_id() {
+        let mut entry = LedgerEntry::default();
+        entry.ethical_verdict = EthicalVerdict::Block;
+        entry.finalize();
+        assert_ne!(entry.verdict_id, [0u8; 32]);
+    }
+
+    #[test]
+    fn verdict_id_deterministic() {
+        let mut a = LedgerEntry::default();
+        let mut b = LedgerEntry::default();
+        a.ethical_verdict = EthicalVerdict::Report;
+        b.ethical_verdict = EthicalVerdict::Report;
+        a.finalize();
+        b.finalize();
+        assert_eq!(a.verdict_id, b.verdict_id);
+    }
+
+    #[test]
+    fn verdict_id_differs_by_verdict_type() {
+        let mut allow = LedgerEntry::default();
+        let mut block = LedgerEntry::default();
+        allow.ethical_verdict = EthicalVerdict::Allow;
+        block.ethical_verdict = EthicalVerdict::Block;
+        allow.finalize();
+        block.finalize();
+        assert_ne!(allow.verdict_id, block.verdict_id);
+    }
+
+    #[test]
+    fn validate_passes_after_finalize() {
+        let mut entry = LedgerEntry::default();
+        entry.ethical_verdict = EthicalVerdict::Allow;
+        entry.finalize();
+        assert!(entry.validate());
+    }
+
+    #[test]
+    fn validate_fails_after_tampering() {
+        let mut entry = LedgerEntry::default();
+        entry.finalize();
+        entry.ethical_verdict = EthicalVerdict::Block;
+        assert!(!entry.validate());
+    }
+
+    #[test]
+    fn finalize_with_key_differs_from_zero_key() {
+        let mut a = LedgerEntry::default();
+        let mut b = LedgerEntry::default();
+        a.finalize();
+        b.finalize_with_key(b"operator-signing-key-production");
+        assert_ne!(a.verdict_id, b.verdict_id);
+    }
+
+    #[test]
+    fn size_is_384_bytes() {
+        assert_eq!(size_of::<LedgerEntry>(), 384);
     }
 }
 
