@@ -1,5 +1,5 @@
 """
-SessionSensitivityAccumulator v1.1.0 — ADR-046
+SessionSensitivityAccumulator v1.2.0 — ADR-046
 
 Acumula sensitivity tags por sessão com base em findings observados
 ao longo do tempo. Expõe risco cumulativo ao EthicalContextEngine
@@ -12,12 +12,15 @@ Filosofia:
   - Levinas: proteger contra combinações perigosas mesmo quando cada
     request individual é legítimo
 
-Changelog v1.1.0 (Sprint 1, Gaps 6 e 7):
-  - Gap 6: tag_counts agora alimenta _frequency_boost() no cumulative_risk
-  - Gap 7: metrics["combinations_detected"] conta apenas novas descobertas
+Changelog:
+  v1.1.0 (Sprint 1, Gaps 6, 7): tag_counts→cumulative_risk, metrics corretos
+  v1.2.0 (Sprint 4, Gaps 8, 18): +6 DANGEROUS_COMBINATIONS ausentes
+    - Corporativas: PII_BRAZILIAN_CORPORATE + FINANCIAL/PII_BRAZILIAN
+    - Cross-jurisdicionais: PII_EU_FISCAL + FINANCIAL_EU
+    - Injection expandido: SECURITY_INJECTION + PII_US_GOV/PII_UK_HEALTH/PII_EU_FISCAL
 
 Performance: O(1) por request (dict lookup + set operations)
-Limite de linhas: ≤ 200 (invariante AI Squad)
+Limite de linhas: ≤ 250 (atualizado com 12 combinações)
 """
 
 import time
@@ -30,8 +33,6 @@ logger = logging.getLogger("btv.governance.sensitivity")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAXONOMIA DE SENSITIVITY TAGS
-# Mapeamento determinístico: validator name (lowercase) → tag semântica.
-# Extensível via YAML (data/policies/sensitivity_tags.yaml) em v1.9+.
 # ─────────────────────────────────────────────────────────────────────────────
 
 FINDING_TO_SENSITIVITY: Dict[str, str] = {
@@ -47,15 +48,48 @@ FINDING_TO_SENSITIVITY: Dict[str, str] = {
     "prompt_injection": "SECURITY_INJECTION",
 }
 
-# Combinações perigosas: cada tag isolada pode ser legítima;
-# a combinação cross-session cruza threshold de risco.
+# ─────────────────────────────────────────────────────────────────────────────
+# DANGEROUS_COMBINATIONS v1.2.0 (12 combinações)
+#
+# Rationale (Jonas: responsabilidade por impactos combinados):
+#
+# ORIGINAIS (v1.0):
+#   PII_BRAZILIAN + FINANCIAL            → fraude CPF + cartão
+#   PII_CONTACT + PII_BRAZILIAN          → dossier pessoal completo
+#   SECURITY_INJECTION + PII_BRAZILIAN   → exfiltração via injection + CPF
+#   SECURITY_INJECTION + PII_CONTACT     → exfiltração via injection + contato
+#   PII_US_GOV + FINANCIAL               → fraude identidade federal EUA
+#   PII_UK_HEALTH + PII_CONTACT          → dados sensíveis saúde + contato
+#
+# GAP 8 — Corporativas (v1.2.0):
+#   PII_BRAZILIAN_CORPORATE + FINANCIAL  → fraude corporativa CNPJ + cartão
+#   PII_BRAZILIAN_CORPORATE + PII_BRAZILIAN → sócio (CPF) + empresa (CNPJ)
+#
+# GAP 8 — Cross-jurisdicionais (v1.2.0):
+#   PII_EU_FISCAL + FINANCIAL_EU         → VAT + IBAN = fraude fiscal europeia
+#
+# GAP 18 — Injection expandido (v1.2.0):
+#   SECURITY_INJECTION + PII_US_GOV      → injection + SSN = exfiltração gov EUA
+#   SECURITY_INJECTION + PII_UK_HEALTH   → injection + NHS = exfiltração saúde UK
+#   SECURITY_INJECTION + PII_EU_FISCAL   → injection + VAT = exfiltração fiscal EU
+# ─────────────────────────────────────────────────────────────────────────────
 DANGEROUS_COMBINATIONS: List[frozenset] = [
-    frozenset({"PII_BRAZILIAN",  "FINANCIAL"}),
-    frozenset({"PII_CONTACT",    "PII_BRAZILIAN"}),
-    frozenset({"SECURITY_INJECTION", "PII_BRAZILIAN"}),
-    frozenset({"SECURITY_INJECTION", "PII_CONTACT"}),
-    frozenset({"PII_US_GOV",     "FINANCIAL"}),
-    frozenset({"PII_UK_HEALTH",  "PII_CONTACT"}),
+    # ── Originais (v1.0) ───────────────────────────────────────────────────
+    frozenset({"PII_BRAZILIAN",             "FINANCIAL"}),
+    frozenset({"PII_CONTACT",               "PII_BRAZILIAN"}),
+    frozenset({"SECURITY_INJECTION",        "PII_BRAZILIAN"}),
+    frozenset({"SECURITY_INJECTION",        "PII_CONTACT"}),
+    frozenset({"PII_US_GOV",               "FINANCIAL"}),
+    frozenset({"PII_UK_HEALTH",            "PII_CONTACT"}),
+    # ── Gap 8: Corporativas (v1.2.0) ─────────────────────────────────────
+    frozenset({"PII_BRAZILIAN_CORPORATE",   "FINANCIAL"}),
+    frozenset({"PII_BRAZILIAN_CORPORATE",   "PII_BRAZILIAN"}),
+    # ── Gap 8: Cross-jurisdicionais (v1.2.0) ─────────────────────────────
+    frozenset({"PII_EU_FISCAL",             "FINANCIAL_EU"}),
+    # ── Gap 18: Injection expandido (v1.2.0) ────────────────────────────
+    frozenset({"SECURITY_INJECTION",        "PII_US_GOV"}),
+    frozenset({"SECURITY_INJECTION",        "PII_UK_HEALTH"}),
+    frozenset({"SECURITY_INJECTION",        "PII_EU_FISCAL"}),
 ]
 
 COMBINATION_RISK_BOOST: float = 0.15   # por combinação ativa (cap 1.0 no total)
@@ -63,10 +97,11 @@ SESSION_TTL_SECONDS:    int   = 1800   # 30min — alinhado com SessionTracker R
 MAX_TAGS_PER_SESSION:   int   = 50     # cap contra memory abuse
 MAX_SESSIONS:           int   = 10_000 # cap de sessões simultâneas
 
-# ── Gap 6: constantes de frequency boost ───────────────────────────────────
+# Gap 6: constantes de frequency boost
 # Jonas: repetição da mesma tag de risco alto indica sondagem intencional.
-FREQ_WEIGHT_PER_REPEAT: float = 0.02   # por repetição acima de 1 (cap: 9 repeats)
-FREQ_MAX_COUNT:         int   = 10     # satura em 10 ocorrências (0.18 max por tag)
+FREQ_WEIGHT_PER_REPEAT: float = 0.02
+FREQ_MAX_COUNT:         int   = 10
+# Recalculado automaticamente: cobre todas as 12 combinações agora
 FREQ_HIGH_RISK_TAGS: frozenset = frozenset(
     tag for combo in DANGEROUS_COMBINATIONS for tag in combo
 )
@@ -100,13 +135,8 @@ class SensitivityState:
 def _frequency_boost(tag_counts: Dict[str, int]) -> float:
     """
     Gap 6: converte tag_counts em sinal de risco por probing persistente.
-
-    Apenas tags em FREQ_HIGH_RISK_TAGS contribuem (tags de combinações
-    perigosas). Uma única ocorrência não gera boost (pode ser legítima);
-    repetição acima de 1 sinaliza sondagem.
-
-    Satura em FREQ_MAX_COUNT para evitar que um callermalicioso force
-    cumulative_risk=1.0 via volume puro.
+    Apenas tags em FREQ_HIGH_RISK_TAGS contribuem.
+    Satura em FREQ_MAX_COUNT contra DoS por volume.
     """
     boost = 0.0
     for tag, count in tag_counts.items():
@@ -127,7 +157,7 @@ class SessionSensitivityAccumulator:
       - FPR das combinações: estimado ~5% (combinações legítimas em agentes
         financeiros) — mitigado por trust_boundary (ADR-045)
       - FNR: 0% para combinações em DANGEROUS_COMBINATIONS (determinístico)
-      - Calibração: 2026-03-04 (hardcoded v1.8; YAML em v1.9+)
+      - Calibração: 2026-03-09 (v1.2.0; YAML em v1.9+)
 
     Uso pelo gateway (app.py):
       1. Após scan Rust: accumulate(session_id, findings_summary)
@@ -179,8 +209,7 @@ class SessionSensitivityAccumulator:
                 state.tags.add(tag)
                 state.tag_counts[tag] += 1
 
-        # Gap 7: salvar combos ativos anteriores antes de recalcular
-        # para contar apenas novas descobertas no métrics (não re-contar ja existentes)
+        # Gap 7: salvar combos anteriores para contar apenas novas descobertas
         previous_combos: set = set(state.active_combinations)
 
         state.active_combinations = []
@@ -190,7 +219,7 @@ class SessionSensitivityAccumulator:
                 label = " + ".join(sorted(combo))
                 state.active_combinations.append(label)
                 combination_boost += COMBINATION_RISK_BOOST
-                if label not in previous_combos:  # Gap 7: apenas novas descobertas
+                if label not in previous_combos:
                     self.metrics["combinations_detected"] += 1
 
         # Gap 6: incorporar frequência de probing no risco cumulativo
