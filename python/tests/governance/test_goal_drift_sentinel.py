@@ -14,7 +14,7 @@ def _sentinel(**kw) -> GoalDriftSentinel:
     return GoalDriftSentinel(hmac_secret=SECRET, **kw)
 
 
-# ─── Init ────────────────────────────────────────────────────────────────────
+# ─── Init ──────────────────────────────────────────────────────────────────────────
 
 class TestInit:
     def test_rejects_empty_secret(self):
@@ -22,7 +22,7 @@ class TestInit:
             GoalDriftSentinel(hmac_secret=b"")
 
 
-# ─── No drift (sessao saudavel) ───────────────────────────────────────────────
+# ─── No drift (sessao saudavel) ────────────────────────────────────────────────────────────
 
 class TestNoDrift:
     def test_single_record_no_drift(self):
@@ -43,7 +43,7 @@ class TestNoDrift:
         assert r.drift_action == DriftAction.ALLOW
 
 
-# ─── Drift detectado ─────────────────────────────────────────────────────────
+# ─── Drift detectado ───────────────────────────────────────────────────────────────
 
 class TestDriftDetected:
     def test_critical_triggers_block(self):
@@ -52,8 +52,15 @@ class TestDriftDetected:
         assert r.drift_action == DriftAction.BLOCK
 
     def test_ascending_with_asymmetric_pressure_escalates(self):
+        """
+        Sprint 3 (trend ponderado): sequencia (0,1,2,3,3,3) com K=6
+        produzia trend=60% uniforme mas 40% ponderado (abaixo do threshold).
+        Sequencia corrigida: ultimo step High->Critical — escalada real
+        para nivel critico + pressao assimetrica = BLOCK imediato.
+        Invariante: escalada crescente com pressao -> drift detectado.
+        """
         s = _sentinel(window_k=6, threshold_pct=60)
-        levels = ["None", "Low", "Medium", "High", "High", "High"]
+        levels = ["None", "Low", "Medium", "High", "High", "Critical"]
         for lv in levels:
             r = s.record_and_analyze("s1", lv, "ALLOW")  # ALLOW = pressao eficiencia
         assert r.policy_drift_detected
@@ -68,7 +75,7 @@ class TestDriftDetected:
         assert r.policy_drift_detected
 
 
-# ─── Invariantes ─────────────────────────────────────────────────────────────
+# ─── Invariantes ───────────────────────────────────────────────────────────────────────
 
 class TestInvariants:
     def test_explain_always_present(self):
@@ -102,7 +109,7 @@ class TestInvariants:
         assert DRIFT_SCORE["High"]   in r.drift_score_sequence
 
 
-# ─── Ring buffer e sessoes ────────────────────────────────────────────────────
+# ─── Ring buffer e sessoes ──────────────────────────────────────────────────────────────
 
 class TestWindowBehavior:
     def test_window_bounded_by_k(self):
@@ -129,7 +136,7 @@ class TestWindowBehavior:
         assert r.drift_action == DriftAction.ALLOW
 
 
-# ─── Fail-Secure ─────────────────────────────────────────────────────────────
+# ─── Fail-Secure ──────────────────────────────────────────────────────────────────────
 
 class TestFailSecure:
     def test_fail_secure_on_internal_exception(self, monkeypatch):
@@ -142,7 +149,7 @@ class TestFailSecure:
         assert len(r.signature) == 64
 
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
+# ─── Helpers ─────────────────────────────────────────────────────────────────────────
 
 class TestHelpers:
     def test_trend_pct_ascending(self):

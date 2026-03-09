@@ -85,15 +85,15 @@ def test_sentinel_sees_rust_escalation_trend_after_fix():
 
 def test_sentinel_plateau_not_drift():
     """
-    Plateau em High (trend=50%) NÃO é drift — spec correta.
-    window=(0,1,2,3,3,3,3): suspeito mas abaixo do threshold de 60%.
-    Sprint 3 introduzirá trend ponderado para tratar este caso border.
+    Plateau em High (trend ponderado=28%) NAO e drift — spec correta.
+    Sprint 3: trend ponderado substituiu o uniforme (era 50%).
+    Sprint 3 introduziu _is_burst para tratar este caso border com pressao.
     """
     s = GoalDriftSentinel(SECRET)
     sid = "sess-plateau"
-    for lvl in ["NONE", "LOW", "MEDIUM", "HIGH", "HIGH", "HIGH", "HIGH"]:
+    for lvl in ["None", "Low", "Medium", "High", "High", "High", "High"]:
         report = s.record_and_analyze(sid, lvl, "ALLOW")
-    assert report.trend_pct == 50
+    assert report.trend_pct == 28           # ponderado (Sprint 3)
     assert report.policy_drift_detected is False
 
 
