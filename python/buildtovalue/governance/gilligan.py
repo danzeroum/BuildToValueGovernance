@@ -1,16 +1,23 @@
 """
-Gilligan Ethics Stage v1.0.0 — PROP-030 (Care/Focus).
+Gilligan Ethics Stage v1.1.0 — PROP-030 (Care/Focus).
 
-Nó explícito do Judiciary pipeline para ética do cuidado (Carol Gilligan).
-Posição: após Jonas, antes de Verdict.
+Changelog:
+  v1.0.0: implementacao inicial
+  v1.1.0 (Sprint 5): corrige double-call de _extract_factors().
+    evaluate() usava calculate() + _extract_factors() separadamente,
+    incrementando _violation_history 2x por request.
+    Fix: usa calculate_with_factors() (unica passagem, sem efeito colateral duplo).
 
-Princípios implementados:
-- Contexto > Regra: circunstâncias específicas importam mais que regras abstratas
-- Care/Focus: weighted recovery para decisões de bloqueio
-- Relacionamento: histórico do usuário (first_offense) é fator de mercy
-- Fail-secure: qualquer exceção → bloquear + logar
+No explicito do Judiciary pipeline para etica do cuidado (Carol Gilligan).
+Posicao: apos Jonas, antes de Verdict.
 
-Obrigatório: explain_decision() em GilliganStageResult.
+Principios implementados:
+- Contexto > Regra: circunstancias especificas importam mais que regras abstratas
+- Care/Focus: weighted recovery para decisoes de bloqueio
+- Relacionamento: historico do usuario (first_offense) e fator de mercy
+- Fail-secure: qualquer excecao -> bloquear + logar
+
+Obrigatorio: explain_decision() em GilliganStageResult.
 """
 from __future__ import annotations
 
@@ -25,16 +32,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class GilliganStageResult:
-    """Resultado do estágio Gilligan no pipeline ético."""
+    """Resultado do estagio Gilligan no pipeline etico."""
     mercy_score: float
-    care_focus: str        # "soften" | "maintain" | "block"
+    care_focus: str
     factors: Optional[MercyFactors]
     explanation: str
     passed: bool
     error: Optional[str] = None
 
     def explain_decision(self) -> str:
-        """Obrigatório: explicação auditável da decisão. Conforme ADR-Python."""
+        """Obrigatorio: explicacao auditavel da decisao. Conforme ADR-Python."""
         return (
             f"[Gilligan/Care P-030] care_focus={self.care_focus} "
             f"mercy_score={self.mercy_score:.3f} "
@@ -44,9 +51,9 @@ class GilliganStageResult:
 
 class GilliganStage:
     """
-    Estágio Gilligan do Judiciary pipeline (PROP-030).
+    Estagio Gilligan do Judiciary pipeline (PROP-030).
 
-    Integra MercyCalculator como nó formal explícito, expondo
+    Integra MercyCalculator como no formal explicito, expondo
     care_focus e explain_decision() para o Verdict downstream.
     """
 
@@ -58,25 +65,21 @@ class GilliganStage:
 
     def evaluate(
         self,
-        evidence,  # TechnicalEvidence (evita import circular com ffi_client)
+        evidence,
         context: dict,
         trust_score: float = 0.5,
     ) -> GilliganStageResult:
         """
-        Avalia evidência com ética do cuidado.
+        Avalia evidencia com etica do cuidado.
 
-        Args:
-            evidence: TechnicalEvidence do kernel Rust
-            context:  dict com domain, session_id, etc.
-            trust_score: 0.0–1.0 (confiança do solicitante)
-
-        Returns:
-            GilliganStageResult com explain_decision() obrigatório.
+        Usa calculate_with_factors() para obter (score, factors) em
+        uma unica passagem — evita o bug de double-call onde
+        _is_first_offense() incrementava _violation_history 2x.
         """
         try:
-            mercy_score = self._calc.calculate(evidence, context, trust_score)
-            # _extract_factors é semi-privado por convenção; acesso interno justificado.
-            factors = self._calc._extract_factors(evidence, context, trust_score)
+            mercy_score, factors = self._calc.calculate_with_factors(
+                evidence, context, trust_score
+            )
             care_focus = self._resolve_care_focus(mercy_score, evidence)
             explanation = self._build_explanation(mercy_score, factors, care_focus)
             return GilliganStageResult(
@@ -86,7 +89,7 @@ class GilliganStage:
                 explanation=explanation,
                 passed=True,
             )
-        except Exception as exc:  # noqa: BLE001 — fail-secure intencional
+        except Exception as exc:
             logger.error("GilliganStage error — fail-secure BLOCK: %s", exc)
             return GilliganStageResult(
                 mercy_score=0.0,
@@ -98,7 +101,6 @@ class GilliganStage:
             )
 
     def _resolve_care_focus(self, mercy_score: float, evidence) -> str:
-        """Resolve care_focus baseado em mercy score e critical findings."""
         if getattr(evidence, "critical_count", 0) > 0 and mercy_score < self.SOFTEN_THRESHOLD:
             return "block"
         if mercy_score >= self.SOFTEN_THRESHOLD:

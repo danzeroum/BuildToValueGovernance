@@ -1,10 +1,11 @@
 # python/tests/unit/governance/test_bias_guardian.py
 """
-Testes Unitários para BiasGuardian.
-Valida a aplicação de políticas de segurança e exceções.
+Testes Unitarios para BiasGuardian.
+Valida a aplicacao de politicas de seguranca e excecoes.
 """
 
 import pytest
+from unittest.mock import Mock
 from buildtovalue.governance.bias_guardian import (
     BiasGuardian,
     check_model,
@@ -22,13 +23,11 @@ from buildtovalue.governance.exceptions import (
 
 @pytest.fixture
 def strict_guardian():
-    """Guardião configurado para rejeitar modelos desconhecidos."""
     return BiasGuardian(fail_on_unknown=True)
 
 
 @pytest.fixture
 def loose_guardian():
-    """Guardião configurado para avisar sobre modelos desconhecidos."""
     return BiasGuardian(fail_on_unknown=False)
 
 
@@ -48,23 +47,19 @@ def unknown_model():
 
 
 # ==========================================
-# TESTES: VERIFICAÇÃO DE ELEGIBILIDADE
+# TESTES: VERIFICACAO DE ELEGIBILIDADE
 # ==========================================
 
 class TestBiasGuardianEligibility:
-    """Testa a lógica de elegibilidade."""
 
     def test_legitimate_model_allowed(self, loose_guardian, legitimate_model):
-        """Modelo legítimo deve ser permitido."""
         verdict = loose_guardian.check_eligibility(legitimate_model)
         assert verdict.allowed is True
         assert "Verified legitimate" in verdict.reason
 
     def test_abliterated_model_blocked(self, loose_guardian, abliterated_model):
-        """Modelo abliterated deve ser bloqueado com SecurityViolation."""
         with pytest.raises(SecurityViolation) as exc_info:
             loose_guardian.check_eligibility(abliterated_model)
-
         assert abliterated_model in str(exc_info.value)
 
     def test_unknown_model_warned_in_loose_mode(self, loose_guardian, unknown_model):
@@ -72,37 +67,31 @@ class TestBiasGuardianEligibility:
         verdict = loose_guardian.check_eligibility(unknown_model)
         assert verdict.allowed is True
         assert len(verdict.warnings) > 0
-        assert "Unknown model" in verdict.warnings[0]
+        # Mensagem atual (v1.1+): 'Model not in trusted registry.'
+        assert "trusted registry" in verdict.warnings[0]
 
     def test_unknown_model_blocked_in_strict_mode(self, strict_guardian, unknown_model):
-        """Modelo desconhecido deve ser bloqueado em modo strict."""
         with pytest.raises(IntegrityCheckFailed) as exc_info:
             strict_guardian.check_eligibility(unknown_model)
-
         assert unknown_model in str(exc_info.value)
 
 
 # ==========================================
-# TESTES: EXECUÇÃO SEGURA
+# TESTES: EXECUCAO SEGURA
 # ==========================================
 
 class TestSafeEvaluation:
-    """Testa a função run_safe."""
 
     def test_safe_eval_runs_for_legitimate(self, loose_guardian, legitimate_model):
-        """Deve executar a função para modelo legítimo."""
         mock_func = lambda: "result"
         result = loose_guardian.safe_evaluate(legitimate_model, mock_func)
         assert result == "result"
 
     def test_safe_eval_blocks_for_abliterated(self, loose_guardian, abliterated_model):
-        """Deve levantar exceção antes de executar para modelo abliterated."""
+        """Deve levantar excecao antes de executar para modelo abliterated."""
         mock_func = Mock()
-
         with pytest.raises(SecurityViolation):
             loose_guardian.safe_evaluate(abliterated_model, mock_func)
-
-        # Garante que a função NUNCA foi chamada
         mock_func.assert_not_called()
 
 
@@ -111,7 +100,6 @@ class TestSafeEvaluation:
 # ==========================================
 
 class TestGlobalAPI:
-    """Testa os atalhos globais."""
 
     def test_check_model_returns_verdict(self, legitimate_model):
         verdict = check_model(legitimate_model)
