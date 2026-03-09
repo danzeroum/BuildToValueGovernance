@@ -188,6 +188,7 @@ pub enum ValidatorModule {
     OutputGuard,
     // LGPD Compliance
     Consent,
+    ConsentRevocation,
     SensitiveData,
     InternationalTransfer,
     DataAccessRequest,
