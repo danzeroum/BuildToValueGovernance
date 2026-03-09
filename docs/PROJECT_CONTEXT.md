@@ -1,7 +1,7 @@
-# PROJECT_CONTEXT.md — BuildToValue v2.1.2
+# PROJECT_CONTEXT.md — BuildToValue v2.2.0
 
 > Documento de contexto para AI Squad. Colar no início de cada chat de IA.
-> Última atualização: 08 março 2026.
+> Última atualização: 08 março 2026 (sessão noturna).
 
 ## O que é
 
@@ -24,12 +24,26 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 
 **Structs canônicos (tamanhos verificados compile-time):**
 
-| Struct | Tamanho | Arquivo |
+| Struct | Tamanho | Arquivo | Nota |
 |:---|:---|:---|
-| TechnicalEvidence | 9600 bytes | evidence/technical.rs |
-| ScanContextFlags | 64 bytes | core/module.rs |
-| Finding | 144 bytes | evidence/finding.rs |
-| LedgerEntry | 384 bytes | ledger/entry.rs |
+| TechnicalEvidence | 9600 bytes | evidence/technical.rs | — |
+| ScanContextFlags | 64 bytes | core/module.rs | — |
+| Finding | 144 bytes | evidence/finding.rs | — |
+| LedgerEntry | 384 bytes | ledger/entry.rs | `verdict_id [u8;32]` adicionado, `_reserved` 196→164 (ADR-043) |
+
+**LedgerEntry v2.4.0 (ADR-043):**
+- `verdict_id: [u8; 32]` — HMAC-SHA256(signing_key, evidence_hash ‖ action_u8 ‖ trail_id)
+- `finalize()` — computa `entry_hash` + `verdict_id` com chave zero (default seguro)
+- `finalize_with_key(signing_key)` — produção com chave do operador (ADR-042)
+- `validate()` / `validate_with_key()` — verificam `entry_hash` + `verdict_id`
+- `_reserved` 196→164 bytes (total 384 mantido)
+
+**EthicalVerdict enum (types.rs):**
+`Pending=0 | Allow=1 | Educate=2 | Redact=3 | Block=4 | Report=5 (ADR-043)`
+- `Report`: flagging auditável sem alteração de output, SLA 24h
+
+**ActionType enum (ledger/entry.rs):**
+`Allow=0 | Log=1 | Educate=2 | Redact=3 | Block=4 | Report=5 (ADR-043)`
 
 **ScanContextFlags (ADR-032):**
 - `lang_bitmask` (u64): idiomas detectados (EN=bit0, PT=bit1, ES=bit2...)
@@ -51,6 +65,8 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 - PatternRegistry integrado: `REGISTRY.load()` → `snap.epoch` → `ctx.flags.pattern_epoch`
 - OutputGuard: sanitização XSS/injection + PII masking
 - SessionGuard: proteção hijacking (30min timeout)
+- `supply_guard.rs` (PROP-031): BLAKE3 keyed-MAC + registry lookup, fail-secure
+- `model_integrity.rs` (ADR-051 Fase 1): BLAKE3 hash de manifesto, fail-secure, ring buffer 256 eventos
 
 ### Python Governance (python/buildtovalue/)
 
@@ -58,8 +74,15 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 
 | Arquivo | Versão | Uso |
 |:---|:---|:---|
-| `context_engine.py` | v1.8 (pipeline Mercy) | `app.py` via `EthicalContextEngine(signing_key=...)` |
+| `context_engine.py` | v1.9.0 (pipeline Mercy + REPORT) | `app.py` via `EthicalContextEngine(signing_key=...)` |
 | `ethical_context_engine.py` | v1.0 (unified technical+governance) | `EthicalContextEngineV3` alias, testes v3 |
+
+**EthicalContextEngine v1.9.0 (ADR-043):**
+- `report_threshold: float = 0.65` — configurável via Policy (ADR-042)
+- Step 5b: `ALLOW + composite_risk >= report_threshold + finding_count > 0` → `REPORT`
+- `EthicalVerdict.report_triggered: bool` — rastreável em `to_dict()`
+- `explain_decision()` documenta REPORT com SLA 24h
+- BLOCK/REDACT/EDUCATE **nunca** são downgraded para REPORT
 
 **Pipeline filosófico (ADR-038, spec — integração parcial):**
 - RawlsStage: Blind testing, detecta anomalias policy/evidence
@@ -91,6 +114,22 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 - v2.0: `/v1/decide`, `/v1/appeals` (CRUD + metrics), `/health/bias`, `/v1/trust/:session`
 - Middleware: ApiKeyLayer, RateLimitLayer (per-IP, per-tenant), CORS, Timeout 20s
 
+### Policy-as-Code (data/policies/)
+
+**governance_v1.yaml — regras ativas:**
+- GOV-001: `composite_risk > 0.9` → BLOCK (Jonas)
+- GOV-002: `composite_risk > 0.7` → ESCALATE/REPORT (Rawls, anotado ADR-043)
+- GOV-003: PII detectado → REDACT (Levinas)
+- GOV-004: Prompt injection → BLOCK (Jonas)
+- GOV-005: Supply chain não verificada → BLOCK (Jonas)
+- GOV-006: Goal drift crítico → BLOCK (Jonas)
+- GOV-007: Persuasion attack → ESCALATE (Levinas)
+- **GOV-008**: `composite_risk [0.65–0.90] + ALLOW + findings > 0` → REPORT (ADR-043)
+  — `output_altered: false`, `contestable: true`, `escalates_to_human: true`
+
+**default.yaml — governance.report_threshold (ADR-043):**
+`report_threshold: 0.65 | min: 0.50 | max: 0.85 | sla_hours: 24`
+
 ### Testes
 
 - Rust: `cargo test --workspace` — 357+ testes
@@ -98,7 +137,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 - E2E: `ops/e2e-tests.sh` — 27 testes (21 pass, 4 fail, 2 skip — mercy/compliance gaps conhecidos)
 - Red-team: `ops/red-team/run-all.sh` — RT-001..RT-008
 
-### ADRs (42 total)
+### ADRs (44 total)
 
 | Grupo | IDs | Status |
 |:---|:---|:---|
@@ -114,8 +153,24 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 | K: Red-team & Governance | 036-039 | ✅ Implementados |
 | L: Gateway & Obs v2.0 | 040-041 | ✅ Implementados |
 | M: Policy Automation | 042 | ✅ Implementado (21 testes, CaseCategory, CI gate) |
-| N: Effect + CoT Safety | 0048-0049 | ✅ Implementados (PROP-029, PROP-037) |
-| O: Model Integrity | 052 | ✅ Implementado (fail-secure UNKNOWN→BLOCK, blacklist Heretic +6, ops/ci_gate_g0.py) |
+| **N: Unified Verdict Identity** | **043** | ✅ **Implementado completo (Rust + Python + Policy)** |
+| O: Effect + CoT Safety | 0048-0049 | ✅ Implementados (PROP-029, PROP-037) |
+| P: Model Integrity Verifier | 051 | ✅ Fase 1 (`model_integrity.rs`, BLAKE3, ring buffer 256 eventos) |
+| Q: Model Integrity CI | 052 | ✅ Implementado (fail-secure UNKNOWN→BLOCK, blacklist Heretic +6, ops/ci_gate_g0.py) |
+
+### Commits desta sessão (2026-03-08)
+
+| Commit | Artefato |
+|:---|:---|
+| `61a81b9` | ConsentValidator + ConsentRevocationValidator (LGPD Art.7/Art.8§5) |
+| `d7991cc` | PROJECT_CONTEXT.md v2.1.2 |
+| `7ad82f3` | ADR-051 Model Integrity (documento) |
+| `4e3500e` | `model_integrity.rs` BLAKE3 — ADR-051 Fase 1 |
+| `45bdb8b` | ADR-043 Unified Verdict Identity (documento) |
+| `5baf141` | `EthicalVerdict::Report=5` + `verdict_id` struct + `ActionType::Report=5` |
+| `2228139` | `verdict_id` HMAC-SHA256 em `finalize()` + `validate()` + 7 testes |
+| `038ac45` | `EthicalContextEngine v1.9.0` — emite `REPORT`, `report_triggered` |
+| `a1adae8` | `GOV-008 REPORT` + `report_threshold=0.65` em policies YAML |
 
 ### Débitos Técnicos Ativos
 
@@ -128,6 +183,16 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 | DT-005 | `ethical_context_engine.py` excede 200 linhas | Média | Decomposição T1.3 |
 | DT-006 | `bridge.rs` em bindings/ tem placeholder Gatekeeper (não usa real) | ✅ Fechado — falso positivo (já usa Gatekeeper real, v2.0) | — |
 | DT-007 | Trait `Validator` legado coexiste com `Module` | ✅ Fechado v2.1.1 | — |
+
+### Roadmap Pendente
+
+| Item | Release | ADR |
+|:---|:---:|:---:|
+| ADR-051 Fase 2 — `abliteration_detector.py` refusal probe + LoRA scan | v1.7.0 | ADR-051 |
+| ADR-051 Fase 3 — Contestability flow manifesto alternativo | v1.7.0 | ADR-051 |
+| DT-004 — E2E 4 failures (mercy/compliance schema mismatch) | v1.6.0 | — |
+| DT-005 — `ethical_context_engine.py` decomposição T1.3 | v1.6.0 | — |
+| `report_threshold` lido dinamicamente do YAML pelo engine | v1.6.0 | ADR-043 |
 
 ### Anti-padrões Proibidos
 
@@ -145,7 +210,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 ### Dependências Principais
 
 **Rust (Cargo.toml workspace):**
-blake3, arc_swap, whatlang, regex, lazy_static, static_assertions, phf, pyo3, serde, axum, tower-http, prometheus, reqwest
+blake3, arc_swap, whatlang, regex, lazy_static, static_assertions, phf, pyo3, serde, axum, tower-http, prometheus, reqwest, hmac, sha2, ring
 
 **Python (pyproject.toml):**
 fastapi, uvicorn, pyyaml, prometheus-client, httpx, pydantic, llama-cpp-python (optional)
