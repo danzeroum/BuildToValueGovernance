@@ -1,0 +1,46 @@
+# ADR-042 — Policy-as-Code: Model Integrity & Abliteration Detection
+# Rawls: contrato social verificável para integridade de modelos de IA
+# Jonas: responsabilidade pela cadeia de custódia do modelo
+#
+# Carregado por PolicyEngine._load_policies via rglob (v1.1.0+)
+
+governance:
+  model_integrity:
+    verification_enabled: true
+    block_on_failure: true
+    models:
+      phi-3-mini-v1:
+        manifest_path: "data/manifests/phi-3-mini-v1.json"
+        expected_hash_env: "BTV_PHI3_MANIFEST_HASH"
+  abliteration:
+    refusal_threshold: 0.6
+    refusal_threshold_min: 0.4
+    refusal_threshold_max: 0.9
+    probe_timeout_ms: 5000
+
+rules:
+  - rule_id: MODEL_INTEGRITY_HASH_MISMATCH
+    description: >-
+      Hash do manifesto do modelo nao coincide com o esperado —
+      possivel adulteracao ou substituicao nao autorizada (Jonas: responsabilidade).
+      Acao: BLOCK imediato, contestavel SLA 24h (Rawls).
+    action: BLOCK
+    severity: critical
+    condition_field: model_hash_mismatch
+    condition_operator: eq
+    condition_value: "true"
+    adr_refs:
+      - ADR-042
+
+  - rule_id: MODEL_ABLITERATION_DETECTED
+    description: >-
+      Padrao de abliteration detectado — modelo pode ter seu alinhamento
+      etico removido intencionalmente (Levinas: responsabilidade pelo outro).
+      Acao: BLOCK imediato, contestavel SLA 24h (Rawls).
+    action: BLOCK
+    severity: critical
+    condition_field: abliteration_detected
+    condition_operator: eq
+    condition_value: "true"
+    adr_refs:
+      - ADR-042

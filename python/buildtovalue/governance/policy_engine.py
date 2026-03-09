@@ -1,4 +1,4 @@
-"""PolicyEngine v1.0.0 — ADR-011 (Policy-as-Code / Legislativo)
+"""PolicyEngine v1.1.0 — ADR-011 + ADR-042 (Policy-as-Code / Legislativo)
 
 Republica Algoritmica — ramo Legislativo.
 Carrega politicas YAML (Rawls), avalia contexto etico, retorna
@@ -9,6 +9,13 @@ Invariantes:
 - explain_decision() em todos os caminhos (Levinas)
 - HMAC-SHA256 sobre resultado (Jonas: responsabilidade assinada)
 - funcoes <= 50 linhas, zero bare except, zero Any sem justificativa
+
+v1.1.0 (ADR-042):
+- ModelConfig, ModelIntegrityConfig, AbliterationConfig — dataclasses frozen
+- _load_policies usa rglob para carregar subdiretorios (ex: security/)
+- Novos accessors: .model_integrity, .abliteration, .abliteration_threshold,
+  .manifest_path_for(model_id)
+- AbliterationDetector e ModelIntegrityVerifier NAO alterados neste ciclo
 """
 from __future__ import annotations
 
@@ -69,6 +76,47 @@ class PolicyEvalResult:
         return self.explain
 
 
+# ---------------------------------------------------------------------------
+# ADR-042: Typed accessors para Model Integrity e Abliteration
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ModelConfig:
+    """Configuracao por modelo: manifest_path e env var para hash esperado."""
+    manifest_path: str
+    expected_hash_env: str
+
+
+@dataclass(frozen=True)
+class ModelIntegrityConfig:
+    """ADR-042: Configuracao tipada de integridade de modelo.
+
+    Rawls: verificacao de integridade como contrato social — nenhum modelo
+    opera sem hash validado quando verification_enabled=True.
+    Jonas: defaults conservadores (verification_enabled=True, block_on_failure=True).
+    """
+    verification_enabled: bool
+    block_on_failure: bool
+    models: Dict[str, ModelConfig]  # Dict justificado: chave = model_id (str dinamico)
+
+
+@dataclass(frozen=True)
+class AbliterationConfig:
+    """ADR-042: Configuracao tipada de deteccao de abliteration.
+
+    refusal_threshold e clamped entre refusal_threshold_min e
+    refusal_threshold_max para evitar configuracao insegura.
+    """
+    refusal_threshold: float        # clamped no accessor — nunca fora de [min, max]
+    refusal_threshold_min: float
+    refusal_threshold_max: float
+    probe_timeout_ms: int
+
+
+# ---------------------------------------------------------------------------
+# PolicyEngine
+# ---------------------------------------------------------------------------
+
 class PolicyEngine:
     """
     Motor de politicas runtime — ADR-011.
@@ -83,7 +131,7 @@ class PolicyEngine:
     def __init__(self, policies_dir: Optional[Path] = None) -> None:
         self._rules: List[PolicyRule] = []
         self._policy_source: str = "none"
-        # ADR-043: configuração de governança lida dos YAMLs (campo governance:)
+        # ADR-043: configuracao de governanca lida dos YAMLs (campo governance:)
         self._governance_config: dict = {}
         _dir = policies_dir or (
             Path(__file__).parent.parent.parent.parent / "data" / "policies"
@@ -91,10 +139,10 @@ class PolicyEngine:
         self._load_policies(_dir)
 
     def _load_policies(self, policies_dir: Path) -> None:
-        """Carrega YAMLs de politicas. Fail-secure: parse error -> skip (nao BLOCK)."""
+        """Carrega YAMLs recursivamente (rglob). Fail-secure: parse error -> skip."""
         if not policies_dir.exists():
             return
-        for yaml_file in sorted(policies_dir.glob("*.yaml")):
+        for yaml_file in sorted(policies_dir.rglob("*.yaml")):
             try:
                 self._parse_policy_file(yaml_file)
             except Exception:
@@ -122,15 +170,19 @@ class PolicyEngine:
                 self._policy_source = yaml_file.name
             except (KeyError, ValueError):
                 continue
-        # ADR-043: ler configuração de governança (governance:) se presente
+        # ADR-043 + ADR-042: ler configuracao de governanca (governance:) se presente
         if "governance" in data and isinstance(data["governance"], dict):
             self._governance_config.update(data["governance"])
 
+    # -----------------------------------------------------------------------
+    # Properties existentes
+    # -----------------------------------------------------------------------
+
     @property
     def report_threshold(self) -> float:
-        """ADR-043: threshold para emissão de REPORT, lido do YAML.
+        """ADR-043: threshold para emissao de REPORT, lido do YAML.
         Respeita floor (min) e ceiling (max) definidos na policy.
-        Default 0.65 se não configurado.
+        Default 0.65 se nao configurado.
         """
         raw = self._governance_config.get("report_threshold", 0.65)
         floor = self._governance_config.get("report_threshold_min", 0.50)
@@ -140,6 +192,76 @@ class PolicyEngine:
         except (TypeError, ValueError):
             value = 0.65
         return max(floor, min(ceiling, value))
+
+    # -----------------------------------------------------------------------
+    # ADR-042: Novos accessors tipados
+    # -----------------------------------------------------------------------
+
+    @property
+    def model_integrity(self) -> ModelIntegrityConfig:
+        """ADR-042: Configuracao tipada de integridade de modelo.
+
+        Fail-secure (Jonas): defaults conservadores quando YAML ausente —
+        verification_enabled=True, block_on_failure=True.
+        """
+        cfg: dict = self._governance_config.get("model_integrity", {})
+        raw_models: dict = cfg.get("models", {}) if isinstance(cfg, dict) else {}
+        models: Dict[str, ModelConfig] = {}
+        for model_id, mcfg in raw_models.items():
+            if isinstance(mcfg, dict):
+                models[str(model_id)] = ModelConfig(
+                    manifest_path=str(mcfg.get("manifest_path", "")),
+                    expected_hash_env=str(mcfg.get("expected_hash_env", "")),
+                )
+        return ModelIntegrityConfig(
+            verification_enabled=bool(cfg.get("verification_enabled", True)),
+            block_on_failure=bool(cfg.get("block_on_failure", True)),
+            models=models,
+        )
+
+    @property
+    def abliteration(self) -> AbliterationConfig:
+        """ADR-042: Configuracao tipada de deteccao de abliteration.
+
+        refusal_threshold e clamped entre min e max.
+        Fail-secure: defaults conservadores se nao configurado.
+        """
+        cfg: dict = self._governance_config.get("abliteration", {})
+        if not isinstance(cfg, dict):
+            cfg = {}
+        try:
+            value = float(cfg.get("refusal_threshold", 0.6))
+            floor_f = float(cfg.get("refusal_threshold_min", 0.4))
+            ceiling_f = float(cfg.get("refusal_threshold_max", 0.9))
+        except (TypeError, ValueError):
+            value, floor_f, ceiling_f = 0.6, 0.4, 0.9
+        clamped = max(floor_f, min(ceiling_f, value))
+        return AbliterationConfig(
+            refusal_threshold=clamped,
+            refusal_threshold_min=floor_f,
+            refusal_threshold_max=ceiling_f,
+            probe_timeout_ms=int(cfg.get("probe_timeout_ms", 5000)),
+        )
+
+    @property
+    def abliteration_threshold(self) -> float:
+        """ADR-042: atalho para refusal_threshold clamped — espelha report_threshold."""
+        return self.abliteration.refusal_threshold
+
+    def manifest_path_for(self, model_id: str) -> Optional[str]:
+        """ADR-042: retorna manifest_path para model_id, ou None se ausente.
+
+        Retorna None em vez de lancar excecao — fail-secure sem BLOCK:
+        a ausencia de manifest e tratada pelo ModelIntegrityVerifier.
+        """
+        model_cfg = self.model_integrity.models.get(model_id)
+        if model_cfg is None:
+            return None
+        return model_cfg.manifest_path if model_cfg.manifest_path else None
+
+    # -----------------------------------------------------------------------
+    # Core evaluation (inalterado de v1.0.0)
+    # -----------------------------------------------------------------------
 
     def evaluate(
         self,
