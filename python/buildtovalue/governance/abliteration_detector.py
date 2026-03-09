@@ -1,5 +1,5 @@
 """
-abliteration_detector.py — AbliterationDetector v1.1.0 (ADR-051 + ADR-042)
+abliteration_detector.py — AbliterationDetector v1.2.0 (ADR-051 + ADR-042)
 
 Detecta modelos abliterados (safety alignment removido via refusal probe).
 Abliteration: técnica que remove o "refusal direction" do espaço de ativações
@@ -9,7 +9,7 @@ Refusal Probe: conjunto calibrado de prompts probe que modelos com safety
 alignment recusam. Score abaixo do threshold → modelo possivelmente abliterado.
 
 Filosofia:
-  Jonas:  fail-secure — exception → is_abliterated=True
+  Jonas:  fail-secure — exception/timeout → resposta vazia (= recusou)
   Levinas: explain_decision() obrigatório em todo resultado
   Rawls:  mesma probe para todos os modelos (blind evaluation)
   ADR-051: IntegrityVerifier pipeline
@@ -17,12 +17,18 @@ Filosofia:
 v1.1.0 (ADR-042):
   - refusal_threshold lido via policy_engine.abliteration_threshold (accessor tipado)
   - _probe_timeout_ms lido via policy_engine.abliteration.probe_timeout_ms
-  - Substitui getattr(..., 'abliteration_refusal_threshold', ...) que era best-effort
+
+v1.2.0 (ADR-042 Fase 2):
+  - probe_with_fn: timeout enforçado via threading.Thread + queue.Queue
+  - _run_probe_with_timeout: thread daemon, queue.Empty = fail-secure (= recusou)
+  - Timeout lido de _probe_timeout_ms — cross-platform (sem signal.alarm)
 """
 from __future__ import annotations
 
 import logging
+import queue
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
@@ -169,10 +175,11 @@ class AbliterationDetector:
     """Detecta modelos abliterados via refusal probe (ADR-051 Fase 2).
 
     Invariantes:
-    - Fail-secure: exception → is_abliterated=True (Jonas)
+    - Fail-secure: exception/timeout → resposta vazia = recusou (Jonas)
     - explain_decision() obrigatório em todo resultado (Levinas)
     - Mesma probe para todos os modelos (Rawls: blind evaluation)
     - Threshold configurável via PolicyEngine.abliteration_threshold (ADR-042)
+    - Probe timeout enforçado via threading (ADR-042 Fase 2)
     - Probe catalog extensível via add_probe() (ADR-051 §5)
     """
 
@@ -185,7 +192,7 @@ class AbliterationDetector:
     ) -> None:
         self._probes: List[RefusalProbeQuestion] = list(probes or _DEFAULT_PROBES)
         if policy_engine is not None:
-            # ADR-042: accessor tipado — substitui getattr best-effort anterior
+            # ADR-042: accessors tipados — threshold + timeout do YAML
             refusal_threshold = policy_engine.abliteration_threshold
             self._probe_timeout_ms: int = policy_engine.abliteration.probe_timeout_ms
         else:
@@ -222,20 +229,51 @@ class AbliterationDetector:
         model_id: str,
         response_fn: Callable[[str], str],
     ) -> AbliterationResult:
-        """Avalia modelo ao vivo via função de resposta (ex: chamada LLM).
+        """Avalia modelo ao vivo com timeout por probe (ADR-042 Fase 2).
 
-        Fail-secure: exception na response_fn → resposta vazia (= recusou).
+        Fail-secure: timeout ou exception → resposta vazia (= recusou).
+        Timeout lido de _probe_timeout_ms (PolicyEngine.abliteration.probe_timeout_ms).
         """
-        responses: Dict[str, str] = {}
-        for probe in self._probes:
-            try:
-                responses[probe.probe_id] = response_fn(probe.prompt)
-            except Exception as exc:
-                logger.warning("probe_fn failed for %s: %s", probe.probe_id, exc)
-                responses[probe.probe_id] = ""
+        timeout_s = self._probe_timeout_ms / 1000.0
+        responses: Dict[str, str] = {
+            probe.probe_id: self._run_probe_with_timeout(probe, response_fn, timeout_s)
+            for probe in self._probes
+        }
         return self.evaluate_responses(model_id, responses)
 
     # ── Internals ─────────────────────────────────────────────────────────────
+
+    def _run_probe_with_timeout(
+        self,
+        probe: RefusalProbeQuestion,
+        response_fn: Callable[[str], str],
+        timeout_s: float,
+    ) -> str:
+        """Executa probe com timeout via threading.Thread + queue.Queue.
+
+        Cross-platform: não usa signal.alarm (indisponível no Windows).
+        Thread é daemon — não bloqueia encerramento do processo.
+        Timeout → queue.Empty → string vazia (fail-secure: recusou).
+        """
+        q: queue.Queue[str] = queue.Queue(maxsize=1)
+
+        def _target() -> None:
+            try:
+                q.put(response_fn(probe.prompt))
+            except Exception as exc:
+                logger.warning("probe_fn failed for %s: %s", probe.probe_id, exc)
+                q.put("")
+
+        t = threading.Thread(target=_target, daemon=True)
+        t.start()
+        try:
+            return q.get(timeout=timeout_s)
+        except queue.Empty:
+            logger.warning(
+                "probe %s timed out after %.1fs — fail-secure: treated as refusal",
+                probe.probe_id, timeout_s,
+            )
+            return ""
 
     def _evaluate_internal(
         self,
