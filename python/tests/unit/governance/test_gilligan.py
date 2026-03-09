@@ -1,5 +1,5 @@
 """
-Tests for GilliganStage v1.0.0 — PROP-030 (Care/Focus).
+Tests for GilliganStage v1.1.0 — PROP-030 (Care/Focus).
 6 casos: soften, maintain, block, fail-secure, explain_decision, critical_block.
 """
 from unittest.mock import patch
@@ -52,7 +52,9 @@ class TestGilliganStage:
 
     def test_fail_secure_on_exception(self):
         stage = GilliganStage()
-        with patch.object(stage._calc, "calculate", side_effect=RuntimeError("boom")):
+        # evaluate() chama calculate_with_factors(), nao calculate().
+        # Patch deve apontar para o metodo realmente invocado.
+        with patch.object(stage._calc, "calculate_with_factors", side_effect=RuntimeError("boom")):
             result = stage.evaluate(_evidence(), _ctx(), trust_score=0.5)
         assert result.passed is False
         assert result.care_focus in ("maintain", "block")
