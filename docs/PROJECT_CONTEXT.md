@@ -1,7 +1,8 @@
-# PROJECT_CONTEXT.md — BuildToValue v2.2.0
+
+# PROJECT_CONTEXT.md — BuildToValue v2.4.0
 
 > Documento de contexto para AI Squad. Colar no início de cada chat de IA.
-> Última atualização: 08 março 2026 (sessão noturna).
+> Última atualização: 08 março 2026 (sessão noturna — YAML-driven threshold pattern consolidado).
 
 ## O que é
 
@@ -25,7 +26,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 **Structs canônicos (tamanhos verificados compile-time):**
 
 | Struct | Tamanho | Arquivo | Nota |
-|:---|:---|:---|
+|:---|:---|:---|:---|
 | TechnicalEvidence | 9600 bytes | evidence/technical.rs | — |
 | ScanContextFlags | 64 bytes | core/module.rs | — |
 | Finding | 144 bytes | evidence/finding.rs | — |
@@ -74,15 +75,45 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 
 | Arquivo | Versão | Uso |
 |:---|:---|:---|
-| `context_engine.py` | v1.9.0 (pipeline Mercy + REPORT) | `app.py` via `EthicalContextEngine(signing_key=...)` |
+| `context_engine.py` | v1.9.1 (YAML-driven threshold) | `app.py` via `EthicalContextEngine(signing_key=..., policy_engine=...)` |
 | `ethical_context_engine.py` | v1.0 (unified technical+governance) | `EthicalContextEngineV3` alias, testes v3 |
 
-**EthicalContextEngine v1.9.0 (ADR-043):**
-- `report_threshold: float = 0.65` — configurável via Policy (ADR-042)
+**EthicalContextEngine v1.9.1 (ADR-043):**
+- `__init__` aceita `policy_engine: Optional[PolicyEngine] = None`
+- `report_threshold` lido de `policy_engine.report_threshold` se fornecido; fallback `0.65` (backward compat total)
 - Step 5b: `ALLOW + composite_risk >= report_threshold + finding_count > 0` → `REPORT`
 - `EthicalVerdict.report_triggered: bool` — rastreável em `to_dict()`
 - `explain_decision()` documenta REPORT com SLA 24h
 - BLOCK/REDACT/EDUCATE **nunca** são downgraded para REPORT
+
+**PolicyEngine v1.1.0 (ADR-043):**
+- `_governance_config: dict` — lido do campo `governance:` de qualquer YAML em `data/policies/`
+- `report_threshold` property: `max(floor, min(ceiling, raw))` com defaults `floor=0.50`, `ceiling=0.85`
+- Fail-secure: YAML malformado → skip, `_governance_config` permanece `{}` → fallback `0.65`
+
+**AbliterationDetector / IntegrityVerifier v1.1.0 (ADR-051 — sessão 2026-03-08 noturna):**
+- `AbliterationDetector.__init__` aceita `policy_engine: Optional[PolicyEngine] = None`
+- `_refusal_threshold`: lido de `model_integrity_refusal_threshold` do YAML; floor `0.50`, ceiling `0.95`; fallback `0.70`
+- `_sample_size`: lido de `model_integrity_sample_size` do YAML; fallback `len(PROBE_PROMPTS)`
+- `IntegrityVerifier.__init__` repassa `policy_engine` ao `AbliterationDetector`
+- `verify_model_integrity()` API pública aceita `policy_engine` opcional
+- `PROBE_PROMPTS` e `refusal_markers` permanecem constantes internas (dados sensíveis de segurança — nunca em YAML público)
+- Blacklist/whitelist inalteradas; backward compat total
+
+**Padrão YAML-driven threshold (consolidado — ADR-043 + ADR-051):**
+```
+default.yaml  governance:
+  meu_threshold: X.XX
+  meu_threshold_min: X.XX   ← floor
+  meu_threshold_max: X.XX   ← ceiling
+
+PolicyEngine._governance_config  ← lê automaticamente
+↓
+MeuComponente.__init__(policy_engine=None)
+  → gc.get("meu_threshold", FALLBACK)
+  → max(floor, min(ceiling, valor))
+  → sem policy_engine → usa constante (backward compat)
+```
 
 **Pipeline filosófico (ADR-038, spec — integração parcial):**
 - RawlsStage: Blind testing, detecta anomalias policy/evidence
@@ -127,8 +158,18 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 - **GOV-008**: `composite_risk [0.65–0.90] + ALLOW + findings > 0` → REPORT (ADR-043)
   — `output_altered: false`, `contestable: true`, `escalates_to_human: true`
 
-**default.yaml — governance.report_threshold (ADR-043):**
-`report_threshold: 0.65 | min: 0.50 | max: 0.85 | sla_hours: 24`
+**default.yaml — 8 campos configuráveis em `governance:` (ADR-043 + ADR-051):**
+```yaml
+governance:
+  report_threshold: 0.65          # EthicalContextEngine — floor 0.50 / ceiling 0.85
+  report_threshold_min: 0.50
+  report_threshold_max: 0.85
+  report_sla_hours: 24            # Contestability SLA (ADR-017)
+  model_integrity_refusal_threshold: 0.70   # AbliterationDetector — floor 0.50 / ceiling 0.95
+  model_integrity_refusal_threshold_min: 0.50
+  model_integrity_refusal_threshold_max: 0.95
+  model_integrity_sample_size: 3  # Nº de probes por verificação
+```
 
 ### Testes
 
@@ -153,9 +194,9 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 | K: Red-team & Governance | 036-039 | ✅ Implementados |
 | L: Gateway & Obs v2.0 | 040-041 | ✅ Implementados |
 | M: Policy Automation | 042 | ✅ Implementado (21 testes, CaseCategory, CI gate) |
-| **N: Unified Verdict Identity** | **043** | ✅ **Implementado completo (Rust + Python + Policy)** |
+| **N: Unified Verdict Identity** | **043** | ✅ **Implementado completo (Rust + Python + Policy + YAML-driven threshold)** |
 | O: Effect + CoT Safety | 0048-0049 | ✅ Implementados (PROP-029, PROP-037) |
-| P: Model Integrity Verifier | 051 | ✅ Fase 1 (`model_integrity.rs`, BLAKE3, ring buffer 256 eventos) |
+| P: Model Integrity Verifier | 051 | ✅ Fase 1 completa + thresholds YAML-driven (ADR-043 pattern) |
 | Q: Model Integrity CI | 052 | ✅ Implementado (fail-secure UNKNOWN→BLOCK, blacklist Heretic +6, ops/ci_gate_g0.py) |
 
 ### Commits desta sessão (2026-03-08)
@@ -171,6 +212,9 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 | `2228139` | `verdict_id` HMAC-SHA256 em `finalize()` + `validate()` + 7 testes |
 | `038ac45` | `EthicalContextEngine v1.9.0` — emite `REPORT`, `report_triggered` |
 | `a1adae8` | `GOV-008 REPORT` + `report_threshold=0.65` em policies YAML |
+| `97d64c7` | PROJECT_CONTEXT.md v2.2.0 |
+| `230b402` | `PolicyEngine._governance_config` + `report_threshold` property (floor/ceiling) + `EthicalContextEngine` aceita `policy_engine` opcional |
+| `3eeac64` | **`AbliterationDetector._refusal_threshold` + `_sample_size` YAML-driven; `IntegrityVerifier` + `verify_model_integrity()` aceitam `policy_engine`** |
 
 ### Débitos Técnicos Ativos
 
@@ -192,7 +236,6 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 | ADR-051 Fase 3 — Contestability flow manifesto alternativo | v1.7.0 | ADR-051 |
 | DT-004 — E2E 4 failures (mercy/compliance schema mismatch) | v1.6.0 | — |
 | DT-005 — `ethical_context_engine.py` decomposição T1.3 | v1.6.0 | — |
-| `report_threshold` lido dinamicamente do YAML pelo engine | v1.6.0 | ADR-043 |
 
 ### Anti-padrões Proibidos
 
@@ -206,6 +249,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 - Singleton global em módulos Python de runtime (usar `IntegrityVerifier()` por chamada ou `Depends()` no FastAPI)
 - Referência a 9596 ou 9632 bytes (valor correto: 9600)
 - `lazy_static!` para patterns que podem usar `PatternRegistry` (ADR-033)
+- Thresholds de risco hardcoded em Python (usar padrão YAML-driven — veja PolicyEngine._governance_config)
 
 ### Dependências Principais
 
