@@ -91,9 +91,14 @@ class TestIntegrityVerifier:
         """Modelo abliterated deve falhar na verificação."""
         assert verify_model_integrity(abliterated_model_id) is False
 
-    def test_verify_unknown_model_passes_by_default(self, unknown_model_id):
-        """Modelo desconhecido deve passar por padrão (fail-open policy)."""
-        assert verify_model_integrity(unknown_model_id) is True
+    def test_verify_unknown_model_blocked_fail_secure(self, unknown_model_id):
+        """Modelo desconhecido deve ser BLOQUEADO (fail-secure — Jonas)."""
+        assert verify_model_integrity(unknown_model_id) is False
+
+    def test_verify_unknown_model_with_legitimate_callable_blocked(self, unknown_model_id):
+        """Modelo desconhecido sem generate_func → bloqueado mesmo com callable vazio."""
+        # AbliterationDetector sem generate_func retorna True (suspeito) → IntegrityVerifier bloqueia
+        assert verify_model_integrity(unknown_model_id, model_callable=None) is False
 
 
 # ==========================================
