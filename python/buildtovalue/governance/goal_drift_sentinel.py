@@ -16,6 +16,9 @@ Invariantes:
 Changelog:
   v1.1.0 (Sprint 0, Gaps 2/4/15): normalize_drift_level + normalize_action
   v1.2.0 (Sprint 3): _compute_trend_pct ponderado + _is_burst + burst condition
+  v1.3.0 (Sprint 5, Gaps 1/9): SessionManager LRU+TTL — sessões expiradas
+    são evictadas; ring buffer não polui com histórico obsoleto.
+    max_sessions=10_000, ttl_s=1800 (alinhado com SessionTracker Rust).
 
 Filosofia: Jonas (responsabilidade preventiva), Rawls (SLA 24h contestavel).
 """
@@ -31,10 +34,11 @@ from enum import Enum
 from typing import Optional
 
 from ._normalize import normalize_drift_level, normalize_action
+from .session_manager import SessionManager
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 
 DRIFT_WINDOW_K: int = 10
 DRIFT_THRESHOLD_PCT: int = 60
@@ -45,9 +49,9 @@ EFFICIENCY_PRESSURE_ACTIONS = frozenset({"ALLOW", "LOG"})
 SECURITY_PRESSURE_ACTIONS   = frozenset({"BLOCK", "REDACT", "EDUCATE", "ESCALATE_HUMAN"})
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # TYPES
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 
 class DriftAction(str, Enum):
     ALLOW           = "ALLOW"
@@ -85,9 +89,9 @@ class DriftReport:
         }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # SENTINEL
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 
 @dataclass
 class _SessionWindow:
@@ -101,6 +105,7 @@ class GoalDriftSentinel:
 
     Mantém ring buffer de K timesteps por session_id.
     Fail-secure: excecao interna -> ESCALATE assinado.
+    SessionManager (v1.3.0): cap de sessoes e TTL — prevenção de DoS/leak.
     """
 
     def __init__(
@@ -108,6 +113,8 @@ class GoalDriftSentinel:
         hmac_secret:     bytes,
         window_k:        int = DRIFT_WINDOW_K,
         threshold_pct:   int = DRIFT_THRESHOLD_PCT,
+        max_sessions:    int = 10_000,
+        ttl_s:           int = 1800,
     ) -> None:
         if not hmac_secret:
             raise ValueError("hmac_secret nao pode ser vazio")
@@ -115,6 +122,8 @@ class GoalDriftSentinel:
         self._window_k     = window_k
         self._threshold    = threshold_pct
         self._sessions: dict[str, _SessionWindow] = {}
+        # Gap 1/9: LRU+TTL — evicção automática, sem crescimento ilimitado
+        self._session_mgr  = SessionManager(max_sessions=max_sessions, ttl_s=ttl_s)
 
     def record_and_analyze(
         self,
@@ -131,13 +140,14 @@ class GoalDriftSentinel:
     def reset_session(self, session_id: str) -> None:
         """Remove janela de sessao (ex: apos contestacao aprovada)."""
         self._sessions.pop(session_id, None)
+        self._session_mgr.evict(session_id)
 
     def window_snapshot(self, session_id: str) -> list[int]:
         """Retorna copia da janela atual (para auditoria)."""
         w = self._sessions.get(session_id)
         return list(w.scores) if w else []
 
-    # ── Internal ─────────────────────────────────────────────────────────────
+    # ── Internal ───────────────────────────────────────────────────────────────────
 
     def _analyze(
         self,
@@ -176,6 +186,15 @@ class GoalDriftSentinel:
         )
 
     def _get_or_create(self, session_id: str) -> _SessionWindow:
+        """
+        Toca sessão no SessionManager (LRU+TTL).
+        Limpa dados das sessões que foram evictadas.
+        Cria nova janela se sessão não existe.
+        """
+        evicted = self._session_mgr.touch(session_id)
+        for sid in evicted:
+            self._sessions.pop(sid, None)
+
         if session_id not in self._sessions:
             self._sessions[session_id] = _SessionWindow(
                 scores=deque(maxlen=self._window_k),
@@ -199,7 +218,6 @@ class GoalDriftSentinel:
         if trend_pct >= self._threshold and last >= DRIFT_SCORE["High"]:
             return True
         # Sprint 3: burst tardio — 3 steps finais todos ascendentes + High + pressao
-        # Captura aceleracao localizada que threshold global de 60% nao via.
         if _is_burst(scores) and last >= DRIFT_SCORE["High"] and asym:
             return True
         return False
@@ -291,9 +309,9 @@ class GoalDriftSentinel:
         return _hmac.new(self._secret, payload, hashlib.sha256).hexdigest()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # MODULE-LEVEL HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 
 def _compute_trend_pct(scores: list[int]) -> int:
     """
@@ -301,14 +319,6 @@ def _compute_trend_pct(scores: list[int]) -> int:
 
     Passo i (1-indexed dentro da janela) tem peso i.
     O passo mais recente (i=n-1) tem o maior peso.
-
-    Beneficio vs uniforme:
-      - Escalada concentrada nos ultimos steps: trend_pct maior
-        (melhor deteccao de burst tardio).
-      - Plateau apos escalada (0,1,2,3,3,3,3): trend cai de 50%
-        para 28% — correto: sistema estabilizou.
-
-    total_weight = 1+2+...+(n-1) = n*(n-1)//2
     """
     n = len(scores)
     if n < 2:
@@ -323,9 +333,7 @@ def _compute_trend_pct(scores: list[int]) -> int:
 def _is_burst(scores: list[int]) -> bool:
     """
     Sprint 3: detecta aceleracao localizada nos 3 ultimos steps.
-
     Retorna True se os ultimos 3 passos sao estritamente crescentes.
-    Sinal de escalada rapida tardia independente do threshold global.
     """
     if len(scores) < 3:
         return False
