@@ -1,22 +1,39 @@
 """
-Trust Score Calculator - Calculador de confiança de usuário.
-Score multifatorial baseado em histórico e comportamento.
+Trust Score Calculator v1.2.0 — ADR-039.
+
+Calculador de confianca multifatorial baseado em historico e comportamento.
+
+Changelog:
+  v1.1.0: adjust_post_penalty (Gap 14)
+  v1.2.0 (Gap 12): SessionManager LRU+TTL + deque(maxlen=200) por sessao.
+    - trust_cache sem cap -> substituido por evicao via SessionManager
+    - activity_log list crescimento ilimitado -> deque(maxlen=200)
+    - evict_session() limpa ambas as estruturas
 """
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Any
-import time
+from __future__ import annotations
+
 import math
-from collections import defaultdict
+import time
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+from .session_manager import SessionManager
+
+MAX_SESSIONS:       int = 10_000
+SESSION_TTL_S:      int = 1800   # 30 min — alinhado com SessionTracker Rust
+ACTIVITY_MAX:       int = 200    # historico por sessao
+TRUST_CACHE_TTL_S:  int = 300    # 5 min
 
 
 @dataclass
 class UserActivity:
-    """Atividade de usuário."""
+    """Atividade de usuario."""
     session_id: str
-    timestamp: int
-    action: str  # "request", "appeal", "feedback"
-    result: str  # "allowed", "blocked", "appeal_success", "appeal_fail"
-    context: Dict[str, Any] = None
+    timestamp:  int
+    action:     str   # "request", "appeal", "feedback", "post_penalty_analysis"
+    result:     str   # "allowed", "blocked", "appeal_success", "appeal_fail", ...
+    context:    Optional[Dict[str, Any]] = None
 
 
 class TrustScoreCalculator:
@@ -24,254 +41,96 @@ class TrustScoreCalculator:
     Calcula Trust Score multi-fatorial.
 
     Formula:
-    trust = w1*base + w2*history + w3*appeals + w4*decay + w5*consistency
+        trust = w1*base + w2*history + w3*appeals + w4*decay + w5*consistency
 
     Garantias:
-    - Score ∈ [0.0, 1.0]
-    - Determinístico: mesmo histórico = mesmo score
-    - Não-gaming: spam não aumenta trust
+    - Score em [0.0, 1.0]
+    - Determinístico: mesmo historico = mesmo score
+    - Nao-gaming: spam nao aumenta trust
     - Privacy-preserving: sem PII
+    - Gap 12 (v1.2.0): SessionManager evita memory leak em prod.
+      activity_log limitado a 200 entradas por sessao (deque).
+
+    BiasDeclaration (ADR-039):
+    - FPR de penalidade por decay: ~10% em usuarios com bloqueios por FP
+      do sistema — mitigado por adjust_post_penalty() e appeals
+    - Calibracao: 2026-03-09 (v1.2.0)
     """
 
-    def __init__(self):
-        """
-        Inicializa calculador.
-
-        Pesos padrão (soma = 1.0):
-        - base: 0.20 (score inicial por role)
-        - history: 0.30 (comportamento passado)
-        - appeals: 0.20 (contestações bem-sucedidas)
-        - decay: 0.15 (penalidade por violações recentes)
-        - consistency: 0.15 (padrão de uso consistente)
-        """
+    def __init__(self, max_sessions: int = MAX_SESSIONS) -> None:
         self.weights = {
-            'base': 0.20,
-            'history': 0.30,
-            'appeals': 0.20,
-            'decay': 0.15,
-            'consistency': 0.15
+            "base":        0.20,
+            "history":     0.30,
+            "appeals":     0.20,
+            "decay":       0.15,
+            "consistency": 0.15,
         }
-
-        # Cache de trust scores (session_id -> (score, timestamp))
-        # Em prod: usar Redis com TTL
-        self.trust_cache: Dict[str, tuple[float, int]] = {}
-
-        # Histórico de atividades (session_id -> [activities])
-        # Em prod: usar TimeSeries DB
-        self.activity_log: Dict[str, List[UserActivity]] = defaultdict(list)
-
-    def calculate(self, session_id: str, user_role: str) -> float:
-        """
-        Calcula trust score.
-
-        Retorna: 0.0-1.0
-        """
-        # Cache hit (válido por 5 minutos)
-        if session_id in self.trust_cache:
-            cached_score, cached_time = self.trust_cache[session_id]
-            if time.time() - cached_time < 300:  # 5 min
-                return cached_score
-
-        # Calcula componentes
-        base_score = self._base_score(user_role)
-        history_score = self._history_score(session_id)
-        appeal_score = self._appeal_score(session_id)
-        decay_penalty = self._decay_penalty(session_id)
-        consistency_score = self._consistency_score(session_id)
-
-        # Aplica fórmula ponderada
-        trust = (
-                self.weights['base'] * base_score +
-                self.weights['history'] * history_score +
-                self.weights['appeals'] * appeal_score +
-                self.weights['decay'] * (1.0 - decay_penalty) +
-                self.weights['consistency'] * consistency_score
+        # Gap 12: LRU + TTL — previne crescimento ilimitado
+        self._session_mgr = SessionManager(max_sessions=max_sessions, ttl_s=SESSION_TTL_S)
+        # trust_cache: session_id -> (score: float, ts: int)
+        self.trust_cache:  Dict[str, tuple[float, int]] = {}
+        # activity_log: session_id -> deque[UserActivity] (cap: ACTIVITY_MAX)
+        self.activity_log: Dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=ACTIVITY_MAX)
         )
 
-        # Clamp [0.0, 1.0]
+    # ── Public API ─────────────────────────────────────────────────────────────
+
+    def calculate(self, session_id: str, user_role: str) -> float:
+        """Calcula trust score. Retorna float em [0.0, 1.0]."""
+        evicted = self._session_mgr.touch(session_id)
+        for sid in evicted:
+            self.evict_session(sid)
+
+        # Cache hit (5 min)
+        cached = self.trust_cache.get(session_id)
+        if cached is not None:
+            score, ts = cached
+            if time.time() - ts < TRUST_CACHE_TTL_S:
+                return score
+
+        trust = (
+            self.weights["base"]        * self._base_score(user_role)
+            + self.weights["history"]   * self._history_score(session_id)
+            + self.weights["appeals"]   * self._appeal_score(session_id)
+            + self.weights["decay"]     * (1.0 - self._decay_penalty(session_id))
+            + self.weights["consistency"] * self._consistency_score(session_id)
+        )
         trust = max(0.0, min(1.0, trust))
-
-        # Cacheia
         self.trust_cache[session_id] = (trust, int(time.time()))
-
         return trust
 
-    def _base_score(self, user_role: str) -> float:
-        """
-        Score base por role.
-
-        Roles mais privilegiadas começam com trust maior:
-        - admin: 0.9
-        - developer: 0.7
-        - user: 0.5
-        - guest: 0.3
-        """
-        role_scores = {
-            'admin': 0.9,
-            'developer': 0.7,
-            'power_user': 0.6,
-            'user': 0.5,
-            'guest': 0.3,
-            'anonymous': 0.2
-        }
-        return role_scores.get(user_role, 0.5)
-
-    def _history_score(self, session_id: str) -> float:
-        """
-        Score baseado em histórico de comportamento.
-
-        Calcula:
-        - Ratio de requests allowed vs blocked
-        - Penaliza violações repetidas
-        - Recompensa uso consistente
-        """
-        activities = self.activity_log.get(session_id, [])
-        if not activities:
-            return 0.5  # Neutro se sem histórico
-
-        # Filtra apenas requests (não appeals/feedback)
-        requests = [a for a in activities if a.action == "request"]
-        if not requests:
-            return 0.5
-
-        # Calcula ratio allowed/total
-        allowed_count = sum(1 for r in requests if r.result == "allowed")
-        total_count = len(requests)
-        ratio = allowed_count / total_count
-
-        # Penaliza se muitos bloqueios
-        if ratio < 0.5:
-            return ratio * 0.8  # Penalidade
-        else:
-            return ratio
-
-    def _appeal_score(self, session_id: str) -> float:
-        """
-        Score baseado em appeals bem-sucedidos.
-
-        Appeals bem-sucedidos indicam:
-        - Usuário conhece seus direitos
-        - Falso positivos do sistema
-        - Contexto justificável
-
-        Aumenta trust.
-        """
-        activities = self.activity_log.get(session_id, [])
-        appeals = [a for a in activities if a.action == "appeal"]
-
-        if not appeals:
-            return 0.5  # Neutro
-
-        success_count = sum(1 for a in appeals if a.result == "appeal_success")
-        total_appeals = len(appeals)
-
-        # Ratio de sucesso
-        success_ratio = success_count / total_appeals
-
-        # Normaliza para [0.3, 1.0]
-        # (pelo menos 30% de trust mesmo com appeals falhados)
-        return 0.3 + (success_ratio * 0.7)
-
-    def _decay_penalty(self, session_id: str) -> float:
-        """
-        Penalidade por violações recentes.
-
-        Violações mais recentes têm maior impacto.
-        Decai exponencialmente com tempo.
-
-        Returns:
-            0.0-1.0 (0 = sem penalidade, 1 = máxima penalidade)
-        """
-        activities = self.activity_log.get(session_id, [])
-        blocked = [a for a in activities if a.result == "blocked"]
-
-        if not blocked:
-            return 0.0  # Sem penalidade
-
-        now = int(time.time())
-        penalty = 0.0
-
-        for activity in blocked:
-            # Tempo desde violação (em dias)
-            days_ago = (now - activity.timestamp) / 86400
-
-            # Decay exponencial: penalty = e^(-days/30)
-            # Após 30 dias, penalidade é ~37% do original
-            decay = math.exp(-days_ago / 30)
-            penalty += decay * 0.2  # Cada violação = 20% penalty
-
-        return min(1.0, penalty)
-
-    def _consistency_score(self, session_id: str) -> float:
-        """
-        Score de consistência de uso.
-
-        Uso consistente (mesmo horário, padrões) = maior trust.
-        Uso errático = menor trust.
-
-        Calcula:
-        - Variância de horários
-        - Frequência de uso
-        """
-        activities = self.activity_log.get(session_id, [])
-        if len(activities) < 5:
-            return 0.5  # Pouco histórico
-
-        # Calcula variância de timestamps
-        timestamps = [a.timestamp for a in activities[-30:]]  # Últimos 30
-
-        if len(timestamps) < 2:
-            return 0.5
-
-        # Calcula intervalos entre requests
-        intervals = [timestamps[i + 1] - timestamps[i] for i in range(len(timestamps) - 1)]
-
-        # Variância dos intervalos
-        mean_interval = sum(intervals) / len(intervals)
-        variance = sum((x - mean_interval) ** 2 for x in intervals) / len(intervals)
-        std_dev = math.sqrt(variance)
-
-        # Normaliza: menor variância = maior consistência
-        # Assume intervalo médio de 1 hora = 3600s
-        consistency = 1.0 - min(1.0, std_dev / 3600)
-
-        return consistency
-
-    def record_activity(self, activity: UserActivity):
-        """
-        Registra atividade de usuário.
-
-        Em prod: persistir em TimeSeries DB.
-        """
+    def record_activity(self, activity: UserActivity) -> None:
+        """Registra atividade. deque(maxlen=200) descarta entradas antigas."""
+        evicted = self._session_mgr.touch(activity.session_id)
+        for sid in evicted:
+            self.evict_session(sid)
         self.activity_log[activity.session_id].append(activity)
+        self.trust_cache.pop(activity.session_id, None)  # invalida cache
 
-        # Invalida cache
-        if activity.session_id in self.trust_cache:
-            del self.trust_cache[activity.session_id]
+    def evict_session(self, session_id: str) -> None:
+        """Remove sessao de trust_cache e activity_log."""
+        self.trust_cache.pop(session_id, None)
+        self.activity_log.pop(session_id, None)
 
     def explain(self, session_id: str, user_role: str) -> str:
-        """
-        Gera explicação human-readable do trust score.
-        """
-        trust = self.calculate(session_id, user_role)
-
-        base = self._base_score(user_role)
-        history = self._history_score(session_id)
-        appeals = self._appeal_score(session_id)
-        decay = self._decay_penalty(session_id)
+        """Gera explicacao human-readable do trust score."""
+        trust       = self.calculate(session_id, user_role)
+        base        = self._base_score(user_role)
+        history     = self._history_score(session_id)
+        appeals     = self._appeal_score(session_id)
+        decay       = self._decay_penalty(session_id)
         consistency = self._consistency_score(session_id)
-
         lines = [
             f"Trust Score: {trust:.2f}",
             "",
             "Componentes:",
-            f"  • Base (role {user_role}): {base:.2f} (peso: {self.weights['base']:.0%})",
-            f"  • Histórico: {history:.2f} (peso: {self.weights['history']:.0%})",
-            f"  • Appeals: {appeals:.2f} (peso: {self.weights['appeals']:.0%})",
-            f"  • Decay penalty: {decay:.2f} (peso: {self.weights['decay']:.0%})",
-            f"  • Consistência: {consistency:.2f} (peso: {self.weights['consistency']:.0%})",
+            f"  base (role={user_role}): {base:.2f}  peso={self.weights['base']:.0%}",
+            f"  historico:               {history:.2f}  peso={self.weights['history']:.0%}",
+            f"  appeals:                 {appeals:.2f}  peso={self.weights['appeals']:.0%}",
+            f"  decay_penalty:           {decay:.2f}  peso={self.weights['decay']:.0%}",
+            f"  consistencia:            {consistency:.2f}  peso={self.weights['consistency']:.0%}",
         ]
-
         return "\n".join(lines)
 
     def adjust(self, user_id: str, delta: float) -> float:
@@ -280,12 +139,9 @@ class TrustScoreCalculator:
         Usado por adjust_trust_after_appeal() do AppealEngine.
         Retorna novo score clampado em [0.0, 1.0].
         """
-        import time
-
-        current = self.calculate(user_id, "anonymous")
+        current   = self.calculate(user_id, "anonymous")
         new_score = max(0.0, min(1.0, current + delta))
-        # Registrar como atividade para persistência no histórico
-        activity = UserActivity(
+        activity  = UserActivity(
             session_id=user_id,
             timestamp=int(time.time()),
             action="appeal",
@@ -293,12 +149,13 @@ class TrustScoreCalculator:
         )
         self.record_activity(activity)
         return new_score
+
     def adjust_post_penalty(
         self,
-        session_id: str,
-        pre_block_entropy: float,
+        session_id:        str,
+        pre_block_entropy:  float,
         post_block_entropy: float,
-        subsequent_action: str,
+        subsequent_action:  str,
     ) -> float:
         """
         Analisa comportamento apos BLOCK para refinar trust.
@@ -308,16 +165,13 @@ class TrustScoreCalculator:
 
         Returns: delta aplicado (positivo=recuperacao, negativo=penalidade).
         """
-        import time
         entropy_delta = post_block_entropy - pre_block_entropy
 
-        # Recuou: entropia caiu — provavelmente falso positivo ou confusao
         if entropy_delta < -0.3 and subsequent_action == "ALLOW":
-            delta = +0.05
+            delta  = +0.05
             result = "post_penalty_recovery"
-        # Escalou: entropia cresceu — sinal de adversario adaptativo
         elif entropy_delta > 0.2:
-            delta = -0.10
+            delta  = -0.10
             result = "post_penalty_escalation"
         else:
             return 0.0
@@ -332,3 +186,61 @@ class TrustScoreCalculator:
         self.adjust(session_id, delta)
         return delta
 
+    # ── Private score components ────────────────────────────────────────────────
+
+    def _base_score(self, user_role: str) -> float:
+        role_scores = {
+            "admin":       0.9,
+            "developer":   0.7,
+            "power_user":  0.6,
+            "user":        0.5,
+            "guest":       0.3,
+            "anonymous":   0.2,
+        }
+        return role_scores.get(user_role, 0.5)
+
+    def _history_score(self, session_id: str) -> float:
+        activities = self.activity_log.get(session_id, [])
+        requests   = [a for a in activities if a.action == "request"]
+        if not requests:
+            return 0.5
+        allowed = sum(1 for r in requests if r.result == "allowed")
+        ratio   = allowed / len(requests)
+        return ratio * 0.8 if ratio < 0.5 else ratio
+
+    def _appeal_score(self, session_id: str) -> float:
+        activities = self.activity_log.get(session_id, [])
+        appeals    = [a for a in activities if a.action == "appeal"]
+        if not appeals:
+            return 0.5
+        success_ratio = sum(
+            1 for a in appeals if a.result == "appeal_success"
+        ) / len(appeals)
+        return 0.3 + (success_ratio * 0.7)
+
+    def _decay_penalty(self, session_id: str) -> float:
+        activities = self.activity_log.get(session_id, [])
+        blocked    = [a for a in activities if a.result == "blocked"]
+        if not blocked:
+            return 0.0
+        now     = int(time.time())
+        penalty = 0.0
+        for activity in blocked:
+            days_ago = (now - activity.timestamp) / 86400
+            penalty += math.exp(-days_ago / 30) * 0.2
+        return min(1.0, penalty)
+
+    def _consistency_score(self, session_id: str) -> float:
+        activities = self.activity_log.get(session_id, [])
+        if len(activities) < 5:
+            return 0.5
+        timestamps = [a.timestamp for a in list(activities)[-30:]]
+        if len(timestamps) < 2:
+            return 0.5
+        intervals   = [
+            timestamps[i + 1] - timestamps[i] for i in range(len(timestamps) - 1)
+        ]
+        mean_iv  = sum(intervals) / len(intervals)
+        variance = sum((x - mean_iv) ** 2 for x in intervals) / len(intervals)
+        std_dev  = math.sqrt(variance)
+        return 1.0 - min(1.0, std_dev / 3600)
