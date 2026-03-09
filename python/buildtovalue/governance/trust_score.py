@@ -138,8 +138,12 @@ class TrustScoreCalculator:
         Ajusta trust score de user_id por delta (ADR-039).
         Usado por adjust_trust_after_appeal() do AppealEngine.
         Retorna novo score clampado em [0.0, 1.0].
+
+        Fix D12: usa score cacheado (role correto) em vez de
+        recalcular com role="anonymous" (que ignorava o role real).
         """
-        current   = self.calculate(user_id, "anonymous")
+        cached    = self.trust_cache.get(user_id)
+        current   = cached[0] if cached is not None else self.calculate(user_id, "anonymous")
         new_score = max(0.0, min(1.0, current + delta))
         activity  = UserActivity(
             session_id=user_id,
