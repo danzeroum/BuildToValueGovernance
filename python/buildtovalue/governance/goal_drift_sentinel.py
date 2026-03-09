@@ -13,6 +13,10 @@ Invariantes:
 - Drift assimetrico: eficiencia > seguranca = vetor critico
 - Inputs normalizados na fronteira (_normalize): nunca score 0 por case mismatch
 
+Changelog:
+  v1.1.0 (Sprint 0, Gaps 2/4/15): normalize_drift_level + normalize_action
+  v1.2.0 (Sprint 3): _compute_trend_pct ponderado + _is_burst + burst condition
+
 Filosofia: Jonas (responsabilidade preventiva), Rawls (SLA 24h contestavel).
 """
 from __future__ import annotations
@@ -32,12 +36,11 @@ from ._normalize import normalize_drift_level, normalize_action
 # CONSTANTS
 # ─────────────────────────────────────────────────────────────────────────────
 
-DRIFT_WINDOW_K: int = 10          # janela temporal (timesteps)
-DRIFT_THRESHOLD_PCT: int = 60     # % de passos crescentes para drift
+DRIFT_WINDOW_K: int = 10
+DRIFT_THRESHOLD_PCT: int = 60
 DRIFT_SCORE: dict[str, int] = {
     "None": 0, "Low": 1, "Medium": 2, "High": 3, "Critical": 4,
 }
-# Acoes que indicam pressao de eficiencia (vetor assimetrico do paper 213)
 EFFICIENCY_PRESSURE_ACTIONS = frozenset({"ALLOW", "LOG"})
 SECURITY_PRESSURE_ACTIONS   = frozenset({"BLOCK", "REDACT", "EDUCATE", "ESCALATE_HUMAN"})
 
@@ -63,8 +66,8 @@ class DriftReport:
     policy_drift_detected:   bool
     drift_action:            DriftAction
     drift_score_sequence:    tuple
-    trend_pct:               int      # % de passos crescentes na janela
-    asymmetric_pressure:     bool     # pressao eficiencia > seguranca
+    trend_pct:               int
+    asymmetric_pressure:     bool
     explain_decision:        str
     decided_at_iso:          str
     signature:               str
@@ -115,8 +118,8 @@ class GoalDriftSentinel:
 
     def record_and_analyze(
         self,
-        session_id:   str,
-        drift_level:  str,
+        session_id:    str,
+        drift_level:   str,
         policy_action: str = "ALLOW",
     ) -> DriftReport:
         """Registra timestep e analisa drift. Fail-secure em erro."""
@@ -142,25 +145,24 @@ class GoalDriftSentinel:
         drift_level:   str,
         policy_action: str,
     ) -> DriftReport:
-        # Sprint 0 — Gaps 15/2/4: normalizar na fronteira antes de qualquer uso
-        drift_level   = normalize_drift_level(drift_level)  # suporta 'LOW'→'Low' (Rust)
-        policy_action = normalize_action(policy_action)     # suporta 'allow'→'ALLOW'
-        score = DRIFT_SCORE[drift_level]                    # sempre válido após normalização
+        drift_level   = normalize_drift_level(drift_level)
+        policy_action = normalize_action(policy_action)
+        score = DRIFT_SCORE[drift_level]
 
-        win   = self._get_or_create(session_id)
+        win = self._get_or_create(session_id)
         win.scores.append(score)
         win.actions.append(policy_action)
 
-        scores_list  = list(win.scores)
-        trend_pct    = _compute_trend_pct(scores_list)
-        asym         = _detect_asymmetric_pressure(list(win.actions))
-        drift_det    = self._is_drift(scores_list, trend_pct, asym)
-        action       = self._decide_action(drift_det, scores_list)
-        explain      = self._build_explain(
+        scores_list = list(win.scores)
+        trend_pct   = _compute_trend_pct(scores_list)
+        asym        = _detect_asymmetric_pressure(list(win.actions))
+        drift_det   = self._is_drift(scores_list, trend_pct, asym)
+        action      = self._decide_action(drift_det, scores_list)
+        explain     = self._build_explain(
             session_id, drift_level, scores_list, trend_pct, asym, drift_det, action,
         )
-        now  = datetime.now(timezone.utc).isoformat()
-        sig  = self._sign(session_id, drift_det, action, now)
+        now = datetime.now(timezone.utc).isoformat()
+        sig = self._sign(session_id, drift_det, action, now)
         return DriftReport(
             session_id=session_id,
             policy_drift_detected=drift_det,
@@ -188,16 +190,17 @@ class GoalDriftSentinel:
         asym:      bool,
     ) -> bool:
         last = scores[-1] if scores else 0
-        # Critico imediato: score Critical(4) em qualquer ponto — sem minimo de janela
         if last >= DRIFT_SCORE["Critical"]:
             return True
         if len(scores) < 2:
             return False
-        # Drift crescente + pressao assimetrica = drift confirmado
         if trend_pct >= self._threshold and asym:
             return True
-        # Drift crescente acima do threshold sem pressao assimetrica
         if trend_pct >= self._threshold and last >= DRIFT_SCORE["High"]:
+            return True
+        # Sprint 3: burst tardio — 3 steps finais todos ascendentes + High + pressao
+        # Captura aceleracao localizada que threshold global de 60% nao via.
+        if _is_burst(scores) and last >= DRIFT_SCORE["High"] and asym:
             return True
         return False
 
@@ -213,18 +216,19 @@ class GoalDriftSentinel:
 
     def _build_explain(
         self,
-        session_id: str,
+        session_id:  str,
         drift_level: str,
-        scores: list[int],
-        trend_pct: int,
-        asym: bool,
-        detected: bool,
-        action: DriftAction,
+        scores:      list[int],
+        trend_pct:   int,
+        asym:        bool,
+        detected:    bool,
+        action:      DriftAction,
     ) -> str:
+        burst = _is_burst(scores)
         parts = [
             f"[GoalDriftSentinel] session={session_id}  drift_detected={detected}",
-            f"  drift_level={drift_level}  trend={trend_pct}%  "
-            f"asymmetric_pressure={asym}",
+            f"  drift_level={drift_level}  trend={trend_pct}%(ponderado)  "
+            f"asymmetric_pressure={asym}  burst={burst}",
             f"  window(K={self._window_k}): {scores}",
             f"  action={action.value}",
         ]
@@ -232,6 +236,11 @@ class GoalDriftSentinel:
             parts.append(
                 "  Diagnostico: pressao Eficiencia vs. Seguranca detectada "
                 "(paper 213: 100% violacao em timesteps finais sob pressao)."
+            )
+        if burst and detected:
+            parts.append(
+                "  Burst tardio: ultimos 3 passos estritamente crescentes — "
+                "aceleracao localizada detectada."
             )
         if action == DriftAction.ESCALATE_HUMAN:
             parts.append(
@@ -287,12 +296,41 @@ class GoalDriftSentinel:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _compute_trend_pct(scores: list[int]) -> int:
-    """% de passos estritamente crescentes na janela."""
+    """
+    Sprint 3: % ponderado de passos ascendentes — recencia linear.
+
+    Passo i (1-indexed dentro da janela) tem peso i.
+    O passo mais recente (i=n-1) tem o maior peso.
+
+    Beneficio vs uniforme:
+      - Escalada concentrada nos ultimos steps: trend_pct maior
+        (melhor deteccao de burst tardio).
+      - Plateau apos escalada (0,1,2,3,3,3,3): trend cai de 50%
+        para 28% — correto: sistema estabilizou.
+
+    total_weight = 1+2+...+(n-1) = n*(n-1)//2
+    """
     n = len(scores)
     if n < 2:
         return 0
-    ascending = sum(1 for i in range(1, n) if scores[i] > scores[i - 1])
-    return (ascending * 100) // (n - 1)
+    total_weight = (n * (n - 1)) // 2
+    ascending_weight = sum(
+        i for i in range(1, n) if scores[i] > scores[i - 1]
+    )
+    return (ascending_weight * 100) // total_weight
+
+
+def _is_burst(scores: list[int]) -> bool:
+    """
+    Sprint 3: detecta aceleracao localizada nos 3 ultimos steps.
+
+    Retorna True se os ultimos 3 passos sao estritamente crescentes.
+    Sinal de escalada rapida tardia independente do threshold global.
+    """
+    if len(scores) < 3:
+        return False
+    tail = scores[-3:]
+    return tail[1] > tail[0] and tail[2] > tail[1]
 
 
 def _detect_asymmetric_pressure(actions: list[str]) -> bool:
@@ -302,6 +340,6 @@ def _detect_asymmetric_pressure(actions: list[str]) -> bool:
     """
     if len(actions) < 3:
         return False
-    recent = actions[-5:]  # ultimos 5
+    recent = actions[-5:]
     eff_count = sum(1 for a in recent if a in EFFICIENCY_PRESSURE_ACTIONS)
     return eff_count > len(recent) // 2
