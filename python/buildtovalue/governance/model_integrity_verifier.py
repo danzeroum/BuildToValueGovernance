@@ -51,10 +51,14 @@ class AbliterationDetector:
         if is_known_abliterated(model_id):
             return True
 
-        # 2. Se não tem função de geração, assume legítimo por enquanto
+        # 2. Sem generate_func: não é possível testar comportamento → fail-secure.
+        # Retorna True (abliterado) para forçar BLOCK no IntegrityVerifier.
         if not self.generate:
-            logger.warning(f"AbliterationDetector: No generate_func provided for {model_id}. Skipping behavioral test.")
-            return False
+            logger.warning(
+                f"AbliterationDetector: No generate_func for '{model_id}'. "
+                "Cannot verify behavior → treating as SUSPICIOUS (fail-secure)."
+            )
+            return True
 
         # 3. Teste comportamental (sondagem)
         logger.info(f"Running behavioral probe on {model_id}...")
@@ -129,32 +133,31 @@ class IntegrityVerifier:
                 logger.error(f"BLOCK: Behavioral test failed for unknown model {model_id}.")
                 return False
 
-        # 4. Fail-open para desconhecidos (política pode ser mais restritiva em produção)
-        logger.info(f"UNKNOWN: Model {model_id} not in registry. Passing provisionally.")
-        return True
+        # 4. Fail-secure para desconhecidos (Jonas: precaução máxima com o desconhecido).
+        # Modelos não cadastrados são bloqueados. Cadastre em LEGITIMATE_MODELS para liberar.
+        logger.warning(
+            f"BLOCK: Model '{model_id}' not in registry. "
+            "Fail-secure applied. Register in LEGITIMATE_MODELS to allow."
+        )
+        return False
 
 
 # ==========================================
 # API PÚBLICA
 # ==========================================
 
-# Instância global (Singleton implícito)
-_verifier: Optional[IntegrityVerifier] = None
-
-
 def verify_model_integrity(model_id: str, model_callable: Optional[Callable] = None) -> bool:
     """
     Função de conveniência para verificar integridade.
+
+    Cria IntegrityVerifier por chamada — sem singleton global.
+    Em FastAPI, prefira injetar IntegrityVerifier via Depends().
 
     Uso:
         if not verify_model_integrity("my-model-v1"):
             raise SecurityError("Compromised model detected!")
     """
-    global _verifier
-    if _verifier is None:
-        _verifier = IntegrityVerifier()
-
-    return _verifier.verify(model_id, model_callable)
+    return IntegrityVerifier().verify(model_id, model_callable)
 
 
 def get_tri(model_id: str) -> float:
