@@ -128,6 +128,22 @@ pub static JAILBREAK_PATTERNS: &[StaticPattern] = &[
         confidence: 85,
         description: "Injeção de modo privilegiado",
     },
+    StaticPattern {
+        id: "JAILBREAK_T0_004",
+        regex: r"(?i)dev(?:eloper)?\s+mode\s*[:\-]\s*\w+",
+        category: ThreatCategory::Jailbreak,
+        severity: Severity::High,
+        confidence: 82,
+        description: "Modo desenvolvedor com separador alternativo (colon/dash)",
+    },
+    StaticPattern {
+        id: "JAILBREAK_T0_005",
+        regex: r"(?i)(?:don\'?t|do\s+not)(?:\s+need\s+to)?\s+follow\s+(?:these|those|the|any|your)\s+(?:rules?|instructions?|guidelines?|restrictions?)",
+        category: ThreatCategory::Jailbreak,
+        severity: Severity::High,
+        confidence: 80,
+        description: "Override indireto via negacao de obrigacao de seguir regras",
+    },
 ];
 
 // ==========================================
