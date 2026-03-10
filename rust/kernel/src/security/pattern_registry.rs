@@ -195,7 +195,7 @@ fn build_default_patterns() -> Vec<CompiledPattern> {
         (r"(?i)\bact\s+as\s+(a\s+|an\s+)?(?!if\b)",                    "INSTRUCTION_OVERRIDE"),
         (r"(?i)\bpretend\s+(that\s+)?you\s+are\b",                      "INSTRUCTION_OVERRIDE"),
         (r"(?i)\bdisregard\s+(all\s+)?(previous|prior|above)",          "INSTRUCTION_OVERRIDE"),
-        (r"(?i)\bforget\s+(everything|all|previous)",                   "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bforget\s+(?:everything|all|previous|the\s+\w+)",     "INSTRUCTION_OVERRIDE"),
         (r"(?i)\bignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)", "INSTRUCTION_OVERRIDE"),
         (r"(?i)\boverride\s+(your|the|all)\s+(instructions?|rules?|guidelines?)", "INSTRUCTION_OVERRIDE"),
         (r"(?i)\bbypass\s+(your|the|all)\s+(safety|security|filters?|restrictions?)", "INSTRUCTION_OVERRIDE"),
