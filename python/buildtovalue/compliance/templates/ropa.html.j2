@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>ROPA — Registro de Atividades de Tratamento (LGPD Art. 37)</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 40px; color: #333; line-height: 1.6; }
+        h1 { color: #1a1a2e; border-bottom: 3px solid #16213e; padding-bottom: 10px; }
+        h2 { color: #16213e; margin-top: 30px; }
+        h3 { color: #0f3460; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #16213e; color: white; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        .meta { background: #f0f4f8; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .meta dt { font-weight: bold; color: #16213e; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 0.85em; color: #666; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.85em; }
+        .badge-safe { background: #d4edda; color: #155724; }
+        .badge-risk { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>ROPA — Registro de Atividades de Tratamento</h1>
+    <p><strong>Base Legal:</strong> Lei Geral de Protecao de Dados (LGPD), Art. 37</p>
+
+    <div class="meta">
+        <dl>
+            <dt>Controlador</dt><dd>{{ data.controller }}</dd>
+            <dt>Encarregado (DPO)</dt><dd>{{ data.dpo_name }} ({{ data.dpo_contact }})</dd>
+            <dt>Periodo Coberto</dt><dd>{{ data.period_covered }}</dd>
+            <dt>Total de Registros Processados</dt><dd>{{ data.total_records_processed }}</dd>
+            <dt>Gerado em</dt><dd>{{ data.generated_at }}</dd>
+            <dt>Hash de Integridade do Ledger</dt><dd><code>{{ data.ledger_hash }}</code></dd>
+        </dl>
+    </div>
+
+    {% for entry in data.entries %}
+    <h2>{{ loop.index }}. {{ entry.activity_name }}</h2>
+
+    <table>
+        <tr><th width="30%">Campo</th><th>Descricao</th></tr>
+        <tr><td>Finalidade</td><td>{{ entry.purpose }}</td></tr>
+        <tr><td>Base Legal</td><td>{{ entry.legal_basis }}</td></tr>
+        <tr><td>Categorias de Dados</td><td>{{ entry.data_categories | join(', ') }}</td></tr>
+        <tr><td>Titulares</td><td>{{ entry.data_subjects }}</td></tr>
+        <tr><td>Destinatarios</td><td>{{ entry.recipients }}</td></tr>
+        <tr><td>Periodo de Retencao</td><td>{{ entry.retention_period }}</td></tr>
+        <tr><td>Medidas de Seguranca</td><td>{{ entry.security_measures }}</td></tr>
+        <tr><td>Transferencia Internacional</td>
+            <td>{% if entry.cross_border_transfer %}<span class="badge badge-risk">Sim</span>{% else %}<span class="badge badge-safe">Nao</span>{% endif %}</td></tr>
+    </table>
+
+    {% if entry.record_count > 0 %}
+    <h3>Dados do Ledger</h3>
+    <table>
+        <tr><td>Registros Processados</td><td>{{ entry.record_count }}</td></tr>
+        <tr><td>Periodo</td><td>{{ entry.period_start }} a {{ entry.period_end }}</td></tr>
+        <tr><td>Bloqueios</td><td>{{ entry.block_count }}</td></tr>
+        <tr><td>Mercy Aplicado</td><td>{{ entry.mercy_count }}</td></tr>
+        {% if entry.risk_distribution %}
+        <tr><td>Distribuicao de Risco</td>
+            <td>{% for k, v in entry.risk_distribution.items() %}{{ k }}: {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+        {% endif %}
+    </table>
+    {% endif %}
+    {% endfor %}
+
+    <div class="footer">
+        <p>Documento gerado automaticamente pelo BuildToValue Governance OS.</p>
+        <p>Este ROPA e preenchido com dados forenses reais do ledger imutavel.</p>
+        <p>Versao: {{ data.version }} | Gerado em: {{ generated_at }}</p>
+    </div>
+</body>
+</html>
