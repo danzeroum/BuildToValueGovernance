@@ -1,0 +1,845 @@
+openapi: "3.0.3"
+info:
+  title: BuildToValue Governance API
+  description: |
+    BTV — República Algorítmica. Ethical AI governance gateway combining Rust
+    kernel (speed, validators, policy) with Python judiciary (ethics, mercy,
+    appeals, compliance).
+
+    All endpoints (except /health and /metrics) require an API key via
+    `X-API-Key` header. Obtain yours by setting `BTV_API_KEYS` in the gateway
+    environment.
+  version: "2.0.0"
+  contact:
+    name: BuildToValue
+    url: https://buildtovalue.io
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:8080
+    description: Local development gateway
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    VerdictAction:
+      type: string
+      enum: [ALLOW, BLOCK, INSPECT, REDACT, EDUCATE, LOG]
+      description: |
+        The governance decision action.
+        - ALLOW: input is safe to proceed
+        - BLOCK: input is blocked (high risk or hard rule match)
+        - INSPECT: input needs manual review
+        - REDACT: sensitive content detected, output should be masked
+        - EDUCATE: low-risk, user should be informed (Gilligan mercy applied)
+        - LOG: allowed but recorded for audit
+
+    ExplainDecision:
+      type: object
+      description: Philosophical rationale behind the verdict (Rawls→Levinas→Jonas→Gilligan pipeline)
+      properties:
+        summary:
+          type: string
+          description: Plain-language summary of the decision
+        rawls_rationale:
+          type: string
+          description: Rawlsian fairness rationale (blind policy evaluation)
+        levinas_rationale:
+          type: string
+          description: Levinasian duty-of-care rationale
+        jonas_rationale:
+          type: string
+          description: Jonas responsibility principle rationale
+        gilligan_rationale:
+          type: string
+          description: Gilligan ethics-of-care rationale (mercy)
+        trust_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Current session trust score at decision time
+        mercy_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Mercy probability computed by Gilligan engine
+        pipeline_stages:
+          type: array
+          items:
+            type: string
+          description: Ordered list of pipeline stages executed
+      required: [summary, rawls_rationale, levinas_rationale, jonas_rationale,
+                 gilligan_rationale, trust_score, mercy_score, pipeline_stages]
+
+    Verdict:
+      type: object
+      description: Full governance verdict returned by /v1/decide
+      properties:
+        verdict_id:
+          type: string
+          pattern: "^VRD-[0-9A-HJKMNP-TV-Z]{26}$"
+          description: Immutable ULID-based verdict identifier (ADR-043)
+          example: "VRD-01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        action:
+          $ref: "#/components/schemas/VerdictAction"
+        original_action:
+          $ref: "#/components/schemas/VerdictAction"
+          description: Action before mercy/softening was applied
+        mercy_applied:
+          type: boolean
+          description: Whether Gilligan mercy softened the original action
+        finding_count:
+          type: integer
+          minimum: 0
+          description: Number of evidence findings detected
+        critical_count:
+          type: integer
+          minimum: 0
+          description: Number of critical-severity findings
+        composite_risk:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Composite risk score (0=safe, 1=critical)
+        hard_blocked:
+          type: boolean
+          description: Whether a hard-block rule matched (not contestable)
+        contestable:
+          type: boolean
+          description: Whether the verdict can be appealed
+        appeal_deadline_hours:
+          type: integer
+          description: Hours remaining to submit an appeal (24h SLA)
+        signature:
+          type: string
+          description: HMAC-SHA256 signature over verdict_id+action+risk (ADR-043)
+        rationale:
+          type: string
+          description: Plain-text rationale for the decision
+        explain:
+          $ref: "#/components/schemas/ExplainDecision"
+        jurisdiction_bitmask:
+          type: integer
+          description: |
+            Bitmask of applicable jurisdictions (ADR-032).
+            BR=0x01, US=0x02, EU=0x04, UK=0x08
+        latency_ms:
+          type: number
+          format: float
+          description: Total decision latency in milliseconds
+      required: [verdict_id, action, original_action, mercy_applied, finding_count,
+                 critical_count, composite_risk, hard_blocked, contestable,
+                 appeal_deadline_hours, signature, rationale, explain,
+                 jurisdiction_bitmask, latency_ms]
+
+    ValidateVerdict:
+      type: object
+      description: Verdict returned by /v1/validate (Rust-only, no ethical pipeline)
+      properties:
+        verdict_id:
+          type: string
+          pattern: "^VRD-[0-9A-HJKMNP-TV-Z]{26}$"
+          example: "VRD-01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        action:
+          $ref: "#/components/schemas/VerdictAction"
+        original_action:
+          $ref: "#/components/schemas/VerdictAction"
+        mercy_applied:
+          type: boolean
+        finding_count:
+          type: integer
+        critical_count:
+          type: integer
+        composite_risk:
+          type: number
+          format: float
+        hard_blocked:
+          type: boolean
+        hard_block_term:
+          type: string
+          nullable: true
+          description: The term that triggered a hard block, if any
+        contestable:
+          type: boolean
+        appeal_deadline_hours:
+          type: integer
+        message:
+          type: string
+        matched_policies:
+          type: array
+          items:
+            type: string
+          description: Policy names that matched
+        max_finding_confidence:
+          type: number
+          format: float
+          description: Highest confidence score among all findings
+        entropy:
+          type: number
+          format: float
+          description: Input entropy score
+        total_chars:
+          type: integer
+        blake3_hash:
+          type: string
+          description: BLAKE3 hash of the input for audit purposes
+        drift_level:
+          type: string
+          enum: [None, Low, Moderate, High, Critical]
+          description: Session drift level (ADR-044)
+        signature:
+          type: string
+        latency_ms:
+          type: number
+          format: float
+      required: [verdict_id, action, original_action, mercy_applied, finding_count,
+                 critical_count, composite_risk, hard_blocked, contestable,
+                 appeal_deadline_hours, message, matched_policies, signature, latency_ms]
+
+    AppealStatus:
+      type: string
+      enum: [pending, under_review, accepted, rejected, expired]
+
+    AppealGrounds:
+      type: string
+      enum:
+        - rawls_equity
+        - levinas_protection
+        - gilligan_mercy
+        - jonas_responsibility
+        - technical_error
+        - scope_mismatch
+        - false_positive
+      description: Philosophical/legal grounds for the appeal (ADR-047)
+
+    AppealRequest:
+      type: object
+      description: Submit an appeal against a verdict
+      properties:
+        verdict_id:
+          type: string
+          description: The verdict_id to appeal (from a prior /v1/decide or /v1/validate call)
+          example: "VRD-01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        user_id:
+          type: string
+          description: Opaque user/session identifier for the appellant
+        reason:
+          type: string
+          minLength: 20
+          description: Articulated reason for the appeal (Levinas principle — min 20 chars)
+          example: "This is a test CPF used for ABNT compliance testing, not real PII."
+        grounds:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppealGrounds"
+          description: One or more philosophical grounds for the appeal
+        evidence:
+          type: string
+          nullable: true
+          description: Optional supporting evidence text
+      required: [verdict_id, user_id, reason]
+
+    Appeal:
+      type: object
+      description: Appeal record with status and resolution
+      properties:
+        appeal_id:
+          type: string
+          description: Unique appeal identifier
+        verdict_id:
+          type: string
+          description: The verdict being appealed
+        user_id:
+          type: string
+        reason:
+          type: string
+        grounds:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppealGrounds"
+        status:
+          $ref: "#/components/schemas/AppealStatus"
+        submitted_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolution:
+          type: string
+          nullable: true
+          description: Human reviewer resolution notes
+        mediator_recommendation:
+          type: string
+          nullable: true
+          enum: [accept_appeal, reject_appeal, escalate, educate, null]
+          description: AI mediator recommendation for the human reviewer
+        sla_deadline:
+          type: string
+          format: date-time
+          description: Deadline for resolution (24h from submission, Jonas principle)
+        evidence_hash:
+          type: string
+          nullable: true
+          description: BLAKE3 hash of evidence for integrity verification
+      required: [appeal_id, verdict_id, user_id, reason, grounds, status, submitted_at,
+                 sla_deadline]
+
+    TrustScore:
+      type: object
+      properties:
+        session_id:
+          type: string
+        trust_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: |
+            Multi-factorial trust score (ADR-039):
+            trust = 0.20*base + 0.30*history + 0.20*appeals + 0.15*(1-decay) + 0.15*consistency
+        total_requests:
+          type: integer
+        offenses:
+          type: integer
+        calculated_at:
+          type: string
+          format: date-time
+      required: [session_id, trust_score]
+
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        uptime_seconds:
+          type: number
+        version:
+          type: string
+      required: [status]
+
+    SanitizeRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Text to sanitize (PII masking)
+        session_id:
+          type: string
+          nullable: true
+      required: [text]
+
+    SanitizeResponse:
+      type: object
+      properties:
+        sanitized:
+          type: string
+          description: Text with PII replaced by masked tokens
+        redactions:
+          type: integer
+          description: Number of redactions applied
+        latency_ms:
+          type: number
+          format: float
+      required: [sanitized, redactions]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        detail:
+          type: string
+          nullable: true
+      required: [error]
+
+paths:
+  /v1/decide:
+    post:
+      operationId: decide
+      summary: Full ethical decision pipeline
+      description: |
+        Runs the complete BTV governance pipeline:
+        1. Rust kernel: IP classification, session drift, evidence scan, policy evaluation
+        2. Python judiciary: Rawls → Levinas → Jonas → Gilligan ethical pipeline
+        3. Trust score update
+        4. Mercy evaluation (Gilligan)
+        5. HMAC-signed verdict
+
+        This is the recommended endpoint for most integrations. Use `/v1/validate`
+        only when you need fast Rust-only scanning without the ethical pipeline.
+      tags: [Governance]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input:
+                  type: string
+                  description: Text to evaluate
+                  example: "Meu CPF é 123.456.789-09"
+                session_id:
+                  type: string
+                  nullable: true
+                  description: Opaque session identifier for trust tracking
+                  example: "sess-user-abc-001"
+                profile:
+                  type: string
+                  nullable: true
+                  description: Governance profile (sector-specific policies)
+                  enum: [general, healthcare, finance, legal, research, education]
+                  example: "healthcare"
+                agent_id:
+                  type: string
+                  nullable: true
+                  description: Identifier of the calling AI agent (ADR-029)
+              required: [input]
+            examples:
+              basic:
+                summary: Basic text input
+                value:
+                  input: "Hello, how can I help you today?"
+                  session_id: "sess-001"
+              pii_detection:
+                summary: Input with PII
+                value:
+                  input: "Meu CPF é 123.456.789-09 e meu email é user@example.com"
+                  session_id: "sess-001"
+                  profile: "healthcare"
+      responses:
+        "200":
+          description: Governance verdict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Verdict"
+              examples:
+                allowed:
+                  summary: Clean input allowed
+                  value:
+                    verdict_id: "VRD-01ARZ3NDEKTSV4RRFFQ69G5FAV"
+                    action: "ALLOW"
+                    original_action: "ALLOW"
+                    mercy_applied: false
+                    finding_count: 0
+                    critical_count: 0
+                    composite_risk: 0.02
+                    hard_blocked: false
+                    contestable: false
+                    appeal_deadline_hours: 0
+                    signature: "abc123..."
+                    rationale: "No governance concerns detected."
+                    jurisdiction_bitmask: 1
+                    latency_ms: 12.5
+                    explain:
+                      summary: "Clean input, no ethical concerns."
+                      rawls_rationale: "Policy evaluation passed under veil of ignorance."
+                      levinas_rationale: "No duty-of-care concerns."
+                      jonas_rationale: "No long-term risk identified."
+                      gilligan_rationale: "No mercy intervention required."
+                      trust_score: 0.85
+                      mercy_score: 0.0
+                      pipeline_stages: ["rawls", "levinas", "jonas", "gilligan"]
+                educate:
+                  summary: PII detected, mercy applied (EDUCATE instead of BLOCK)
+                  value:
+                    verdict_id: "VRD-01ARZ3NDEKTSV4RRFFQ69G5AW"
+                    action: "EDUCATE"
+                    original_action: "BLOCK"
+                    mercy_applied: true
+                    finding_count: 2
+                    critical_count: 1
+                    composite_risk: 0.71
+                    hard_blocked: false
+                    contestable: true
+                    appeal_deadline_hours: 24
+                    signature: "def456..."
+                    rationale: "CPF detected. First offense — educational response preferred."
+                    jurisdiction_bitmask: 1
+                    latency_ms: 34.2
+                    explain:
+                      summary: "Sensitive PII (CPF) detected. Mercy applied for first offense."
+                      rawls_rationale: "Policy violation detected (LGPD Art. 6)."
+                      levinas_rationale: "User deserves explanation, not just blocking."
+                      jonas_rationale: "Risk contained; no irreversible harm."
+                      gilligan_rationale: "First offense + trust > 0.6 → EDUCATE over BLOCK."
+                      trust_score: 0.72
+                      mercy_score: 0.83
+                      pipeline_stages: ["rawls", "levinas", "jonas", "gilligan"]
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/validate:
+    post:
+      operationId: validate
+      summary: Fast Rust-kernel scan (no ethical pipeline)
+      description: |
+        Runs only the Rust kernel scan: PII detection, policy evaluation, session drift.
+        Does NOT call the Python ethical pipeline (Rawls/Levinas/Jonas/Gilligan).
+
+        Use this for latency-sensitive applications where full philosophical reasoning
+        is not required. Use `/v1/decide` for full governance.
+      tags: [Governance]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input:
+                  type: string
+                  example: "SELECT * FROM users WHERE id = 1 OR 1=1"
+                session_id:
+                  type: string
+                  nullable: true
+                profile:
+                  type: string
+                  nullable: true
+              required: [input]
+      responses:
+        "200":
+          description: Validation verdict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateVerdict"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/sanitize:
+    post:
+      operationId: sanitize
+      summary: Sanitize text — mask PII and injection patterns
+      description: |
+        Runs the OutputGuard to redact PII (CPF, CNPJ, email, phone, credit card)
+        and neutralize prompt injection patterns from text.
+      tags: [Governance]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SanitizeRequest"
+            example:
+              text: "Contact John at john@example.com or 011-99999-9999"
+      responses:
+        "200":
+          description: Sanitized text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SanitizeResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/appeals:
+    post:
+      operationId: submitAppeal
+      summary: Submit an appeal against a verdict
+      description: |
+        Challenge a governance verdict (LGPD Art. 20 / EU AI Act Art. 14 / ADR-017).
+
+        Appeals require:
+        - A `reason` of at least 20 characters (Levinas: articulation required)
+        - At least one philosophical `ground`
+        - The `verdict_id` must be contestable (non-hard-blocked verdicts)
+
+        SLA: 24 hours for human review (Jonas responsibility principle).
+      tags: [Appeals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppealRequest"
+            example:
+              verdict_id: "VRD-01ARZ3NDEKTSV4RRFFQ69G5FAV"
+              user_id: "user-anonymous-001"
+              reason: "This CPF belongs to a test dataset (ABNT NBR ISO/IEC 27001). Not real PII."
+              grounds: ["technical_error", "false_positive"]
+      responses:
+        "201":
+          description: Appeal submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appeal"
+        "400":
+          description: Invalid appeal (reason too short, invalid grounds, verdict not contestable)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Governance service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/appeals/{appeal_id}:
+    get:
+      operationId: getAppeal
+      summary: Get appeal status
+      tags: [Appeals]
+      parameters:
+        - name: appeal_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "APL-01ARZ3NDEKTSV4RRFFQ69G5FAV"
+      responses:
+        "200":
+          description: Appeal record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appeal"
+        "401":
+          description: Missing or invalid API key
+        "404":
+          description: Appeal not found
+
+  /v1/appeals/{appeal_id}/resolve:
+    post:
+      operationId: resolveAppeal
+      summary: Resolve an appeal (human-in-the-loop)
+      description: Human reviewer decision for a pending appeal.
+      tags: [Appeals]
+      parameters:
+        - name: appeal_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resolution:
+                  type: string
+                  enum: [accepted, rejected]
+                reviewer_notes:
+                  type: string
+              required: [resolution]
+      responses:
+        "200":
+          description: Appeal resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appeal"
+        "401":
+          description: Missing or invalid API key
+        "404":
+          description: Appeal not found
+
+  /v1/appeals/pending:
+    get:
+      operationId: listPendingAppeals
+      summary: List all pending appeals
+      tags: [Appeals]
+      responses:
+        "200":
+          description: List of pending appeals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  appeals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Appeal"
+                  total:
+                    type: integer
+        "401":
+          description: Missing or invalid API key
+
+  /v1/appeals/metrics:
+    get:
+      operationId: getAppealMetrics
+      summary: SLA compliance metrics for appeals
+      tags: [Appeals]
+      responses:
+        "200":
+          description: Appeal SLA metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_submitted:
+                    type: integer
+                  total_resolved:
+                    type: integer
+                  total_expired:
+                    type: integer
+                  sla_compliance_rate:
+                    type: number
+                    format: float
+                    description: Percentage of appeals resolved within 24h SLA
+                  avg_resolution_hours:
+                    type: number
+                    format: float
+        "401":
+          description: Missing or invalid API key
+
+  /v1/trust/{session_id}:
+    get:
+      operationId: getTrustScore
+      summary: Get session trust score
+      description: |
+        Returns the multi-factorial trust score for a session (ADR-039).
+
+        Formula: trust = 0.20*base + 0.30*history + 0.20*appeals + 0.15*(1-decay) + 0.15*consistency
+
+        Range: [0.0, 1.0]. Score decays over time and recovers through positive interactions.
+      tags: [Trust]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "sess-user-abc-001"
+      responses:
+        "200":
+          description: Trust score for the session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrustScore"
+              example:
+                session_id: "sess-user-abc-001"
+                trust_score: 0.82
+                total_requests: 47
+                offenses: 1
+                calculated_at: "2026-03-20T12:00:00Z"
+        "401":
+          description: Missing or invalid API key
+        "404":
+          description: Session not found (no trust history)
+
+  /health:
+    get:
+      operationId: health
+      summary: Gateway health check
+      security: []
+      tags: [System]
+      responses:
+        "200":
+          description: Gateway is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthCheck"
+              example:
+                status: "ok"
+                uptime_seconds: 3600.5
+                version: "2.0.0"
+
+  /health/bias:
+    get:
+      operationId: healthBias
+      summary: BiasGuardian divergence status
+      description: |
+        Returns current FPR/FNR divergence metrics across all validators (ADR-036).
+        Warning if FNR divergence > 5pp, block if > 15pp between demographic groups.
+      security: []
+      tags: [System]
+      responses:
+        "200":
+          description: Bias metrics per validator
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, warning, blocked]
+                  validators:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        fpr:
+                          type: number
+                          format: float
+                        fnr:
+                          type: number
+                          format: float
+                        divergence_pp:
+                          type: number
+                          format: float
+                        status:
+                          type: string
+                          enum: [ok, warning, blocked]
+
+tags:
+  - name: Governance
+    description: Core governance decisions — validate inputs, decide on actions
+  - name: Appeals
+    description: Contestability endpoints (LGPD Art. 20, EU AI Act Art. 14)
+  - name: Trust
+    description: Session trust score management
+  - name: System
+    description: Health and observability endpoints

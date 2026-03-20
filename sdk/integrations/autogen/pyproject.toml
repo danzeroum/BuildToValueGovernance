@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "btv-autogen"
+version = "0.1.0"
+description = "AutoGen integration for BuildToValue AI governance"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+keywords = ["autogen", "ai", "governance", "ethics"]
+dependencies = [
+    "buildtovalue>=0.1",
+    "pyautogen>=0.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
