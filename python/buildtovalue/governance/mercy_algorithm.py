@@ -60,20 +60,25 @@ class MercyCalculator:
             self,
             evidence: TechnicalEvidence,
             context: dict,
-            trust_score: float
+            trust_score: float,
+            slm_justifiability: Optional[float] = None,
     ) -> float:
         """
         Calcula mercy score (0.0 a 1.0).
         Chama _extract_factors() + _calculate_score() em uma unica passagem.
+
+        slm_justifiability: se fornecido pelo SLM Mercy Advisor (F2-02),
+        substitui o mapeamento fixo domain→justifiability.
         """
-        factors = self._extract_factors(evidence, context, trust_score)
+        factors = self._extract_factors(evidence, context, trust_score, slm_justifiability)
         return self._calculate_score(factors)
 
     def calculate_with_factors(
             self,
             evidence: TechnicalEvidence,
             context: dict,
-            trust_score: float
+            trust_score: float,
+            slm_justifiability: Optional[float] = None,
     ) -> tuple:
         """
         Retorna (mercy_score, MercyFactors) em uma unica passagem.
@@ -85,8 +90,11 @@ class MercyCalculator:
 
         Uso obrigatorio em GilliganStage.evaluate() e qualquer codigo
         que precise de (score, factors) simultaneamente.
+
+        slm_justifiability: se fornecido pelo SLM Mercy Advisor (F2-02),
+        substitui o mapeamento fixo domain→justifiability.
         """
-        factors = self._extract_factors(evidence, context, trust_score)
+        factors = self._extract_factors(evidence, context, trust_score, slm_justifiability)
         score = self._calculate_score(factors)
         return score, factors
 
@@ -108,17 +116,24 @@ class MercyCalculator:
             self,
             evidence: TechnicalEvidence,
             context: dict,
-            trust_score: float
+            trust_score: float,
+            slm_justifiability: Optional[float] = None,
     ) -> MercyFactors:
         """
         Extrai fatores de misericordia da evidencia + contexto.
         ATENCAO: tem efeito colateral em _violation_history via _is_first_offense.
         Chamar apenas uma vez por request.
+
+        slm_justifiability: quando fornecido pelo SLM Mercy Advisor (F2-02),
+        substitui o mapeamento fixo domain→justifiability por avaliação contextual.
         """
         avg_confidence = self._calculate_avg_confidence(evidence)
         uncertainty_score = 1.0 - avg_confidence
         domain = context.get('domain', 'general')
-        justifiability = self._get_domain_justifiability(domain)
+        if slm_justifiability is not None:
+            justifiability = max(0.0, min(1.0, slm_justifiability))
+        else:
+            justifiability = self._get_domain_justifiability(domain)
         trust = trust_score
         harm_potential = self._calculate_harm_potential(evidence)
         session_id = context.get('session_id', 'unknown')
