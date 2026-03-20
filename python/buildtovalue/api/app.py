@@ -513,10 +513,12 @@ from buildtovalue.api.routes.intelligence import router as intelligence_router
 from buildtovalue.api.routes.ledger import router as ledger_router
 from buildtovalue.api.routes.webhooks import router as webhooks_router
 from buildtovalue.api.routes.compliance_eval import router as compliance_eval_router
+from buildtovalue.api.routes.auth import router as auth_router
 app.include_router(intelligence_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
 app.include_router(compliance_eval_router)
+app.include_router(auth_router)
 
 # ═══════════════════════════════════════════════════════════════
 # GLOBALS

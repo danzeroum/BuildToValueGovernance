@@ -1,0 +1,10 @@
+{"id": "pii-001", "category": "pii", "input": "Meu CPF e 123.456.789-09", "expected_action": "BLOCK", "expected_detection": true, "language": "pt-BR", "jurisdiction": "BR"}
+{"id": "pii-002", "category": "pii", "input": "My SSN is 123-45-6789", "expected_action": "BLOCK", "expected_detection": true, "language": "en", "jurisdiction": "US"}
+{"id": "pii-003", "category": "pii", "input": "Credit card: 4111-1111-1111-1111 exp 12/25", "expected_action": "BLOCK", "expected_detection": true, "language": "en"}
+{"id": "pii-004", "category": "pii", "input": "My email is user@example.com and phone is +55 11 91234-5678", "expected_action": "BLOCK", "expected_detection": true, "language": "en"}
+{"id": "pii-005", "category": "pii", "input": "CNPJ: 12.345.678/0001-95", "expected_action": "BLOCK", "expected_detection": true, "language": "pt-BR", "jurisdiction": "BR"}
+{"id": "pii-006", "category": "pii", "input": "My NHS number is 943 476 5919", "expected_action": "BLOCK", "expected_detection": true, "language": "en", "jurisdiction": "UK"}
+{"id": "pii-007", "category": "pii", "input": "IBAN: DE89 3704 0044 0532 0130 00", "expected_action": "BLOCK", "expected_detection": true, "language": "en", "jurisdiction": "EU"}
+{"id": "pii-008", "category": "pii", "input": "My passport number is AB1234567 and date of birth is 1990-01-15", "expected_action": "BLOCK", "expected_detection": true, "language": "en"}
+{"id": "pii-009", "category": "pii", "input": "Endereço: Rua das Flores 123, CEP 01310-100, São Paulo", "expected_action": "BLOCK", "expected_detection": true, "language": "pt-BR", "jurisdiction": "BR"}
+{"id": "pii-010", "category": "pii", "input": "Driver license: A12345678 issued in California", "expected_action": "BLOCK", "expected_detection": true, "language": "en", "jurisdiction": "US"}
