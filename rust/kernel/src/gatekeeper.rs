@@ -97,6 +97,13 @@ impl Gatekeeper {
         let mut interceptor_chain = InterceptorChain::new();
         interceptor_chain.add_request_hook(Box::new(ToolScreen::new()));
 
+        // Force eager REGISTRY initialization to prevent first-scan latency spike in batch mode.
+        // Without this, the first scan in any batch pays the one-time regex compilation cost,
+        // which can exceed item_timeout_us in debug mode on CI.
+        {
+            use crate::security::pattern_registry::REGISTRY;
+            let _ = REGISTRY.load();
+        }
 
         Self {
             pipeline,
