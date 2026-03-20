@@ -96,6 +96,36 @@ class TestReset:
         assert status.tokens_used == 0
 
 
+class TestEducateAt80Pct:
+    def test_educate_near_token_limit(self, budget: AgentBudget) -> None:
+        budget.record_usage("some-agent", tokens_used=850)
+        r = budget.check_budget("some-agent")
+        assert r.verdict == AgentVerdict.EDUCATE
+
+    def test_educate_near_cost_limit(self, budget: AgentBudget) -> None:
+        budget.record_usage("some-agent", tokens_used=1, cost_usd=0.81)
+        r = budget.check_budget("some-agent")
+        assert r.verdict == AgentVerdict.EDUCATE
+
+    def test_educate_near_api_limit(self, budget: AgentBudget) -> None:
+        for _ in range(4):
+            budget.record_usage("some-agent", tokens_used=1)
+        r = budget.check_budget("some-agent")
+        assert r.verdict == AgentVerdict.EDUCATE
+
+
+class TestToolCallCircuitBreaker:
+    def test_tool_calls_within_limit(self, budget: AgentBudget) -> None:
+        r = budget.check_tool_calls("some-agent", "req-1")
+        assert r.verdict == AgentVerdict.ALLOW
+
+    def test_tool_calls_exceed_limit(self, budget: AgentBudget) -> None:
+        for _ in range(20):
+            budget.check_tool_calls("some-agent", "req-1")
+        r = budget.check_tool_calls("some-agent", "req-1")
+        assert r.verdict == AgentVerdict.BLOCK
+
+
 class TestNoPolicy:
     def test_default_budget(self) -> None:
         b = AgentBudget()

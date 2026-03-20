@@ -74,6 +74,18 @@ class TestRevocation:
             ledger.revoke_delegation("nonexistent")
 
 
+class TestCycleDetection:
+    def test_self_delegation_forbidden(self, ledger: DelegationLedger) -> None:
+        with pytest.raises(ValueError, match="Self-delegation"):
+            ledger.record_delegation("a", "a", "read_only")
+
+    def test_cycle_detected(self, ledger: DelegationLedger) -> None:
+        ledger.record_delegation("a", "b", "read_only")
+        ledger.record_delegation("b", "c", "read_only")
+        with pytest.raises(ValueError, match="Cycle detected"):
+            ledger.record_delegation("c", "a", "read_only")
+
+
 class TestNoPolicy:
     def test_default_ledger(self) -> None:
         dl = DelegationLedger()

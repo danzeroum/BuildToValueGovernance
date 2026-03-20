@@ -90,6 +90,13 @@ class DelegationLedger:
             if parent_rec and self._scope_rank.get(scope, 99) > self._scope_rank.get(parent_rec.scope, 0):
                 raise ValueError("Scope escalation forbidden")
 
+        # Cycle detection: check if child already appears in parent's chain
+        if child_agent == parent_agent:
+            raise ValueError("Self-delegation forbidden")
+        chain_agents = self._walk_chain(parent_agent)
+        if child_agent in chain_agents:
+            raise ValueError(f"Cycle detected: {child_agent} already in chain")
+
         record_id = str(uuid.uuid4())
         prev_hash = chain[-1] if chain else "0" * 64
         chain_hash = hashlib.sha256(
