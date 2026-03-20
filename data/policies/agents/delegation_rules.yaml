@@ -1,0 +1,21 @@
+# Delegation Rules — Gap B (Delegation Chain Tracking)
+# Defines limits on agent-to-agent delegation.
+
+schema_version: "1.0"
+
+# Maximum delegation chain depth
+max_chain_depth: 5
+
+# Allowed delegation scopes
+allowed_scopes:
+  - "read_only"
+  - "read_write"
+  - "execute"
+  - "admin"
+
+# Scope escalation is forbidden (child cannot exceed parent scope)
+scope_hierarchy:
+  read_only: 0
+  read_write: 1
+  execute: 2
+  admin: 3

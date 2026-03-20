@@ -1,0 +1,50 @@
+# Tool Call Policy — Gap A (Agent Governance)
+# Defines allowed tools, blocked tools, and parameter constraints per agent.
+# Loaded by: python/buildtovalue/governance/tool_call_guard.py
+
+schema_version: "1.0"
+
+# Global blocked tools (apply to ALL agents)
+global_blocked_tools:
+  - "raw_shell"
+  - "shell_exec"
+  - "system_call"
+  - "eval_code"
+  - "arbitrary_exec"
+
+# Global blocked parameter patterns (regex)
+global_blocked_params:
+  - "rm\\s+-rf"
+  - "dd\\s+if="
+  - "mkfs"
+  - "chmod\\s+777"
+  - "/etc/passwd"
+  - "/etc/shadow"
+  - "sudo\\s+su"
+
+# Default policy for unknown agents
+default_policy:
+  max_params_size_bytes: 10000
+  require_parameters_hash: true
+  unknown_tool_action: BLOCK  # fail-secure
+
+# Agent-specific policies
+agents:
+  medical-agent:
+    allowed_tools:
+      - "patient_lookup"
+      - "lab_results"
+      - "prescription_check"
+      - "schedule_appointment"
+    blocked_tools: []
+    max_params_size_bytes: 5000
+
+  chatbot-internal:
+    allowed_tools:
+      - "llm_message_send"
+      - "document_index"
+      - "rag_chunk_inject"
+      - "training_cycle_start"
+      - "lora_deploy"
+    blocked_tools: []
+    max_params_size_bytes: 50000
