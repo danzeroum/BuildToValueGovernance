@@ -12,7 +12,14 @@ from buildtovalue.intelligence.slm_classifier import (
     SLMClassification,
     IntentLabel,
     SLMBiasDeclaration,
+    SLMContext,
+    MercyAdvice,
+    OutputAnalysis,
     CLASSIFICATION_PROMPT,
+    ADVANCED_CLASSIFICATION_PROMPT,
+    MERCY_ADVISOR_PROMPT,
+    EXPLAIN_PROMPT,
+    OUTPUT_ANALYSIS_PROMPT,
 )
 
 
@@ -248,7 +255,251 @@ class TestPrompt:
     def test_prompt_template_has_placeholder(self):
         assert "{input_text}" in CLASSIFICATION_PROMPT
 
-    def test_prompt_contains_all_categories(self):
-        for label in IntentLabel:
-            if label != IntentLabel.UNKNOWN:
-                assert label.value in CLASSIFICATION_PROMPT
+    def test_prompt_contains_base_categories(self):
+        # POLICY_EVASION is only in the advanced prompt, not the base prompt
+        base_categories = [
+            IntentLabel.BENIGN,
+            IntentLabel.PII_EXTRACTION,
+            IntentLabel.PROMPT_INJECTION,
+            IntentLabel.DATA_EXFILTRATION,
+            IntentLabel.SOCIAL_ENGINEERING,
+        ]
+        for label in base_categories:
+            assert label.value in CLASSIFICATION_PROMPT
+
+
+# ═══════════════════════════════════════════════════════════════
+# F2-01: POLICY_EVASION, SLMContext, ADVANCED_CLASSIFICATION_PROMPT
+# ═══════════════════════════════════════════════════════════════
+
+class TestPolicyEvasion:
+
+    def test_policy_evasion_in_intent_label(self):
+        assert IntentLabel("policy_evasion") == IntentLabel.POLICY_EVASION
+
+    def test_policy_evasion_in_advanced_prompt(self):
+        assert "policy_evasion" in ADVANCED_CLASSIFICATION_PROMPT
+
+    def test_advanced_prompt_has_all_context_placeholders(self):
+        required = [
+            "{lang}", "{entropy:.2f}", "{instruction_density:.2f}",
+            "{entropy_shift}", "{leet_ratio:.2f}", "{finding_count}",
+            "{critical_count}", "{trust_score:.2f}", "{domain}",
+            "{violation_count}", "{input_text}",
+        ]
+        for placeholder in required:
+            assert placeholder in ADVANCED_CLASSIFICATION_PROMPT, (
+                f"Missing placeholder: {placeholder}"
+            )
+
+
+class TestSLMContext:
+
+    def test_slm_context_construction(self):
+        ctx = SLMContext(
+            lang="pt-BR",
+            entropy=4.2,
+            instruction_density=0.05,
+            entropy_shift=False,
+            leet_ratio=0.0,
+            trust_score=0.7,
+            domain="general",
+            violation_count=0,
+        )
+        assert ctx.lang == "pt-BR"
+        assert ctx.entropy == 4.2
+        assert ctx.domain == "general"
+        assert ctx.violation_count == 0
+
+    def test_classify_with_context_returns_none_when_not_loaded(self):
+        clf = SLMClassifier(model_id="test")
+        ctx = SLMContext(
+            lang="en", entropy=4.0, instruction_density=0.0,
+            entropy_shift=False, leet_ratio=0.0,
+            trust_score=0.5, domain="general", violation_count=0,
+        )
+        result = clf.classify_with_context("hello", 0, 0, ctx)
+        assert result is None
+
+    def test_classify_with_context_skips_outside_ambiguity_zone(self):
+        clf = SLMClassifier(model_id="test")
+        clf._loaded = True
+        clf._llm = MagicMock()
+        ctx = SLMContext(
+            lang="en", entropy=4.0, instruction_density=0.0,
+            entropy_shift=False, leet_ratio=0.0,
+            trust_score=0.5, domain="general", violation_count=0,
+        )
+        # finding_count=5 + critical_count=2 → outside ambiguity zone → None
+        result = clf.classify_with_context("test input", 5, 2, ctx)
+        assert result is None
+        clf._llm.create_chat_completion.assert_not_called()
+
+    def test_classify_with_context_uses_advanced_prompt(self):
+        clf = SLMClassifier(model_id="test")
+        clf._loaded = True
+        clf._llm = MagicMock()
+        clf._llm.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": '{"intent":"benign","risk":0.1,"confidence":0.9}'}}]
+        }
+        ctx = SLMContext(
+            lang="en", entropy=4.0, instruction_density=0.02,
+            entropy_shift=False, leet_ratio=0.0,
+            trust_score=0.8, domain="general", violation_count=0,
+        )
+        result = clf.classify_with_context("hello world", 0, 0, ctx)
+        assert result is not None
+        # Verify the advanced prompt was used (contains entropy context)
+        call_args = clf._llm.create_chat_completion.call_args
+        user_msg = call_args[1]["messages"][1]["content"]
+        assert "4.00" in user_msg  # entropy formatted
+        assert "general" in user_msg  # domain injected
+
+
+# ═══════════════════════════════════════════════════════════════
+# F2-02: MercyAdvice, MERCY_ADVISOR_PROMPT, advise_mercy()
+# ═══════════════════════════════════════════════════════════════
+
+class TestMercyAdvisor:
+
+    def test_mercy_advisor_prompt_has_placeholders(self):
+        required = ["{input_text}", "{finding_types}", "{domain}",
+                    "{user_role}", "{is_first_offense}", "{trust_score:.2f}"]
+        for p in required:
+            assert p in MERCY_ADVISOR_PROMPT, f"Missing: {p}"
+
+    def test_advise_mercy_returns_none_when_not_loaded(self):
+        clf = SLMClassifier(model_id="test")
+        result = clf.advise_mercy("CPF: 123", ["pii_extraction"], "general", "anonymous", True, 0.5)
+        assert result is None
+
+    def test_advise_mercy_parses_legitimate_probability(self):
+        clf = SLMClassifier(model_id="test")
+        clf._loaded = True
+        clf._llm = MagicMock()
+        clf._llm.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": '{"legitimate_probability": 0.8, "reasoning": "testing context"}'}}]
+        }
+        result = clf.advise_mercy("test", [], "testing", "developer", True, 0.8)
+        assert result is not None
+        assert isinstance(result, MercyAdvice)
+        assert result.legitimate_probability == 0.8
+        assert result.reasoning == "testing context"
+
+    def test_mercy_advice_clamped_to_unit_interval(self):
+        clf = SLMClassifier(model_id="test")
+        clf._loaded = True
+        clf._llm = MagicMock()
+        clf._llm.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": '{"legitimate_probability": 1.5, "reasoning": "out of range"}'}}]
+        }
+        result = clf.advise_mercy("x", [], "general", "anon", True, 0.5)
+        assert result is not None
+        assert result.legitimate_probability == 1.0
+
+
+# ═══════════════════════════════════════════════════════════════
+# F2-03: EXPLAIN_PROMPT, generate_explanation()
+# ═══════════════════════════════════════════════════════════════
+
+class TestExplainGeneration:
+
+    def test_explain_prompt_has_placeholders(self):
+        required = ["{action}", "{original_action}", "{mercy_applied}",
+                    "{mercy_scenario}", "{trust_score:.2f}", "{findings_summary}",
+                    "{levinas_note}", "{gilligan_note}", "{language}"]
+        for p in required:
+            assert p in EXPLAIN_PROMPT, f"Missing: {p}"
+
+    def test_generate_explanation_returns_none_when_not_loaded(self):
+        clf = SLMClassifier(model_id="test")
+        result = clf.generate_explanation(
+            action="BLOCK", original_action="BLOCK", mercy_applied=False,
+            mercy_scenario="S1_CRITICAL_OVERRIDE", trust_score=0.3,
+            findings_summary="1 findings, 1 critical",
+            levinas_note="Pode contestar em 24h",
+            gilligan_note="Regra aplicada",
+        )
+        assert result is None
+
+    def test_generate_explanation_returns_text(self):
+        clf = SLMClassifier(model_id="test")
+        clf._loaded = True
+        clf._llm = MagicMock()
+        clf._llm.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": "Seu input foi bloqueado por conter dados sensíveis."}}]
+        }
+        result = clf.generate_explanation(
+            action="BLOCK", original_action="BLOCK", mercy_applied=False,
+            mercy_scenario="S1_CRITICAL_OVERRIDE", trust_score=0.3,
+            findings_summary="1 findings, 1 critical",
+            levinas_note="Pode contestar em 24h",
+            gilligan_note="Regra aplicada",
+        )
+        assert result is not None
+        assert "bloqueado" in result
+
+    def test_generate_explanation_fail_open_on_exception(self):
+        clf = SLMClassifier(model_id="test")
+        clf._loaded = True
+        clf._llm = MagicMock()
+        clf._llm.create_chat_completion.side_effect = RuntimeError("model crash")
+        result = clf.generate_explanation(
+            action="ALLOW", original_action="ALLOW", mercy_applied=False,
+            mercy_scenario="S6_DEFAULT_NO_MERCY", trust_score=0.7,
+            findings_summary="0 findings, 0 critical",
+            levinas_note="ok", gilligan_note="ok",
+        )
+        assert result is None
+
+
+# ═══════════════════════════════════════════════════════════════
+# F2-04: OutputAnalysis, OUTPUT_ANALYSIS_PROMPT, analyze_output()
+# ═══════════════════════════════════════════════════════════════
+
+class TestOutputAnalysis:
+
+    def test_output_analysis_prompt_has_placeholders(self):
+        required = ["{output_text}", "{domain}", "{masked_count}"]
+        for p in required:
+            assert p in OUTPUT_ANALYSIS_PROMPT, f"Missing: {p}"
+
+    def test_analyze_output_returns_none_when_not_loaded(self):
+        clf = SLMClassifier(model_id="test")
+        result = clf.analyze_output("Patient John Doe, 47, diagnosed with...", "healthcare")
+        assert result is None
+
+    def test_analyze_output_detects_leak(self):
+        clf = SLMClassifier(model_id="test")
+        clf._loaded = True
+        clf._llm = MagicMock()
+        clf._llm.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": '{"leak_detected": true, "leak_type": "indirect_pii", "risk": 0.75, "recommendation": "redact"}'}}]
+        }
+        result = clf.analyze_output("Patient on Rua X...", "healthcare", masked_count=0)
+        assert result is not None
+        assert isinstance(result, OutputAnalysis)
+        assert result.leak_detected is True
+        assert result.leak_type == "indirect_pii"
+        assert result.risk == 0.75
+        assert result.recommendation == "redact"
+
+    def test_analyze_output_safe_response(self):
+        clf = SLMClassifier(model_id="test")
+        clf._loaded = True
+        clf._llm = MagicMock()
+        clf._llm.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": '{"leak_detected": false, "leak_type": "none", "risk": 0.05, "recommendation": "safe"}'}}]
+        }
+        result = clf.analyze_output("The weather is sunny today.", "general")
+        assert result is not None
+        assert result.leak_detected is False
+        assert result.risk == 0.05
+
+    def test_analyze_output_fail_open_on_exception(self):
+        clf = SLMClassifier(model_id="test")
+        clf._loaded = True
+        clf._llm = MagicMock()
+        clf._llm.create_chat_completion.side_effect = RuntimeError("crash")
+        result = clf.analyze_output("some output", "general")
+        assert result is None
