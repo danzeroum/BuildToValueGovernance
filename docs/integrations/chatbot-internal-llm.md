@@ -1542,9 +1542,9 @@ reduzido para ~5-8% com o SLM na zona de ambiguidade, porque:
 | Ponto | Onde | Prompt | Timeout | Fail mode | Status |
 |:------|:-----|:-------|:--------|:----------|:-------|
 | 1. Desambiguação | `/v1/decide` Step 2 | `CLASSIFICATION_PROMPT` | 100ms | Fail-open (BENIGN) | Implementado |
-| 2. Mercy advisor | `MercyCalculator` | `MERCY_ADVISOR_PROMPT` | 100ms | Fail-open (usa mapeamento fixo) | Proposto |
-| 3. Explicação NL | `explain_decision()` | `EXPLAIN_PROMPT` | 200ms | Fail-open (usa template string) | Proposto |
-| 4. Output semantic | `OutputSanitizer` | `OUTPUT_ANALYSIS_PROMPT` | 100ms | Fail-open (só regex) | Proposto |
+| 2. Mercy advisor | `MercyCalculator` | `MERCY_ADVISOR_PROMPT` | 100ms | Fail-open (usa mapeamento fixo) | Implementado |
+| 3. Explicação NL | `explain_decision()` | `EXPLAIN_PROMPT` | 200ms | Fail-open (usa template string) | Implementado |
+| 4. Output semantic | `OutputSanitizer` | `OUTPUT_ANALYSIS_PROMPT` | 100ms | Fail-open (só regex) | Implementado |
 | 5. Appeal analyzer | `ContestabilityLoop` | `APPEAL_ANALYZER_PROMPT` | sem | Fail-open (review manual) | Proposto |
 | 6. Compliance report | `/v1/compliance` | `COMPLIANCE_REPORT_PROMPT` | sem | Fail-open (template) | Proposto |
 | 7. Policy generator | `ThreatPolicyBridge` | `POLICY_GEN_PROMPT` | sem | Fail-open (manual) | Proposto (ADR-024) |
