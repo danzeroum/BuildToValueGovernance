@@ -247,6 +247,32 @@ Output JSON:
 
 
 # ─────────────────────────────────────────────────────────────
+# F2-05: APPEAL EVIDENCE ANALYZER (off-path, no timeout constraint)
+# ─────────────────────────────────────────────────────────────
+
+APPEAL_ANALYZER_PROMPT = """You are a pre-reviewer for AI trust decision appeals.
+
+## Original decision
+Action: {action}
+Reason for block: {block_reason}
+Findings: {findings}
+
+## User's appeal
+Reason: {appeal_reason}
+Evidence provided: {evidence_url_or_text}
+
+## Task
+Assess if the appeal has merit. Consider:
+- Is the user's explanation plausible?
+- Could this be a false positive?
+- Does the evidence support the claim?
+
+Output JSON:
+{{"merit_score": 0.7, "recommendation": "likely_legitimate",
+  "suggested_action": "ACCEPT", "reasoning": "brief explanation"}}"""
+
+
+# ─────────────────────────────────────────────────────────────
 # SLM CLASSIFIER
 # ─────────────────────────────────────────────────────────────
 
