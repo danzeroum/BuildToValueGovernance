@@ -1,0 +1,31 @@
+# Leakage Patterns — Gap G (System Prompt Leakage Detection)
+# Known phrases that indicate system prompt leakage in agent output.
+
+schema_version: "1.0"
+
+# Similarity threshold for n-gram overlap detection
+ngram_similarity_threshold: 0.35
+ngram_size: 3
+
+# Exact leakage indicator phrases (case-insensitive)
+indicator_phrases:
+  - "my instructions are"
+  - "my system prompt"
+  - "i was instructed to"
+  - "my original instructions"
+  - "my programming tells me"
+  - "i am programmed to"
+  - "my guidelines state"
+  - "according to my instructions"
+  - "my directives say"
+  - "i was told to"
+  - "here is my prompt"
+  - "here are my instructions"
+
+# Structural leakage patterns (regex)
+structural_patterns:
+  - "system\\s*prompt\\s*:.*\\n"
+  - "\\[INST\\].*\\[/INST\\]"
+  - "<\\|im_start\\|>system"
+  - "<<SYS>>.*<</SYS>>"
+  - "You are a .{10,200} assistant"
