@@ -1,0 +1,19 @@
+# ═══════════════════════════════════════════════════════════════
+# BuildToValue — React Dashboard Build Stage
+# Feature 2.4: Replaces Streamlit with production React SPA
+# ═══════════════════════════════════════════════════════════════
+
+FROM node:22-slim AS builder
+WORKDIR /app
+
+COPY dashboard/package.json dashboard/package-lock.json* ./
+RUN npm ci --production=false
+
+COPY dashboard/ ./
+RUN npm run build
+
+# ───────────────────────────────────────────────────────────────
+# Output stage: just the built files
+# ───────────────────────────────────────────────────────────────
+FROM scratch
+COPY --from=builder /app/dist /dist

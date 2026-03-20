@@ -127,14 +127,16 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────
-  # DASHBOARD (--profile dashboard | full)
-  # Internal ops dashboard at http://localhost:8501
+  # DASHBOARD (React SPA — served by gateway via static files)
+  # The React dashboard is built into the gateway container.
+  # Access at http://localhost:8080/ (no separate port needed).
+  # Legacy Streamlit dashboard preserved for migration period.
   # ─────────────────────────────────────────────────────────────
-  dashboard:
+  dashboard-legacy:
     build:
       context: ..
       dockerfile: ops/Dockerfile.streamlit
-    profiles: ["dashboard", "full"]
+    profiles: ["dashboard-legacy"]
     ports:
       - "8501:8501"
     environment:
