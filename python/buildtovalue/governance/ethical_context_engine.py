@@ -84,14 +84,15 @@ class EthicalContextEngine:
         policy_signer: Optional[PolicySigner] = None,
         safe_evaluator: Optional[SafeExpressionEvaluator] = None,
         contestability_loop: Optional[ContestabilityLoop] = None,
-        bias_guardian: Optional[BiasGuardian] = None,
+        bias_guardian: Optional[BiasGuardian] = None,  # None → default instance criada internamente
         persuasion_guard: Optional[PersuasionGuard] = None,
         gilligan_stage: Optional[GilliganStage] = None,
         consensus_validator: Optional[ConsensusValidator] = None,
     ) -> None:
         self.profile_manager = profile_manager
         self.contestability_loop = contestability_loop or ContestabilityLoop()
-        self.bias_guardian: Optional[BiasGuardian] = bias_guardian
+        # ADR-036 0.4: garante que bias_guardian nunca é None — elimina Optional[BiasGuardian]
+        self.bias_guardian: BiasGuardian = bias_guardian if bias_guardian is not None else BiasGuardian()
         self.persuasion_guard: Optional[PersuasionGuard] = persuasion_guard
         if persuasion_guard is not None:
             _validate_persuasion_guard_startup(persuasion_guard)
@@ -291,10 +292,8 @@ class EthicalContextEngine:
         Principio de Jonas: responsabilidade proporcional — declarar estado real.
         """
         bd = self.bias_declaration.copy()
-        if self.bias_guardian is not None:
-            bd["bias_guardian_active"] = True
-        else:
-            bd["bias_guardian_active"] = False
+        # bias_guardian é sempre não-None (instância default garantida no __init__)
+        bd["bias_guardian_active"] = True
         return bd
 
     def reset_metrics(self) -> None:
