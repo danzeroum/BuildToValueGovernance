@@ -49,6 +49,7 @@ class ThreatAssessment:
     burst_detected: bool
     pattern_match: Optional[str]
     explain: str
+    instruction_density: float = 0.0
     hmac_sha256: str = ""
 
 
@@ -105,10 +106,12 @@ class ConversationThreatGraph:
         esc_pct = self._escalation_pct(buf)
         burst = self._is_burst(buf)
         pattern = self._match_sequence(buf)
+        density = self._instruction_density(buf)
 
-        level = self._classify(esc_pct, burst, pattern)
+        level = self._classify(esc_pct, burst, pattern, density)
         explain = (
-            f"esc={esc_pct:.0f}% burst={burst} pattern={pattern or 'none'}"
+            f"esc={esc_pct:.0f}% burst={burst} "
+            f"pattern={pattern or 'none'} instr_density={density:.2f}"
         )
         sig = self._sign(f"{session_id}|{level}|{explain}")
         return ThreatAssessment(
@@ -118,6 +121,7 @@ class ConversationThreatGraph:
             burst_detected=burst,
             pattern_match=pattern,
             explain=f"[threat_graph] {explain}",
+            instruction_density=density,
             hmac_sha256=sig,
         )
 
@@ -147,12 +151,26 @@ class ConversationThreatGraph:
                     return seq.get("name")
         return None
 
+    def _instruction_density(self, buf: Deque[_TurnRecord]) -> float:
+        """Return ratio of instruction-like actions to total actions in window."""
+        if not buf:
+            return 0.0
+        _INSTR_KEYWORDS = {"instruct", "system", "override", "ignore", "execute", "sudo"}
+        count = sum(
+            1 for t in buf
+            if any(kw in t.action.lower() for kw in _INSTR_KEYWORDS)
+        )
+        return count / len(buf)
+
     def _classify(
-        self, esc_pct: float, burst: bool, pattern: Optional[str]
+        self, esc_pct: float, burst: bool, pattern: Optional[str],
+        density: float = 0.0,
     ) -> ThreatLevel:
         if pattern or burst:
             return ThreatLevel.CRITICAL
         if esc_pct >= self._esc_pct:
+            return ThreatLevel.HIGH
+        if density > 0.5:
             return ThreatLevel.HIGH
         if esc_pct >= self._esc_pct / 2:
             return ThreatLevel.MEDIUM

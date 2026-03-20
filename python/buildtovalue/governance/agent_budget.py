@@ -1,10 +1,11 @@
 """AgentBudget — Gap I: Agent Budget/Token Tracking.
 
-Tracks per-agent token usage, cost, and API call counts.
-Exceeding budget -> BLOCK with explanation.
+Tracks per-agent, per-session token usage, cost, and API call counts.
+EDUCATE at 80% budget, BLOCK at 100%.
+Tool call circuit breaker per request.
 
 Invariants:
-- Fail-secure: budget error -> conservative limit (BLOCK)
+- Fail-secure: budget error -> BLOCK
 - Monotonic counters (never decrease)
 - Functions <= 50 lines, file <= 200 lines
 """
@@ -13,7 +14,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
@@ -25,6 +26,8 @@ logger = logging.getLogger("btv.governance.agent_budget")
 _DEFAULT_TOKENS = 1_000_000
 _DEFAULT_COST = 10.0
 _DEFAULT_CALLS = 500
+_DEFAULT_TOOLS_PER_REQ = 20
+_EDUCATE_PCT = 0.80
 
 
 @dataclass
@@ -32,11 +35,13 @@ class BudgetLimits:
     max_tokens: int = _DEFAULT_TOKENS
     max_cost_usd: float = _DEFAULT_COST
     max_api_calls: int = _DEFAULT_CALLS
+    max_tools_per_request: int = _DEFAULT_TOOLS_PER_REQ
 
 
 @dataclass
 class BudgetStatus:
     agent_id: str
+    session_id: str
     tokens_used: int
     tokens_remaining: int
     cost_used_usd: float
@@ -50,10 +55,11 @@ class _Usage:
     tokens: int = 0
     cost_usd: float = 0.0
     api_calls: int = 0
+    tool_calls_in_request: Dict[str, int] = field(default_factory=dict)
 
 
 class AgentBudget:
-    """Tracks and enforces per-agent resource budgets."""
+    """Tracks and enforces per-agent, per-session resource budgets."""
 
     def __init__(self, policy_path: Optional[Path] = None) -> None:
         raw = self._load(policy_path) if policy_path else {}
@@ -62,6 +68,9 @@ class AgentBudget:
             max_tokens=defaults.get("max_tokens", _DEFAULT_TOKENS),
             max_cost_usd=defaults.get("max_cost_usd", _DEFAULT_COST),
             max_api_calls=defaults.get("max_api_calls", _DEFAULT_CALLS),
+            max_tools_per_request=defaults.get(
+                "max_tools_per_request", _DEFAULT_TOOLS_PER_REQ
+            ),
         )
         self._agents: Dict[str, BudgetLimits] = {}
         for aid, cfg in raw.get("agents", {}).items():
@@ -69,8 +78,11 @@ class AgentBudget:
                 max_tokens=cfg.get("max_tokens", self._default.max_tokens),
                 max_cost_usd=cfg.get("max_cost_usd", self._default.max_cost_usd),
                 max_api_calls=cfg.get("max_api_calls", self._default.max_api_calls),
+                max_tools_per_request=cfg.get(
+                    "max_tools_per_request", self._default.max_tools_per_request
+                ),
             )
-        self._usage: Dict[str, _Usage] = {}
+        self._usage: Dict[Tuple[str, str], _Usage] = {}
 
     @staticmethod
     def _load(path: Path) -> dict:
@@ -82,53 +94,69 @@ class AgentBudget:
     def _limits(self, agent_id: str) -> BudgetLimits:
         return self._agents.get(agent_id, self._default)
 
-    def _get_usage(self, agent_id: str) -> _Usage:
-        if agent_id not in self._usage:
-            self._usage[agent_id] = _Usage()
-        return self._usage[agent_id]
+    def _key(self, agent_id: str, session_id: str) -> Tuple[str, str]:
+        return (agent_id, session_id)
+
+    def _get_usage(self, agent_id: str, session_id: str = "") -> _Usage:
+        k = self._key(agent_id, session_id)
+        if k not in self._usage:
+            self._usage[k] = _Usage()
+        return self._usage[k]
 
     def check_budget(
-        self, agent_id: str, estimated_tokens: int = 0
+        self, agent_id: str, estimated_tokens: int = 0,
+        session_id: str = "",
     ) -> GateResult:
-        """Check if agent has remaining budget."""
+        """Check budget. EDUCATE at 80%, BLOCK at 100%."""
         limits = self._limits(agent_id)
-        usage = self._get_usage(agent_id)
+        usage = self._get_usage(agent_id, session_id)
+        projected = usage.tokens + estimated_tokens
 
-        if usage.tokens + estimated_tokens > limits.max_tokens:
-            return _block(
-                "agent_budget",
-                f"Token limit exceeded: {usage.tokens}/{limits.max_tokens}",
-            )
+        if projected > limits.max_tokens:
+            return _block(f"Token limit: {usage.tokens}/{limits.max_tokens}")
         if usage.cost_usd >= limits.max_cost_usd:
-            return _block(
-                "agent_budget",
-                f"Cost limit exceeded: ${usage.cost_usd:.2f}/${limits.max_cost_usd:.2f}",
-            )
+            return _block(f"Cost limit: ${usage.cost_usd:.2f}/${limits.max_cost_usd:.2f}")
         if usage.api_calls >= limits.max_api_calls:
-            return _block(
-                "agent_budget",
-                f"API call limit exceeded: {usage.api_calls}/{limits.max_api_calls}",
-            )
-        return _allow("agent_budget", "Within budget")
+            return _block(f"API call limit: {usage.api_calls}/{limits.max_api_calls}")
+
+        if projected > limits.max_tokens * _EDUCATE_PCT:
+            return _educate(f"Token budget at {projected/limits.max_tokens:.0%}")
+        if usage.cost_usd >= limits.max_cost_usd * _EDUCATE_PCT:
+            return _educate(f"Cost budget at {usage.cost_usd/limits.max_cost_usd:.0%}")
+        if usage.api_calls >= limits.max_api_calls * _EDUCATE_PCT:
+            return _educate(f"API calls at {usage.api_calls/limits.max_api_calls:.0%}")
+
+        return _allow("Within budget")
 
     def record_usage(
-        self,
-        agent_id: str,
-        tokens_used: int = 0,
-        cost_usd: float = 0.0,
+        self, agent_id: str, tokens_used: int = 0,
+        cost_usd: float = 0.0, session_id: str = "",
     ) -> None:
         """Record resource consumption (monotonic)."""
-        usage = self._get_usage(agent_id)
+        usage = self._get_usage(agent_id, session_id)
         usage.tokens += tokens_used
         usage.cost_usd += cost_usd
         usage.api_calls += 1
 
-    def get_remaining(self, agent_id: str) -> BudgetStatus:
-        """Get remaining budget for an agent."""
+    def check_tool_calls(
+        self, agent_id: str, request_id: str, session_id: str = "",
+    ) -> GateResult:
+        """Circuit breaker: BLOCK if too many tool calls per request."""
         limits = self._limits(agent_id)
-        usage = self._get_usage(agent_id)
+        usage = self._get_usage(agent_id, session_id)
+        count = usage.tool_calls_in_request.get(request_id, 0) + 1
+        usage.tool_calls_in_request[request_id] = count
+        if count > limits.max_tools_per_request:
+            return _block(f"Tool calls {count} > {limits.max_tools_per_request}/req")
+        return _allow(f"Tool call {count}/{limits.max_tools_per_request}")
+
+    def get_remaining(
+        self, agent_id: str, session_id: str = "",
+    ) -> BudgetStatus:
+        limits = self._limits(agent_id)
+        usage = self._get_usage(agent_id, session_id)
         return BudgetStatus(
-            agent_id=agent_id,
+            agent_id=agent_id, session_id=session_id,
             tokens_used=usage.tokens,
             tokens_remaining=max(0, limits.max_tokens - usage.tokens),
             cost_used_usd=usage.cost_usd,
@@ -137,25 +165,25 @@ class AgentBudget:
             api_calls_remaining=max(0, limits.max_api_calls - usage.api_calls),
         )
 
-    def reset(self, agent_id: str) -> None:
-        """Reset usage counters for an agent."""
-        self._usage.pop(agent_id, None)
+    def reset(self, agent_id: str, session_id: str = "") -> None:
+        self._usage.pop(self._key(agent_id, session_id), None)
 
 
-def _block(gate: str, reason: str) -> GateResult:
-    logger.warning("BLOCK: gate=%s reason=%s", gate, reason)
+def _block(reason: str) -> GateResult:
+    logger.warning("BLOCK: agent_budget %s", reason)
     return GateResult(
-        verdict=AgentVerdict.BLOCK,
-        evidence_id=None,
-        explain=f"[{gate}] {reason}",
-        gate=gate,
+        verdict=AgentVerdict.BLOCK, evidence_id=None,
+        explain=f"[agent_budget] {reason}", gate="agent_budget",
     )
 
-
-def _allow(gate: str, reason: str) -> GateResult:
+def _educate(reason: str) -> GateResult:
     return GateResult(
-        verdict=AgentVerdict.ALLOW,
-        evidence_id=None,
-        explain=f"[{gate}] {reason}",
-        gate=gate,
+        verdict=AgentVerdict.EDUCATE, evidence_id=None,
+        explain=f"[agent_budget] {reason}", gate="agent_budget",
+    )
+
+def _allow(reason: str) -> GateResult:
+    return GateResult(
+        verdict=AgentVerdict.ALLOW, evidence_id=None,
+        explain=f"[agent_budget] {reason}", gate="agent_budget",
     )

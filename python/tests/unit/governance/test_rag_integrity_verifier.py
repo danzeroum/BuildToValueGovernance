@@ -33,7 +33,9 @@ def verifier(policy_path: Path) -> RagIntegrityVerifier:
 
 
 def _hash(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
+    """Use same hash as verifier (BLAKE3 with SHA-256 fallback)."""
+    from buildtovalue.governance.rag_integrity_verifier import _blake3_hex
+    return _blake3_hex(text.encode())
 
 
 class TestChunkVerification:
@@ -107,6 +109,20 @@ class TestCosineDistance:
 
     def test_mismatched_dims(self) -> None:
         assert _cosine_distance([1], [1, 2]) == 2.0
+
+
+class TestIntegrityResultFields:
+    def test_blake3_hash_present(self, verifier: RagIntegrityVerifier) -> None:
+        r = verifier.verify_chunk("test data")
+        assert len(r.blake3_hash) == 64
+
+    def test_hmac_signature_present(self, verifier: RagIntegrityVerifier) -> None:
+        r = verifier.verify_chunk("test data")
+        assert len(r.hmac_signature) == 64
+
+    def test_compute_doc_hmac(self, verifier: RagIntegrityVerifier) -> None:
+        sig = verifier.compute_doc_hmac("a" * 64, [1.0, 0.0])
+        assert len(sig) == 64
 
 
 class TestNoPolicy:
