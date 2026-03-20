@@ -79,3 +79,15 @@ class TestEnforce:
         req = _make_request("unknown-agent", ["patient_lookup"])
         r = enforcer.enforce(req)
         assert r.verdict == AgentVerdict.BLOCK
+
+
+class TestMakeFinding:
+    def test_finding_generated(self) -> None:
+        f = CapabilityEnforcer.make_finding("test")
+        assert f.rule_id == "CAPABILITY_EXCEEDED"
+        assert f.severity == 0.9
+        assert f.module == "capability_enforcer"
+
+    def test_custom_confidence(self) -> None:
+        f = CapabilityEnforcer.make_finding("test", confidence=0.7)
+        assert f.confidence == 0.7

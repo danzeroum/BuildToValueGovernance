@@ -41,6 +41,7 @@ class LeakageResult:
     action: ActionType
     explain: str
     hmac_sha256: str = ""
+    sanitized_output: str = ""
 
 
 def _ngrams(text: str, n: int) -> Counter:
@@ -140,8 +141,41 @@ class OutputLeakageDetector:
 
         return self._result(False, 0.0, "No leakage detected")
 
+    def detect_and_sanitize(
+        self,
+        output_text: str,
+        registered_prompts: Optional[List[str]] = None,
+    ) -> LeakageResult:
+        """Detect leakage and sanitize output if leaked."""
+        result = self.detect(output_text, registered_prompts)
+        if result.leaked:
+            sanitized = output_text
+            for prompt in (registered_prompts or []):
+                if len(prompt) > 20 and prompt.lower() in output_text.lower():
+                    sanitized = sanitized.replace(prompt, "[SYSTEM CONTENT REDACTED]")
+            if sanitized == output_text:
+                sanitized = "[SYSTEM CONTENT REDACTED]"
+        else:
+            sanitized = output_text
+        sig = _sign(
+            f"{result.leaked}|{result.confidence}|{result.explain}|{sanitized}",
+            self._key,
+        )
+        return LeakageResult(
+            leaked=result.leaked,
+            confidence=result.confidence,
+            action=result.action,
+            explain=result.explain,
+            hmac_sha256=sig,
+            sanitized_output=sanitized,
+        )
+
     def _result(
-        self, leaked: bool, confidence: float, explain: str
+        self,
+        leaked: bool,
+        confidence: float,
+        explain: str,
+        sanitized_output: str = "",
     ) -> LeakageResult:
         action = ActionType.BLOCK if leaked else ActionType.ALLOW
         sig = _sign(f"{leaked}|{confidence}|{explain}", self._key)
@@ -151,4 +185,5 @@ class OutputLeakageDetector:
             action=action,
             explain=f"[output_leakage_detector] {explain}",
             hmac_sha256=sig,
+            sanitized_output=sanitized_output,
         )

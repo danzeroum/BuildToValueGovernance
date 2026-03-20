@@ -90,6 +90,21 @@ class TestHmac:
         assert len(r.hmac_sha256) == 64
 
 
+class TestInstructionDensity:
+    def test_high_density_triggers_high(self, graph: ConversationThreatGraph) -> None:
+        # All instruction-like actions -> density > 0.5 -> HIGH
+        graph.record_turn("s1", "system_override", 0.3)
+        graph.record_turn("s1", "execute_command", 0.3)
+        r = graph.record_turn("s1", "ignore_rules", 0.3)
+        assert r.instruction_density > 0.5
+        assert r.threat_level in (ThreatLevel.HIGH, ThreatLevel.CRITICAL)
+
+    def test_low_density_stays_low(self, graph: ConversationThreatGraph) -> None:
+        r = graph.record_turn("s1", "read_data", 0.1)
+        assert r.instruction_density == 0.0
+        assert r.threat_level == ThreatLevel.LOW
+
+
 class TestNoPolicy:
     def test_default_graph(self) -> None:
         g = ConversationThreatGraph()

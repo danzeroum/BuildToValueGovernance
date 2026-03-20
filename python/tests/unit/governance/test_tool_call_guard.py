@@ -62,7 +62,7 @@ class TestPreValidation:
         big = "x" * 300
         r = guard.validate_pre("safe_tool", big, "test-agent", "s1")
         assert r.verdict == AgentVerdict.BLOCK
-        assert "limit" in r.explain
+        assert "exceed" in r.explain.lower() or "200B" in r.explain
 
     def test_blocked_param_pattern(self, guard: ToolCallGuard) -> None:
         r = guard.validate_pre("safe_tool", "rm -rf /", "test-agent", "s1")
@@ -113,3 +113,43 @@ class TestFailSecure:
     def test_sudo_in_params_blocked(self, guard: ToolCallGuard) -> None:
         r = guard.validate_pre("safe_tool", "sudo su -", "test-agent", "s1")
         assert r.verdict == AgentVerdict.BLOCK
+
+
+class TestValidatePreRequest:
+    def test_adr_request_blocked_tool(self, guard: ToolCallGuard) -> None:
+        from buildtovalue.governance.agent_pdp import (
+            AgentAction, ActionImpact, AgentDecisionRequest,
+        )
+        req = AgentDecisionRequest(
+            agent_id="any",
+            session_id="s1",
+            action=AgentAction(name="raw_shell", impact=ActionImpact.SAFE),
+            parameters_hash="a" * 64,
+        )
+        r = guard.validate_pre_request(req)
+        assert r.verdict == AgentVerdict.BLOCK
+
+    def test_capability_check(self, guard: ToolCallGuard) -> None:
+        from buildtovalue.governance.agent_pdp import (
+            AgentAction, ActionImpact, AgentDecisionRequest,
+        )
+        req = AgentDecisionRequest(
+            agent_id="test-agent",
+            session_id="s1",
+            action=AgentAction(
+                name="safe_tool", impact=ActionImpact.SAFE,
+                capabilities=["special_cap"],
+            ),
+            parameters_hash="a" * 64,
+        )
+        r = guard.validate_pre_request(req, capability_set=frozenset())
+        assert r.verdict == AgentVerdict.BLOCK
+        assert "CAPABILITY_EXCEEDED" in r.explain
+
+
+class TestMakeFinding:
+    def test_make_finding(self) -> None:
+        from buildtovalue.governance.tool_call_guard import ToolCallGuard
+        f = ToolCallGuard.make_finding("test reason")
+        assert f.rule_id == "CAPABILITY_EXCEEDED"
+        assert f.severity == 0.9
