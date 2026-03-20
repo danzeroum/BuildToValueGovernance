@@ -123,8 +123,8 @@ mod tests {
         let mut gk = Gatekeeper::new(); // regex compile aqui (~10ms)
         let bp = BatchProcessor::new(test_config());
 
-        // Warm up gatekeeper (first scan compiles lazy patterns)
-        let _ = gk.scan_for_evidence("warmup", 0);
+        // Warm up gatekeeper (REGISTRY already compiled in new(), this warms OS-level caches)
+        let _ = gk.scan_for_evidence("warmup input", 0); // 12 chars >= MIN_INPUT_LENGTH
 
         let inputs: Vec<&str> = vec!["sample input with some text to scan"; 100];
         let ids: Vec<u128> = (0..100).map(|i| i as u128).collect();
