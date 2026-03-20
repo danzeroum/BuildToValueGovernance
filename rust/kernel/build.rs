@@ -9,7 +9,7 @@
 
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -45,7 +45,7 @@ fn main() {
         .unwrap_or_else(|e| panic!("build.rs: falha ao escrever {}: {}", out_file.display(), e));
 }
 
-fn load_hashes(path: &PathBuf, key: &str) -> Vec<[u8; 32]> {
+fn load_hashes(path: &Path, key: &str) -> Vec<[u8; 32]> {
     if !path.exists() {
         println!("cargo:warning=SkillRegistry: {} nao encontrado — usando lista vazia", path.display());
         return vec![];
@@ -69,8 +69,8 @@ fn load_hashes(path: &PathBuf, key: &str) -> Vec<[u8; 32]> {
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 continue;
             }
-            if trimmed.starts_with("- ") {
-                let hex = trimmed[2..].trim();
+            if let Some(stripped) = trimmed.strip_prefix("- ") {
+                let hex = stripped.trim();
                 if hex == "[]" { break; }
                 hashes.push(parse_blake3_hex(hex, path));
             } else if !trimmed.starts_with(' ') && !trimmed.starts_with('-') {
@@ -82,7 +82,7 @@ fn load_hashes(path: &PathBuf, key: &str) -> Vec<[u8; 32]> {
     hashes
 }
 
-fn parse_blake3_hex(hex: &str, source: &PathBuf) -> [u8; 32] {
+fn parse_blake3_hex(hex: &str, source: &Path) -> [u8; 32] {
     if hex.len() != 64 {
         panic!(
             "build.rs: hash invalido em {} — esperado 64 chars hex BLAKE3, obtido {} chars: '{}'",
