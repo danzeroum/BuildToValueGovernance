@@ -85,6 +85,7 @@ class EthicalContextEngine:
         evidence: RustEvidence,
         context: RequestContext,
         external_verdict_id: Optional[str] = None,
+        slm_justifiability: Optional[float] = None,
     ) -> EthicalVerdict:
         """Main entry point. Produces signed, explainable verdict."""
         now = int(time.time())
@@ -105,6 +106,7 @@ class EthicalContextEngine:
                 "user_role": context.user_role,
             },
             trust_score=trust,
+            slm_justifiability=slm_justifiability,
         )
         scenario_result = evaluate_scenarios(
             action=evidence.policy_action,
