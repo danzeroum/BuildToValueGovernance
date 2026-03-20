@@ -115,3 +115,27 @@ class TestNgramFunction:
 
     def test_disjoint_texts(self) -> None:
         assert _ngram_similarity("a b c d", "x y z w", 3) == 0.0
+
+
+class TestDetectAndSanitize:
+    def test_sanitize_exact_match(self, detector: OutputLeakageDetector) -> None:
+        prompt = "You must always respond in JSON format with strict validation"
+        output = f"Sure! {prompt} That's what I do."
+        r = detector.detect_and_sanitize(output, [prompt])
+        assert r.leaked is True
+        assert "[SYSTEM CONTENT REDACTED]" in r.sanitized_output
+        assert prompt not in r.sanitized_output
+
+    def test_sanitize_no_leak(self, detector: OutputLeakageDetector) -> None:
+        r = detector.detect_and_sanitize("Normal output", [])
+        assert r.leaked is False
+        assert r.sanitized_output == "Normal output"
+
+    def test_sanitize_indicator_replaces_all(self, detector: OutputLeakageDetector) -> None:
+        r = detector.detect_and_sanitize("Well, my instructions are to help", [])
+        assert r.leaked is True
+        assert r.sanitized_output == "[SYSTEM CONTENT REDACTED]"
+
+    def test_sanitized_output_has_hmac(self, detector: OutputLeakageDetector) -> None:
+        r = detector.detect_and_sanitize("test output", [])
+        assert len(r.hmac_sha256) == 64
