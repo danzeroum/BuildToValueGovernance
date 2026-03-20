@@ -83,18 +83,16 @@ impl SessionAggregator {
         let mut last_us = u64::MIN;
         let mut valid_count = 0usize;
 
-        for slot in &self.buffer {
-            if let Some(ev) = slot {
-                valid_count += 1;
-                if ev.blocked { block_count += 1; }
-                if ev.has_pii { pii_count += 1; }
-                total_risk += ev.composite_risk;
-                if (ev.risk_level as u8) > (max_risk as u8) {
-                    max_risk = ev.risk_level;
-                }
-                if ev.timestamp_us < first_us { first_us = ev.timestamp_us; }
-                if ev.timestamp_us > last_us { last_us = ev.timestamp_us; }
+        for ev in self.buffer.iter().flatten() {
+            valid_count += 1;
+            if ev.blocked { block_count += 1; }
+            if ev.has_pii { pii_count += 1; }
+            total_risk += ev.composite_risk;
+            if (ev.risk_level as u8) > (max_risk as u8) {
+                max_risk = ev.risk_level;
             }
+            if ev.timestamp_us < first_us { first_us = ev.timestamp_us; }
+            if ev.timestamp_us > last_us { last_us = ev.timestamp_us; }
         }
 
         SessionAggregate {

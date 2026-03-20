@@ -26,7 +26,7 @@ impl<K: Clone + Eq + std::hash::Hash, V: Clone> ObliviousCache<K, V> {
         let mut rng = rand::thread_rng();
         
         // 1. Acessa chave real
-        if let Some(_) = self.storage.get(&key) {
+        if self.storage.contains_key(&key) {
             found = true;
         }
         
@@ -39,7 +39,7 @@ impl<K: Clone + Eq + std::hash::Hash, V: Clone> ObliviousCache<K, V> {
         
         // 3. Incrementa contador (obfuscação adicional)
         // Força flush de cache a cada 1000 acessos
-        if self.access_count % 1000 == 0 {
+        if self.access_count.is_multiple_of(1000) {
             self.dummy_flush();
         }
         
