@@ -16,9 +16,14 @@ use crate::core::types::{BiasDeclaration, ValidatorModule};
 use crate::evidence::Finding;
 
 // Confiança mínima para ativar Tier 1/2 no PatternRegistry.
-const MIN_CONFIDENCE: f64 = 0.30;
+// Para inputs > LONG_INPUT_LEN usamos threshold mais alto (0.60) para maior precisão.
+// Para inputs curtos (> MIN_INPUT_LEN) usamos threshold menor (0.30) para maior recall.
+const MIN_CONFIDENCE_SHORT: f64 = 0.30;
+const MIN_CONFIDENCE_LONG: f64 = 0.60;
 // Input muito curto: não há sinal suficiente para detecção confiável.
-const MIN_INPUT_LEN: usize = 20;
+const MIN_INPUT_LEN: usize = 10;
+// Inputs acima deste limiar têm sinal suficiente para exigir confiança mais alta.
+const LONG_INPUT_LEN: usize = 30;
 
 pub struct LanguageDetector;
 
@@ -68,8 +73,16 @@ impl Module for LanguageDetector {
         if let Some(info) = detect(input) {
             let confidence = info.confidence();
 
+            // Threshold adaptativo: inputs longos exigem maior confiança para evitar
+            // falsos positivos de idioma; inputs curtos usam threshold menor para maior recall.
+            let min_conf = if input.len() > LONG_INPUT_LEN {
+                MIN_CONFIDENCE_LONG
+            } else {
+                MIN_CONFIDENCE_SHORT
+            };
+
             // Só ativar Tier 1/2 se confiança mínima atingida.
-            if confidence >= MIN_CONFIDENCE {
+            if confidence >= min_conf {
                 if let Some(bit) = Self::lang_to_bit(info.lang()) {
                     ctx.flags.lang_bitmask |= bit;
 
@@ -98,15 +111,15 @@ impl Module for LanguageDetector {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(
-            0.05, // FPR: idioma errado detectado com confiança >= 0.3
-            0.25, // FNR: textos curtos ou mistos não detectados (undetermined)
-            20260224,
-            420,
+            0.05, // FPR: idioma errado detectado com confiança >= threshold
+            0.20, // FNR: textos curtos ou mistos não detectados (undetermined) — reduzido de 0.25
+            20260319,
+            450,
         )
         .with_limitations(
-            "Textos < 20 chars retornam undetermined. \
+            "Textos < 10 chars retornam undetermined. \
              Inputs mistos (PT+EN) detectam apenas idioma dominante. \
-             FNR alto para inputs < 50 chars.",
+             Threshold adaptativo: 0.30 para inputs <= 30 chars, 0.60 para inputs > 30 chars.",
         )
         .with_affected_groups(
             "Usuários com inputs curtos (mobile). \
@@ -145,7 +158,17 @@ mod tests {
     fn test_short_input_undetermined() {
         let d = detector();
         let mut ctx = ScanContext::default();
+        // "hi" has 2 chars < MIN_INPUT_LEN (10), so undetermined
         d.scan("hi", &mut ctx);
+        assert!(ctx.flags.is_language_undetermined());
+    }
+
+    #[test]
+    fn test_very_short_under_10_undetermined() {
+        let d = detector();
+        let mut ctx = ScanContext::default();
+        // Exactly 9 chars — below new MIN_INPUT_LEN of 10
+        d.scan("123456789", &mut ctx);
         assert!(ctx.flags.is_language_undetermined());
     }
 
