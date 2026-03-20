@@ -49,3 +49,15 @@ from .model_integrity import ModelStatus, get_model_info, normalize_id, is_known
 from .model_integrity_verifier import AbliterationDetector, IntegrityVerifier, verify_model_integrity
 from .agent_pdp import ActionImpact, AgentVerdict, AgentAction, AgentContext, AgentDecisionRequest, VerdictEnvelope, BiasSummary
 from .chatbot_gates import DataClassification, GateResult, message_gate, indexing_gate, rag_gate, training_gate, lora_deploy_gate
+
+# Agent Governance Gaps (A–I)
+from .tool_call_guard import ToolCallGuard                         # Gap A
+from .output_leakage_detector import OutputLeakageDetector         # Gap G
+from .capability_registry import CapabilityRegistry                # Gap C
+from .capability_enforcer import CapabilityEnforcer                # Gap C
+from .approval_workflow import ApprovalWorkflow, ApprovalStatus    # Gap F
+from .conversation_threat_graph import ConversationThreatGraph     # Gap E
+from .delegation_ledger import DelegationLedger                    # Gap B
+from .agent_budget import AgentBudget                              # Gap I
+from .cross_agent_correlator import CrossAgentCorrelator           # Gap D
+from .rag_integrity_verifier import RagIntegrityVerifier           # Gap H
