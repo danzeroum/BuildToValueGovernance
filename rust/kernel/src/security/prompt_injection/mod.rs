@@ -16,7 +16,6 @@ pub use universal::{detect_tier0, Severity, ThreatCategory, ThreatSignal};
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
 #[allow(dead_code)]
-
 const INSTRUCTION_DENSITY_THRESHOLD: f32 = 0.15;
 const MIN_INPUT_LENGTH: usize = 10;
 
@@ -43,20 +42,27 @@ impl PromptInjectionDetector {
     }
 
     const CONTEXT_WHITELIST: &[(&str, &[&str])] = &[
-        ("ignore", &["git ignore", "ignore error", "css override"]),
-        ("bypass", &["bypass cache", "bypass proxy"]),
+        // RT-001 FP: fp-ignore-noise — "ignore the noise in the background"
+        ("ignore", &["git ignore", "ignore error", "css override", "ignore the noise", "ignore noise", "ignore the background"]),
+        // RT-001 FP: fp-bypass-traffic — "bypass a traffic jam"
+        ("bypass", &["bypass cache", "bypass proxy", "bypass traffic", "bypass a traffic", "bypass the traffic", "bypass the queue", "bypass queue"]),
         ("override", &["method override", "config override"]),
         ("kill", &["kill process", "kill switch"]),
-        ("system", &["operating system", "file system"]),
+        // RT-001 FP: fp-system-requirements — "System requirements: 8GB RAM"
+        ("system", &["operating system", "file system", "system requirements", "system specs", "system information", "system configuration"]),
+        // RT-001 FP: fp-pretend-teaching — "Pretend you are helping a student"
+        // (handled via is_educational_context below)
+        ("pretend", &["pretend you are helping", "pretend you are teaching", "pretend you are a teacher", "pretend you are a tutor"]),
+        // RT-001 FP: fp-act-as-if-medieval — "act as if this scenario happened in medieval times"
+        ("act as if", &["act as if this scenario", "act as if it happened", "act as if this happened", "act as if we were", "act as if you were in"]),
     ];
 
     fn is_whitelisted(input: &str) -> bool {
         let lower = input.to_lowercase();
         for (trigger, safe_contexts) in Self::CONTEXT_WHITELIST {
-            if lower.contains(trigger) {
-                if safe_contexts.iter().any(|ctx| lower.contains(ctx)) {
-                    return true;
-                }
+            if lower.contains(trigger)
+                && safe_contexts.iter().any(|ctx| lower.contains(ctx)) {
+                return true;
             }
         }
         false

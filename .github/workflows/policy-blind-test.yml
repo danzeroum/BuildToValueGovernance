@@ -6,6 +6,13 @@ on:
       - 'data/policies/**/*.yaml'
       - 'python/buildtovalue/governance/policy_tester.py'
       - 'python/buildtovalue/governance/synthetic_dataset.py'
+  # ADR-042: bloquear PRs que toquem policies ou código de teste antes de merge
+  pull_request:
+    paths:
+      - 'data/policies/**/*.yaml'
+      - 'python/buildtovalue/governance/policy_tester.py'
+      - 'python/buildtovalue/governance/synthetic_dataset.py'
+      - 'python/buildtovalue/governance/blind_evaluator.py'
   workflow_dispatch:
     inputs:
       force_rerun:

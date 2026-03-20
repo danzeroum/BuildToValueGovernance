@@ -91,3 +91,7 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_any_explicit = false
+# ADR-036 0.4: strict mode para o pacote governance/
+# Aplicado via CI com: mypy buildtovalue/governance/ --strict --ignore-missing-imports
+strict = false  # global: false para não quebrar pacotes de terceiros sem stubs
+ignore_missing_imports = true
