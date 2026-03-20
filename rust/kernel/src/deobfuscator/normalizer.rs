@@ -271,8 +271,9 @@ impl Normalizer {
     }
 
     /// 3. Remove espaços internos em padrões que se parecem com PII espaçado.
-    /// Ex: "1 2 3 . 4 5 6 . 7 8 9 - 0 9" → "123.456.789-09"
-    /// Heurística: sequência de dígitos/separadores com espaços entre cada char.
+    ///
+    ///    Ex: "1 2 3 . 4 5 6 . 7 8 9 - 0 9" → "123.456.789-09"
+    ///    Heurística: sequência de dígitos/separadores com espaços entre cada char.
     fn normalize_pii_spaces(&self, input: &str) -> String {
         let tokens: Vec<&str> = input.split_whitespace().collect();
         if tokens.len() < 5 {
@@ -291,7 +292,8 @@ impl Normalizer {
     }
 
     /// 4. Substitui letra O/o por 0 em padrão CPF NNN.NNN.NNN-OO
-    /// Opera char-by-char para segurança UTF-8.
+    ///
+    ///    Opera char-by-char para segurança UTF-8.
     fn normalize_letter_o_as_zero(&self, input: &str) -> String {
         let chars: Vec<char> = input.chars().collect();
         let len = chars.len();
@@ -364,7 +366,7 @@ impl Module for Normalizer {
                 TechnicalSeverity::Medium,
                 "NORMALIZER_001",
                 "INPUT_NORMALIZED",
-                &format!("Input normalizado (homoglyphs/palavras/espaços PII)"),
+                "Input normalizado (homoglyphs/palavras/espaços PII)",
             ).with_confidence(180)]
         } else {
             vec![]
