@@ -40,6 +40,7 @@ services:
       - ../data/policies:/app/data/policies:ro
       - ./autogen-policies:/app/data/autogen-policies
       - ./models:/app/models
+      - ledger_data:/app/data/ledger
     environment:
       - BTV_HMAC_KEY=${BTV_HMAC_KEY:-btv-dev-key-NOT-FOR-PRODUCTION!!}
       - BTV_ENV=${BTV_ENV:-development}
