@@ -63,7 +63,7 @@ impl ToolScreen {
             }
         }
         let non_ascii = input.bytes().filter(|b| *b > 127).count();
-        if input.len() > 0 && non_ascii * 100 / input.len() > 40 {
+        if !input.is_empty() && non_ascii * 100 / input.len() > 40 {
             return ToolScreenResult::Suspicious { reason: "high_non_ascii_density" };
         }
         ToolScreenResult::Clean

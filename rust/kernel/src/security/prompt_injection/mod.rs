@@ -16,7 +16,6 @@ pub use universal::{detect_tier0, Severity, ThreatCategory, ThreatSignal};
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
 #[allow(dead_code)]
-
 const INSTRUCTION_DENSITY_THRESHOLD: f32 = 0.15;
 const MIN_INPUT_LENGTH: usize = 10;
 
@@ -61,10 +60,9 @@ impl PromptInjectionDetector {
     fn is_whitelisted(input: &str) -> bool {
         let lower = input.to_lowercase();
         for (trigger, safe_contexts) in Self::CONTEXT_WHITELIST {
-            if lower.contains(trigger) {
-                if safe_contexts.iter().any(|ctx| lower.contains(ctx)) {
-                    return true;
-                }
+            if lower.contains(trigger)
+                && safe_contexts.iter().any(|ctx| lower.contains(ctx)) {
+                return true;
             }
         }
         false
