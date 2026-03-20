@@ -1,0 +1,22 @@
+# Budget Limits — Gap I (Agent Budget/Token Tracking)
+# Per-agent token and cost limits.
+
+schema_version: "1.0"
+
+# Default limits (apply to all agents without specific config)
+defaults:
+  max_tokens: 1000000      # 1M tokens per session
+  max_cost_usd: 10.0       # $10 per session
+  max_api_calls: 500        # 500 calls per session
+
+# Agent-specific limits
+agents:
+  medical-agent:
+    max_tokens: 500000
+    max_cost_usd: 5.0
+    max_api_calls: 200
+
+  chatbot-internal:
+    max_tokens: 5000000
+    max_cost_usd: 50.0
+    max_api_calls: 2000
