@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatorio Art. 20 — Decisoes Automatizadas (LGPD)</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 40px; color: #333; line-height: 1.6; }
+        h1 { color: #1a1a2e; border-bottom: 3px solid #16213e; padding-bottom: 10px; }
+        h2 { color: #16213e; margin-top: 30px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 0.9em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #16213e; color: white; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        .meta { background: #f0f4f8; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin: 20px 0; }
+        .summary-card { background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #16213e; }
+        .summary-card .number { font-size: 1.8em; font-weight: bold; color: #16213e; }
+        .methodology { background: #f0f4f8; padding: 15px; border-radius: 5px; white-space: pre-line; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 0.85em; color: #666; }
+        .badge-block { color: #dc3545; font-weight: bold; }
+        .badge-allow { color: #28a745; }
+        .badge-educate { color: #ffc107; }
+    </style>
+</head>
+<body>
+    <h1>Relatorio de Decisoes Automatizadas</h1>
+    <p><strong>Base Legal:</strong> LGPD Art. 20 — Direito a revisao de decisoes automatizadas</p>
+
+    <div class="meta">
+        <p><strong>Periodo:</strong> {{ data.period.start }} a {{ data.period.end }}</p>
+        <p><strong>Total de Decisoes:</strong> {{ data.summary.total_decisions }}</p>
+        <p><strong>Gerado em:</strong> {{ data.generated_at }}</p>
+    </div>
+
+    <h2>Resumo Estatistico</h2>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="number">{{ data.summary.total_decisions }}</div>
+            <div>Decisoes Totais</div>
+        </div>
+        <div class="summary-card">
+            <div class="number">{{ data.summary.block_decisions }}</div>
+            <div>Bloqueios</div>
+        </div>
+        <div class="summary-card">
+            <div class="number">{{ data.summary.mercy_applied }}</div>
+            <div>Mercy Aplicado</div>
+        </div>
+    </div>
+
+    <table>
+        <tr>
+            <th>Metrica</th><th>Valor</th>
+        </tr>
+        <tr><td>Decisoes Automatizadas</td><td>{{ data.summary.automated_decisions }}</td></tr>
+        <tr><td>Permitidas (ALLOW)</td><td>{{ data.summary.allow_decisions }}</td></tr>
+        <tr><td>Bloqueadas (BLOCK)</td><td>{{ data.summary.block_decisions }}</td></tr>
+        <tr><td>Educativas (EDUCATE)</td><td>{{ data.summary.educate_decisions }}</td></tr>
+        <tr><td>Redigidas (REDACT)</td><td>{{ data.summary.redact_decisions }}</td></tr>
+        <tr><td>Hard Blocks</td><td>{{ data.summary.hard_blocks }}</td></tr>
+        <tr><td>Risco Medio</td><td>{{ data.summary.avg_risk }}</td></tr>
+        <tr><td>Latencia Media</td><td>{{ data.summary.avg_latency_ms }}ms</td></tr>
+    </table>
+
+    <h2>Metodologia</h2>
+    <div class="methodology">{{ data.methodology }}</div>
+
+    <h2>Declaracoes de Vies (BiasDeclaration)</h2>
+    <table>
+        <tr><th>Componente</th><th>ADR</th><th>FPR</th><th>FNR</th><th>Limitacoes</th></tr>
+        {% for bd in data.bias_declarations %}
+        <tr>
+            <td>{{ bd.component }}</td>
+            <td>{{ bd.adr }}</td>
+            <td>{{ bd.fpr }}</td>
+            <td>{{ bd.fnr }}</td>
+            <td>{{ bd.limitations }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    {% if data.decisions %}
+    <h2>Registro de Decisoes ({{ data.total_decisions_in_report }} registros)</h2>
+    <table>
+        <tr>
+            <th>Verdict ID</th><th>Timestamp</th><th>Acao</th><th>Risco</th>
+            <th>Findings</th><th>Mercy</th>
+        </tr>
+        {% for d in data.decisions[:100] %}
+        <tr>
+            <td><code>{{ d.verdict_id[:16] }}...</code></td>
+            <td>{{ d.timestamp }}</td>
+            <td class="badge-{{ d.final_action | lower }}">{{ d.final_action }}</td>
+            <td>{{ d.risk }}</td>
+            <td>{{ d.findings }} ({{ d.critical }} crit)</td>
+            <td>{{ 'Sim' if d.mercy else 'Nao' }}</td>
+        </tr>
+        {% endfor %}
+        {% if data.decisions | length > 100 %}
+        <tr><td colspan="6"><em>... {{ data.decisions | length - 100 }} registros adicionais omitidos</em></td></tr>
+        {% endif %}
+    </table>
+    {% endif %}
+
+    <div class="footer">
+        <p>Documento gerado automaticamente pelo BuildToValue Governance OS.</p>
+        <p>Todas as decisoes sao contestaveis via POST /v1/appeals (SLA 24h).</p>
+        <p>Gerado em: {{ generated_at }}</p>
+    </div>
+</body>
+</html>
