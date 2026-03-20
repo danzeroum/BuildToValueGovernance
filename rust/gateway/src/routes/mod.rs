@@ -30,6 +30,7 @@ use axum::{Router, routing::{get, post}, middleware};
 use tower_http::trace::TraceLayer;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::cors::{CorsLayer, Any};
+use tower_http::services::{ServeDir, ServeFile};
 use std::time::Duration;
 use crate::state::AppState;
 use crate::middleware::rate_limit::RateLimitLayer;
@@ -66,6 +67,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 
         // Trust score (ADR-039)
         .route("/v1/trust/:session",        get(trust::get_trust_handler))
+
+        // ── SPA fallback (React dashboard) ──────────────────────
+        .fallback_service(
+            ServeDir::new("./dashboard/dist")
+                .not_found_service(ServeFile::new("./dashboard/dist/index.html"))
+        )
 
         // ── Layers (ordem preservada) ─────────────────────────
         .layer(ApiKeyLayer::from_env())
