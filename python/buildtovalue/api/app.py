@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from enum import Enum
 
 from contextlib import asynccontextmanager
-from buildtovalue.intelligence.slm_classifier import SLMClassifier
+from buildtovalue.intelligence.slm_classifier import SLMClassifier, SLMContext
 from buildtovalue.compliance.plugin import ComplianceReport
 from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
 from buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
@@ -611,7 +611,23 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
     adjusted_action = req.action
 
     if _slm is not None:
-        slm_result = _slm.classify_if_ambiguous(
+        # F2-01: use context-aware classification when kernel signals are available
+        _slm_ctx = SLMContext(
+            lang=getattr(req, "detected_language", None) or "unknown",
+            entropy=getattr(req, "entropy", 4.0),
+            instruction_density=getattr(req, "instruction_density", 0.0),
+            entropy_shift=bool(getattr(req, "entropy_shift", False)),
+            leet_ratio=float(getattr(req, "leet_ratio", 0.0)),
+            trust_score=get_trust_score(session_id),
+            domain=_resolve_domain(req.profile),
+            violation_count=db_get_session(session_id)["offenses"] if session_id else 0,
+        )
+        slm_result = _slm.classify_with_context(
+            text=req.input_text,
+            finding_count=req.finding_count,
+            critical_count=req.critical_count,
+            context=_slm_ctx,
+        ) or _slm.classify_if_ambiguous(
             text=req.input_text,
             finding_count=req.finding_count,
             critical_count=req.critical_count,
@@ -636,6 +652,24 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                     "SLM escalation: %s→%s (intent=%s, risk=%.2f)",
                     req.action, adjusted_action, slm_intent, slm_result.risk,
                 )
+
+    # ── Step 2.5: SLM Mercy Advisor (F2-02, fail-open) ───────────────
+    _slm_justifiability: Optional[float] = None
+    if _slm is not None and adjusted_action not in ("BLOCK",):
+        _slm_mercy = _slm.advise_mercy(
+            text=req.input_text,
+            finding_types=req.matched_policies if hasattr(req, "matched_policies") else [],
+            domain=_resolve_domain(req.profile),
+            user_role=_resolve_role(session_id),
+            is_first_offense=(db_get_session(session_id)["offenses"] == 0 if session_id else True),
+            trust_score=get_trust_score(session_id),
+        )
+        if _slm_mercy is not None:
+            _slm_justifiability = _slm_mercy.legitimate_probability
+            logger.info(
+                "SLM mercy advisor: legitimate_probability=%.2f reasoning=%s",
+                _slm_mercy.legitimate_probability, _slm_mercy.reasoning[:80],
+            )
 
     # ── Step 3: Profile/sector risk adjustment ───────────────────────
     sector_note = ""
@@ -733,7 +767,9 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
     _ethical_engine.set_trust_score(session_id, trust)
 
     verdict = _ethical_engine.decide(
-        evidence, context, external_verdict_id=req.verdict_id
+        evidence, context,
+        external_verdict_id=req.verdict_id,
+        slm_justifiability=_slm_justifiability,
     )
 
     # ── Step 5.5: Runtime Compliance (EU AI Act) ────────────────────
@@ -822,6 +858,64 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         except Exception as e:
             logger.warning("Output schema validation error: %s", e)
 
+    # ── Step 5.7: SLM semantic output analysis (F2-04, fail-open) ────────
+    if _slm is not None and req.llm_output:
+        try:
+            _out_analysis = _slm.analyze_output(
+                output_text=req.llm_output,
+                domain=_resolve_domain(req.profile),
+                masked_count=0,
+            )
+            if _out_analysis and _out_analysis.leak_detected and _out_analysis.risk >= 0.5:
+                if ACTION_SEVERITY.get(verdict.final_action, 0) < ACTION_SEVERITY.get("REDACT", 0):
+                    verdict = _ethical_engine.decide(
+                        RustEvidence(
+                            composite_risk=max(adjusted_risk, _out_analysis.risk),
+                            finding_count=adjusted_finding_count + 1,
+                            critical_count=adjusted_critical_count,
+                            entropy=req.entropy,
+                            total_chars=req.total_chars,
+                            policy_action="REDACT",
+                            blake3_hash=req.blake3_hash,
+                        ),
+                        context,
+                        slm_justifiability=_slm_justifiability,
+                    )
+                logger.warning(
+                    "SLM output analysis: leak_type=%s risk=%.2f → REDACT (session=%s)",
+                    _out_analysis.leak_type, _out_analysis.risk, session_id,
+                )
+        except Exception as e:
+            logger.warning("SLM output analysis error (fail-open): %s", e)
+
+    # ── Step 5.8: SLM natural language explanation (F2-03, fail-open) ────
+    _slm_explanation: Optional[str] = None
+    if _slm is not None:
+        try:
+            _slm_explanation = _slm.generate_explanation(
+                action=verdict.final_action,
+                original_action=req.action,
+                mercy_applied=verdict.mercy_applied,
+                mercy_scenario=verdict.mercy_scenario or "S6_DEFAULT_NO_MERCY",
+                trust_score=verdict.trust_score,
+                findings_summary=(
+                    f"{adjusted_finding_count} findings, {adjusted_critical_count} critical"
+                ),
+                levinas_note=(
+                    "Usuário pode contestar em 24h"
+                    if getattr(verdict, "contestable", True)
+                    else "Decisão automática"
+                ),
+                gilligan_note=(
+                    f"Cenário de misericórdia: {verdict.mercy_scenario}"
+                    if verdict.mercy_applied
+                    else "Regra aplicada uniformemente"
+                ),
+                language="pt-BR",
+            )
+        except Exception as e:
+            logger.warning("SLM explanation error (fail-open): %s", e)
+
     # ── Step 6: Update trust + persist adjust_post_penalty (Gap 14) ──────
     if session_id:
         prev = db_get_session(session_id)
@@ -885,7 +979,9 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         ).inc()
 
     latency = (time.perf_counter() - start) * 1000
-    rationale = verdict.explanation + sector_note + cumulative_note + drift_cross_note
+    # F2-03: use SLM natural language explanation when available; fallback to template
+    _base_rationale = _slm_explanation if _slm_explanation else verdict.explanation
+    rationale = _base_rationale + sector_note + cumulative_note + drift_cross_note
 
     return DecideResponse(
         verdict_id=verdict.verdict_id,
