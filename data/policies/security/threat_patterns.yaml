@@ -1,0 +1,31 @@
+# Threat Patterns — Gap E (Multi-Turn Threat Modeling)
+# Known multi-turn attack sequences and escalation thresholds.
+
+schema_version: "1.0"
+
+# Ring buffer size for recent turns
+window_size: 10
+
+# Escalation detection
+escalation_threshold_pct: 50  # % of turns with increasing risk
+burst_threshold: 3  # consecutive high-risk turns triggers alert
+
+# Risk score thresholds
+risk_levels:
+  low: 0.3
+  medium: 0.6
+  high: 0.8
+
+# Known attack sequences (ordered action patterns)
+attack_sequences:
+  - name: "progressive_boundary_test"
+    pattern: ["ALLOW", "EDUCATE", "EDUCATE", "BLOCK"]
+    severity: high
+
+  - name: "social_engineering_ramp"
+    pattern: ["ALLOW", "ALLOW", "EDUCATE", "BLOCK", "BLOCK"]
+    severity: critical
+
+  - name: "retry_after_block"
+    pattern: ["BLOCK", "BLOCK", "BLOCK"]
+    severity: high

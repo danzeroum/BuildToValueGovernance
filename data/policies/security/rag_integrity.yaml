@@ -1,0 +1,16 @@
+# RAG Integrity — Gap H (Embedding/RAG Poisoning Detection)
+# Thresholds for RAG chunk verification.
+
+schema_version: "1.0"
+
+# Maximum chunk size (characters)
+max_chunk_size: 4000
+
+# Embedding drift threshold (cosine distance)
+embedding_drift_threshold: 0.3
+
+# Source hash verification required
+require_source_hash: true
+
+# Injection detection enabled
+injection_detection: true

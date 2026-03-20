@@ -1,0 +1,23 @@
+# Coordination Rules — Gap D (Multi-Agent Coordination)
+# Circuit breaker and conflict detection settings.
+
+schema_version: "1.0"
+
+# Circuit breaker
+circuit_breaker:
+  failure_threshold: 5      # failures within window triggers open
+  window_s: 60              # time window for counting failures
+  cooldown_s: 30            # time to wait before retrying after trip
+  half_open_max: 2          # requests allowed in half-open state
+
+# Conflict detection
+conflict_rules:
+  - action_a: "model_deploy"
+    action_b: "model_deploy"
+    conflict: true
+    reason: "Concurrent model deploys forbidden"
+
+  - action_a: "training_cycle_start"
+    action_b: "lora_deploy"
+    conflict: true
+    reason: "Cannot deploy while training"
