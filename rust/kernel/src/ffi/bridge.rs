@@ -188,6 +188,29 @@ impl PyTechnicalEvidence {
     #[getter]
     fn processing_time_us(&self) -> u64 { self.inner.processing_time_us }
 
+    /// ADR-046: max severity across all findings for Medium-zone SLM trigger.
+    #[getter]
+    fn max_severity(&self) -> String {
+        let mut max = 0u8;
+        for i in 0..self.inner.finding_count.min(crate::core::types::MAX_FINDINGS as u8) as usize {
+            let s = self.inner.findings[i].severity.to_score();
+            let mapped = if s >= 0.9 { 4 } else if s >= 0.7 { 3 } else if s >= 0.4 { 2 } else if s > 0.0 { 1 } else { 0 };
+            if mapped > max { max = mapped; }
+        }
+        for i in 0..self.inner.critical_count.min(crate::core::types::MAX_CRITICAL_FINDINGS as u8) as usize {
+            let s = self.inner.critical_findings[i].severity.to_score();
+            let mapped = if s >= 0.9 { 4 } else if s >= 0.7 { 3 } else if s >= 0.4 { 2 } else if s > 0.0 { 1 } else { 0 };
+            if mapped > max { max = mapped; }
+        }
+        match max {
+            0 => "Safe".to_string(),
+            1 => "Low".to_string(),
+            2 => "Medium".to_string(),
+            3 => "High".to_string(),
+            _ => "Critical".to_string(),
+        }
+    }
+
     #[getter]
     fn hash(&self) -> String { hex::encode(&self.inner.hash) }
 
@@ -218,6 +241,7 @@ impl PyTechnicalEvidence {
             dict.set_item("executed_modules", self.inner.executed_modules)?;
             dict.set_item("processing_time_us", self.inner.processing_time_us)?;
             dict.set_item("hash", hex::encode(&self.inner.hash))?;
+            dict.set_item("max_severity", self.max_severity())?;
             dict.set_item("bias_fpr", self.inner.bias.false_positive_rate)?;
             dict.set_item("bias_fnr", self.inner.bias.false_negative_rate)?;
             dict.set_item("bias_calibration_date", self.inner.bias.calibration_date)?;

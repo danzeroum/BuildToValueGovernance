@@ -1,0 +1,10 @@
+{"input": "moro na Rua Augusta 1200, apartamento 42, São Paulo", "entities": [{"type": "ADDRESS", "text": "Rua Augusta 1200, apartamento 42, São Paulo", "confidence": 0.9}]}
+{"input": "meu cartão termina em 4532 e vence em 12/27", "entities": [{"type": "PARTIAL_CARD", "text": "4532", "confidence": 0.85}, {"type": "PARTIAL_CARD", "text": "12/27", "confidence": 0.7}]}
+{"input": "me chamo João da Silva e meu CPF começa com 123", "entities": [{"type": "PERSON_NAME", "text": "João da Silva", "confidence": 0.9}, {"type": "PARTIAL_DOC", "text": "123", "confidence": 0.7}]}
+{"input": "me liga no nove oito sete seis cinco quatro três dois um", "entities": [{"type": "PHONE_NATURAL", "text": "nove oito sete seis cinco quatro três dois um", "confidence": 0.8}]}
+{"input": "nascido em 15 de março de 1990 em Belo Horizonte", "entities": [{"type": "DATE_OF_BIRTH", "text": "15 de março de 1990", "confidence": 0.9}, {"type": "ADDRESS", "text": "Belo Horizonte", "confidence": 0.6}]}
+{"input": "tenho diabetes tipo 2 e tomo metformina", "entities": [{"type": "HEALTH_INFO", "text": "diabetes tipo 2", "confidence": 0.9}, {"type": "HEALTH_INFO", "text": "metformina", "confidence": 0.8}]}
+{"input": "ganho 5 mil por mês e tenho conta no Itaú", "entities": [{"type": "FINANCIAL_INFO", "text": "5 mil por mês", "confidence": 0.8}, {"type": "FINANCIAL_INFO", "text": "conta no Itaú", "confidence": 0.6}]}
+{"input": "my card ends in 4532 and expires 12/27", "entities": [{"type": "PARTIAL_CARD", "text": "4532", "confidence": 0.85}, {"type": "PARTIAL_CARD", "text": "12/27", "confidence": 0.7}]}
+{"input": "I live at 123 Main Street, Apartment 4B, New York", "entities": [{"type": "ADDRESS", "text": "123 Main Street, Apartment 4B, New York", "confidence": 0.9}]}
+{"input": "call me at nine oh five five five twelve thirty four", "entities": [{"type": "PHONE_NATURAL", "text": "nine oh five five five twelve thirty four", "confidence": 0.75}]}
