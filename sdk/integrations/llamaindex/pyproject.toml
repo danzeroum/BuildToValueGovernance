@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "btv-llamaindex"
+version = "0.1.0"
+description = "LlamaIndex integration for BuildToValue AI governance"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+keywords = ["llamaindex", "ai", "governance", "ethics"]
+dependencies = [
+    "buildtovalue>=0.1",
+    "llama-index-core>=0.10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
