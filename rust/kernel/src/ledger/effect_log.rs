@@ -137,6 +137,7 @@ impl std::fmt::Debug for EffectEntry {
 // ─── WAL trait ───────────────────────────────────────────────────────────────
 
 /// Contrato mínimo para integração WAL. Impl concreta: WriteAheadLog (wal.rs).
+#[allow(clippy::result_unit_err)]
 pub trait WalWriter {
     fn append_effect(&mut self, entry: &EffectEntry) -> Result<(), ()>;
 }
@@ -154,6 +155,10 @@ struct FrontierInner {
 pub struct FrontierSet {
     inner:     Mutex<FrontierInner>,
     confirmed: [AtomicBool; MAX_FRONTIERS],
+}
+
+impl Default for FrontierSet {
+    fn default() -> Self { Self::new() }
 }
 
 impl FrontierSet {
@@ -241,6 +246,10 @@ pub struct EffectLog {
     head:       usize,
     count:      usize,
     pub frontiers: FrontierSet,
+}
+
+impl Default for EffectLog {
+    fn default() -> Self { Self::new() }
 }
 
 impl EffectLog {

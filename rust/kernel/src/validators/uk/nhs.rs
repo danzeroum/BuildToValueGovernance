@@ -30,7 +30,7 @@ impl NhsValidator {
         let sum: u32 = d.iter().enumerate()
             .map(|(i, &v)| v * (10 - i as u32))
             .sum();
-        sum % 11 == 0
+        sum.is_multiple_of(11)
     }
 }
 
