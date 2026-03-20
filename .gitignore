@@ -30,3 +30,5 @@ rust/Cargo.lock
 ece_check.txt
 patch_consensus.py
 reports/
+ops/runtime/*.db
+check_branches.sh
