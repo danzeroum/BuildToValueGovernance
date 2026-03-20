@@ -1,0 +1,30 @@
+{
+  "name": "@buildtovalue/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the BuildToValue AI Governance Gateway",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+  },
+  "keywords": ["ai", "governance", "ethics", "compliance", "lgpd", "eu-ai-act"],
+  "license": "UNLICENSED",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.0.0",
+    "@jest/globals": "^29.0.0",
+    "ts-jest": "^29.0.0"
+  }
+}
