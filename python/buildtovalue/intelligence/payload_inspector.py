@@ -24,6 +24,7 @@ from enum import Enum
 from typing import Optional
 
 from .slm_classifier import SLMClassifier, SLMClassification, IntentLabel
+from .ner_detector import NERDetector, NERInspectionResult
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ class PayloadInspectionReport:
 
     explain_decision OBRIGATORIO (invariante arquitetural).
     slm_classification: None se SLM nao acionado ou falhou (fail-open).
+    ner_result: None se NER nao acionado ou falhou (fail-open, ADR-047).
     action: InspectionAction recomendada ao Judiciario.
     """
     action:             InspectionAction
@@ -59,12 +61,16 @@ class PayloadInspectionReport:
     payload_len:        int
     decided_at_iso:     str
     signature:          str
+    ner_result:         Optional[NERInspectionResult] = None
 
     def has_slm_finding(self) -> bool:
         return (
             self.slm_classification is not None
             and self.slm_classification.is_malicious
         )
+
+    def has_ner_findings(self) -> bool:
+        return self.ner_result is not None and self.ner_result.has_pii
 
     def to_finding_dict(self) -> dict:
         base = {
@@ -77,6 +83,8 @@ class PayloadInspectionReport:
         }
         if self.slm_classification is not None:
             base["slm"] = self.slm_classification.to_finding_dict()
+        if self.ner_result is not None and self.ner_result.has_pii:
+            base["ner"] = self.ner_result.to_dict()
         return base
 
 
@@ -96,11 +104,13 @@ class PayloadInspector:
         self,
         hmac_secret: bytes,
         slm: Optional[SLMClassifier] = None,
+        ner: Optional[NERDetector] = None,
     ) -> None:
         if not hmac_secret:
             raise ValueError("hmac_secret nao pode ser vazio")
         self._secret = hmac_secret
         self._slm    = slm  # None = sem SLM; fail-open gerenciado em _run_slm
+        self._ner    = ner  # None = sem NER; fail-open (ADR-047)
 
     def inspect(
         self,
@@ -108,10 +118,11 @@ class PayloadInspector:
         signal:         InjectionSignal,
         finding_count:  int = 0,
         critical_count: int = 0,
+        max_severity:   str | None = None,
     ) -> PayloadInspectionReport:
         """Inspeciona payload. Fail-secure em Confirmed; fail-open em erro SLM."""
         try:
-            return self._inspect_internal(payload, signal, finding_count, critical_count)
+            return self._inspect_internal(payload, signal, finding_count, critical_count, max_severity)
         except Exception as exc:
             return self._fail_open_report(payload, signal, str(exc))
 
@@ -123,13 +134,15 @@ class PayloadInspector:
         signal:         InjectionSignal,
         finding_count:  int,
         critical_count: int,
+        max_severity:   str | None = None,
     ) -> PayloadInspectionReport:
 
         # Stage 1 Confirmed -> BLOCK imediato, sem SLM (Jonas)
         if signal == InjectionSignal.CONFIRMED:
             return self._confirmed_block(payload, signal)
 
-        slm_result = self._run_slm(payload, signal, finding_count, critical_count)
+        slm_result = self._run_slm(payload, signal, finding_count, critical_count, max_severity)
+        ner_result = self._run_ner(payload)
         action     = self._decide_action(signal, slm_result)
         explain    = self._build_explain(signal, slm_result, action, finding_count)
         now        = datetime.now(timezone.utc).isoformat()
@@ -141,6 +154,7 @@ class PayloadInspector:
             payload_len=len(payload),
             decided_at_iso=now,
             signature=self._sign(action, signal, now),
+            ner_result=ner_result,
         )
 
     def _run_slm(
@@ -149,13 +163,30 @@ class PayloadInspector:
         signal:         InjectionSignal,
         finding_count:  int,
         critical_count: int,
+        max_severity:   str | None = None,
     ) -> Optional[SLMClassification]:
         if self._slm is None:
             return None
         if signal == InjectionSignal.SUSPICIOUS:
             return self._slm.classify(payload)   # sempre aciona se suspeito
+        # ADR-046: Medium-confidence zone — heuristico tem sinais mas sem certeza
+        if max_severity is not None and max_severity == "Medium":
+            return self._slm.classify_medium_zone(payload)
         # Clean: aciona apenas na zona de ambiguidade
         return self._slm.classify_if_ambiguous(payload, finding_count, critical_count)
+
+    def _run_ner(self, payload: str) -> Optional[NERInspectionResult]:
+        """Run NER detection in parallel context (ADR-047). Fail-open."""
+        if self._ner is None:
+            return None
+        try:
+            return self._ner.detect(payload)
+        except Exception as exc:
+            import logging
+            logging.getLogger("btv.intelligence.inspector").warning(
+                "NER fail-open: %s", exc,
+            )
+            return None
 
     def _decide_action(
         self,

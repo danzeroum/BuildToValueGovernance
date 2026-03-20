@@ -28,6 +28,7 @@ from enum import Enum
 
 from contextlib import asynccontextmanager
 from buildtovalue.intelligence.slm_classifier import SLMClassifier
+from buildtovalue.intelligence.ner_detector import NERDetector
 from buildtovalue.compliance.plugin import ComplianceReport
 from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
 from buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
@@ -483,6 +484,14 @@ async def lifespan(application):
     else:
         logger.info("SLM disabled (slm.enabled=false or config missing)")
 
+    # ADR-047: NER detector — reutiliza SLM para extracão semântica de PII
+    global _ner
+    if _slm is not None:
+        _ner = NERDetector(_slm)
+        logger.info("NER detector initialized (SLM-backed)")
+    else:
+        logger.info("NER detector disabled (SLM not loaded)")
+
     from buildtovalue.api.auth import init_auth
     init_auth()
 
@@ -517,6 +526,7 @@ _contestability_loop: Optional[ContestabilityLoop] = None
 _profile_manager: Optional[ProfileManager] = None
 _sector_loader: Optional[SectorLoader] = None
 _slm: Optional[SLMClassifier] = None
+_ner: Optional[NERDetector] = None
 _ethical_engine: Optional[EthicalContextEngine] = None
 _output_validator: Optional[OutputSchemaValidator] = None
 _sensitivity_accumulator: Optional["SessionSensitivityAccumulator"] = None
@@ -1133,8 +1143,84 @@ def generate_fria(req: FRIARequest, _=Depends(require_api_key)):
         violations=viols,
         compliance_rate=rate,
         capabilities=req.capabilities,
+        ledger_analytics=_ledger_analytics,
     )
     return doc.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════
+# COMPLIANCE-AS-CODE — ROPA, Art. 20, Document Export (ADR-048)
+# ═══════════════════════════════════════════════════════════════
+
+from buildtovalue.compliance.ledger_analytics import LedgerAnalytics
+from buildtovalue.compliance.ropa_generator import ROPAGenerator
+from buildtovalue.compliance.art20_report import Art20ReportGenerator
+from buildtovalue.compliance.document_exporter import DocumentExporter
+
+_ledger_analytics = LedgerAnalytics()
+_ropa_generator = ROPAGenerator(_ledger_analytics)
+_art20_generator = Art20ReportGenerator(_ledger_analytics)
+_doc_exporter = DocumentExporter()
+
+
+@app.post("/v1/compliance/ropa/generate")
+def generate_ropa(req: dict, _=Depends(require_api_key)):
+    """Generate ROPA document from ledger data (LGPD Art. 37, ADR-048)."""
+    controller = req.get("controller", "Not specified")
+    dpo_name = req.get("dpo_name", "Not specified")
+    dpo_contact = req.get("dpo_contact", "Not specified")
+    start_ts = req.get("start_ts")
+    end_ts = req.get("end_ts")
+
+    ropa = _ropa_generator.generate(
+        controller=controller,
+        dpo_name=dpo_name,
+        dpo_contact=dpo_contact,
+        start_ts=start_ts,
+        end_ts=end_ts,
+    )
+    return ropa.to_dict()
+
+
+@app.post("/v1/compliance/art20/report")
+def generate_art20(req: dict, _=Depends(require_api_key)):
+    """Generate Art. 20 automated decision report (LGPD, ADR-048)."""
+    start_ts = req.get("start_ts")
+    end_ts = req.get("end_ts")
+    include_decisions = req.get("include_decisions", True)
+    max_decisions = req.get("max_decisions", 500)
+
+    report = _art20_generator.generate(
+        start_ts=start_ts,
+        end_ts=end_ts,
+        include_decisions=include_decisions,
+        max_decisions=max_decisions,
+    )
+    return report.to_dict()
+
+
+@app.post("/v1/compliance/documents/export")
+def export_compliance_document(req: dict, _=Depends(require_api_key)):
+    """Export compliance document to PDF (ADR-048)."""
+    doc_type = req.get("type", "")  # ropa, fria, art20
+    data = req.get("data", {})
+    fmt = req.get("format", "json")  # json or pdf
+
+    if doc_type not in ("ropa", "fria", "art20"):
+        raise HTTPException(status_code=400, detail="type must be ropa, fria, or art20")
+    if not data:
+        raise HTTPException(status_code=400, detail="data is required")
+
+    if fmt == "pdf":
+        try:
+            path = _doc_exporter.export_pdf(data=data, template_name=doc_type)
+            return {"status": "ok", "format": "pdf", "path": path}
+        except ImportError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+    else:
+        path = _doc_exporter.export_json(data=data, template_name=doc_type)
+        return {"status": "ok", "format": "json", "path": path}
+
 
 # ═══════════════════════════════════════════════════════════════
 # SLM METRICS — /v1/slm
@@ -1161,6 +1247,30 @@ def slm_bias(_=Depends(require_api_key)):
         "limitations": b.limitations,
         "affected_groups": b.affected_groups,
     }
+
+
+# ═══════════════════════════════════════════════════════════════
+# NER SEMANTIC SCAN — /v1/scan/semantic (ADR-047)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/v1/scan/semantic")
+def scan_semantic(req: dict, _=Depends(require_api_key)):
+    """Semantic PII detection via SLM NER (ADR-047)."""
+    if _ner is None:
+        raise HTTPException(status_code=503, detail="NER detector not available (SLM not loaded)")
+    text = req.get("text", "")
+    if not text or len(text) < 3:
+        raise HTTPException(status_code=400, detail="Text must be at least 3 characters")
+    result = _ner.detect(text)
+    return result.to_dict()
+
+
+@app.get("/v1/ner/metrics")
+def ner_metrics(_=Depends(require_api_key)):
+    """NER detector metrics (ADR-047)."""
+    if _ner is None:
+        return {"enabled": False, "message": "NER not loaded"}
+    return {"enabled": True, **_ner.get_metrics()}
 
 
 # ═══════════════════════════════════════════════════════════════
