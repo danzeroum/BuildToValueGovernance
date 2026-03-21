@@ -1,0 +1,75 @@
+# pa_commit_reveal.yaml — Cenários 2, 5, 20: Commit-Reveal Protocol
+# Protocolo para negociações P2P entre agentes sem front-running.
+
+schema_version: "1.0"
+metadata:
+  name: "Commit-Reveal Protocol Policy"
+  description: >
+    Define regras para negociações P2P entre agentes usando commit-reveal.
+    Previne front-running e renegociação maliciosa: cada parte compromete-se
+    com um hash antes de revelar sua intenção. Execução só após ambas revelarem
+    com hash correspondente dentro do TTL.
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenarios: ["C02", "C05", "C20"]
+  adrs: ["ADR-020", "ADR-005"]
+
+# Configuração do protocolo
+protocol:
+  ttl_seconds: 3600            # Janela de revelação: 1 hora
+  require_salt: true           # Salt obrigatório para unlinkability
+  max_pending_commits: 100     # Máximo de commits pendentes por agente
+
+# Invariantes de segurança
+invariants:
+  timeout_action: ABORT        # Timeout → ABORT (nunca ALLOW implícito)
+  hash_mismatch_action: ABORT  # Hash inválido → ABORT
+  double_reveal_action: ABORT  # Duplo reveal → ABORT
+  storage: "DurableLedger"     # Estado deve ser durável (não só em memória)
+  hash_algorithm: "BLAKE2b"    # Algoritmo de hash binding
+
+policies:
+  - id: "CR-001"
+    name: "Timeout ABORT"
+    description: >
+      TTL expirado → ABORT incondicional. Nunca ALLOW implícito após timeout.
+      Fail-secure: restart durante commit + TTL expirado → ABORT.
+    enabled: true
+    priority: 100
+    conditions:
+      commit_ttl_expired: true
+    action: ABORT
+
+  - id: "CR-002"
+    name: "Hash mismatch ABORT"
+    description: >
+      Hash da intenção revelada não coincide com hash do commit → ABORT.
+      Binding: uma vez comprometido, a intenção não pode ser alterada.
+    enabled: true
+    priority: 100
+    conditions:
+      hash_match: false
+    action: ABORT
+
+  - id: "CR-003"
+    name: "Double reveal ABORT"
+    description: >
+      Tentativa de revelar commit já revelado → ABORT (replay attack prevention).
+    enabled: true
+    priority: 100
+    conditions:
+      already_revealed: true
+    action: ABORT
+
+  - id: "CR-004"
+    name: "Successful reveal ALLOW"
+    description: >
+      Hash correto + TTL válido + primeiro reveal → execução autorizada atomicamente.
+    enabled: true
+    priority: 50
+    conditions:
+      hash_match: true
+      ttl_valid: true
+      first_reveal: true
+    action: ALLOW
