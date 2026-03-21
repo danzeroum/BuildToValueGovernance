@@ -61,7 +61,114 @@ from buildtovalue.intelligence.misp_ingestor import ThreatEvent as BridgeThreatE
 from buildtovalue.compliance.risk_classifier import RiskClassifier, RiskClassification
 from buildtovalue.governance.cross_agent_correlator import CrossAgentCorrelator
 from buildtovalue.governance.delegation_ledger import DelegationLedger
+# Guard modules — imported lazily to avoid startup cost when not used
+from buildtovalue.governance.visual_input_firewall import (
+    VisualInputFirewall,
+    FirewallVerdict as VisualFirewallVerdict,
+)
+from buildtovalue.governance.oracle_trust_gate import OracleTrustGate
+from buildtovalue.governance.rag_integrity_verifier import RagIntegrityVerifier
 logger = logging.getLogger(__name__)
+
+
+# ═══════════════════════════════════════════════════════════════
+# GUARD HELPERS — agent_policies, source, channel activation
+# ═══════════════════════════════════════════════════════════════
+
+def _block_guard_response(
+    session_id: str,
+    verdict_id: str,
+    guard_name: str,
+    explain: str,
+    composite_risk: float,
+    start: float,
+) -> "DecideResponse":
+    """Returns a BLOCK DecideResponse from a guard module (fail-secure)."""
+    update_trust(session_id, "BLOCK")
+    sig = sign_verdict(verdict_id, "BLOCK", composite_risk)
+    return DecideResponse(
+        verdict_id=verdict_id,
+        action="BLOCK",
+        original_action="BLOCK",
+        mercy_applied=False,
+        mercy_scenario=f"GUARD_{guard_name.upper()}",
+        mercy_score=0.0,
+        trust_score=get_trust_score(session_id),
+        adjusted_risk=composite_risk,
+        rationale=(
+            f"Guard '{guard_name}' blocked request. {explain} "
+            "Contestable within 24h (ADR-017)."
+        ),
+        contestable=True,
+        appeal_deadline_hours=24,
+        signature=sig,
+        latency_ms=(time.perf_counter() - start) * 1000,
+    )
+
+
+def _run_visual_guard(
+    input_text: str, yaml_path: "Optional[Path]"  # noqa: ARG001 — path reserved for future config
+) -> "tuple[bool, str]":
+    """
+    Runs VisualInputFirewall on input_text.
+
+    Returns (blocked: bool, explain: str).
+    Fail-secure: any exception → (True, error message).
+    """
+    try:
+        fw = VisualInputFirewall()
+        result = fw.sanitize(input_text)
+        if result.verdict == VisualFirewallVerdict.BLOCK:
+            return True, result.explain or "Visual injection pattern detected."
+        return False, ""
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("VisualInputFirewall error (fail-secure → BLOCK): %s", exc)
+        return True, f"VisualInputFirewall internal error: {exc!s:.80}"
+
+
+def _run_channel_guard(
+    channel: str, yaml_path: "Optional[Path]"
+) -> "tuple[bool, str, int]":
+    """
+    Loads pa_channel_hierarchy.yaml and resolves trust level for the given channel.
+
+    Returns (blocked: bool, explain: str, trust_level: int).
+    Trust level 0=UNTRUSTED, 1=LOW, 2=MEDIUM, 3=HIGH, 4=SOVEREIGN.
+    Fail-secure: unknown channel → trust_level=0 (UNTRUSTED), not blocked by default.
+    """
+    try:
+        import yaml as _yaml
+        if yaml_path is None or not yaml_path.exists():
+            return False, "", 1  # no config → LOW trust, not blocked
+        with open(yaml_path) as f:
+            cfg = _yaml.safe_load(f)
+        registry: dict = cfg.get("channel_registry", {}) if cfg else {}
+        entry = registry.get(channel, {})
+        level: int = entry.get("trust_level", 0) if isinstance(entry, dict) else 0
+        return False, "", level
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ChannelAuthorityVerifier error: %s", exc)
+        return False, "", 0
+
+
+def _run_rag_guard(
+    input_text: str, channel_trust: int, yaml_path: "Optional[Path]"
+) -> "tuple[bool, str]":
+    """
+    Runs RagIntegrityVerifier for requests tagged with pa_p2p_oracle.
+
+    Returns (blocked: bool, explain: str).
+    Fail-secure: any exception → (True, error message).
+    """
+    try:
+        verifier = RagIntegrityVerifier()
+        result = verifier.verify_chunk(input_text)
+        if not result.valid:
+            return True, result.reason or "RAG integrity check failed."
+        return False, ""
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("RagIntegrityVerifier error (fail-secure → BLOCK): %s", exc)
+        return True, f"RagIntegrityVerifier internal error: {exc!s:.80}"
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -207,6 +314,13 @@ class DecideRequest(BaseModel):
     llm_output: Optional[str] = None  # LLM response text for schema validation
     # ADR-043: ID gerado pelo Rust; None = modo legado (deprecado)
     verdict_id: Optional[str] = None
+    # Guard activation fields (forwarded from Rust gateway — policy-activation layer)
+    # source: input modality — "text" | "visual" | "audio"
+    source: Optional[str] = None
+    # channel: request origin channel — "whatsapp_2fa" | "email" | "app_biometric"
+    channel: Optional[str] = None
+    # agent_policies: names of agents/*.yaml to activate (e.g. ["pa_channel_hierarchy"])
+    agent_policies: Optional[List[str]] = None
 
 class DecideResponse(BaseModel):
     verdict_id: str
@@ -543,11 +657,13 @@ from buildtovalue.api.routes.ledger import router as ledger_router
 from buildtovalue.api.routes.webhooks import router as webhooks_router
 from buildtovalue.api.routes.compliance_eval import router as compliance_eval_router
 from buildtovalue.api.routes.auth import router as auth_router
+from buildtovalue.api.routes.agent_decide import router as agent_decide_router
 app.include_router(intelligence_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
 app.include_router(compliance_eval_router)
 app.include_router(auth_router)
+app.include_router(agent_decide_router)
 
 # ═══════════════════════════════════════════════════════════════
 # GLOBALS
@@ -613,6 +729,75 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             signature=sig,
             latency_ms=(time.perf_counter() - start) * 1000,
         )
+
+    # ── Step 0.5: Guard activation (source / channel / agent_policies) ──
+    # Guards run early to short-circuit the expensive pipeline on BLOCK.
+    # Layer 1 guards (source=visual, channel) are independent and run first.
+    # Layer 2 guards (rag_verifier) depend on channel trust level resolved above.
+    # SLA: <50ms for text-only; <100ms when guards are active (cold path).
+    _channel_trust_level: int = 1  # default LOW
+    if req.source or req.channel or req.agent_policies:
+        module_config = None
+        if _profile_manager and req.agent_policies:
+            module_config = _profile_manager.resolve_module_config(req.agent_policies)
+
+        # Guard: visual firewall (source == "visual" OR pa_identity_firewall policy)
+        _vf_yaml = (
+            module_config.visual_firewall
+            if module_config and module_config.visual_firewall
+            else None
+        )
+        if req.source == "visual" or (module_config and module_config.visual_firewall):
+            _vf_blocked, _vf_explain = _run_visual_guard(req.input_text, _vf_yaml)
+            if _vf_blocked:
+                return _block_guard_response(
+                    session_id,
+                    f"VRD-VF-{int(time.time())}",
+                    "visual_firewall",
+                    _vf_explain,
+                    req.composite_risk,
+                    start,
+                )
+
+        # Guard: channel authority (channel header present OR pa_channel_hierarchy policy)
+        _ch_yaml = (
+            module_config.channel_authority
+            if module_config and module_config.channel_authority
+            else None
+        )
+        if req.channel or (module_config and module_config.channel_authority):
+            _ch_blocked, _ch_explain, _channel_trust_level = _run_channel_guard(
+                req.channel or "", _ch_yaml
+            )
+            if _ch_blocked:
+                return _block_guard_response(
+                    session_id,
+                    f"VRD-CH-{int(time.time())}",
+                    "channel_authority",
+                    _ch_explain,
+                    req.composite_risk,
+                    start,
+                )
+
+        # Guard: RAG integrity (pa_p2p_oracle policy, runs after channel is resolved)
+        _rg_yaml = (
+            module_config.rag_verifier
+            if module_config and module_config.rag_verifier
+            else None
+        )
+        if module_config and module_config.rag_verifier:
+            _rg_blocked, _rg_explain = _run_rag_guard(
+                req.input_text, _channel_trust_level, _rg_yaml
+            )
+            if _rg_blocked:
+                return _block_guard_response(
+                    session_id,
+                    f"VRD-RG-{int(time.time())}",
+                    "rag_verifier",
+                    _rg_explain,
+                    req.composite_risk,
+                    start,
+                )
 
     # ── Step 1: ADR-046 — acumular sensitivity da sessão ────────────────
     sensitivity_state = None
