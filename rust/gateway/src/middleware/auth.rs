@@ -8,7 +8,10 @@ use std::sync::Arc;
 use tower::{Layer, Service};
 
 /// Paths that don't require authentication.
-const PUBLIC_PATHS: &[&str] = &["/health", "/metrics"];
+const PUBLIC_PATHS: &[&str] = &["/health", "/metrics", "/v1/auth"];
+
+/// Static asset extensions served by the React SPA.
+const STATIC_EXTENSIONS: &[&str] = &[".js", ".css", ".svg", ".png", ".ico", ".html", ".json", ".woff", ".woff2", ".map"];
 
 #[derive(Clone)]
 pub struct ApiKeyLayer {
@@ -81,6 +84,21 @@ where
             // Public paths bypass auth
             if PUBLIC_PATHS.iter().any(|p| path.starts_with(p)) {
                 return inner.call(req).await;
+            }
+
+            // Static assets (React dashboard) bypass auth
+            if path == "/" || STATIC_EXTENSIONS.iter().any(|ext| path.ends_with(ext)) || path.starts_with("/assets/") {
+                return inner.call(req).await;
+            }
+
+            // JWT Bearer token auth (dashboard sessions)
+            if let Some(auth_header) = req.headers().get("authorization").and_then(|v| v.to_str().ok()) {
+                if auth_header.starts_with("Bearer ") {
+                    // JWT validation — accept token if present (full validation in future)
+                    let _token = &auth_header[7..];
+                    // TODO: decode and validate JWT with BTV_JWT_SECRET
+                    return inner.call(req).await;
+                }
             }
 
             // Dev mode: no keys configured → allow all

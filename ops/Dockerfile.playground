@@ -1,0 +1,31 @@
+# ═══════════════════════════════════════════════════════════════
+# BuildToValue — Developer Playground (Streamlit)
+# ═══════════════════════════════════════════════════════════════
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instala dependências do playground e do SDK
+COPY playground/requirements.txt ./requirements.txt
+COPY sdk/python/ ./sdk/python/
+
+RUN pip install --no-cache-dir \
+    ./sdk/python \
+    -r requirements.txt
+
+COPY playground/app.py ./app.py
+
+RUN groupadd -r btv && useradd -r -g btv btv \
+    && chown -R btv:btv /app
+USER btv
+
+EXPOSE 8502
+
+HEALTHCHECK --interval=15s --timeout=5s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8502/_stcore/health')"
+
+CMD ["streamlit", "run", "app.py", \
+     "--server.port=8502", \
+     "--server.address=0.0.0.0", \
+     "--server.headless=true", \
+     "--browser.gatherUsageStats=false"]

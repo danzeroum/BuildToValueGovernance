@@ -1,0 +1,83 @@
+site_name: BuildToValue Docs
+site_description: Ética em IA em 5 minutos — governança, conformidade e contestabilidade para agentes de IA
+site_url: https://docs.buildtovalue.io
+repo_url: https://github.com/buildtovalue/buildtovalue
+repo_name: buildtovalue/buildtovalue
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: pt
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Modo escuro
+    - scheme: slate
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Modo claro
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - autorefs
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Início: index.md
+  - Quickstart: quickstart.md
+  - Conceitos: concepts.md
+  - Referência da API: api-reference.md
+  - Integrações:
+    - Visão geral: integrations/index.md
+    - Python SDK: integrations/python-sdk.md
+    - TypeScript SDK: integrations/typescript-sdk.md
+    - LangChain: integrations/langchain.md
+    - LlamaIndex: integrations/llamaindex.md
+    - CrewAI: integrations/crewai.md
+    - AutoGen: integrations/autogen.md
+    - MCP Server: integrations/mcp.md
+  - Compliance: compliance.md
+  - Changelog: changelog.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/buildtovalue/buildtovalue
+  analytics:
+    provider: google
+    property: G-XXXXXXXXXX
