@@ -55,7 +55,7 @@ Ethical trust infrastructure for AI agents. Hybrid Rust + Python architecture im
 | Deobfuscate | Base64, Hex, Leetspeak |
 | Analyze | Entropy, ZScore, CharRatio, LanguageDetector (whatlang) |
 | Validate | CPF, CNPJ, Email, CreditCard, Phone, PromptInjection, SSN |
-| Available | NHS, EU VAT, IBAN (ADR-035, pending pipeline integration) |
+| Available | NHS (UK), EU VAT, IBAN (ADR-035, jurisdiction-gated in pipeline v2.2) |
 
 **Python Governance — Philosophical Pipeline (ADR-038):**
 
@@ -166,7 +166,7 @@ See `docs/adr/0000-adr-index.md` for full catalog with dependency map.
 - FNR leetspeak ~12% (Unicode homoglyphs not covered)
 - SSN bare (9 digits no separator) FPR ~25%
 - PromptInjection is heuristic (regex + structural), not ML
-- NHS/VAT/IBAN validators exist but not yet in Gatekeeper pipeline
+- NHS/VAT/IBAN validators are jurisdiction-gated (require JURISDICTION_UK or JURISDICTION_EU bitmask in scan context)
 - Ledger grows indefinitely (no rotation)
 - No TLS (plain HTTP)
 - SLM latency on CPU-only (~500ms-5s)
