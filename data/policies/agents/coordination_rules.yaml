@@ -21,3 +21,11 @@ conflict_rules:
     action_b: "lora_deploy"
     conflict: true
     reason: "Cannot deploy while training"
+
+# Byzantine Fault Tolerance — Scenario 4 (Robótica BFT)
+# Requires 2/3 consensus before any critical single-agent action.
+bft:
+  min_consensus_fraction: 0.67          # 2/3 of agents must agree
+  byzantine_fault_tolerance: true
+  max_faulty_agents_fraction: 0.33      # tolerates up to 33% Byzantine agents
+  block_on_single_agent_critical_action: true  # solo critical actions = BLOCK

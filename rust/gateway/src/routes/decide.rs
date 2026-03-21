@@ -47,6 +47,18 @@ pub struct DecideRequest {
     pub profile: Option<String>,
     #[serde(default)]
     pub agent_id: Option<String>,
+    /// Input modality: "text" | "visual" | "audio". Activates corresponding guard modules.
+    #[serde(default)]
+    pub source: Option<String>,
+    /// Channel through which the request arrived (e.g. "whatsapp_2fa", "email", "app_biometric").
+    /// Used by ChannelAuthorityVerifier to enforce pa_channel_hierarchy.yaml.
+    #[serde(default)]
+    pub channel: Option<String>,
+    /// Names of agents/*.yaml policy files to activate for this request.
+    /// Example: ["pa_channel_hierarchy", "pa_p2p_oracle"]. Vec allocates only during
+    /// serde deserialization (outside Rust kernel hot path — see ADR discussion Complement E).
+    #[serde(default)]
+    pub agent_policies: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -129,6 +141,15 @@ struct GovernanceDecideRequest {
     ip_risk: String,
     ip_jurisdiction: String,
     drift_level: String,
+    /// Forwarded from DecideRequest — input modality (ADR policy-activation)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
+    /// Forwarded from DecideRequest — channel identifier (ADR policy-activation)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    channel: Option<String>,
+    /// Forwarded from DecideRequest — agent YAML policy names to activate
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent_policies: Option<Vec<String>>,
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -289,6 +310,9 @@ pub async fn decide_handler(
             ip_risk: ip_risk_str.clone(),
             ip_jurisdiction: ip_jurisdiction.clone(),
             drift_level: drift_level.clone(),
+            source: req.source.clone(),
+            channel: req.channel.clone(),
+            agent_policies: req.agent_policies.clone(),
         };
 
         match state.http_client
