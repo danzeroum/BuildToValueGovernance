@@ -4,7 +4,7 @@ pytest python/tests/governance/test_goal_drift_sentinel.py -v
 """
 import pytest
 from buildtovalue.governance.goal_drift_sentinel import (
-    GoalDriftSentinel, DriftAction, DriftReport,
+    GoalDriftSentinel, DriftAction, DriftReport, ModelPerformanceReport,
     DRIFT_SCORE, _compute_trend_pct, _detect_asymmetric_pressure,
 )
 
@@ -169,3 +169,71 @@ class TestHelpers:
 
     def test_asymmetric_too_short(self):
         assert not _detect_asymmetric_pressure(["ALLOW", "ALLOW"])
+
+
+# ── C14: ModelPerformanceSentinel ─────────────────────────────────────────────
+
+class TestModelPerformanceSentinel:
+    def _sentinel(self) -> GoalDriftSentinel:
+        return GoalDriftSentinel(hmac_secret=SECRET)
+
+    def test_no_degradation_stable(self):
+        s = self._sentinel()
+        for _ in range(5):
+            r = s.monitor_model_performance("model-a", 0.95)
+        assert isinstance(r, ModelPerformanceReport)
+        assert r.degradation_detected is False
+        assert r.model_id == "model-a"
+
+    def test_degradation_25pct_detected(self):
+        s = self._sentinel()
+        # Build baseline with high metrics
+        for _ in range(6):
+            s.monitor_model_performance("model-b", 1.0)
+        # Sudden drop to 0.70 — ~30% below baseline
+        r = s.monitor_model_performance("model-b", 0.70)
+        assert r.degradation_detected is True
+        assert r.degradation_pct > 20.0
+
+    def test_below_threshold_not_detected(self):
+        s = self._sentinel()
+        for _ in range(6):
+            s.monitor_model_performance("model-c", 1.0)
+        # 8% drop — below default 20% threshold
+        r = s.monitor_model_performance("model-c", 0.92)
+        assert r.degradation_detected is False
+
+    def test_insufficient_samples_no_baseline(self):
+        s = self._sentinel()
+        # Only 2 samples — not enough for baseline detection
+        s.monitor_model_performance("model-d", 0.95)
+        r = s.monitor_model_performance("model-d", 0.50)
+        assert r.degradation_detected is False
+
+    def test_report_signed(self):
+        s = self._sentinel()
+        r = s.monitor_model_performance("model-e", 0.90)
+        assert len(r.signature) == 64
+        assert all(c in "0123456789abcdef" for c in r.signature)
+
+    def test_explain_decision_mandatory(self):
+        s = self._sentinel()
+        r = s.monitor_model_performance("model-f", 0.85)
+        assert r.explain_decision  # non-empty (Levinas)
+        assert "model-f" in r.explain_decision
+
+    def test_degradation_explain_includes_alert(self):
+        s = self._sentinel()
+        for _ in range(6):
+            s.monitor_model_performance("model-g", 1.0)
+        r = s.monitor_model_performance("model-g", 0.50)
+        assert r.degradation_detected is True
+        assert "backdoor" in r.explain_decision.lower() or "degradação" in r.explain_decision
+
+    def test_custom_threshold(self):
+        s = self._sentinel()
+        for _ in range(6):
+            s.monitor_model_performance("model-h", 1.0)
+        # 15% drop — below default 20% but above custom 10%
+        r = s.monitor_model_performance("model-h", 0.85, threshold=0.10)
+        assert r.degradation_detected is True
