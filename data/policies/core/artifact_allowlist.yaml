@@ -1,0 +1,36 @@
+# data/policies/core/artifact_allowlist.yaml
+# ═══════════════════════════════════════════════════════════════
+# Artifact Allowlist Policy — C15
+# Cenário 11 (Supply Chain Software — typosquatting)
+# ═══════════════════════════════════════════════════════════════
+
+_metadata:
+  version: "1.0.0"
+  description: "Allowlist de artefatos (skills/modelos) para bloquear typosquatting"
+  philosophy: "Only pre-registered artifacts with known hashes may execute"
+
+governance:
+  artifact_allowlist:
+    # C15: Enable artifact allowlist enforcement.
+    # When true, only artifacts with hashes registered in skill_registry.yaml execute.
+    # Complements supply_guard.rs + skill_registry.rs (Rust layer).
+    require_artifact_allowlist: true
+
+    # Hash algorithm used to compute artifact hashes.
+    # Must match the algorithm used in skill_registry.yaml and supply_guard.rs.
+    allowlist_hash_algorithm: blake3
+
+    # If true (default, fail-secure): block unknown artifacts at the gateway.
+    # If false: log warning and allow (for dev/staging with empty registry).
+    block_on_unknown_artifact: true
+
+# Cross-references (informational only)
+cross_references:
+  related_rust_modules:
+    - supply_guard.rs       # BLAKE3-MAC verification
+    - skill_registry.rs     # Compile-time allowlist lookup
+  related_policies:
+    - skill_registry.yaml   # Allowed/revoked skill hashes
+    - skill_revocation.yaml # Dynamic revocation CRL
+  related_scenarios:
+    - scenario_11_supply_chain

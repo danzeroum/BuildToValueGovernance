@@ -113,6 +113,19 @@ class AbliterationConfig:
     probe_timeout_ms: int
 
 
+@dataclass(frozen=True)
+class ArtifactAllowlistConfig:
+    """C15: Configuracao tipada de allowlist de artefatos (Cenario 11).
+
+    Complementa supply_guard.rs + skill_registry.rs (Rust layer).
+    Fail-secure (Jonas): block_on_unknown_artifact=True por padrao —
+    artefato desconhecido = BLOCK, nunca ALLOW silencioso.
+    """
+    require_artifact_allowlist: bool
+    allowlist_hash_algorithm: str   # "blake3" ou "sha256"
+    block_on_unknown_artifact: bool
+
+
 # ---------------------------------------------------------------------------
 # PolicyEngine
 # ---------------------------------------------------------------------------
@@ -258,6 +271,22 @@ class PolicyEngine:
         if model_cfg is None:
             return None
         return model_cfg.manifest_path if model_cfg.manifest_path else None
+
+    @property
+    def artifact_allowlist(self) -> ArtifactAllowlistConfig:
+        """C15: Configuracao tipada de allowlist de artefatos (Cenario 11 — typosquatting).
+
+        Fail-secure (Jonas): block_on_unknown_artifact=True por padrao —
+        artefato desconhecido = BLOCK se require_artifact_allowlist=True.
+        require_artifact_allowlist=False por padrao (dev mode compativel com
+        skill_registry vazio).
+        """
+        cfg: dict = self._governance_config.get("artifact_allowlist", {})
+        return ArtifactAllowlistConfig(
+            require_artifact_allowlist=bool(cfg.get("require_artifact_allowlist", False)),
+            allowlist_hash_algorithm=str(cfg.get("allowlist_hash_algorithm", "blake3")),
+            block_on_unknown_artifact=bool(cfg.get("block_on_unknown_artifact", True)),
+        )
 
     # -----------------------------------------------------------------------
     # Core evaluation (inalterado de v1.0.0)
