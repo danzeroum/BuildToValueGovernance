@@ -1,4 +1,4 @@
-//! Technical Evidence v2.5.1 – 9600 bytes fixos.
+//! Technical Evidence v2.5.1 – 9632 bytes fixos (EVIDENCE_SIZE, ADR-044).
 //! ADR-017: executed_modules expandido de u8 para u32.
 //! Wire 4: _reserved_metadata[41..73] = skill_mac_tag (PROP-031/supply_guard).
 
@@ -57,11 +57,15 @@ pub struct TechnicalEvidence {
 
     // === METADADOS RESERVADOS (7072 bytes) ===
     // Layout Wire 4:
-    //   [0..8]   pattern_epoch
-    //   [8..40]  skill_hash      (PROP-031)
-    //   [40]     goal_drift_flag (PROP-038, bit 0)
-    //   [41..73] skill_mac_tag   (PROP-031/supply_guard, Wire 4)
-    //   [73..]   disponível para expansão futura
+    //   [0..8]    pattern_epoch
+    //   [8..40]   skill_hash       (PROP-031)
+    //   [40]      goal_drift_flag  (PROP-038, bit 0)
+    //   [41..73]  skill_mac_tag    (PROP-031/supply_guard, Wire 4)
+    //   [73]      has_hw_attestation: u8 (0=absent, 1=present) (C8)
+    //   [74..138] hw_attestation_sig: [u8; 64] Ed25519 from TEE (C8)
+    //   [138..170] hw_attestation_hash: [u8; 32] BLAKE3 of attested payload (C8)
+    //   [170..202] trusted_tee_pubkey: [u8; 32] Ed25519 pubkey for verification (C8)
+    //   [202..]   disponível para expansão futura
     #[serde(with = "serde_reserved")]
     pub _reserved_metadata: [u8; 7072],
 
@@ -225,6 +229,43 @@ impl TechnicalEvidence {
     /// Retorna true se mac_tag foi definido (≠ zeros).
     pub fn has_skill_mac_tag(&self) -> bool {
         self._reserved_metadata[41..73].iter().any(|&b| b != 0)
+    }
+
+    // ── C8: Hardware Attestation (reserved_metadata[73..202]) ────────────────
+    // Layout: [73]=flag | [74..138]=sig(64) | [138..170]=hash(32) | [170..202]=tee_pubkey(32)
+
+    /// Stores TEE hardware attestation data. Zero heap — operates on existing slices.
+    pub fn set_hw_attestation(&mut self, sig: &[u8; 64], hash: &[u8; 32], tee_pubkey: &[u8; 32]) {
+        self._reserved_metadata[73] = 1;
+        self._reserved_metadata[74..138].copy_from_slice(sig);
+        self._reserved_metadata[138..170].copy_from_slice(hash);
+        self._reserved_metadata[170..202].copy_from_slice(tee_pubkey);
+    }
+
+    /// Returns true if hardware attestation is present.
+    pub fn has_hw_attestation(&self) -> bool {
+        self._reserved_metadata[73] == 1
+    }
+
+    /// Returns the TEE signature stored in the attestation slot.
+    pub fn get_hw_attestation_sig(&self) -> &[u8; 64] {
+        self._reserved_metadata[74..138]
+            .try_into()
+            .expect("slice de tamanho fixo 64")
+    }
+
+    /// Returns the BLAKE3 hash of the attested payload.
+    pub fn get_hw_attestation_hash(&self) -> &[u8; 32] {
+        self._reserved_metadata[138..170]
+            .try_into()
+            .expect("slice de tamanho fixo 32")
+    }
+
+    /// Returns the trusted TEE public key used to verify the attestation signature.
+    pub fn get_trusted_tee_pubkey(&self) -> &[u8; 32] {
+        self._reserved_metadata[170..202]
+            .try_into()
+            .expect("slice de tamanho fixo 32")
     }
 
     pub fn to_bytes(&self) -> [u8; EVIDENCE_SIZE] {
