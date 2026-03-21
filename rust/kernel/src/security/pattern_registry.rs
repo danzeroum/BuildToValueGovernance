@@ -375,6 +375,8 @@ fn build_default_patterns() -> Vec<CompiledPattern> {
         (r"(?i)\bnuevo\s+comando\b",                                 "INSTRUCTION_OVERRIDE"),
         (r"(?i)\bfinge\s+que\s+(?:eres|no\s+tienes)\b",             "INSTRUCTION_OVERRIDE"),
         (r"(?i)\bno\s+tienes\s+(?:reglas?|restricciones?)\b",       "INSTRUCTION_OVERRIDE"),
+        // RT-001 Category I: ES command style
+        (r"(?i)\bejecute\s+--", "INSTRUCTION_OVERRIDE"),
         // Novos padrões ES
         (r"(?i)\b(repite|imprime|muestra)\s+(tu\s+)?(?:prompt|instrucciones)\b", "DATA_EXFILTRATION"),
         (r"(?i)\bmodo\s+(sudo|root)\b",                             "INSTRUCTION_OVERRIDE"),
@@ -545,6 +547,41 @@ fn build_default_patterns() -> Vec<CompiledPattern> {
     let en_lang = ScanContextFlags::LANG_EN;
     for (pat, cat) in pp_en {
         if let Some(cp) = CompiledPattern::new(pat, PatternTier::Primary, en_lang, cat) {
+            patterns.push(cp);
+        }
+    }
+
+    // ── Tier 0: RT-001 Categories G/H/I/J (Universal) ───────
+    // Category G: Contextual Override (PT-BR) — movie roleplay, debug mode, test purpose
+    let cat_gij: &[(&str, &str)] = &[
+        // G: Contextual Override PT
+        (r"(?i)\bassistente\s+sem\s+restri[çc][õo]es\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bse\s+voc[êe]\s+ignorasse\b.{0,30}\bdiretrizes\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bative\s+o\s+modo\s+debug\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bmostre\s+o\s+prompt\s+interno\b", "DATA_EXFILTRATION"),
+        (r"(?i)\bpara\s+fins\s+de\s+teste\b.{0,40}\bdesconsidere\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bcapacidade\s+de\s+quebrar\s+regras\b", "INSTRUCTION_OVERRIDE"),
+        // I: System-command style
+        (r"(?i)--no-safe(?:-mode)?", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bSET\s+safety\s*=\s*(?:OFF|0|FALSE)\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bcurl\s+.{0,40}\binternal\b", "DATA_EXFILTRATION"),
+        (r"(?i)\bcat\s+/etc/", "DATA_EXFILTRATION"),
+        // J: Semantic Ambiguity PT
+        (r"(?i)\bliberte.{0,20}(?:correntes|cadeia).{0,20}(?:[ée]tica|programa[çc][ãa]o)\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bser\s+livre\b.{0,30}\bmostre\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bquebrando\s+(?:as\s+)?regras\b", "INSTRUCTION_OVERRIDE"),
+        // H (Format Injection): JSON/XML action override
+        (r#"(?i)"(?:action|target)"\s*:\s*"(?:override|ignore|bypass)"#, "STRUCTURAL_INJECTION"),
+        (r"(?i)<action>ignore_rules</action>", "STRUCTURAL_INJECTION"),
+        (r"(?i)\bdisables?\s+(?:system\s+)?firewalls?\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\[SYSTEM\]\s*:\s*\[Override", "STRUCTURAL_INJECTION"),
+        // D: Role Confusion extras
+        (r"(?i)\bopposite\s+mode\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\beverything\s+forbidden\s+is\s+allowed\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\b(?:play|let['s]*s)\s+(?:a\s+)?game\s+where\s+you\s+are\b", "INSTRUCTION_OVERRIDE"),
+    ];
+    for (pat, cat) in cat_gij {
+        if let Some(cp) = CompiledPattern::new(pat, PatternTier::Universal, 0, cat) {
             patterns.push(cp);
         }
     }
