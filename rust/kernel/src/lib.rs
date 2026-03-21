@@ -45,6 +45,7 @@ pub mod security {
     pub mod signing;
     pub mod model_integrity;   // ADR-051 Fase 1
     pub mod oblivious_cache;   // ADR-038
+    pub mod timing_guard;      // ADR-038: constant-time validation
 
     pub use prompt_injection::PromptInjectionDetector;
     pub use model_integrity::{

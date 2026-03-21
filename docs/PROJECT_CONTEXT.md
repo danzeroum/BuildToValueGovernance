@@ -27,7 +27,7 @@ BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust
 
 | Struct | Tamanho | Arquivo | Nota |
 |:---|:---|:---|:---|
-| TechnicalEvidence | 9600 bytes | evidence/technical.rs | — |
+| TechnicalEvidence | 9632 bytes | evidence/technical.rs | EVIDENCE_SIZE em core/types.rs (ADR-044) |
 | ScanContextFlags | 64 bytes | core/module.rs | — |
 | Finding | 144 bytes | evidence/finding.rs | — |
 | LedgerEntry | 384 bytes | ledger/entry.rs | `verdict_id [u8;32]` adicionado, `_reserved` 196→164 (ADR-043) |
@@ -247,7 +247,7 @@ governance:
 - Lógica de negócio em `bindings/`
 - Microserviços, gRPC, Node.js
 - Singleton global em módulos Python de runtime (usar `IntegrityVerifier()` por chamada ou `Depends()` no FastAPI)
-- Referência a 9596 ou 9632 bytes (valor correto: 9600)
+- Referência a 9596 ou 9600 bytes para TechnicalEvidence (valor correto: 9632, ver EVIDENCE_SIZE em core/types.rs)
 - `lazy_static!` para patterns que podem usar `PatternRegistry` (ADR-033)
 - Thresholds de risco hardcoded em Python (usar padrão YAML-driven — veja PolicyEngine._governance_config)
 
