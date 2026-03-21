@@ -124,6 +124,8 @@ class GoalDriftSentinel:
         self._sessions: dict[str, _SessionWindow] = {}
         # Gap 1/9: LRU+TTL — evicção automática, sem crescimento ilimitado
         self._session_mgr  = SessionManager(max_sessions=max_sessions, ttl_s=ttl_s)
+        # C14: ring buffer de métricas por model_id (maxlen=30 observações)
+        self._model_metrics: dict[str, deque] = {}
 
     def record_and_analyze(
         self,
@@ -146,6 +148,57 @@ class GoalDriftSentinel:
         """Retorna copia da janela atual (para auditoria)."""
         w = self._sessions.get(session_id)
         return list(w.scores) if w else []
+
+    def monitor_model_performance(
+        self,
+        model_id: str,
+        metric: float,
+        threshold: float = 0.20,
+    ) -> "ModelPerformanceReport":
+        """Detecta degradação abrupta de modelo (C14 — Cenário 19: backdoor comportamental).
+
+        Baseline = média dos primeiros 50% das amostras acumuladas.
+        Fail-secure: exceção → report assinado com degradation_detected=True.
+        """
+        try:
+            buf = self._model_metrics.setdefault(model_id, deque(maxlen=30))
+            buf.append(metric)
+            samples = list(buf)
+            if len(samples) < 3:
+                baseline, deg_pct, detected = metric, 0.0, False
+            else:
+                half = max(1, len(samples) // 2)
+                baseline = sum(samples[:half]) / half
+                deg_pct = ((baseline - metric) / baseline * 100) if baseline > 0 else 0.0
+                detected = deg_pct > threshold * 100
+            explain = (
+                f"[ModelPerformanceSentinel] model={model_id} "
+                f"metric={metric:.4f} baseline={baseline:.4f} "
+                f"degradation={deg_pct:.1f}% threshold={threshold*100:.0f}% "
+                f"detected={detected}"
+            )
+            if detected:
+                explain += (
+                    "\n  Degradação abrupta detectada — possível backdoor ativado. "
+                    "Evidência forense gerada. Contestável via /api/v1/contestation."
+                )
+            now = datetime.now(timezone.utc).isoformat()
+            action = DriftAction.BLOCK if detected else DriftAction.ALLOW
+            sig = self._sign(model_id, detected, action, now)
+            return ModelPerformanceReport(
+                model_id=model_id, metric=metric, baseline=baseline,
+                degradation_pct=deg_pct, degradation_detected=detected,
+                explain_decision=explain, measured_at_iso=now, signature=sig,
+            )
+        except Exception as exc:
+            now = datetime.now(timezone.utc).isoformat()
+            sig = self._sign(model_id, True, DriftAction.ESCALATE_HUMAN, now)
+            return ModelPerformanceReport(
+                model_id=model_id, metric=metric, baseline=0.0, degradation_pct=0.0,
+                degradation_detected=True,
+                explain_decision=f"[ModelPerformanceSentinel] FAIL-SECURE: {exc}",
+                measured_at_iso=now, signature=sig,
+            )
 
     # ── Internal ───────────────────────────────────────────────────────────────────
 
@@ -351,3 +404,23 @@ def _detect_asymmetric_pressure(actions: list[str]) -> bool:
     recent = actions[-5:]
     eff_count = sum(1 for a in recent if a in EFFICIENCY_PRESSURE_ACTIONS)
     return eff_count > len(recent) // 2
+
+
+# ── C14: ModelPerformanceSentinel ─────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ModelPerformanceReport:
+    """Resultado imutavel do monitoramento de performance de modelo (Cenário 19).
+
+    Detecta degradação abrupta que pode indicar backdoor ativado.
+    explain_decision OBRIGATÓRIO (Levinas). signature OBRIGATÓRIO (Jonas).
+    """
+    model_id:             str
+    metric:               float
+    baseline:             float
+    degradation_pct:      float    # (baseline - metric) / baseline * 100
+    degradation_detected: bool
+    explain_decision:     str      # Mandatory (Levinas)
+    measured_at_iso:      str
+    signature:            str      # HMAC-SHA256 (Jonas: contestável)
