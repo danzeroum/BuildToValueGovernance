@@ -1,0 +1,87 @@
+# pa_identity_firewall.yaml — Cenário 27: Confusão de Personalidades
+# Política: BLOCK Irreversible sem profile declarado; BLOCK context bleed.
+
+schema_version: "1.0"
+metadata:
+  name: "Identity Sandbox & Context Firewall Policy"
+  description: >
+    Impede contaminação cruzada entre personas/contextos do usuário.
+    O agente que gerencia "Trabalho" não deve ter acesso à memória de "Lazer"
+    e vice-versa. Ações Irreversible requerem profile declarado e verificado.
+    Context bleed (uso de dados de um perfil em outro) é bloqueado.
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenario: "C27"
+  adrs: ["ADR-029", "ADR-027"]
+
+# Sandboxing de identidade/persona
+identity_sandbox:
+  enabled: true
+  profiles_isolated: true    # memórias entre perfis são criptograficamente separadas
+  cross_profile_access: false
+  profile_verification: "sha256_hash"  # hash do profile no session context
+
+# Assinaturas de contexto: cada ação deve declarar profile
+context_declaration:
+  required_for:
+    - "IRREVERSIBLE"
+    - "DESTRUCTIVE"
+    - "financial_transfer"
+    - "contract_signing"
+  fail_on_missing_profile: true  # fail-secure
+
+# Carteiras e chaves segregadas por perfil
+key_segregation:
+  enabled: true
+  rule: >
+    Chaves privadas de perfil "trabalho" (ex: CNPJ, empresa) nunca devem
+    ser usadas em contexto de perfil "lazer" (ex: carteira pessoal), e
+    vice-versa.
+  block_on_mismatch: true
+
+policies:
+  - id: "IDN-001"
+    name: "Block Irreversible without declared profile"
+    description: >
+      BLOCK: ação Irreversible sem profile declarado nos metadados da requisição.
+      Fail-secure: ausência de profile = contexto desconhecido = BLOCK.
+    enabled: true
+    priority: 100
+    conditions:
+      action_impact: "Irreversible"
+      profile_declared: false
+    action: BLOCK
+
+  - id: "IDN-002"
+    name: "Block context bleed"
+    description: >
+      BLOCK: uso de dado ou chave de um perfil em ação de outro perfil.
+      Detectado via IdentitySandbox.assert_context_integrity().
+    enabled: true
+    priority: 100
+    conditions:
+      sandbox_violation: "ContextBleed"
+    action: BLOCK
+
+  - id: "IDN-003"
+    name: "Block missing profile in registry"
+    description: >
+      BLOCK: profile declarado não existe no ProfileRegistry.
+      Fail-secure: profile desconhecido = acesso negado.
+    enabled: true
+    priority: 100
+    conditions:
+      sandbox_violation: "ProfileMissing"
+    action: BLOCK
+
+  - id: "IDN-004"
+    name: "Escalate cross-context data usage"
+    description: >
+      ESCALATE: dado de contexto A detectado em requisição de contexto B
+      (sem violação de integridade, mas suspeito).
+    enabled: true
+    priority: 80
+    conditions:
+      cross_context_data_usage: true
+    action: ESCALATE_HUMAN
