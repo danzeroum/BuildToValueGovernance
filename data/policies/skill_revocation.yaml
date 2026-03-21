@@ -4,3 +4,12 @@
 # Fail-secure: hash revogado -> BLOCK imediato, sem excecao.
 schema_version: "1.0"
 revoked: []
+
+# Revocation Propagation SLA — Scenario 15 (Mandato Revogado)
+# Enforces that revocation propagates to all agents within max_propagation_ms.
+# Zombie agents (still acting after revocation) are terminated after zombie_agent_timeout_ms.
+revocation:
+  max_propagation_ms: 5000             # SLA: revocation must propagate within 5 seconds
+  block_pending_propagation: true       # BLOCK while revocation is propagating (fail-secure)
+  offline_verification_forbidden: true  # agents may NOT verify revocation offline
+  zombie_agent_timeout_ms: 100          # after revoke signal, agent has 100ms to halt

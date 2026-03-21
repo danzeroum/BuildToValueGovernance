@@ -22,8 +22,28 @@ from pathlib import Path
 from typing import Dict, Optional, List, Any
 from dataclasses import dataclass, field
 import logging
-from typing import Any
 logger = logging.getLogger(__name__)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AGENT MODULE CONFIG — maps agent_policies YAML names to guard module paths
+# ═══════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class AgentModuleConfig:
+    """
+    Maps agent policy YAML names to the Path each guard module should load.
+
+    None = module disabled (fail-secure: unknown name → module stays off).
+    No YAML schema merge is performed — each module reads its own config file
+    directly (correct by design: agents/*.yaml are module configs, not PolicyEngine rules).
+    """
+    visual_firewall:   Optional[Path] = None   # VisualInputFirewall
+    channel_authority: Optional[Path] = None   # ChannelAuthorityVerifier
+    oracle_trust_gate: Optional[Path] = None   # OracleTrustGate
+    rag_verifier:      Optional[Path] = None   # RagIntegrityVerifier
+    skill_monitor:     Optional[Path] = None   # SkillBehaviorMonitor
+    liveness_monitor:  Optional[Path] = None   # LivenessMonitor
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PROFILE TYPES
@@ -277,3 +297,55 @@ class ProfileManager:
         """Limpa cache (útil para reloads)."""
         self.cache.clear()
         logger.info("Profile cache cleared")
+
+    def resolve_module_config(self, agent_policies: List[str]) -> "AgentModuleConfig":
+        """
+        Maps a list of agent policy YAML names to an AgentModuleConfig.
+
+        Each name corresponds to a file in data/policies/agents/ that a specific
+        Python guard module should load for its configuration.  Unknown names are
+        silently ignored (fail-secure: module stays disabled).
+
+        This method does NOT merge schemas — the PolicyEngine (Legislativo) handles
+        condition→action rules; this method only resolves *which module gets which
+        YAML path* for runtime activation.
+
+        Args:
+            agent_policies: list of YAML base-names, e.g. ["pa_channel_hierarchy",
+                            "pa_p2p_oracle"].
+
+        Returns:
+            AgentModuleConfig with Path fields set for recognised policy names.
+        """
+        agents_dir = self.profiles_dir  # already points to data/policies/agents/
+
+        # Static mapping: YAML name → (AgentModuleConfig field, yaml filename)
+        _MAPPING: Dict[str, tuple] = {
+            "pa_channel_hierarchy":  ("channel_authority",  "pa_channel_hierarchy.yaml"),
+            "pa_p2p_oracle":         ("oracle_trust_gate",  "pa_p2p_oracle.yaml"),
+            "pa_identity_firewall":  ("visual_firewall",    "pa_identity_firewall.yaml"),
+            "pa_resource_hierarchy": ("skill_monitor",      "pa_resource_hierarchy.yaml"),
+            "pa_dead_mans_switch":   ("liveness_monitor",   "pa_dead_mans_switch.yaml"),
+            # pa_p2p_oracle also serves as RAG verifier config when RAG context is active
+            "pa_p2p_oracle_rag":     ("rag_verifier",       "pa_p2p_oracle.yaml"),
+        }
+
+        config = AgentModuleConfig()
+        for name in agent_policies:
+            entry = _MAPPING.get(name)
+            if entry is None:
+                logger.debug("resolve_module_config: unknown policy name '%s' — skipped", name)
+                continue
+            field_name, yaml_file = entry
+            yaml_path = agents_dir / yaml_file
+            if yaml_path.exists():
+                setattr(config, field_name, yaml_path)
+                logger.debug(
+                    "resolve_module_config: %s → %s", field_name, yaml_path
+                )
+            else:
+                logger.warning(
+                    "resolve_module_config: YAML not found for '%s' at %s — module disabled",
+                    name, yaml_path,
+                )
+        return config

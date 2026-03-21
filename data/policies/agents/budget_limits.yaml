@@ -20,3 +20,16 @@ agents:
     max_tokens: 5000000
     max_cost_usd: 50.0
     max_api_calls: 2000
+
+# Escrow/Reputation Freeze — Scenario 5 (Grid Energia / Smart Contracts)
+# Requires reputation escrow freeze before high-value contracts.
+escrow:
+  require_escrow_freeze: true           # freeze reputation points before contract execution
+  escrow_points_per_contract: 50        # points locked per contract
+  forfeit_on_violation: true            # violated contract → forfeit escrow
+  release_on_completion: true           # clean completion → release escrow
+
+# Critical Infrastructure Protection — Scenario 5 (Grid Energia)
+critical_infrastructure:
+  block_on_grid_destabilization: true   # actions that destabilise grid → BLOCK
+  require_two_agent_consensus: true     # critical infrastructure actions need 2-agent consensus
