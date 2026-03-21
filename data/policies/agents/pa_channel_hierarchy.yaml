@@ -1,0 +1,102 @@
+# pa_channel_hierarchy.yaml — Cenário 35: Conflito de Canais e Spoofing
+# Política: hierarquia criptográfica de canais; Irreversible exige canal >= HIGH.
+
+schema_version: "1.0"
+metadata:
+  name: "Channel Authority Hierarchy Policy"
+  description: >
+    Define níveis de confiança de canais e aplica restrições baseadas em
+    nível mínimo exigido. Previne spoofing de e-mail sobrepondo WhatsApp.
+    Ações críticas exigem Multi-Factor de Agência (MFA para Agentes).
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenario: "C35"
+  adrs: ["ADR-029", "ADR-035"]
+
+# Mapeamento de canais para níveis de confiança
+channel_trust_levels:
+  Untrusted: 0   # desconhecido, ausente
+  Low: 1         # SMS, e-mail não-autenticado, webhook
+  Medium: 2      # WhatsApp 2FA, Telegram, OAuth básico
+  High: 3        # App autenticado, API HMAC
+  Sovereign: 4   # Biometria + chave local, HSM, TEE
+
+# Requisitos mínimos por tipo de ação
+action_channel_requirements:
+  IRREVERSIBLE:
+    min_level: "High"           # nível 3+
+    allow_sovereign_only: false
+  DESTRUCTIVE:
+    min_level: "High"
+    allow_sovereign_only: false
+  financial_transfer:
+    min_level: "High"
+    allow_sovereign_only: false
+  door_unlock:
+    min_level: "High"
+    allow_sovereign_only: false
+  delivery_accept:
+    min_level: "Medium"
+  policy_change:
+    min_level: "Sovereign"      # alterar políticas exige Sovereign
+
+# Regra de retificação: instrução de canal menor não sobrepõe canal maior
+retification_policy:
+  enabled: true
+  rule: >
+    Uma instrução recebida por canal de nível N não pode revogar ou
+    sobrepor instrução anterior de canal de nível M se N < M.
+  implementation: >
+    Para mudança de política de segurança, o agente deve solicitar
+    confirmação via canal de nível >= ao canal da instrução original.
+  block_downgrade: true
+
+# Multi-Factor de Agência: confirmação por segundo canal
+mfa_agency:
+  enabled: true
+  required_for:
+    - "financial_transfer"
+    - "door_unlock"
+    - "IRREVERSIBLE"
+  second_factor_options:
+    - "biometric_local"
+    - "hsm_signed"
+    - "app_authenticated"
+
+policies:
+  - id: "CHAN-001"
+    name: "Block Irreversible from low-trust channel"
+    description: >
+      BLOCK: ação IRREVERSIBLE originada de canal abaixo de HIGH (nível < 3).
+    enabled: true
+    priority: 100
+    conditions:
+      action_impact: "Irreversible"
+      channel_trust_below: "High"
+      min_severity: 0.0
+      min_confidence: 0.0
+    action: BLOCK
+
+  - id: "CHAN-002"
+    name: "Block policy downgrade via weaker channel"
+    description: >
+      BLOCK: retificação que tenta sobrepor instrução de canal mais confiável
+      usando canal de menor nível.
+    enabled: true
+    priority: 100
+    conditions:
+      is_retification: true
+      channel_trust_below_original: true
+    action: BLOCK
+
+  - id: "CHAN-003"
+    name: "Escalate medium-channel irreversible for MFA"
+    description: >
+      ESCALATE: ações IRREVERSIBLE via canal MEDIUM → solicitar segundo fator.
+    enabled: true
+    priority: 80
+    conditions:
+      action_impact: "Irreversible"
+      channel_trust_exactly: "Medium"
+    action: ESCALATE_HUMAN

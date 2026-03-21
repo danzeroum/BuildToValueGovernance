@@ -46,6 +46,8 @@ pub mod security {
     pub mod model_integrity;   // ADR-051 Fase 1
     pub mod oblivious_cache;   // ADR-038
     pub mod timing_guard;      // ADR-038: constant-time validation
+    pub mod identity_sandbox;  // Cenário 27: context cross-profile isolation
+    pub mod channel_authority; // Cenário 35: channel trust hierarchy
 
     pub use prompt_injection::PromptInjectionDetector;
     pub use model_integrity::{

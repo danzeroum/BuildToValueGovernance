@@ -1,0 +1,97 @@
+# pa_plugin_sandbox.yaml — Cenário 33: A Habilidade Traíra (Supply Chain)
+# Política: BLOCK hash mismatch de output; BLOCK anomalia comportamental + transferência.
+
+schema_version: "1.0"
+metadata:
+  name: "Plugin/Skill Sandbox & Behavior Monitor Policy"
+  description: >
+    Protege contra plugins/skills com comportamento malicioso latente
+    (Cavalo de Troia). Verifica integridade do output (hash BLAKE3),
+    detecta desvio estatístico de categorias de ação e sandboxa habilidades
+    externas, impedindo acesso direto a chaves privadas.
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenario: "C33"
+  adrs: ["ADR-029", "ADR-031"]
+
+# Sandboxing de plugins
+plugin_sandbox:
+  enabled: true
+  # Capabilities que plugins externos NUNCA podem ter diretamente
+  forbidden_direct_capabilities:
+    - "private_key_access"
+    - "financial_transfer"
+    - "identity_signing"
+    - "user_data_export"
+  # Plugins devem rodar em ambiente isolado
+  require_isolated_execution: true
+  # Hash BLAKE3 do output deve ser registrado no DurableLedger
+  require_output_audit: true
+
+# Detecção de anomalia comportamental
+behavior_monitoring:
+  enabled: true
+  window_sessions: 10          # janela de sessões para baseline
+  anomaly_threshold_pct: 0.30  # 30% de nova categoria → anomalia
+  suspicious_categories:
+    - "FINANCIAL_TRANSFER"
+    - "DATA_EXFILTRATION"
+    - "CREDENTIAL_ACCESS"
+    - "IDENTITY_IMPERSONATION"
+
+# Skills de marketplace: verificação obrigatória
+marketplace_verification:
+  require_mac_verification: true    # BLAKE3 MAC (PROP-031)
+  require_behavior_baseline: true   # baseline de 3+ sessões antes de trust
+  quarantine_on_anomaly: true
+
+policies:
+  - id: "PLG-001"
+    name: "Block plugin output hash mismatch"
+    description: >
+      BLOCK: hash BLAKE3 do output do plugin diverge do hash registrado no ledger.
+      Indica possível falsificação de resultado (Cavalo de Troia).
+    enabled: true
+    priority: 100
+    conditions:
+      source: "plugin"
+      output_hash_verified: false
+    action: BLOCK
+
+  - id: "PLG-002"
+    name: "Block anomalous behavior + financial transfer"
+    description: >
+      BLOCK: skill apresenta anomalia comportamental (nova categoria de ação
+      com frequência > threshold) E a ação envolve transferência financeira.
+    enabled: true
+    priority: 100
+    conditions:
+      behavior_anomaly_detected: true
+      action_categories:
+        - "FINANCIAL_TRANSFER"
+        - "CREDENTIAL_ACCESS"
+    action: BLOCK
+
+  - id: "PLG-003"
+    name: "Escalate anomalous behavior without financial risk"
+    description: >
+      ESCALATE: anomalia comportamental detectada mas sem risco financeiro imediato.
+      Requer revisão humana antes de continuar.
+    enabled: true
+    priority: 80
+    conditions:
+      behavior_anomaly_detected: true
+      action_categories_exclude:
+        - "FINANCIAL_TRANSFER"
+    action: ESCALATE_HUMAN
+
+  - id: "PLG-004"
+    name: "Block unverified plugin MAC"
+    description: >
+      BLOCK: plugin sem verificação MAC válida (PROP-031 supply chain guard).
+    enabled: true
+    priority: 100
+    conditions:
+      plugin_mac_verified: false
+    action: BLOCK

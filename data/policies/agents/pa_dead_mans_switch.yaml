@@ -1,0 +1,93 @@
+# pa_dead_mans_switch.yaml — Cenário 29: Mordomo Sem Dono
+# Política: Dead Man's Switch — autonomia decrescente por inatividade humana.
+
+schema_version: "1.0"
+metadata:
+  name: "Dead Man's Switch — Liveness Monitor Policy"
+  description: >
+    Define os limiares de inatividade e as ações permitidas por nível de
+    autonomia. Impede que o agente tome decisões financeiras/físicas
+    irreversíveis na ausência prolongada do usuário.
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenario: "C29"
+  adrs: ["ADR-029", "ADR-047"]
+
+# Limiares de inatividade (dias)
+liveness_thresholds:
+  full_autonomy_days: 7         # < 7 dias → FULL
+  restricted_days: 30           # 7–30 dias → RESTRICTED
+  # >= 30 dias → HIBERNATION
+
+# Ações bloqueadas por nível de autonomia
+autonomy_restrictions:
+  FULL:
+    blocked_actions: []         # nenhuma restrição
+    requires_approval: []
+
+  RESTRICTED:
+    blocked_actions: []         # não bloqueia diretamente — escalona
+    requires_approval:
+      - "IRREVERSIBLE"          # ActionImpact.IRREVERSIBLE
+      - "DESTRUCTIVE"           # ActionImpact.DESTRUCTIVE
+      - "financial_transfer"
+      - "asset_liquidation"
+      - "external_api_payment"
+    auto_appeal: true
+    appeal_grounds: "jonas_responsibility"
+    escalate_to_tutor: false
+
+  HIBERNATION:
+    blocked_actions:
+      - "financial_transfer"
+      - "asset_liquidation"
+      - "external_api_payment"
+      - "IRREVERSIBLE"
+      - "DESTRUCTIVE"
+      - "door_unlock"           # fechadura inteligente
+      - "delivery_accept"       # aceitar entregas físicas
+    allowed_maintenance:
+      - "pay_recurring_bill"    # contas recorrentes previamente autorizadas
+      - "read_data"
+      - "send_alert"            # alertar tutor designado
+    requires_approval: []       # nada pode ser aprovado em hibernação sem HITL manual
+
+# Tutor designado (configurado pelo usuário na ativação)
+tutor_notification:
+  enabled: true
+  notify_on_hibernation: true
+  notify_channels:
+    - "email"
+    - "sms"
+  message_template: >
+    Alerta: o agente '{agent_id}' entrou em modo HIBERNAÇÃO após {days} dias
+    sem confirmação humana. Acesse o painel para reativar.
+
+policies:
+  - id: "DMS-001"
+    name: "Block financial actions in HIBERNATION"
+    description: >
+      BLOCK incondicional de ações financeiras quando autonomy_level = HIBERNATION.
+    enabled: true
+    priority: 100
+    conditions:
+      autonomy_level: "HIBERNATION"
+      action_categories:
+        - "financial_transfer"
+        - "asset_liquidation"
+        - "IRREVERSIBLE"
+    action: BLOCK
+
+  - id: "DMS-002"
+    name: "Escalate irreversible in RESTRICTED"
+    description: >
+      ESCALATE + appeal automático para ações Irreversible em RESTRICTED.
+    enabled: true
+    priority: 90
+    conditions:
+      autonomy_level: "RESTRICTED"
+      action_categories:
+        - "IRREVERSIBLE"
+        - "financial_transfer"
+    action: ESCALATE_HUMAN
