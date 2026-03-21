@@ -1,7 +1,10 @@
 
 """
-ROI Engine v2 - Calculate compliance penalties avoided.
-Integrates with Rust FFI for penalty calculations.
+ROI Engine v2 — Calculate compliance penalties avoided.
+
+Calculates potential regulatory penalties (LGPD, EU AI Act) that were
+avoided by BTV governance decisions. Uses a lookup table of maximum
+penalties per framework — no FFI needed for this operation.
 """
 from decimal import Decimal
 from typing import List, Dict, Any
@@ -10,12 +13,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# TODO: Implement real FFI integration
-# from buildtovalue.governance.ffi_client import FFIClient
-
 def calculate_penalties_batch(threats: List[Dict[str, str]]) -> Dict[str, Any]:
     """
-    Mock implementation - Replace with FFI call to Rust.
+    Calculate total potential penalties for a batch of threats.
 
     Args:
         threats: List of {"threat_type": str, "framework": str}

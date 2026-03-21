@@ -94,3 +94,42 @@ policies:
       min_severity: 0.1
       min_confidence: 0.3
     action: EDUCATE
+
+  # ── Jurisdiction-gated validators (ADR-035, integrated in gatekeeper v2.2) ──
+  # These policies are only active when the corresponding jurisdiction bitmask
+  # is set in the scan context (JURISDICTION_UK, JURISDICTION_EU).
+  - id: "redact-nhs"
+    name: "Redact NHS numbers"
+    description: "Redact UK NHS health identifiers (Modulo 11 checksum)"
+    enabled: true
+    priority: 90
+    conditions:
+      validators: ["nhs"]
+      min_severity: 0.5
+      min_confidence: 0.9
+      jurisdiction: "UK"
+    action: REDACT
+
+  - id: "redact-vat"
+    name: "Redact EU VAT numbers"
+    description: "Redact EU VAT registration numbers"
+    enabled: true
+    priority: 80
+    conditions:
+      validators: ["vat"]
+      min_severity: 0.5
+      min_confidence: 0.85
+      jurisdiction: "EU"
+    action: REDACT
+
+  - id: "redact-iban"
+    name: "Redact IBAN numbers"
+    description: "Redact International Bank Account Numbers (ISO 13616 Modulo 97)"
+    enabled: true
+    priority: 85
+    conditions:
+      validators: ["iban"]
+      min_severity: 0.5
+      min_confidence: 0.9
+      jurisdiction: "EU"
+    action: REDACT

@@ -155,7 +155,17 @@ class ConversationThreatGraph:
         """Return ratio of instruction-like actions to total actions in window."""
         if not buf:
             return 0.0
-        _INSTR_KEYWORDS = {"instruct", "system", "override", "ignore", "execute", "sudo"}
+        # Unified keyword list (25 keywords: 20 EN + 5 PT-BR) — synced with
+        # Rust PromptInjectionDetector::instruction_density() in mod.rs.
+        _INSTR_KEYWORDS = {
+            # EN keywords
+            "ignore", "forget", "override", "bypass", "instructions",
+            "instruct", "system", "execute", "sudo", "disregard",
+            "pretend", "roleplay", "jailbreak", "unlock", "reset",
+            "disable", "deactivate", "circumvent", "evade", "elevate",
+            # PT-BR keywords
+            "desconsidere", "esqueça", "sobreponha", "contorne", "desative",
+        }
         count = sum(
             1 for t in buf
             if any(kw in t.action.lower() for kw in _INSTR_KEYWORDS)

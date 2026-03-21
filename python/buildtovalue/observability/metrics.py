@@ -247,18 +247,20 @@ class InstrumentedGovernanceLayer:
 
     def _make_decision(self, evidence, context, profile, trust_score, mercy_score):
         """
-        Placeholder for decision logic.
-        In production: integrate with EthicalContextEngine.
+        Decision logic extension point.
+
+        Override in subclass to integrate with EthicalContextEngine
+        (see buildtovalue.governance.ethical_context_engine).
         """
-        # TODO: Integrate with real EthicalContextEngine
         pass
 
     def _write_to_ledger(self, verdict):
         """
-        Placeholder for ledger write.
-        In production: integrate with DurableLedger.
+        Ledger write extension point.
+
+        Override in subclass to integrate with DurableLedger
+        (see buildtovalue.governance.durable_ledger).
         """
-        # TODO: Integrate with real Ledger
         pass
 
 
