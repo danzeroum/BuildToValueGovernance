@@ -1,7 +1,9 @@
 
 use ring::hmac;
+use ring::signature::{Ed25519KeyPair, UnparsedPublicKey, ED25519};
 use std::fs;
 use std::path::Path;
+use zeroize::Zeroizing;
 
 /// Signing key manager (HMAC-SHA256)
 pub struct SigningKeyManager {
@@ -11,10 +13,12 @@ pub struct SigningKeyManager {
 impl SigningKeyManager {
     /// Load signing key from file (secure storage)
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, CryptoError> {
-        // Read key file
-        let key_bytes = fs::read(path.as_ref())
-            .map_err(|e| CryptoError::KeyLoadFailed(e.to_string()))?;
-        
+        // Read key file — Zeroizing ensures memory is zeroed on drop
+        let key_bytes: Zeroizing<Vec<u8>> = Zeroizing::new(
+            fs::read(path.as_ref())
+                .map_err(|e| CryptoError::KeyLoadFailed(e.to_string()))?
+        );
+
         // Validate key length (must be 32 bytes for HMAC-SHA256)
         if key_bytes.len() != 32 {
             return Err(CryptoError::InvalidKeyLength {
@@ -22,17 +26,14 @@ impl SigningKeyManager {
                 actual: key_bytes.len(),
             });
         }
-        
+
         // Validate key entropy (must not be all zeros, etc)
         if key_bytes.iter().all(|&b| b == 0) {
             return Err(CryptoError::WeakKey("Key is all zeros".to_string()));
         }
-        
+
         let key = hmac::Key::new(hmac::HMAC_SHA256, &key_bytes);
-        
-        // Securely zero out key_bytes (prevent leaks)
-        drop(key_bytes);
-        
+        // key_bytes is zeroed automatically when dropped here
         Ok(Self { key })
     }
     
@@ -127,6 +128,50 @@ impl SigningKeyRotator {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Asymmetric Signing (Ed25519) — ADR-C2
+// Zero heap on hot path (sign returns [u8;64] on stack).
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug)]
+pub enum SigningError {
+    KeyGenerationFailed,
+    InvalidKey,
+}
+
+pub struct AsymmetricSigner {
+    key_pair: Ed25519KeyPair,
+}
+
+impl AsymmetricSigner {
+    /// Generate a new Ed25519 key pair. Cold path — allocation acceptable.
+    /// Returns (signer, public_key_bytes[32]).
+    pub fn generate() -> Result<(Self, [u8; 32]), SigningError> {
+        let rng = ring::rand::SystemRandom::new();
+        let pkcs8 = Ed25519KeyPair::generate_pkcs8(&rng)
+            .map_err(|_| SigningError::KeyGenerationFailed)?;
+        let kp = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref())
+            .map_err(|_| SigningError::InvalidKey)?;
+        let mut pub_key = [0u8; 32];
+        pub_key.copy_from_slice(kp.public_key().as_ref());
+        Ok((Self { key_pair: kp }, pub_key))
+    }
+
+    /// Hot path: sign returns [u8; 64] on the stack — zero heap allocation.
+    pub fn sign(&self, message: &[u8]) -> [u8; 64] {
+        let sig = self.key_pair.sign(message);
+        let mut out = [0u8; 64];
+        out.copy_from_slice(sig.as_ref());
+        out
+    }
+
+    /// Verify an Ed25519 signature.
+    pub fn verify(pub_key: &[u8; 32], msg: &[u8], sig: &[u8; 64]) -> bool {
+        let peer = UnparsedPublicKey::new(&ED25519, pub_key as &[u8]);
+        peer.verify(msg, sig).is_ok()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,5 +232,26 @@ mod tests {
         
         // Should also verify (previous key)
         assert!(rotator.verify(message, &signature_previous));
+    }
+
+    #[test]
+    fn test_asymmetric_sign_verify_roundtrip() {
+        let (signer, pub_key) = AsymmetricSigner::generate().unwrap();
+        let message = b"BTV agent attestation test";
+        let sig = signer.sign(message);
+        assert!(AsymmetricSigner::verify(&pub_key, message, &sig));
+        // Wrong message must fail
+        assert!(!AsymmetricSigner::verify(&pub_key, b"tampered", &sig));
+        // Wrong key must fail
+        let (_, other_pub) = AsymmetricSigner::generate().unwrap();
+        assert!(!AsymmetricSigner::verify(&other_pub, message, &sig));
+    }
+
+    #[test]
+    fn test_asymmetric_sign_is_stack_only() {
+        // sign() must return [u8; 64] — compile-time size verified here
+        let (signer, _) = AsymmetricSigner::generate().unwrap();
+        let sig: [u8; 64] = signer.sign(b"stack-only");
+        assert_eq!(sig.len(), 64);
     }
 }
