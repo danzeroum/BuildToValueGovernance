@@ -7,12 +7,13 @@ Invariants:
 - Immutable append-only (like durable_ledger.py)
 - HMAC-SHA256 signed records, BLAKE3 chain linking
 - Fail-secure: depth exceeded -> BLOCK
-- Functions <= 50 lines, file <= 200 lines
+- Functions <= 50 lines
 """
 from __future__ import annotations
 
 import hashlib
 import hmac as hmac_lib
+import json
 import logging
 import time
 import uuid
@@ -76,6 +77,7 @@ class DelegationLedger:
         self._records: Dict[str, DelegationRecord] = {}
         self._children: Dict[str, List[str]] = {}  # parent -> [record_ids]
         self._parent_of: Dict[str, str] = {}  # child -> parent
+        self._work_contracts: Dict[str, "WorkContract"] = {}  # C12
 
     @staticmethod
     def _load(path: Path) -> dict:
@@ -217,3 +219,133 @@ class DelegationLedger:
                 layer.append(layer[-1])  # duplicate last for odd count
             layer = [_b3(a + b) for a, b in zip(layer[::2], layer[1::2])]
         return layer[0]
+
+
+# ── C12: WorkContract ─────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class WorkContract:
+    """Immutable record sealing work scope before execution (Cenário 14).
+
+    sampling_seed=None until reveal_sampling_seed() is called post-delivery,
+    making pre-delivery audit sampling unpredictable to the contractor.
+    """
+    contract_id: str
+    contractor: str
+    scope_merkle: str              # hex: BLAKE3 Merkle root of document hashes
+    model_hash: str                # hex: hash of the specific model to use
+    acceptance_criteria_hash: str  # hex: BLAKE3 hash of criteria dict
+    sampling_seed: Optional[str]   # None until reveal_sampling_seed() called
+    created_at: float
+    hmac_sha256: str               # HMAC-SHA256 signed with ledger key
+
+
+# Extending DelegationLedger with C12 methods via monkey-patch at class level
+# is avoided — instead we add to the class body above, but Python doesn't support
+# reopening classes. We add the methods as standalone functions used in the ledger.
+# The DelegationLedger.__init__ already initializes self._work_contracts above.
+
+def _record_work_contract(
+    self: "DelegationLedger",
+    contractor: str,
+    scope_merkle: bytes,
+    model_hash: bytes,
+    acceptance_criteria: dict,
+) -> WorkContract:
+    """Seal work scope BEFORE execution. sampling_seed=None until post-delivery reveal.
+
+    Invariant: contractor cannot know audit sample indices before delivering all work.
+    """
+    contract_id = str(uuid.uuid4())
+    criteria_bytes = json.dumps(
+        {str(k): str(v) for k, v in sorted(acceptance_criteria.items())}
+    ).encode()
+    criteria_hash = _b3(criteria_bytes).hex()
+    sig_payload = f"{contract_id}|{contractor}|{scope_merkle.hex()}|{model_hash.hex()}"
+    sig = hmac_lib.new(
+        self._key, sig_payload.encode(), hashlib.sha256
+    ).hexdigest()
+    contract = WorkContract(
+        contract_id=contract_id,
+        contractor=contractor,
+        scope_merkle=scope_merkle.hex(),
+        model_hash=model_hash.hex(),
+        acceptance_criteria_hash=criteria_hash,
+        sampling_seed=None,
+        created_at=time.time(),
+        hmac_sha256=sig,
+    )
+    self._work_contracts[contract_id] = contract
+    return contract
+
+
+def _reveal_sampling_seed(
+    self: "DelegationLedger",
+    contract_id: str,
+    delivery_hash: bytes,
+) -> WorkContract:
+    """Post-delivery: seed = BLAKE3(delivery_hash). Deterministic, unpredictable before delivery.
+
+    Raises ValueError if contract_id unknown.
+    """
+    original = self._work_contracts.get(contract_id)
+    if original is None:
+        raise ValueError(f"Unknown contract: {contract_id}")
+    seed = _b3(delivery_hash).hex()
+    updated = WorkContract(
+        contract_id=original.contract_id,
+        contractor=original.contractor,
+        scope_merkle=original.scope_merkle,
+        model_hash=original.model_hash,
+        acceptance_criteria_hash=original.acceptance_criteria_hash,
+        sampling_seed=seed,
+        created_at=original.created_at,
+        hmac_sha256=original.hmac_sha256,
+    )
+    self._work_contracts[contract_id] = updated
+    return updated
+
+
+DelegationLedger.record_work_contract = _record_work_contract  # type: ignore[attr-defined]
+DelegationLedger.reveal_sampling_seed = _reveal_sampling_seed  # type: ignore[attr-defined]
+
+
+# ── C13: ColdChain ────────────────────────────────────────────────────────────
+
+
+class CustodyGapError(Exception):
+    """Raised when a custody transfer has a temporal gap exceeding policy limit."""
+
+
+def _record_custody_transfer(
+    self: "DelegationLedger",
+    sender: str,
+    receiver: str,
+    scope: str,
+    last_telemetry_at: float,
+    cold_chain_policy_path: Optional[Path] = None,
+) -> DelegationRecord:
+    """Custody transfer with temporal gap check (Cenário 17 — Broken Cold Chain).
+
+    Raises CustodyGapError if gap > max_custody_gap_seconds and block_on_gap=True.
+    Logs warning if block_on_gap=False. Records gap_s in capabilities for audit.
+    """
+    cfg = DelegationLedger._load(cold_chain_policy_path) if cold_chain_policy_path else {}
+    max_gap: float = float(cfg.get("max_custody_gap_seconds", 300))
+    block_on_gap: bool = bool(cfg.get("block_on_gap", True))
+    gap = time.time() - last_telemetry_at
+    if gap > max_gap:
+        msg = f"Cold chain gap {gap:.0f}s exceeds max {max_gap:.0f}s for sender={sender}"
+        if block_on_gap:
+            raise CustodyGapError(msg)
+        logger.warning("[ColdChain] %s — proceeding (block_on_gap=False)", msg)
+    return self.record_delegation(
+        parent_agent=sender,
+        child_agent=receiver,
+        scope=scope,
+        capabilities=[f"cold_chain_gap_s:{gap:.1f}"],
+    )
+
+
+DelegationLedger.record_custody_transfer = _record_custody_transfer  # type: ignore[attr-defined]

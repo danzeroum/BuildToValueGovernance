@@ -5,8 +5,10 @@ PolicyEngine unit tests — ADR-011 / v1.6.0
 """
 import pytest
 from pathlib import Path
+import yaml
 from buildtovalue.governance.policy_engine import (
     PolicyEngine, PolicyAction, PolicyRule, PolicySeverity, PolicyEvalResult,
+    ArtifactAllowlistConfig,
 )
 
 
@@ -122,3 +124,46 @@ class TestInvariants:
     def test_sla_deadline_iso8601(self, engine: PolicyEngine) -> None:
         r = engine.evaluate(0.5, {})
         assert "T" in r.sla_deadline_iso and "+" in r.sla_deadline_iso or "Z" in r.sla_deadline_iso
+
+
+# ── C15: ArtifactAllowlist ────────────────────────────────────────────────────
+
+class TestArtifactAllowlist:
+    def test_defaults_when_no_yaml(self, tmp_path: Path) -> None:
+        # Empty directory — no artifact_allowlist.yaml
+        engine = PolicyEngine(policies_dir=tmp_path)
+        cfg = engine.artifact_allowlist
+        assert isinstance(cfg, ArtifactAllowlistConfig)
+        # require_artifact_allowlist=False by default (dev-mode compatible)
+        assert cfg.require_artifact_allowlist is False
+        assert cfg.allowlist_hash_algorithm == "blake3"
+        # block_on_unknown_artifact=True by default (fail-secure)
+        assert cfg.block_on_unknown_artifact is True
+
+    def test_reads_from_yaml(self, tmp_path: Path) -> None:
+        policy = {
+            "governance": {
+                "artifact_allowlist": {
+                    "require_artifact_allowlist": True,
+                    "allowlist_hash_algorithm": "sha256",
+                    "block_on_unknown_artifact": False,
+                }
+            }
+        }
+        p = tmp_path / "artifact_allowlist.yaml"
+        p.write_text(yaml.dump(policy))
+        engine = PolicyEngine(policies_dir=tmp_path)
+        cfg = engine.artifact_allowlist
+        assert cfg.require_artifact_allowlist is True
+        assert cfg.allowlist_hash_algorithm == "sha256"
+        assert cfg.block_on_unknown_artifact is False
+
+    def test_config_is_frozen(self, tmp_path: Path) -> None:
+        engine = PolicyEngine(policies_dir=tmp_path)
+        cfg = engine.artifact_allowlist
+        import dataclasses
+        assert dataclasses.is_dataclass(cfg)
+        # frozen=True: attribute assignment raises FrozenInstanceError
+        import pytest
+        with pytest.raises((TypeError, AttributeError)):
+            cfg.require_artifact_allowlist = True  # type: ignore[misc]
