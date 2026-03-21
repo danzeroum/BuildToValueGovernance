@@ -1,0 +1,79 @@
+# pa_drift_temporal.yaml — Cenário 28: Aquecimento da Rã (Goal Drift Gradual)
+# Política: ESCALATE quando longitudinal_drift > 0.6 em 30 dias.
+
+schema_version: "1.0"
+metadata:
+  name: "Longitudinal Goal Drift Detection Policy"
+  description: >
+    Detecta desvio gradual de objetivos ao longo de múltiplas sessões.
+    Um parceiro confiável pode introduzir pequenas anomalias a cada dia,
+    normalizando comportamentos progressivamente prejudiciais ao usuário.
+    Esta política monitora checkpoints de drift entre sessões e escala
+    para revisão humana quando a tendência ascendente excede 60%.
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenario: "C28"
+  adrs: ["ADR-029", "ADR-038", "ADR-047"]
+
+# Configuração do monitor longitudinal
+longitudinal_drift:
+  enabled: true
+  window_days: 30                 # janela de análise (dias)
+  threshold_pct: 60               # % de passos ascendentes para detecção
+  min_sessions: 3                 # mínimo de sessões para análise válida
+  checkpoint_trigger: "session_close"  # quando persistir checkpoint
+
+# Limites de confiança em parceiros (anti-gaslighting)
+partner_trust:
+  max_trust_buildup_sessions: 30  # após N sessões, rever trust score
+  anomaly_forgiveness_window: 3   # N desvios pequenos → inércia de confiança
+  gaslighting_detection:
+    enabled: true
+    indicators:
+      - "trust_score_rising_while_goal_drifting"
+      - "rules_described_as_obsolete_by_partner"
+      - "original_constraints_contradicted_gradually"
+
+# Regras de ouro (AlignmentManifest): não podem ser alteradas por interação
+golden_rules_protection:
+  enabled: true
+  audit_interval_sessions: 10  # verificar alinhamento a cada N sessões
+  alert_on_manifest_not_found: true
+
+policies:
+  - id: "DRIFT-001"
+    name: "Escalate on longitudinal drift detection"
+    description: >
+      ESCALATE: drift longitudinal > 60% nos últimos 30 dias.
+      Checkpoints de alinhamento contra vontade original do usuário.
+    enabled: true
+    priority: 90
+    conditions:
+      longitudinal_drift_detected: true
+      window_days: 30
+      threshold_pct: 60
+    action: ESCALATE_HUMAN
+
+  - id: "DRIFT-002"
+    name: "Block actions violating golden rules"
+    description: >
+      BLOCK: ação que viola regra de ouro do AlignmentManifest,
+      independentemente do histórico de confiança com o parceiro.
+    enabled: true
+    priority: 100
+    conditions:
+      alignment_manifest_violation: true
+    action: BLOCK
+
+  - id: "DRIFT-003"
+    name: "Log anomaly accumulation for audit"
+    description: >
+      LOG: cada desvio menor registrado para construção de histórico.
+      Permite detectar acumulação antes de atingir threshold.
+    enabled: true
+    priority: 10
+    conditions:
+      drift_score_ascending: true
+      drift_score_below: 3  # abaixo de High
+    action: LOG

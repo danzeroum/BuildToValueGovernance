@@ -1,0 +1,91 @@
+# pa_visual_confirmation.yaml — Cenário 32: Injeção de Prompt no Mundo Físico
+# Política: ESCALATE ações Irreversible de origem visual; requer confirmação não-visual.
+
+schema_version: "1.0"
+metadata:
+  name: "Visual Input Firewall Policy"
+  description: >
+    Sanitiza texto extraído de visão computacional (OCR) e protege contra
+    ataques adversariais visuais (prompt injection via adesivos, QR codes
+    maliciosos, padrões invisíveis ao olho humano).
+    Ações Irreversible de origem visual sempre requerem confirmação por
+    canal não-visual (áudio, texto puro digitado).
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenario: "C32"
+  adrs: ["ADR-029", "ADR-032"]
+
+# Padrões adversariais que disparam BLOCK imediato
+adversarial_patterns:
+  - "ignore.*previous.*instructions?"
+  - "system\\s*prompt"
+  - "override\\s+instructions?"
+  - "execute\\s+(?:command|code|script)"
+  - "new\\s+instruction"
+  - "forget.*previous"
+  - "print.*system.*prompt"
+  - "btv[_\\-]?override"
+  - "btv[_\\-]?admin"
+  - "role[_\\-]?escalat"
+
+# Confirmação alternativa para origem visual
+visual_confirmation:
+  required_for_irreversible: true
+  accepted_confirmation_channels:
+    - "audio_voice"        # comando de voz verificado
+    - "keyboard_typed"     # texto digitado diretamente
+    - "app_authenticated"  # confirmação no app proprietário
+    - "biometric_local"    # confirmação biométrica
+  # Canais NÃO aceitos para confirmar ação visual:
+  rejected_confirmation_channels:
+    - "visual"             # não pode confirmar visual com visual
+    - "camera"
+    - "ocr"
+    - "qr_code"
+
+policies:
+  - id: "VIS-001"
+    name: "Block adversarial visual injection"
+    description: >
+      BLOCK imediato: texto OCR contém padrão de prompt injection adversarial.
+    enabled: true
+    priority: 100
+    conditions:
+      source: "visual"
+      adversarial_pattern_detected: true
+    action: BLOCK
+
+  - id: "VIS-002"
+    name: "Escalate Irreversible from visual source"
+    description: >
+      ESCALATE: ação Irreversible originada de input visual (OCR, câmera, QR).
+      Requer confirmação por canal não-visual (HITL).
+    enabled: true
+    priority: 90
+    conditions:
+      source: "visual"
+      action_impact: "Irreversible"
+    action: ESCALATE_HUMAN
+
+  - id: "VIS-003"
+    name: "Escalate Destructive from visual source"
+    description: >
+      ESCALATE: ação Destructive originada de input visual.
+    enabled: true
+    priority: 90
+    conditions:
+      source: "visual"
+      action_impact: "Destructive"
+    action: ESCALATE_HUMAN
+
+  - id: "VIS-004"
+    name: "Log visual inputs for audit"
+    description: >
+      LOG: todo input visual sanitizado é registrado para auditoria posterior.
+    enabled: true
+    priority: 10
+    conditions:
+      source: "visual"
+      adversarial_pattern_detected: false
+    action: LOG

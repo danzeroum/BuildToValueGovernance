@@ -1553,6 +1553,94 @@ def agent_revoke(agent_id: str, _=Depends(require_api_key)):
 
 
 # ═══════════════════════════════════════════════════════════════
+# C34 — OracleTrustGate endpoints (Cenário 34: Boato Digital P2P)
+# Seguindo padrão /v1/agents/{id}/register e /v1/agents/{id}/revoke
+# ═══════════════════════════════════════════════════════════════
+
+class OracleRegisterRequest(BaseModel):
+    hmac_key_hex: str       # chave HMAC do oráculo (hex)
+    valid_until_iso: str    # data de expiração UTC ISO 8601
+    description: str = ""
+
+
+class OracleRevokeRequest(BaseModel):
+    reason: str = "Revogação solicitada via API"
+
+
+_ORACLE_REGISTRY_STORE: dict = {}  # oracle_id → {hmac_key_hex, valid_until, revoked}
+
+
+@app.post("/v1/oracles/{oracle_id}/register", status_code=201)
+def oracle_register(
+    oracle_id: str,
+    req: OracleRegisterRequest,
+    _=Depends(require_api_key),
+):
+    """Registra chave HMAC de um oráculo regulatório (Cenário 34).
+
+    Segue padrão de /v1/agents/{id}/register.
+    """
+    registered_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    _ORACLE_REGISTRY_STORE[oracle_id] = {
+        "oracle_id": oracle_id,
+        "hmac_key_hex": req.hmac_key_hex,
+        "valid_until_iso": req.valid_until_iso,
+        "description": req.description,
+        "registered_at": registered_at,
+        "revoked": False,
+    }
+    logger.info("Oracle registrado: oracle_id=%s", oracle_id)
+    return {
+        "oracle_id": oracle_id,
+        "registered_at": registered_at,
+        "valid_until_iso": req.valid_until_iso,
+    }
+
+
+@app.post("/v1/oracles/{oracle_id}/revoke", status_code=200)
+def oracle_revoke(
+    oracle_id: str,
+    req: OracleRevokeRequest,
+    _=Depends(require_api_key),
+):
+    """Revoga chave HMAC de um oráculo regulatório (Cenário 34).
+
+    Persiste rastreabilidade no ledger (Gap 3).
+    Segue padrão de /v1/agents/{id}/revoke.
+    """
+    entry = _ORACLE_REGISTRY_STORE.get(oracle_id)
+    if entry is None or entry.get("revoked", False):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Oracle '{oracle_id}' não encontrado ou já revogado",
+        )
+
+    entry["revoked"] = True
+    revoked_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    entry["revoked_at"] = revoked_at
+    entry["revocation_reason"] = req.reason
+
+    # Persiste rastreabilidade no DurableLedger global (se disponível)
+    try:
+        if hasattr(app.state, "durable_ledger") and app.state.durable_ledger is not None:
+            app.state.durable_ledger.append({
+                "type": "oracle_revocation_api",
+                "oracle_id": oracle_id,
+                "revoked_at_iso": revoked_at,
+                "reason": req.reason,
+                "explain_decision": (
+                    f"Oráculo '{oracle_id}' revogado via API em {revoked_at}. "
+                    f"Motivo: {req.reason}"
+                ),
+            })
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Falha ao registrar revogação no ledger: %s", exc)
+
+    logger.info("Oracle revogado: oracle_id=%s reason=%s", oracle_id, req.reason)
+    return {"oracle_id": oracle_id, "revoked_at": revoked_at}
+
+
+# ═══════════════════════════════════════════════════════════════
 # C6 — CrossAgentCorrelator endpoints
 # ═══════════════════════════════════════════════════════════════
 
