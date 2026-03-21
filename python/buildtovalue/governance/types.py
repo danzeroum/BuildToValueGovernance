@@ -18,12 +18,13 @@ class ActionType(Enum):
 
     Severity order: ALLOW < LOG < EDUCATE < REDACT < BLOCK < ESCALATE_HUMAN
     """
-    ALLOW          = "ALLOW"
-    LOG            = "LOG"
-    EDUCATE        = "EDUCATE"
-    REDACT         = "REDACT"
-    BLOCK          = "BLOCK"
-    ESCALATE_HUMAN = "escalate_human"
+    ALLOW            = "ALLOW"
+    LOG              = "LOG"
+    EDUCATE          = "EDUCATE"
+    REDACT           = "REDACT"
+    PENDING_APPROVAL = "PENDING_APPROVAL"  # Gap F: HITL approval required
+    BLOCK            = "BLOCK"
+    ESCALATE_HUMAN   = "escalate_human"
 
 
 ACTION_SEVERITY: Dict[ActionType, int] = {
@@ -31,8 +32,9 @@ ACTION_SEVERITY: Dict[ActionType, int] = {
     ActionType.LOG: 1,
     ActionType.EDUCATE: 2,
     ActionType.REDACT: 3,
-    ActionType.BLOCK: 4,
-    ActionType.ESCALATE_HUMAN: 5,
+    ActionType.PENDING_APPROVAL: 4,
+    ActionType.BLOCK: 5,
+    ActionType.ESCALATE_HUMAN: 6,
 }
 
 

@@ -1,9 +1,11 @@
 """
-LGPD Compliance Plugin v1.0
+LGPD Compliance Plugin v1.1
 Lei Geral de Protecao de Dados (Brazil).
+
+v1.1 (ADR-048): Added generate_ropa() for Art. 37 compliance.
 """
 
-from typing import List
+from typing import List, Optional
 from .plugin import CompliancePlugin, ComplianceArtifact, ComplianceReport, ComplianceLevel
 
 
@@ -76,6 +78,29 @@ class LGPDPlugin:
         ))
 
         return artifacts
+
+    def generate_ropa(
+        self,
+        controller: str,
+        dpo_name: str,
+        dpo_contact: str,
+        ledger_path: str = "data/ledger/decisions.jsonl",
+        start_ts: Optional[int] = None,
+        end_ts: Optional[int] = None,
+    ) -> dict:
+        """Generate ROPA document (Art. 37) from real ledger data (ADR-048)."""
+        from .ledger_analytics import LedgerAnalytics
+        from .ropa_generator import ROPAGenerator
+        analytics = LedgerAnalytics(ledger_path)
+        generator = ROPAGenerator(analytics)
+        ropa = generator.generate(
+            controller=controller,
+            dpo_name=dpo_name,
+            dpo_contact=dpo_contact,
+            start_ts=start_ts,
+            end_ts=end_ts,
+        )
+        return ropa.to_dict()
 
     def validate_requirements(self) -> ComplianceReport:
         # Validate system-level compliance (no specific evidence)

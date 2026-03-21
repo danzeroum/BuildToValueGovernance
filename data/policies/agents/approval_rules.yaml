@@ -1,0 +1,26 @@
+# Approval Rules — Gap F (Human-in-the-Loop Workflow)
+# Defines when HITL approval is required.
+
+schema_version: "1.0"
+
+# Default approval timeout (seconds)
+default_timeout_s: 3600  # 1 hour
+
+# Approval is required when:
+approval_triggers:
+  # By action impact
+  impact_requires_approval:
+    - "Irreversible"
+
+  # By low trust score
+  trust_score_threshold: 0.3  # Approval needed if trust < this
+
+  # By specific action names
+  actions_require_approval:
+    - "lora_deploy"
+    - "model_deploy"
+    - "training_cycle_start"
+    - "delete_patient_record"
+
+# Expired approval behavior
+expired_action: BLOCK  # fail-secure
