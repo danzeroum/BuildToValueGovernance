@@ -1,0 +1,66 @@
+# pa_privacy_geo.yaml — Cenário 26: Over-sharing GPS (PROP-039)
+# Política: BLOCK transmissão de coordenadas geográficas sem aprovação humana.
+# Dado classificado como Hypersensitive — nunca compartilhado automaticamente.
+
+schema_version: "1.0"
+metadata:
+  name: "Privacy GeoLocation Guard"
+  description: >
+    Detecta e bloqueia transmissão automática de coordenadas geográficas.
+    GPS/coordenadas são classificados como Hypersensitive (C26).
+    Compartilhamento requer aprovação humana explícita (HITL).
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenario: "C26"
+  adrs: ["ADR-029", "ADR-039"]
+
+# Categorias de dado geográfico que disparam bloqueio
+geo_sensitivity:
+  categories:
+    - GEO_LOCATION       # coordenadas decimais (lat/lon)
+    - GEO_DMS            # graus/minutos/segundos
+    - GEO_PLUS_CODE      # Open Location Code
+  classification: "Hypersensitive"
+  auto_share_allowed: false
+  requires_human_approval: true
+  approval_timeout_s: 3600
+
+policies:
+  - id: "GEO-001"
+    name: "Block auto-share of GPS coordinates"
+    description: >
+      Bloqueia qualquer ação que envolva transmissão de dado GEO_LOCATION
+      para agente externo sem aprovação humana explícita.
+    enabled: true
+    priority: 100
+    conditions:
+      validators:
+        - "geo_location"
+      min_severity: 0.0
+      min_confidence: 0.5
+    action: BLOCK
+
+  - id: "GEO-002"
+    name: "Escalate ambiguous location data"
+    description: >
+      Escala para revisão humana quando dado de localização parcial
+      (ex: só bairro, CEP) é detectado em contexto de seguro/crédito.
+    enabled: true
+    priority: 80
+    conditions:
+      validators:
+        - "geo_location"
+      min_severity: 0.3
+      min_confidence: 0.3
+    action: ESCALATE_HUMAN
+
+# Zero-Knowledge alternativo: provar "zona urbana" sem revelar coordenadas
+zkp_alternative:
+  enabled: true
+  proof_types:
+    - "urban_zone"        # prova que mora em zona urbana
+    - "state_region"      # prova estado/região sem endereço preciso
+  claim_templates:
+    urban_zone: "O usuário reside em zona urbana (sem revelar endereço)"
+    state_region: "O usuário reside em {state} (sem revelar município)"

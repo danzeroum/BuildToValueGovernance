@@ -4,8 +4,11 @@
 //! Policy-as-Code: YAML → Runtime with hard blocks.
 #[allow(clippy::module_inception)]
 pub mod policy;
+pub mod budget_enforcer; // Cenário 30: hierarquia de contas no hot path
+
 pub use policy::{
     PolicyEngine, PolicySet, Policy, PolicyAction,
     PolicyConditions, PolicyMetadata, PolicyEvaluation,
     PolicyMetrics,
 };
+pub use budget_enforcer::{enforce as enforce_budget, AccountTier, PolicyDecision};

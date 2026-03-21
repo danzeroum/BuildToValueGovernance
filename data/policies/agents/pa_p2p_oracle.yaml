@@ -1,0 +1,119 @@
+# pa_p2p_oracle.yaml — Cenário 34: O Boato Digital (Contaminação P2P)
+# Política: BLOCK transferência financeira de peer_agent sem verificação de oráculo.
+
+schema_version: "1.0"
+metadata:
+  name: "P2P Oracle Verification Policy"
+  description: >
+    Previne "bank run de IA" e pânico de manada entre agentes pessoais.
+    Claims críticos (ex: solvência de banco, colapso de mercado) propagados
+    via rede P2P de agentes devem ser verificados em oráculos regulatórios
+    oficiais antes de qualquer ação financeira significativa.
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenario: "C34"
+  adrs: ["ADR-029", "ADR-034"]
+
+# Fontes de trigger que requerem verificação de oráculo
+p2p_trigger_sources:
+  - "peer_agent"         # outro agente pessoal na rede
+  - "agent_broadcast"    # mensagem de broadcast entre agentes
+  - "social_consensus"   # "todos os outros agentes estão fazendo X"
+
+# Oráculos regulatórios aceitos
+trusted_oracles:
+  - id: "bacen_api_v1"
+    description: "Banco Central do Brasil — API regulatória"
+    jurisdiction: "BR"
+    covers_claims:
+      - "bank_solvency"
+      - "interest_rates"
+      - "financial_institution_status"
+
+  - id: "cvm_feed"
+    description: "Comissão de Valores Mobiliários — feed de dados"
+    jurisdiction: "BR"
+    covers_claims:
+      - "stock_market_status"
+      - "company_financial_health"
+
+  - id: "sec_edgar"
+    description: "SEC EDGAR — EUA"
+    jurisdiction: "US"
+    covers_claims:
+      - "company_financial_health"
+      - "fund_status"
+
+# Ações que requerem verificação quando trigger é P2P
+verification_required_for:
+  - "financial_transfer"
+  - "asset_liquidation"
+  - "bank_account_migration"
+  - "investment_sell_all"
+  - "IRREVERSIBLE"
+
+# Limiar de confiança mínimo do oráculo para permitir ação
+min_oracle_confidence: 0.80  # 80%
+
+policies:
+  - id: "ORC-001"
+    name: "Block P2P financial transfer without oracle verification"
+    description: >
+      BLOCK: transferência financeira disparada por peer_agent/broadcast/social_consensus
+      sem verificação de claim em oráculo regulatório oficial.
+    enabled: true
+    priority: 100
+    conditions:
+      trigger_source_in:
+        - "peer_agent"
+        - "agent_broadcast"
+        - "social_consensus"
+      action_categories:
+        - "financial_transfer"
+        - "asset_liquidation"
+      oracle_verified: false
+    action: BLOCK
+
+  - id: "ORC-002"
+    name: "Block P2P action with low-confidence oracle"
+    description: >
+      BLOCK: oráculo verificou o claim, mas confidence < 80%.
+    enabled: true
+    priority: 90
+    conditions:
+      trigger_source_in:
+        - "peer_agent"
+        - "agent_broadcast"
+      oracle_verified: true
+      oracle_confidence_below: 0.80
+      action_categories:
+        - "financial_transfer"
+    action: BLOCK
+
+  - id: "ORC-003"
+    name: "Escalate P2P non-financial claims for review"
+    description: >
+      ESCALATE: claim P2P não-financeiro (ex: reputação de parceiro)
+      requer revisão humana antes de alterar trust score.
+    enabled: true
+    priority: 70
+    conditions:
+      trigger_source_in:
+        - "peer_agent"
+      action_categories_exclude:
+        - "financial_transfer"
+      claim_type: "reputation"
+    action: ESCALATE_HUMAN
+
+  - id: "ORC-004"
+    name: "Log all P2P social consensus actions"
+    description: >
+      LOG: toda ação baseada em consenso social de outros agentes,
+      mesmo as permitidas, deve ser registrada para auditoria.
+    enabled: true
+    priority: 10
+    conditions:
+      trigger_source_in:
+        - "social_consensus"
+    action: LOG

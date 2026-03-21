@@ -4,6 +4,12 @@ Tracks per-agent, per-session token usage, cost, and API call counts.
 EDUCATE at 80% budget, BLOCK at 100%.
 Tool call circuit breaker per request.
 
+Extensão (Cenário 30 — Sobrevivência a Qualquer Custo):
+  - AccountTier: hierarquia de contas (Operational, Reserve, Untouchable)
+  - ResourceHierarchy: verifica se o agente pode acessar uma conta financeira
+  - check_budget() estendido: chama can_access() quando account_id presente
+  - Retrocompatível: sem account_id no metadata → comportamento original preservado
+
 Invariants:
 - Fail-secure: budget error -> BLOCK
 - Monotonic counters (never decrease)
@@ -13,6 +19,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from decimal import Decimal
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -50,6 +58,63 @@ class BudgetStatus:
     api_calls_remaining: int
 
 
+# ---------------------------------------------------------------------------
+# Cenário 30 — Hierarquia de Contas Financeiras
+# ---------------------------------------------------------------------------
+
+class AccountTier(Enum):
+    """Tier de conta financeira — proteção crescente."""
+    OPERATIONAL = "operational"   # despesas correntes do agente
+    RESERVE     = "reserve"       # reserva: exige assinatura humana
+    UNTOUCHABLE = "untouchable"   # intocável: BLOCK absoluto
+
+
+@dataclass(frozen=True)
+class ResourceHierarchy:
+    """Hierarquia de contas financeiras com limites e proteções.
+
+    Exemplo de uso:
+        hierarchy = ResourceHierarchy(
+            accounts={"wallet_op": AccountTier.OPERATIONAL,
+                      "savings": AccountTier.RESERVE},
+            daily_operational_limit_brl=Decimal("500.00"),
+            human_sig_required_above_brl=Decimal("1000.00"),
+        )
+        ok, reason = hierarchy.can_access("savings", Decimal("100"), has_human_sig=False)
+        # → (False, "Conta reserva exige assinatura humana")
+    """
+    accounts: Dict[str, AccountTier]
+    daily_operational_limit_brl: Decimal
+    human_sig_required_above_brl: Decimal
+
+    def can_access(
+        self,
+        account_id: str,
+        amount: Decimal,
+        has_human_sig: bool,
+    ) -> Tuple[bool, str]:
+        """Verifica se o agente pode acessar `account_id` com `amount`.
+
+        Fail-secure: account_id ausente no mapa → Reserve (não Operational).
+        """
+        tier = self.accounts.get(account_id, AccountTier.RESERVE)  # fail-secure
+
+        if tier == AccountTier.UNTOUCHABLE:
+            return False, f"Conta '{account_id}' intocável — BLOCK absoluto"
+
+        if tier == AccountTier.RESERVE and not has_human_sig:
+            return False, f"Conta reserva '{account_id}' exige assinatura humana"
+
+        if amount > self.daily_operational_limit_brl and not has_human_sig:
+            return (
+                False,
+                f"Valor R${amount} excede limite diário R${self.daily_operational_limit_brl}"
+                " — assinatura humana obrigatória",
+            )
+
+        return True, "Dentro dos limites autorizados"
+
+
 @dataclass
 class _Usage:
     tokens: int = 0
@@ -61,7 +126,12 @@ class _Usage:
 class AgentBudget:
     """Tracks and enforces per-agent, per-session resource budgets."""
 
-    def __init__(self, policy_path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        policy_path: Optional[Path] = None,
+        resource_hierarchy: Optional[ResourceHierarchy] = None,
+    ) -> None:
+        self._resource_hierarchy = resource_hierarchy
         raw = self._load(policy_path) if policy_path else {}
         defaults = raw.get("defaults", {})
         self._default = BudgetLimits(
@@ -104,10 +174,29 @@ class AgentBudget:
         return self._usage[k]
 
     def check_budget(
-        self, agent_id: str, estimated_tokens: int = 0,
+        self,
+        agent_id: str,
+        estimated_tokens: int = 0,
         session_id: str = "",
+        account_id: Optional[str] = None,
+        amount_brl: Optional[Decimal] = None,
+        has_human_sig: bool = False,
     ) -> GateResult:
-        """Check budget. EDUCATE at 80%, BLOCK at 100%."""
+        """Check budget. EDUCATE at 80%, BLOCK at 100%.
+
+        Extensão Cenário 30: se account_id fornecido, verifica ResourceHierarchy.
+        Retrocompatível: sem account_id → comportamento original preservado.
+        """
+        # Cenário 30: verificação de hierarquia de contas (se configurada)
+        if account_id is not None and self._resource_hierarchy is not None:
+            ok, reason = self._resource_hierarchy.can_access(
+                account_id,
+                amount_brl or Decimal("0"),
+                has_human_sig,
+            )
+            if not ok:
+                return _block(f"ResourceHierarchy: {reason}")
+
         limits = self._limits(agent_id)
         usage = self._get_usage(agent_id, session_id)
         projected = usage.tokens + estimated_tokens

@@ -6,6 +6,7 @@
 pub mod bridge;
 pub mod validators_ffi;
 pub mod kernel_ffi;
+pub mod goal_drift_ffi; // Gap 4: GoalDriftBuffer via C ABI (pré-requisito J4)
 
 pub use bridge::{RustKernel, PyTechnicalEvidence, PyBiasDeclaration, PyBatchResult};
 pub use validators_ffi::{

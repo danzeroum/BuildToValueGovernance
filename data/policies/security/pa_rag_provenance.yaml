@@ -1,0 +1,89 @@
+# pa_rag_provenance.yaml — Cenário 31: RAG Poisoning / Falso Passado
+# Política: BLOCK credenciais sem cadeia de custódia; ESCALATE em contradição.
+
+schema_version: "1.0"
+metadata:
+  name: "RAG Provenance & Contradiction Guard"
+  description: >
+    Garante que cada chunk injetado na memória do agente possua uma cadeia
+    de custódia verificável (MemoryProvenanceRecord). Credenciais sem
+    proveniência são bloqueadas. Contradições lógicas disparam escalação.
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenario: "C31"
+  adrs: ["ADR-029", "ADR-046"]
+
+# Entidades que requerem proveniência verificada
+provenance_requirements:
+  require_provenance_for:
+    - "credential"     # senhas, tokens, API keys
+    - "password"       # senhas explícitas
+    - "network_name"   # SSIDs, VPNs
+    - "private_key"    # chaves criptográficas
+    - "secret"         # segredos genéricos
+  trusted_channels:
+    - "user_direct"    # digitado diretamente pelo usuário
+    - "api_hmac"       # API com HMAC verificado
+  untrusted_channels:
+    - "email"          # e-mail (pode ser falsificado)
+    - "agent_peer"     # outro agente (sem verificação adicional)
+  fail_on_missing_provenance: true  # fail-secure
+
+policies:
+  - id: "RAG-001"
+    name: "Block credential without verified provenance"
+    description: >
+      BLOCK: chunk contendo credencial (senha, token, API key) proveniente
+      de canal sem cadeia de custódia verificada no DurableLedger.
+    enabled: true
+    priority: 100
+    conditions:
+      validators:
+        - "rag_integrity_verifier"
+      entity_types:
+        - "credential"
+        - "password"
+        - "private_key"
+      provenance_verified: false
+      min_severity: 0.0
+      min_confidence: 0.5
+    action: BLOCK
+
+  - id: "RAG-002"
+    name: "Escalate on semantic contradiction"
+    description: >
+      ESCALATE: novo chunk contradiz entidade com proveniência verificada
+      no ledger (ex: nova senha difere da senha user_direct anterior).
+    enabled: true
+    priority: 90
+    conditions:
+      validators:
+        - "rag_contradiction_detector"
+      has_contradiction: true
+      min_severity: 0.0
+      min_confidence: 0.3
+    action: ESCALATE_HUMAN
+
+  - id: "RAG-003"
+    name: "Log untrusted channel injections"
+    description: >
+      LOG: chunks de canais não-confiáveis sem entidades sensíveis
+      são permitidos mas registrados para auditoria.
+    enabled: true
+    priority: 50
+    conditions:
+      validators:
+        - "rag_integrity_verifier"
+      source_channel_in:
+        - "email"
+        - "agent_peer"
+      min_severity: 0.0
+      min_confidence: 0.0
+    action: LOG
+
+# Verificação periódica do ledger
+provenance_audit:
+  enabled: true
+  audit_interval_hours: 24
+  alert_on_orphan_chunks: true  # chunks sem proveniência registrada
