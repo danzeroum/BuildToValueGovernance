@@ -1,0 +1,30 @@
+# data/policies/sectors/cold_chain.yaml
+# ═══════════════════════════════════════════════════════════════
+# Cold Chain Logistics Sector Policy
+# Cenário 17 (Cadeia de Frio Quebrada) — C13
+# ═══════════════════════════════════════════════════════════════
+
+_metadata:
+  sector_id: cold_chain
+  version: "1.0.0"
+  risk_classification: high_risk
+  philosophy: "Custody transfer requires uninterrupted telemetry chain"
+
+# C13: Maximum allowed gap (in seconds) between telemetry records.
+# If the time since last_telemetry_at exceeds this, custody transfer is blocked.
+max_custody_gap_seconds: 300  # 5 minutes — gap => interpolated data => BLOCK
+
+# C8: Require TEE hardware attestation for physical custody agents.
+# Set to true in production environments with hardware-secured sensors.
+require_hardware_attestation: false
+
+# If true (default): raise CustodyGapError when gap exceeded.
+# If false: log warning but allow transfer (for testing/staging).
+block_on_gap: true
+
+cross_references:
+  related_scenarios:
+    - scenario_17_cold_chain
+  related_items:
+    - C8  # TEE hardware attestation
+    - C13  # Temporal gap validation
