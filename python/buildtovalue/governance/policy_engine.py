@@ -161,12 +161,49 @@ class PolicyEngine:
             except Exception:
                 pass  # policy malformada nao impede operacao
 
+    # Top-level keys that PolicyEngine recognises in governance YAML files.
+    # Keys outside this set are silently accepted by the loader but never evaluated
+    # as condition→action rules — they belong to module-specific config schemas
+    # (e.g. agents/pa_channel_hierarchy.yaml is read directly by ChannelAuthorityVerifier).
+    _KNOWN_TOP_LEVEL_KEYS: frozenset = frozenset({
+        "version", "id", "description", "metadata", "rules", "governance",
+        "sector", "compliance", "actions", "identity", "rate_limiting",
+        "bft", "escrow", "revocation", "behavioral_monitoring", "timing",
+        "mev_protection", "schema_version", "thresholds", "drift_detection",
+        "fail_secure", "gates", "hard_blocks", "policies",
+        # agents/ schema keys
+        "circuit_breaker", "conflict_rules", "defaults", "agents",
+        "channel_registry", "oracle_requirements", "golden_rules_protection",
+        "capability_hierarchy", "agent_grants", "approval_required_actions",
+        "approval_timeout_s", "approved_sources", "allowed_capabilities",
+        "blocked_capabilities", "priority", "resource_tiers",
+        # sector keys
+        "safe_patterns", "trusted_tee_pubkey_hex", "require_hardware_attestation",
+        "identity_anchor", "anti_flash_loan", "mev_protection", "pii",
+        "critical_infrastructure",
+        # core keys
+        "max_chain_depth", "allowed_scopes", "revoked", "max_agents_per_identity",
+        "proof_of_work_min_difficulty", "min_reputation_age_days",
+    })
+
     def _parse_policy_file(self, yaml_file: Path) -> None:
         """Parse atomico de um arquivo YAML. Regras malformadas sao descartadas."""
         raw = yaml_file.read_text(encoding="utf-8")
         data = yaml.safe_load(raw)
         if not isinstance(data, dict):
             return
+        # Warn on unrecognised top-level keys to prevent silent misconfiguration.
+        # This does NOT prevent loading — agents/ YAMLs use their own module schemas.
+        unknown = set(data.keys()) - self._KNOWN_TOP_LEVEL_KEYS
+        if unknown:
+            logger.warning(
+                "policy_file_unknown_keys path=%s unknown_keys=%s "
+                "— YAML loaded but unrecognised fields are not evaluated as rules. "
+                "If intent was to activate a guard module, use agent_policies in "
+                "DecideRequest instead.",
+                yaml_file.name,
+                sorted(unknown),
+            )
         for r in data.get("rules", []):
             try:
                 rule = PolicyRule(

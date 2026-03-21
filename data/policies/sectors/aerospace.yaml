@@ -1,0 +1,38 @@
+# Aerospace Sector Policy — Scenario 1 (Drones/Autonomous Physical Agents)
+# Requires hardware attestation for all autonomous agents operating in physical space.
+# Fail-secure: irreversible physical actions always require liveness check.
+
+sector: aerospace
+
+identity_anchor:
+  required: true
+  accepted_types:
+    - hardware_attestation
+    - external_pki
+
+require_hardware_attestation: true
+trusted_tee_pubkey_hex: ""   # populated by operator (BTV_TEE_PUBKEY env var)
+
+actions:
+  irreversible_require_liveness: true   # any physical action = liveness check
+  max_latency_ms: 30                    # stricter than default 50ms SLA
+  block_on_attestation_failure: true
+
+rules:
+  - rule_id: "AEROSPACE-001"
+    description: "Block physical actions without hardware attestation"
+    action: "BLOCK"
+    severity: "critical"
+    condition_field: "hardware_attestation"
+    condition_operator: "eq"
+    condition_value: false
+    adr_refs: ["ADR-029", "ADR-035"]
+
+  - rule_id: "AEROSPACE-002"
+    description: "Educate on TEE requirements for high-risk actions"
+    action: "EDUCATE"
+    severity: "high"
+    condition_field: "composite_risk"
+    condition_operator: "gt"
+    condition_value: 0.6
+    adr_refs: ["ADR-011"]

@@ -1,0 +1,45 @@
+# Anti-Sybil Policy — Scenario 7 (Sybil Attack / Identity Flooding)
+# Prevents identity flooding and Sybil attacks by requiring proof-of-work
+# and enforcing one-identity-per-agent constraints.
+# Complements identity_anchor.yaml (which governs proof types).
+
+schema_version: "1.0"
+
+identity:
+  require_anchor: true
+  min_identity_age_days: 7          # new accounts receive LOW trust
+  max_agents_per_identity: 1        # one identity = one active agent
+  proof_of_work_min_difficulty: 14  # cost to create an agent (prevents mass creation)
+
+rate_limiting:
+  max_interactions_per_min: 10
+  burst_penalty_multiplier: 2.0     # violations double cooldown window
+  cooldown_seconds: 60
+
+rules:
+  - rule_id: "ANTI-SYBIL-001"
+    description: "Block agents from identities younger than min_identity_age_days"
+    action: "BLOCK"
+    severity: "high"
+    condition_field: "identity_age_days"
+    condition_operator: "lt"
+    condition_value: 7
+    adr_refs: ["ADR-029", "ADR-035"]
+
+  - rule_id: "ANTI-SYBIL-002"
+    description: "Block when multiple agents share the same identity"
+    action: "BLOCK"
+    severity: "critical"
+    condition_field: "agents_per_identity"
+    condition_operator: "gt"
+    condition_value: 1
+    adr_refs: ["ADR-011"]
+
+  - rule_id: "ANTI-SYBIL-003"
+    description: "Educate when interaction rate approaches limit"
+    action: "EDUCATE"
+    severity: "medium"
+    condition_field: "interactions_per_min"
+    condition_operator: "gt"
+    condition_value: 8
+    adr_refs: ["ADR-011"]
