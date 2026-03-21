@@ -1,0 +1,44 @@
+# Financial HFT Sector Policy — Scenario 2 (MEV / High-Frequency Trading)
+# Prevents timing side-channel attacks and front-running in financial systems.
+# Requires oblivious cache (ADR-038) and constant-time validation.
+
+sector: financial_hft
+
+timing:
+  require_oblivious_cache: true          # ADR-038: timing side-channel protection
+  constant_time_validation: true
+  max_side_channel_variance_us: 5        # microsecond variance ceiling
+  min_submission_delay_ms: 10            # randomise submission timing vs. front-running
+
+mev_protection:
+  block_front_running_patterns: true
+  suspicious_patterns:
+    - "priority_fee_override"
+    - "sandwich_attack"
+    - "mempool_sniff"
+
+pii:
+  block_financial_identifiers: true
+  validators:
+    - credit_card
+    - swift_bic
+    - iban
+
+rules:
+  - rule_id: "HFT-001"
+    description: "Block front-running pattern detection"
+    action: "BLOCK"
+    severity: "critical"
+    condition_field: "mev_pattern_detected"
+    condition_operator: "eq"
+    condition_value: true
+    adr_refs: ["ADR-038", "ADR-011"]
+
+  - rule_id: "HFT-002"
+    description: "Redact financial identifiers (IBAN, SWIFT, credit card)"
+    action: "REDACT"
+    severity: "high"
+    condition_field: "financial_identifier_detected"
+    condition_operator: "eq"
+    condition_value: true
+    adr_refs: ["ADR-011"]
