@@ -1,0 +1,10 @@
+# Identity Anchor Policy — C10 (ADR-Sybil)
+# Controls whether agents must provide identity proof during registration.
+# Set require_identity_anchor: true in production anti-Sybil deployments.
+
+require_identity_anchor: false
+
+accepted_anchor_types:
+  - proof_of_work
+  - external_pki
+  - hardware_attestation

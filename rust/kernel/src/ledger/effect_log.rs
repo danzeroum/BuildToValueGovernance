@@ -338,8 +338,12 @@ fn compute_entry_hmac(
     timestamp_ns:  u64,
     key:           &[u8],
 ) -> [u8; 32] {
+    const FALLBACK_HMAC_KEY: [u8; 32] = [0u8; 32];
     let mut mac = HmacSha256::new_from_slice(key)
-        .expect("HMAC-SHA256 aceita qualquer tamanho de chave");
+        .unwrap_or_else(|_| {
+            HmacSha256::new_from_slice(&FALLBACK_HMAC_KEY)
+                .unwrap_or_else(|_| panic!("BUG: HMAC-SHA256 rejeitou [0u8;32] — impossível por spec"))
+        });
     mac.update(action_id);
     mac.update(resource_id);
     mac.update(&[reversibility as u8, temporality as u8]);

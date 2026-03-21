@@ -1,0 +1,23 @@
+# data/policies/sectors/logistics.yaml
+# ═══════════════════════════════════════════════════════════════
+# Logistics & Autonomous Systems Sector Policy
+# Cenário 1 (Drones) + Cenário 6 (HW Falsificação) — C8
+# ═══════════════════════════════════════════════════════════════
+
+_metadata:
+  sector_id: logistics
+  version: "1.0.0"
+  risk_classification: high_risk
+  philosophy: "Hardware attestation mandatory for autonomous agents in physical domains"
+
+# C8: Require TEE hardware attestation for autonomous logistics agents.
+# If true, agents without hw_attestation in TechnicalEvidence are BLOCKED.
+require_hardware_attestation: false  # Set to true for production drone deployments
+
+# Hex-encoded Ed25519 public key of the trusted TEE authority.
+# Must be provisioned via secure key management before enabling attestation.
+# trusted_tee_pubkey_hex: ""
+
+cross_references:
+  related_sectors:
+    - critical_infrastructure

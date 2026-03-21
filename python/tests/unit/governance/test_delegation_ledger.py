@@ -24,7 +24,7 @@ def policy_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def ledger(policy_path: Path) -> DelegationLedger:
-    return DelegationLedger(policy_path=policy_path)
+    return DelegationLedger(policy_path=policy_path, hmac_key=b"test" * 8)
 
 
 class TestRecordDelegation:
@@ -88,6 +88,6 @@ class TestCycleDetection:
 
 class TestNoPolicy:
     def test_default_ledger(self) -> None:
-        dl = DelegationLedger()
+        dl = DelegationLedger(hmac_key=b"x" * 32)
         rec = dl.record_delegation("a", "b", "read_only")
         assert rec.parent_agent == "a"

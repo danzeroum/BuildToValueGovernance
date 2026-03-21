@@ -20,6 +20,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    import blake3 as _blake3
+    def _b3(data: bytes) -> bytes:
+        return _blake3.blake3(data).digest()
+except ImportError:
+    def _b3(data: bytes) -> bytes:  # type: ignore[misc]
+        return hashlib.sha256(data).digest()  # fallback if blake3 not installed
+
 import yaml
 
 logger = logging.getLogger("btv.governance.delegation_ledger")
@@ -54,8 +62,12 @@ class DelegationLedger:
     def __init__(
         self,
         policy_path: Optional[Path] = None,
-        hmac_key: bytes = b"btv-delegation-default-key",
+        hmac_key: Optional[bytes] = None,
     ) -> None:
+        if hmac_key is None:
+            raise ValueError("hmac_key obrigatório — use env BTV_DELEGATION_KEY")
+        if len(hmac_key) < 32:
+            raise ValueError("hmac_key must be >= 32 bytes")
         raw = self._load(policy_path) if policy_path else {}
         self._max_depth = raw.get("max_chain_depth", _MAX_DEPTH)
         scope_h = raw.get("scope_hierarchy", {})
@@ -173,3 +185,35 @@ class DelegationLedger:
             if rec.child_agent == child_agent and not rec.revoked:
                 return rec
         return None
+
+    # ── C11: MerkleDataManifest ──────────────────────────────────────────────
+
+    def record_data_transfer(
+        self,
+        sender: str,
+        receiver: str,
+        scope: str,
+        chunk_hashes: List[bytes],
+    ) -> DelegationRecord:
+        """Record a data transfer delegation with a BLAKE3 Merkle root (C11)."""
+        merkle_root = self._compute_merkle_root(chunk_hashes)
+        # Store Merkle root as hex in capabilities list for auditability
+        capabilities = [f"merkle_root:{merkle_root.hex()}"]
+        return self.record_delegation(
+            parent_agent=sender,
+            child_agent=receiver,
+            scope=scope,
+            capabilities=capabilities,
+        )
+
+    @staticmethod
+    def _compute_merkle_root(chunk_hashes: List[bytes]) -> bytes:
+        """Pair-hash Merkle tree using BLAKE3. Resistant to length-extension attacks."""
+        if not chunk_hashes:
+            return _b3(b"")
+        layer = list(chunk_hashes)
+        while len(layer) > 1:
+            if len(layer) % 2 == 1:
+                layer.append(layer[-1])  # duplicate last for odd count
+            layer = [_b3(a + b) for a, b in zip(layer[::2], layer[1::2])]
+        return layer[0]
