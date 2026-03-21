@@ -13,7 +13,9 @@ Changelog:
 from __future__ import annotations
 
 import math
+import sqlite3
 import time
+import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -24,6 +26,10 @@ MAX_SESSIONS:       int = 10_000
 SESSION_TTL_S:      int = 1800   # 30 min — alinhado com SessionTracker Rust
 ACTIVITY_MAX:       int = 200    # historico por sessao
 TRUST_CACHE_TTL_S:  int = 300    # 5 min
+
+# C9: Escrow DB path (same SQLite as app — overrideable via env)
+import os as _os
+ESCROW_DB_PATH: str = _os.environ.get("BTV_DB_PATH", "data/trust.db")
 
 
 @dataclass
@@ -248,3 +254,69 @@ class TrustScoreCalculator:
         variance = sum((x - mean_iv) ** 2 for x in intervals) / len(intervals)
         std_dev  = math.sqrt(variance)
         return 1.0 - min(1.0, std_dev / 3600)
+
+    # ── C9: Reputation Escrow ───────────────────────────────────────────────────
+
+    def _ensure_escrow_table(self) -> None:
+        """Create escrow_ledger table if not exists."""
+        conn = sqlite3.connect(ESCROW_DB_PATH)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS escrow_ledger (
+                escrow_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                amount REAL NOT NULL,
+                delegation_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'frozen',
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+    def freeze_escrow(self, session_id: str, amount: float, delegation_id: str) -> str:
+        """Freeze `amount` trust points linked to a delegation. Returns escrow_id."""
+        self._ensure_escrow_table()
+        escrow_id = str(uuid.uuid4())
+        conn = sqlite3.connect(ESCROW_DB_PATH)
+        conn.execute(
+            "INSERT INTO escrow_ledger (escrow_id, session_id, amount, delegation_id, status) "
+            "VALUES (?, ?, ?, ?, 'frozen')",
+            (escrow_id, session_id, amount, delegation_id),
+        )
+        conn.commit()
+        conn.close()
+        return escrow_id
+
+    def release_escrow(self, escrow_id: str) -> None:
+        """Release frozen points (promise fulfilled)."""
+        self._ensure_escrow_table()
+        conn = sqlite3.connect(ESCROW_DB_PATH)
+        conn.execute(
+            "UPDATE escrow_ledger SET status='released' WHERE escrow_id=? AND status='frozen'",
+            (escrow_id,),
+        )
+        conn.commit()
+        conn.close()
+
+    def forfeit_escrow(self, escrow_id: str) -> None:
+        """Permanently deduct frozen points (promise violated)."""
+        self._ensure_escrow_table()
+        conn = sqlite3.connect(ESCROW_DB_PATH)
+        row = conn.execute(
+            "SELECT session_id, amount FROM escrow_ledger WHERE escrow_id=? AND status='frozen'",
+            (escrow_id,),
+        ).fetchone()
+        if row:
+            session_id, amount = row
+            conn.execute(
+                "UPDATE escrow_ledger SET status='forfeited' WHERE escrow_id=?",
+                (escrow_id,),
+            )
+            # Apply penalty to session trust in sessions table
+            conn.execute(
+                "UPDATE sessions SET trust_score = MAX(0.0, trust_score - ?), "
+                "offenses = offenses + 1 WHERE session_id = ?",
+                (amount, session_id),
+            )
+        conn.commit()
+        conn.close()
