@@ -25,9 +25,10 @@ class ActionImpact(str, Enum):
 
 
 class AgentVerdict(str, Enum):
-    ALLOW   = "ALLOW"
-    EDUCATE = "EDUCATE"
-    BLOCK   = "BLOCK"
+    ALLOW            = "ALLOW"
+    EDUCATE          = "EDUCATE"
+    PENDING_APPROVAL = "PENDING_APPROVAL"  # Gap F: awaiting HITL
+    BLOCK            = "BLOCK"
 
 
 @dataclass
@@ -48,15 +49,17 @@ class AgentContext:
 @dataclass
 class AgentDecisionRequest:
     """Contrato canônico ADR-029 §4.1."""
-    agent_id:          str
-    session_id:        str
-    action:            AgentAction
-    parameters_hash:   str                   # BLAKE3-hex dos parâmetros completos
-    schema_version:    str                   = "1.0"
-    request_id:        str                   = field(default_factory=lambda: str(uuid.uuid4()))
+    agent_id:           str
+    session_id:         str
+    action:             AgentAction
+    parameters_hash:    str                   # BLAKE3-hex dos parâmetros completos
+    schema_version:     str                   = "1.0"
+    request_id:         str                   = field(default_factory=lambda: str(uuid.uuid4()))
     parameters_preview: Dict[str, Any]       = field(default_factory=dict)
-    context:           AgentContext          = field(default_factory=AgentContext)
-    timestamp_utc:     str                   = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    context:            AgentContext          = field(default_factory=AgentContext)
+    timestamp_utc:      str                   = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    parent_verdict_id:  Optional[str]        = None   # Gap B: delegation chain
+    delegation_depth:   int                  = 0      # Gap B: chain depth counter
 
     def __post_init__(self) -> None:
         if len(self.parameters_hash) != 64:
@@ -88,6 +91,7 @@ class VerdictEnvelope:
     evidence_id:             str
     hmac_sha256:             str
     timestamp_utc:           str
+    approval_id:             Optional[str] = None  # Gap F: HITL ticket ID
 
     def verify_hmac(self, shared_key: bytes) -> bool:
         """Verificação constant-time obrigatória — ADR-029 §4.3."""

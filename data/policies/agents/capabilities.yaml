@@ -1,0 +1,40 @@
+# Capability Registry — Gap C (Capability-Based Access Control)
+# Defines per-agent capability grants and revocations.
+
+schema_version: "1.0"
+
+# Default capabilities granted to all agents
+default_capabilities:
+  - "llm_inference"
+  - "read_public_data"
+
+# Agent-specific capability grants
+agents:
+  medical-agent:
+    capabilities:
+      - "llm_inference"
+      - "read_public_data"
+      - "patient_lookup"
+      - "lab_results_read"
+      - "prescription_check"
+    revoked: []
+
+  chatbot-internal:
+    capabilities:
+      - "llm_inference"
+      - "read_public_data"
+      - "qdrant_write"
+      - "rag_context"
+      - "model_training"
+      - "model_deploy"
+      - "vllm_hotswap"
+    revoked: []
+
+# Capability hierarchy (parent grants child capabilities)
+hierarchy:
+  model_deploy:
+    requires:
+      - "model_training"
+  vllm_hotswap:
+    requires:
+      - "model_deploy"

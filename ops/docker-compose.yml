@@ -5,7 +5,8 @@
 # Usage:
 #   docker compose up --build                          # core only (gateway + governance)
 #   docker compose --profile observability up --build  # + Prometheus + Grafana
-#   docker compose --profile dashboard up --build      # + Streamlit
+#   docker compose --profile dashboard up --build      # + internal Streamlit dashboard
+#   docker compose --profile playground up --build     # + developer playground (port 8502)
 #   docker compose --profile full up --build           # everything
 # ═══════════════════════════════════════════════════════════════
 
@@ -108,13 +109,35 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────
-  # DASHBOARD (--profile dashboard | full)
+  # PLAYGROUND (--profile playground | full)
+  # Developer-facing interactive demo at http://localhost:8502
   # ─────────────────────────────────────────────────────────────
-  dashboard:
+  playground:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.playground
+    profiles: ["playground", "full"]
+    ports:
+      - "8502:8502"
+    environment:
+      - BTV_GATEWAY_URL=http://gateway:8080
+      - BTV_API_KEY=${BTV_API_KEY:-dev-key}
+    depends_on:
+      gateway:
+        condition: service_started
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────
+  # DASHBOARD (React SPA — served by gateway via static files)
+  # The React dashboard is built into the gateway container.
+  # Access at http://localhost:8080/ (no separate port needed).
+  # Legacy Streamlit dashboard preserved for migration period.
+  # ─────────────────────────────────────────────────────────────
+  dashboard-legacy:
     build:
       context: ..
       dockerfile: ops/Dockerfile.streamlit
-    profiles: ["dashboard", "full"]
+    profiles: ["dashboard-legacy"]
     ports:
       - "8501:8501"
     environment:

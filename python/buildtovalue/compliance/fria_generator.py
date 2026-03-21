@@ -92,11 +92,21 @@ class FRIAGenerator:
         violations: Optional[List[Dict]] = None,
         compliance_rate: Optional[float] = None,
         capabilities: Optional[List[str]] = None,
+        ledger_analytics: Optional[Any] = None,
     ) -> FRIADocument:
         obligs = obligations or []
         viols = violations or []
         caps = capabilities or []
         rate = compliance_rate if compliance_rate is not None else 1.0
+
+        # ADR-048: Enrich with real ledger data if available
+        if ledger_analytics is not None:
+            try:
+                agg = ledger_analytics.aggregate()
+                if agg.total_decisions > 0:
+                    rate = 1.0 - (agg.block_count / agg.total_decisions) if rate == 1.0 else rate
+            except Exception:
+                pass  # Fail-open: use static data if analytics fails
 
         sections = [
             self._purpose_section(agent_id, sector, caps),

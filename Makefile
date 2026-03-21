@@ -2,7 +2,7 @@
 # BuildToValue v2.3.1 - Sovereign Orquestrator Makefile
 # ═══════════════════════════════════════════════════════════════════════════
 
-.PHONY: help build develop test e2e clean install quick
+.PHONY: help build develop test e2e clean install quick dashboard benchmark
 
 help:
 	@echo "BuildToValue Governance v2.3.1 - Orquestração Soberana"
@@ -55,6 +55,16 @@ clean:
 	cd rust && cargo clean
 	cd python && rm -rf build/ dist/ *.egg-info .pytest_cache __pycache__
 	find . -name "*.pyc" -delete
+
+# React Dashboard
+dashboard:
+	@echo "Building React dashboard..."
+	cd dashboard && npm ci && npm run build
+
+# Public Benchmark
+benchmark:
+	@echo "Running BTV benchmark..."
+	cd benchmarks/comparative && python runner.py --adapters btv
 
 # Atalho para desenvolvedor Rust
 quick:
