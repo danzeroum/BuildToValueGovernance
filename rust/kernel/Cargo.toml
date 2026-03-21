@@ -38,6 +38,7 @@ arc-swap = { workspace = true }
 whatlang = { workspace = true }
 hmac = "0.12"
 sha2 = "0.10"
+zeroize = { version = "1.7", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

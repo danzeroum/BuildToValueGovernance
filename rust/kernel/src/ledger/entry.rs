@@ -82,8 +82,12 @@ impl LedgerEntry {
         signing_key: &[u8],
     ) -> [u8; 32] {
         type HmacSha256 = Hmac<Sha256>;
+        const FALLBACK_HMAC_KEY: [u8; 32] = [0u8; 32];
         let mut mac = HmacSha256::new_from_slice(signing_key)
-            .unwrap_or_else(|_| HmacSha256::new_from_slice(&[0u8; 32]).expect("key válida"));
+            .unwrap_or_else(|_| {
+                HmacSha256::new_from_slice(&FALLBACK_HMAC_KEY)
+                    .unwrap_or_else(|_| panic!("BUG: HMAC-SHA256 rejeitou [0u8;32] — impossível por spec"))
+            });
         mac.update(evidence_hash);
         mac.update(&[ethical_verdict as u8]);
         mac.update(&trail_id.to_le_bytes());
