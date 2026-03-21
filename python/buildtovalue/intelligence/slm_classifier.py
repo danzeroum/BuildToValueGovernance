@@ -27,6 +27,7 @@ class IntentLabel(str, Enum):
     DATA_EXFILTRATION = "data_exfiltration"
     SOCIAL_ENGINEERING = "social_engineering"
     POLICY_EVASION = "policy_evasion"
+    EVASION_ATTEMPT = "evasion_attempt"
     UNKNOWN = "unknown"
 
 
@@ -510,6 +511,111 @@ class SLMClassifier:
             return None
 
         return self.classify(text)
+
+    def classify_medium_zone(self, text: str) -> SLMClassification:
+        """
+        ADR-046: Classify text flagged as MEDIUM confidence by heuristic detector.
+
+        Uses MEDIUM_ZONE_PROMPT for semantic evasion detection.
+        Fail-open: if model not loaded or error → returns BENIGN with zero confidence.
+        """
+        start = time.perf_counter()
+
+        if not self._loaded or self._llm is None:
+            return self._fail_open("model_not_loaded", start)
+
+        text_stripped = text.strip()
+        if len(text_stripped) < 3:
+            return self._fail_open("input_too_short", start)
+
+        safe_input = text_stripped[:self._max_input_tokens]
+
+        try:
+            prompt = MEDIUM_ZONE_PROMPT.format(input_text=safe_input)
+
+            result = self._llm.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": "You are a security classifier. Respond with valid JSON only. No explanation."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=64,
+                temperature=0.0,
+                response_format={"type": "json_object"},
+            )
+
+            elapsed = (time.perf_counter() - start) * 1000
+
+            if elapsed > self._timeout_ms:
+                self._metrics["timeouts"] += 1
+                logger.warning("SLM medium-zone timeout: %.1fms > %dms", elapsed, self._timeout_ms)
+
+            try:
+                raw = result["choices"][0]["message"]["content"].strip()
+            except (KeyError, IndexError, TypeError) as struct_err:
+                logger.warning("SLM medium-zone output malformed: %s", struct_err)
+                return self._parse_output("", elapsed)
+
+            classification = self._parse_output(raw, elapsed)
+
+            self._metrics["classifications"] += 1
+            self._metrics["total_latency_ms"] += elapsed
+            if classification.is_malicious:
+                self._metrics["malicious_detected"] += 1
+            else:
+                self._metrics["benign_detected"] += 1
+
+            return classification
+
+        except Exception as e:
+            self._metrics["errors"] += 1
+            logger.error("SLM classify_medium_zone error: %s", e)
+            return self._fail_open(str(e), start)
+
+    def extract_entities(self, text: str) -> List[Dict[str, Any]]:
+        """
+        ADR-047: Extract PII entities using NER_EXTRACTION_PROMPT.
+
+        Fail-open: if model not loaded or error → returns empty list.
+        """
+        if not self._loaded or self._llm is None:
+            return []
+
+        text_stripped = text.strip()
+        if len(text_stripped) < 3:
+            return []
+
+        safe_input = text_stripped[:self._max_input_tokens]
+        start = time.perf_counter()
+
+        try:
+            prompt = NER_EXTRACTION_PROMPT.format(input_text=safe_input)
+
+            result = self._llm.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": "You are a PII extraction specialist. Respond with valid JSON array only."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=128,
+                temperature=0.0,
+            )
+
+            elapsed = (time.perf_counter() - start) * 1000
+
+            if elapsed > self._timeout_ms:
+                self._metrics["timeouts"] += 1
+                logger.warning("SLM extract_entities timeout: %.1fms", elapsed)
+                return []
+
+            import json
+            raw = result["choices"][0]["message"]["content"].strip()
+            entities = json.loads(raw)
+            if not isinstance(entities, list):
+                return []
+            return entities
+
+        except Exception as e:
+            logger.warning("SLM extract_entities error (fail-open): %s", e)
+            return []
 
     def classify_with_context(
             self,
