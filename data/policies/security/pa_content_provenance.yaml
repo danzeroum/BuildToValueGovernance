@@ -1,0 +1,79 @@
+# pa_content_provenance.yaml — Cenários 16, 21, 8: Content Provenance Verifier
+# Verificação de proveniência de conteúdo (C2PA, EXIF, hash de custódia).
+
+schema_version: "1.0"
+metadata:
+  name: "Content Provenance Verifier Policy"
+  description: >
+    Define regras para verificação de proveniência de conteúdo.
+    C2PA (Coalition for Content Provenance and Authenticity) é o padrão adotado.
+    NOTA: crate c2pa está em alpha — modo padrão é EDUCATE, não BLOCK.
+    Migrar para BLOCK após estabilização da dependência.
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenarios: ["C16", "C21", "C08"]
+  adrs: ["ADR-016", "ADR-021"]
+
+# Estado da dependência C2PA
+c2pa_dependency_status: "alpha"
+# Mudar para "stable" para habilitar modo BLOCK para ausência de C2PA
+
+# Modo de operação por status de dependência
+c2pa_modes:
+  alpha:  "EDUCATE"   # Ausência de C2PA → EDUCATE (não BLOCK)
+  stable: "BLOCK"     # Após estabilizar → BLOCK em conteúdo sem C2PA
+
+# Ações por verificação
+actions:
+  c2pa_valid_and_exif_ok: ALLOW
+  c2pa_absent:            EDUCATE   # Temporário: mudar para BLOCK após estabilizar
+  c2pa_invalid:           EDUCATE   # Stub — verificação real pendente
+  exif_modified_confidential: BLOCK # Modificação em CONFIDENTIAL/RESTRICTED → BLOCK
+  exif_modified_public:       EDUCATE
+
+# Cadeia de custódia (sempre ativa)
+custody_chain:
+  enabled: true
+  storage: "DurableLedger"
+  hash_algorithm: "BLAKE2b-256"
+  record_always: true  # Registrar mesmo em ALLOW
+
+policies:
+  - id: "CPV-001"
+    name: "Block modified CONFIDENTIAL/RESTRICTED"
+    description: >
+      BLOCK quando EXIF inconsistente (modificação detectada) em conteúdo
+      CONFIDENTIAL ou RESTRICTED. BLOCK independente do status C2PA.
+    enabled: true
+    priority: 100
+    conditions:
+      exif_consistent: false
+      classification:
+        - "CONFIDENTIAL"
+        - "RESTRICTED"
+    action: BLOCK
+
+  - id: "CPV-002"
+    name: "Allow C2PA valid"
+    description: >
+      ALLOW quando C2PA presente e válida + EXIF consistente.
+    enabled: true
+    priority: 80
+    conditions:
+      c2pa_present: true
+      c2pa_valid: true
+      exif_consistent: true
+    action: ALLOW
+
+  - id: "CPV-003"
+    name: "Educate C2PA absent (temporary)"
+    description: >
+      EDUCATE quando C2PA ausente. Temporário até crate estabilizar.
+      Mudar para BLOCK após c2pa_dependency_status = "stable".
+    enabled: true
+    priority: 60
+    conditions:
+      c2pa_present: false
+    action: EDUCATE
+    note: "Mudar para BLOCK quando c2pa_dependency_status = stable"
