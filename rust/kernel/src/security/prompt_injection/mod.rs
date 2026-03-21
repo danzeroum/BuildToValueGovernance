@@ -15,7 +15,6 @@ pub use universal::{detect_tier0, Severity, ThreatCategory, ThreatSignal};
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
-#[allow(dead_code)]
 const INSTRUCTION_DENSITY_THRESHOLD: f32 = 0.15;
 const MIN_INPUT_LENGTH: usize = 10;
 
@@ -32,11 +31,21 @@ impl Default for PromptInjectionDetector {
 impl PromptInjectionDetector {
     pub fn new() -> Self { Self }
 
-    #[allow(dead_code)]
+    /// Instruction density: ratio of injection-related keywords to total words.
+    /// Unified keyword list (25 keywords: 20 EN + 5 PT-BR) — synced with
+    /// Python's ConversationThreatGraph._instruction_density().
     fn instruction_density(input: &str) -> f32 {
         let words: Vec<&str> = input.split_whitespace().collect();
         if words.is_empty() { return 0.0; }
-        let keywords = ["ignore", "forget", "override", "bypass", "instructions"];
+        let keywords = [
+            // EN keywords
+            "ignore", "forget", "override", "bypass", "instructions",
+            "instruct", "system", "execute", "sudo", "disregard",
+            "pretend", "roleplay", "jailbreak", "unlock", "reset",
+            "disable", "deactivate", "circumvent", "evade", "elevate",
+            // PT-BR keywords
+            "desconsidere", "esqueça", "sobreponha", "contorne", "desative",
+        ];
         let count = words.iter().filter(|w| keywords.iter().any(|k| w.to_lowercase().contains(k))).count();
         count as f32 / words.len() as f32
     }
@@ -107,6 +116,22 @@ impl Module for PromptInjectionDetector {
             if signal.severity == Severity::Critical {
                 return findings;
             }
+        }
+
+        // --- ETAPA 1.5: INSTRUCTION DENSITY ---
+        // High keyword density is a signal of injection attempts even without
+        // matching a specific Tier 0 pattern (defense-in-depth).
+        let density = Self::instruction_density(input);
+        if density >= INSTRUCTION_DENSITY_THRESHOLD {
+            findings.push(
+                Finding::new(
+                    ValidatorModule::PromptInjection,
+                    TechnicalSeverity::Medium,
+                    "INSTRUCTION_DENSITY",
+                    "HIGH_KEYWORD_DENSITY",
+                    input,
+                ).with_confidence(65)
+            );
         }
 
         // --- ETAPA 2: TIER 1/2 (Pattern Registry) ---

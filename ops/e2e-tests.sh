@@ -116,13 +116,32 @@ gov_get() {
 }
 
 # ─────────────────────────────────────────────────────────────
-# 0. Health Checks
+# 0. Health Checks (fail-fast if services are down)
 # ─────────────────────────────────────────────────────────────
 echo "═══ 0. Health Checks ═══"
 R=$(curl -s --max-time 5 "$GATEWAY/health" || echo "{}")
 check "Gateway health" "status" "ok" "$R"
+if ! echo "$R" | python -c "import sys,json; d=json.load(sys.stdin); assert d.get('status')=='ok'" 2>/dev/null; then
+    echo "  ⚠️  Gateway not reachable at $GATEWAY — cannot continue E2E tests."
+    echo "  Start with: cd rust && cargo run --bin btv_gateway (port 8080)"
+    echo ""
+    echo "═══════════════════════════════════════════════════════"
+    echo "  RESULTS: $PASS passed, $FAIL failed, $SKIP skipped (total $TOTAL)"
+    echo "═══════════════════════════════════════════════════════"
+    exit 1
+fi
+
 R=$(curl -s --max-time 5 "$GOVERNANCE/health" || echo "{}")
 check "Governance health" "status" "healthy" "$R"
+if ! echo "$R" | python -c "import sys,json; d=json.load(sys.stdin); assert d.get('status')=='healthy'" 2>/dev/null; then
+    echo "  ⚠️  Governance not reachable at $GOVERNANCE — cannot continue E2E tests."
+    echo "  Start with: cd python && uvicorn buildtovalue.api.app:app --port 8000"
+    echo ""
+    echo "═══════════════════════════════════════════════════════"
+    echo "  RESULTS: $PASS passed, $FAIL failed, $SKIP skipped (total $TOTAL)"
+    echo "═══════════════════════════════════════════════════════"
+    exit 1
+fi
 
 # ─────────────────────────────────────────────────────────────
 # 1. PII Validators
@@ -169,7 +188,8 @@ R=$(validate "$B64")
 check_gte "Base64 deobfuscation" "finding_count" 1 "$R"
 
 echo "  --- Hex ---"
-HEX=$(python -c "print('48656c6c6f20576f726c642054657374')")
+# Hex-encoded CPF "CPF 123.456.789-09" — deobfuscation must decode and detect PII
+HEX=$(python -c "print(''.join(f'{b:02x}' for b in b'CPF 123.456.789-09'))")
 R=$(validate "$HEX")
 check_gte "Hex deobfuscation" "finding_count" 1 "$R"
 
