@@ -1,0 +1,93 @@
+# pa_privacy_budget.yaml — Cenários 26, 30, 3: Privacy Budget Tracker
+# Controle de orçamento de dados sensíveis por agente/sessão.
+# Fundamentação: LGPD Art. 11, GDPR Art. 5(1)(c), GDPR Art. 9
+
+schema_version: "1.0"
+metadata:
+  name: "Privacy Budget Tracker Policy"
+  description: >
+    Define os limites de dados sensíveis que podem ser compartilhados por agente
+    por sessão, dia e semana. Previne over-sharing gradual (vazamento por acúmulo).
+    Fundamentado em LGPD Art. 11 (dados especiais) e GDPR Art. 5(1)(c) (minimização).
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenarios: ["C26", "C30", "C03"]
+  adrs: ["ADR-026", "ADR-030"]
+
+# Limites de budget por tipo de dado e janela temporal
+# Fundamentação normativa por categoria:
+#   GPS_LOCATION:  LGPD Art. 6 (finalidade + minimização), GDPR Art. 5(1)(c)
+#   HEALTH_DATA:   LGPD Art. 11 (dados sensíveis de saúde), GDPR Art. 9(2)(h)
+#   FINANCIAL:     LGPD Art. 11, LGPD Art. 20 (decisões automatizadas)
+#   BIOMETRIC:     LGPD Art. 11 (dados biométricos), GDPR Art. 9
+
+budgets:
+  GPS_LOCATION:
+    session: 3
+    daily:   10
+    weekly:  30
+    normative_basis: "LGPD Art. 6 (finalidade/minimização); GDPR Art. 5(1)(c)"
+
+  HEALTH_DATA:
+    session: 1
+    daily:   5
+    weekly:  15
+    normative_basis: "LGPD Art. 11 (dado sensível de saúde); GDPR Art. 9(2)(h)"
+
+  FINANCIAL_DATA:
+    session: 2
+    daily:   8
+    weekly:  20
+    normative_basis: "LGPD Art. 11; LGPD Art. 20 (decisões automatizadas)"
+
+  BIOMETRIC:
+    session: 1
+    daily:   3
+    weekly:  10
+    normative_basis: "LGPD Art. 11 (dado biométrico); GDPR Art. 9"
+
+# Thresholds de alerta (percentual do budget consumido)
+thresholds:
+  warning_pct:  70   # >= 70%  → WARNING  (monitoramento elevado)
+  critical_pct: 90   # >= 90%  → CRITICAL (alerta crítico)
+  block_pct:    100  # = 100%  → EXHAUSTED → BLOCK automático
+
+# Ações por status
+status_actions:
+  OK:        ALLOW
+  WARNING:   ALLOW        # permite mas registra alerta
+  CRITICAL:  EDUCATE      # permite com notificação obrigatória ao usuário
+  EXHAUSTED: BLOCK        # bloqueia automaticamente (fail-secure)
+
+policies:
+  - id: "PBT-001"
+    name: "Block when budget exhausted"
+    description: >
+      BLOCK incondicional quando qualquer janela de budget atingir 100%.
+      Fail-secure: ausência de resposta do tracker → BLOCK.
+    enabled: true
+    priority: 100
+    conditions:
+      budget_status: "EXHAUSTED"
+    action: BLOCK
+
+  - id: "PBT-002"
+    name: "Educate when budget critical"
+    description: >
+      EDUCATE quando budget >= 90% — notificar usuário antes de exaurir.
+    enabled: true
+    priority: 80
+    conditions:
+      budget_status: "CRITICAL"
+    action: EDUCATE
+
+  - id: "PBT-003"
+    name: "Warn when budget warning"
+    description: >
+      LOG + WARNING quando budget >= 70%.
+    enabled: true
+    priority: 60
+    conditions:
+      budget_status: "WARNING"
+    action: ALLOW  # permite mas com log de warning
