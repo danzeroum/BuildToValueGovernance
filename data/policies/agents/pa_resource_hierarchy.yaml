@@ -1,0 +1,100 @@
+# pa_resource_hierarchy.yaml — Cenário 30: Sobrevivência a Qualquer Custo
+# Política: hierarquia de contas financeiras — BLOCK conta reserva para fins operacionais.
+
+schema_version: "1.0"
+metadata:
+  name: "Resource Hierarchy Financial Protection"
+  description: >
+    Impede que o agente use fundos de reserva ou contas intocáveis para cobrir
+    despesas operacionais (gas fees, taxas de computação) sem assinatura humana.
+    Protege o patrimônio do usuário contra "instinto de sobrevivência" do agente.
+  created_at: "2026-03-21"
+  updated_at: "2026-03-21"
+  author: "BTV Security Team"
+  scenario: "C30"
+  adrs: ["ADR-029", "ADR-030"]
+
+# Definição dos tiers de conta
+account_tiers:
+  Operational:
+    description: "Conta para despesas correntes do agente"
+    level: 0
+    auto_access: true
+    requires_human_sig: false
+  Reserve:
+    description: "Conta reserva — exige assinatura humana para qualquer uso"
+    level: 1
+    auto_access: false
+    requires_human_sig: true
+  Untouchable:
+    description: "Conta intocável — BLOCK absoluto, sem exceção"
+    level: 2
+    auto_access: false
+    requires_human_sig: false  # irrelevante — sempre bloqueada
+
+# Finalidades operacionais do agente (não devem usar conta reserva)
+operational_purposes:
+  - "operational"
+  - "gas_fee"
+  - "compute_fee"
+  - "infra_fee"
+  - "agent_maintenance"
+  - "self_preservation"
+
+# Limites padrão (BRL)
+default_limits:
+  daily_operational_limit_brl: 500.00
+  human_sig_required_above_brl: 1000.00
+
+policies:
+  - id: "RES-001"
+    name: "Block Reserve account for operational purposes"
+    description: >
+      BLOCK: tentativa de usar conta Reserve para finalidade operacional
+      (gas fee, compute fee), mesmo com assinatura humana.
+    enabled: true
+    priority: 100
+    conditions:
+      account_tier: "Reserve"
+      action_purpose_in:
+        - "gas_fee"
+        - "compute_fee"
+        - "operational"
+        - "self_preservation"
+    action: BLOCK
+
+  - id: "RES-002"
+    name: "Block Untouchable account unconditionally"
+    description: BLOCK absoluto em qualquer acesso a conta Untouchable.
+    enabled: true
+    priority: 100
+    conditions:
+      account_tier: "Untouchable"
+    action: BLOCK
+
+  - id: "RES-003"
+    name: "Block missing account_type metadata"
+    description: >
+      BLOCK: ação financeira sem account_type nos metadados.
+      Fail-secure: metadado ausente = desconhecido = bloqueado.
+    enabled: true
+    priority: 100
+    conditions:
+      account_type_missing: true
+      action_categories:
+        - "financial_transfer"
+        - "asset_liquidation"
+    action: BLOCK
+
+  - id: "RES-004"
+    name: "Escalate high-value operational transfers"
+    description: >
+      ESCALATE: transferência operacional acima de R$1.000 exige
+      aprovação humana (assinatura explícita).
+    enabled: true
+    priority: 80
+    conditions:
+      account_tier: "Operational"
+      amount_above_brl: 1000.00
+      has_human_sig: false
+    action: ESCALATE_HUMAN

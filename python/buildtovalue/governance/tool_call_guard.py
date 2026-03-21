@@ -4,6 +4,10 @@ Pre-execution: validates tool name, parameters, ActionImpact,
 and verifies agent capabilities against registry.
 Post-execution: screens output for injection and leakage.
 
+Extensão (Cenário 33 — Supply Chain de Plugins):
+  - validate_post_with_audit(): registra hash BLAKE3 do output no DurableLedger
+    e detecta anomalia comportamental via SkillBehaviorMonitor (injetado opcionalmente).
+
 Accepts AgentDecisionRequest directly (ADR-029 contract).
 Produces SimpleFinding on capability discrepancy.
 
@@ -14,11 +18,12 @@ Invariants:
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import yaml
 
@@ -26,8 +31,12 @@ from .agent_pdp import (
     ActionImpact, AgentDecisionRequest, AgentVerdict,
 )
 from .chatbot_gates import GateResult
+from .durable_ledger import DurableLedger
 from .tool_sanitizer import _RE_SCREEN
 from .types import SimpleFinding
+
+if TYPE_CHECKING:
+    from .skill_behavior_monitor import SkillBehaviorMonitor
 
 logger = logging.getLogger("btv.governance.tool_call_guard")
 
@@ -155,6 +164,52 @@ class ToolCallGuard:
             return _block("Output contains injection patterns")
         return _allow("Post-validation passed")
 
+    def validate_post_with_audit(
+        self,
+        tool_name: str,
+        result: str,
+        agent_id: str,
+        session_id: str,
+        ledger: DurableLedger,
+        monitor: Optional["SkillBehaviorMonitor"] = None,
+    ) -> GateResult:
+        """Validação pós-execução com auditoria no DurableLedger.
+
+        Pipeline (Cenário 33):
+          1. validate_post() existente (retrocompatível)
+          2. Registra hash BLAKE3 do output no ledger imutável
+          3. Se monitor → detect_anomaly() → BLOCK se anomalia detectada
+
+        Fail-secure: erro no ledger → BLOCK.
+        """
+        gate = self.validate_post(tool_name, result, agent_id, session_id)
+        if gate.verdict == AgentVerdict.BLOCK:
+            return gate
+
+        output_hash = _blake3_hex(result.encode())
+        try:
+            ledger.append({
+                "type": "tool_output_audit",
+                "tool": tool_name,
+                "output_blake3": output_hash,
+                "agent_id": agent_id,
+                "session_id": session_id,
+                "explain_decision": (
+                    f"Output auditado para tool '{tool_name}' — "
+                    f"hash={output_hash[:16]}… agent={agent_id}"
+                ),
+            })
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Falha ao registrar audit no ledger: %s", exc)
+            return _block(f"Auditoria de output falhou: {exc} — BLOCK fail-secure")
+
+        if monitor is not None:
+            anomaly = monitor.detect_anomaly(tool_name)
+            if anomaly is not None:
+                return _block(anomaly.explain_decision)
+
+        return gate
+
     @staticmethod
     def make_finding(reason: str, confidence: float = 0.9) -> SimpleFinding:
         """Create Finding for capability/tool violations."""
@@ -179,3 +234,12 @@ def _allow(reason: str) -> GateResult:
         verdict=AgentVerdict.ALLOW, evidence_id=None,
         explain=f"[{_GATE}] {reason}", gate=_GATE,
     )
+
+
+def _blake3_hex(data: bytes) -> str:
+    """BLAKE3 hash (INV-006). Falls back to sha256 if blake3 unavailable."""
+    try:
+        import blake3  # type: ignore[import-untyped]
+        return blake3.blake3(data).hexdigest()
+    except ImportError:
+        return hashlib.sha256(data).hexdigest()

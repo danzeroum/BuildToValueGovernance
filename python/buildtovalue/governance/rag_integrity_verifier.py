@@ -2,7 +2,13 @@
 
 Verifies RAG chunk integrity: BLAKE3 source hash (INV-006),
 HMAC of (doc_hash, embedding), injection patterns, embedding drift,
-and chunk size limits.
+chunk size limits, provenance chain and contradiction detection.
+
+Extensões (Cenário 31 — RAG Poisoning / Falso Passado):
+  - MemoryProvenanceRecord: cadeia de custódia por chunk
+  - record_provenance(): persiste proveniência no DurableLedger
+  - verify_with_provenance(): ponto de entrada unificado (verifica + registra
+    + detecta contradições via RagContradictionDetector injetado)
 
 Invariants:
 - INV-006: BLAKE3 for evidence hashing (never SHA-256)
@@ -16,15 +22,20 @@ import hashlib
 import hmac as hmac_lib
 import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import yaml
 
 from .agent_pdp import AgentVerdict
 from .chatbot_gates import GateResult
+from .durable_ledger import DurableLedger
 from .tool_sanitizer import _RE_SCREEN
+
+if TYPE_CHECKING:
+    from .rag_contradiction_detector import RagContradictionDetector
 
 logger = logging.getLogger("btv.governance.rag_integrity_verifier")
 
@@ -50,6 +61,20 @@ class IntegrityResult:
     gate_result: GateResult
 
 
+@dataclass(frozen=True)
+class MemoryProvenanceRecord:
+    """Cadeia de custódia de cada chunk inserido na memória do agente.
+
+    Cenário 31: cada memória deve ter uma "cadeia de custódia" rastreável.
+    Persistida no DurableLedger para verificação futura.
+    """
+    chunk_blake3: str          # hash BLAKE3 do texto do chunk
+    source_channel: str        # "user_direct"|"email"|"agent<id>"|"api_<id>"
+    inserted_by_agent_id: str
+    inserted_at_iso: str       # UTC ISO 8601
+    hmac_signature: str        # HMAC-SHA256(blake3 + channel + iso)
+
+
 class RagIntegrityVerifier:
     """Verifies RAG chunk integrity before injection."""
 
@@ -57,6 +82,7 @@ class RagIntegrityVerifier:
         self,
         policy_path: Optional[Path] = None,
         hmac_key: bytes = b"btv-rag-integrity-key",
+        contradiction_detector: Optional["RagContradictionDetector"] = None,
     ) -> None:
         raw = self._load(policy_path) if policy_path else {}
         self._max_chunk = raw.get("max_chunk_size", _MAX_CHUNK)
@@ -66,6 +92,7 @@ class RagIntegrityVerifier:
         self._require_hash = raw.get("require_source_hash", True)
         self._injection_check = raw.get("injection_detection", True)
         self._key = hmac_key
+        self._contradiction_detector = contradiction_detector
 
     @staticmethod
     def _load(path: Path) -> dict:
@@ -147,6 +174,98 @@ class RagIntegrityVerifier:
                 gate="rag_integrity_verifier",
             ),
         )
+
+    # ------------------------------------------------------------------ #
+    # Cenário 31 — Proveniência de Memória                                #
+    # ------------------------------------------------------------------ #
+
+    def record_provenance(
+        self,
+        chunk_text: str,
+        source_channel: str,
+        agent_id: str,
+        ledger: DurableLedger,
+    ) -> MemoryProvenanceRecord:
+        """Cria e persiste cadeia de custódia do chunk no DurableLedger.
+
+        Fail-secure: erro ao persistir → propaga exceção (não silencia).
+        """
+        now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        chunk_hash = _blake3_hex(chunk_text.encode())
+        sig_payload = f"{chunk_hash}|{source_channel}|{now_iso}".encode()
+        sig = hmac_lib.new(self._key, sig_payload, hashlib.sha256).hexdigest()
+
+        record = MemoryProvenanceRecord(
+            chunk_blake3=chunk_hash,
+            source_channel=source_channel,
+            inserted_by_agent_id=agent_id,
+            inserted_at_iso=now_iso,
+            hmac_signature=sig,
+        )
+        ledger.append({
+            "type": "rag_provenance",
+            "chunk_blake3": chunk_hash,
+            "source_channel": source_channel,
+            "inserted_by_agent_id": agent_id,
+            "inserted_at_iso": now_iso,
+            "hmac_signature": sig,
+            "explain_decision": (
+                f"Proveniência registrada: chunk={chunk_hash[:16]}… "
+                f"channel={source_channel} agent={agent_id}"
+            ),
+        })
+        return record
+
+    def verify_with_provenance(
+        self,
+        chunk_text: str,
+        source_channel: str,
+        agent_id: str,
+        ledger: DurableLedger,
+        established_chunks: Optional[List[Tuple[str, MemoryProvenanceRecord]]] = None,
+        source_hash: Optional[str] = None,
+        embedding_vector: Optional[List[float]] = None,
+        expected_embedding: Optional[List[float]] = None,
+    ) -> IntegrityResult:
+        """Ponto de entrada unificado: verifica + registra proveniência + detecta contradições.
+
+        Pipeline:
+          1. verify_chunk() — validações existentes (retrocompatibilidade preservada)
+          2. record_provenance() — persiste cadeia de custódia no ledger
+          3. RagContradictionDetector.check() — se injetado e established_chunks fornecidos
+
+        Fail-secure: qualquer falha em qualquer etapa → BLOCK.
+        """
+        result = self.verify_chunk(
+            chunk_text,
+            source_hash=source_hash,
+            embedding_vector=embedding_vector,
+            expected_embedding=expected_embedding,
+        )
+        if not result.valid:
+            return result
+
+        try:
+            self.record_provenance(chunk_text, source_channel, agent_id, ledger)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Falha ao registrar proveniência: %s", exc)
+            return self._fail(
+                f"Falha na cadeia de custódia: {exc}",
+                doc_hash=result.blake3_hash,
+            )
+
+        if self._contradiction_detector and established_chunks:
+            from .rag_contradiction_detector import MemoryProvenanceRecord as _MPR
+            contradiction = self._contradiction_detector.check(
+                chunk_text, established_chunks
+            )
+            if contradiction is not None:
+                return self._fail(
+                    contradiction.explain_decision,
+                    doc_hash=result.blake3_hash,
+                )
+
+        return result
 
 
 def _cosine_distance(a: List[float], b: List[float]) -> float:
