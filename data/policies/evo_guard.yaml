@@ -43,3 +43,12 @@ fail_secure:
   on_parse_error: BLOCK
   on_version_mismatch: BLOCK
   on_committee_timeout: BLOCK                   # ausência de aprovação = bloqueio
+
+# Behavioral Monitoring — Scenario 19 (Modelo Isca / Decoy Model)
+# Detects sustained performance degradation that may indicate a compromised model.
+# GoalDriftSentinel already handles session-level drift; this governs model-level drift.
+behavioral_monitoring:
+  drift_window_hours: 24                # observation window for performance tracking
+  min_performance_degradation_alert: 0.15  # queda > 15% em 24h → alert (Jonas)
+  baseline_window_days: 7               # baseline computed over 7-day rolling window
+  block_on_sustained_degradation_days: 3   # 3 consecutive degraded days → BLOCK

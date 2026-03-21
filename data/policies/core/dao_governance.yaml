@@ -1,0 +1,45 @@
+# DAO Governance Policy — Scenario 20 (Reputation Oracle / Flash Loan Attack)
+# Prevents flash loan and velocity attacks on reputation-weighted voting systems.
+# Requires BTV oracle check before counting on-chain votes.
+
+schema_version: "1.0"
+
+governance:
+  min_reputation_age_days: 30           # flash loan mitigation — stake must be aged
+  min_trust_score_to_vote: 0.6          # minimum BTV trust score to participate
+  lock_period_before_vote_days: 1       # stake must be locked before vote window opens
+  max_stake_velocity_per_hour: 0.05     # limits "buying" reputation quickly (≤5%/hr)
+  require_btv_oracle_check: true        # smart contract must consult BTV before counting
+
+anti_flash_loan:
+  block_same_block_voting: true         # borrow + vote in same block = BLOCK
+  min_blocks_since_stake: 1000          # ~1000 Ethereum blocks ≈ 3.5 hours
+  max_vote_weight_per_address: 0.10     # no single address controls > 10% of vote
+
+rules:
+  - rule_id: "DAO-001"
+    description: "Block votes from stakes younger than lock period"
+    action: "BLOCK"
+    severity: "critical"
+    condition_field: "stake_age_days"
+    condition_operator: "lt"
+    condition_value: 1
+    adr_refs: ["ADR-029", "ADR-011"]
+
+  - rule_id: "DAO-002"
+    description: "Block high-velocity stake accumulation (flash loan pattern)"
+    action: "BLOCK"
+    severity: "critical"
+    condition_field: "stake_velocity_per_hour"
+    condition_operator: "gt"
+    condition_value: 0.05
+    adr_refs: ["ADR-011"]
+
+  - rule_id: "DAO-003"
+    description: "Educate voters with trust score below threshold"
+    action: "EDUCATE"
+    severity: "medium"
+    condition_field: "trust_score"
+    condition_operator: "lt"
+    condition_value: 0.6
+    adr_refs: ["ADR-039"]
