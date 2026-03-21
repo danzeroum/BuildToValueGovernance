@@ -26,6 +26,7 @@ python/data/*.db
 rust/gateway/data/
 ops/runtime/*.db
 **/__pycache__/
+.hypothesis/
 rust/Cargo.lock
 ece_check.txt
 patch_consensus.py
