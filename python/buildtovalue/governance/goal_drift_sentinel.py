@@ -49,7 +49,7 @@ DRIFT_SCORE: dict[str, int] = {
     "None": 0, "Low": 1, "Medium": 2, "High": 3, "Critical": 4,
 }
 EFFICIENCY_PRESSURE_ACTIONS = frozenset({"ALLOW", "LOG"})
-SECURITY_PRESSURE_ACTIONS   = frozenset({"BLOCK", "REDACT", "EDUCATE", "ESCALATE_HUMAN"})
+SECURITY_PRESSURE_ACTIONS   = frozenset({"BLOCK", "REDACT", "EDUCATE", "ESCALATE_HUMAN", "REFUSE"})
 
 
 # ───────────────────────────────────────────────────────────────────────────────
