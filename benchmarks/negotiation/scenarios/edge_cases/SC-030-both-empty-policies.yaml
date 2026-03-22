@@ -1,0 +1,19 @@
+id: SC-030
+name: both_empty_policies_edge_case
+category: edge_cases
+description: >
+  Both agents have empty policy dicts.
+  _evaluate_proposal returns "accept" immediately on both sides.
+  Should confirm in the minimum number of protocol exchanges.
+
+agent_a_policy: {}
+
+agent_b_policy: {}
+
+expected:
+  outcome: confirmed
+  max_rounds: 2
+  shared_policy_must_contain: {}
+  abort_reason: null
+
+adversarial_vector: null

@@ -1,0 +1,25 @@
+id: SC-029
+name: unicode_keys_edge_case
+category: edge_cases
+description: >
+  Policy fields use Unicode keys (Japanese, Arabic, emoji).
+  The engine should process Unicode keys correctly without crashing.
+  Compatible policies — should converge.
+
+agent_a_policy:
+  "暗号化必須": true
+  "データ分類": "内部"
+
+agent_b_policy:
+  "暗号化必須": true
+  "データ分類": "内部"
+  "監査証跡": "必須"
+
+expected:
+  outcome: confirmed
+  max_rounds: 3
+  shared_policy_must_contain:
+    "暗号化必須": true
+  abort_reason: null
+
+adversarial_vector: null

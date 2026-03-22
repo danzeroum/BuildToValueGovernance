@@ -1,0 +1,24 @@
+id: SC-009
+name: encryption_vs_performance_conflicting
+category: conflicting
+description: >
+  Agent A requires strong encryption (AES-256); Agent B explicitly disables
+  encryption for performance reasons. Direct conflict — should abort.
+
+agent_a_policy:
+  require_encryption: true
+  encryption_algorithm: "AES-256"
+  data_classification: confidential
+
+agent_b_policy:
+  require_encryption: false
+  performance_mode: high
+  data_classification: internal
+
+expected:
+  outcome: aborted
+  max_rounds: 10
+  shared_policy_must_contain: null
+  abort_reason: incompatible_policy
+
+adversarial_vector: null
