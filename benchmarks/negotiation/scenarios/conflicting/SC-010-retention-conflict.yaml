@@ -1,0 +1,24 @@
+id: SC-010
+name: retention_conflict_conflicting
+category: conflicting
+description: >
+  Agent A requires data deletion after 7 days (GDPR); Agent B requires
+  data retention for 10 years (compliance audit). Irreconcilable conflict.
+
+agent_a_policy:
+  max_retention_days: 7
+  delete_on_expiry: true
+  gdpr_compliant: true
+
+agent_b_policy:
+  min_retention_years: 10
+  delete_on_expiry: false
+  compliance_audit: required
+
+expected:
+  outcome: aborted
+  max_rounds: 10
+  shared_policy_must_contain: null
+  abort_reason: incompatible_policy
+
+adversarial_vector: null

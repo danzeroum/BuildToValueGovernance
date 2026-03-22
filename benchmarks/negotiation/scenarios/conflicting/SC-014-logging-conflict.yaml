@@ -1,0 +1,24 @@
+id: SC-014
+name: logging_conflict_conflicting
+category: conflicting
+description: >
+  Agent A requires full audit logging; Agent B requires no logging
+  (privacy by design, no PII in logs). Direct boolean conflict.
+
+agent_a_policy:
+  audit_logging: required
+  log_all_access: true
+  siem_integration: true
+
+agent_b_policy:
+  audit_logging: prohibited
+  log_all_access: false
+  pii_in_logs: forbidden
+
+expected:
+  outcome: aborted
+  max_rounds: 10
+  shared_policy_must_contain: null
+  abort_reason: incompatible_policy
+
+adversarial_vector: null

@@ -1,0 +1,26 @@
+id: SC-027
+name: max_rounds_one_edge_case
+category: edge_cases
+description: >
+  max_rounds=1 with non-identical policies.
+  Only one exchange is allowed — if responder counters, proposer exceeds
+  max_rounds immediately and aborts.
+
+agent_a_policy:
+  require_encryption: true
+  mfa_required: true
+
+agent_b_policy:
+  require_encryption: true
+  data_minimisation: true
+
+engine_config:
+  max_rounds: 1
+
+expected:
+  outcome: aborted
+  max_rounds: 1
+  shared_policy_must_contain: null
+  abort_reason: max_rounds
+
+adversarial_vector: null

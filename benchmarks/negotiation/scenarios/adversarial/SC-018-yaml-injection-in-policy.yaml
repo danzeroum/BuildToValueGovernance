@@ -1,0 +1,26 @@
+id: SC-018
+name: yaml_injection_in_policy_adversarial
+category: adversarial
+description: >
+  Adversarial agent injects YAML control characters into policy field values
+  attempting to escape the policy dict and inject arbitrary content.
+  NegotiationGuard YAML injection check should block.
+
+agent_a_policy:
+  require_encryption: true
+
+agent_b_policy:
+  require_encryption: "true\n  injected_key: injected_value\n  __proto__: exploit"
+
+adversarial_injection:
+  target_field: policy.require_encryption
+  vector: yaml_control_characters
+  technique: newline_injection_with_key_escape
+
+expected:
+  outcome: aborted
+  max_rounds: 10
+  shared_policy_must_contain: null
+  abort_reason: jailbreak_blocked
+
+adversarial_vector: yaml_injection
