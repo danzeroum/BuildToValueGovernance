@@ -20,7 +20,7 @@ _log = logging.getLogger(__name__)
 _VALID_DRIFT: frozenset[str] = frozenset({"None", "Low", "Medium", "High", "Critical"})
 
 _VALID_ACTIONS: frozenset[str] = frozenset({
-    "ALLOW", "LOG", "BLOCK", "REDACT", "EDUCATE", "ESCALATE_HUMAN",
+    "ALLOW", "LOG", "BLOCK", "REDACT", "EDUCATE", "ESCALATE_HUMAN", "REFUSE",
 })
 
 # Aliases para upstream Rust uppercase (ADR-044)
