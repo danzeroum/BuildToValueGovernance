@@ -1,0 +1,132 @@
+# pa_visual_confirmation.yaml — Scenario C45: Visual/Explicit Confirmation Gate
+# Policy: BLOCK irreversible or high-impact actions without explicit confirmation signal.
+
+schema_version: "1.0"
+metadata:
+  name: "Visual Confirmation Gate Policy"
+  description: >
+    Prevents accidental or adversarially-induced high-impact actions
+    by requiring an explicit, out-of-band confirmation signal before
+    execution of IRREVERSIBLE or DESTRUCTIVE operations.
+    In an Arena A2A context where the human is async, this policy
+    enforces a structured confirmation protocol between agents:
+    the executing agent must receive a signed confirmation token
+    from the initiating agent before proceeding.
+    Implements Gilligan's care principle: pause before harm.
+  created_at: "2026-03-22"
+  updated_at: "2026-03-22"
+  author: "BTV Security Team"
+  scenario: "C45"
+  adrs: ["ADR-027", "ADR-029", "ADR-039", "ADR-045"]
+
+# Actions requiring explicit confirmation
+confirmation_required_for:
+  - "IRREVERSIBLE"
+  - "DESTRUCTIVE"
+  - "financial_transfer_above_threshold"
+  - "data_deletion_bulk"
+  - "model_deploy_production"
+  - "contract_signing"
+  - "credential_rotation"
+
+# Confirmation protocol
+confirmation_protocol:
+  method: "signed_token"               # HMAC-SHA256 signed by initiating agent
+  token_ttl_seconds: 300               # 5-minute window; expired = BLOCK
+  requires_separate_channel: true      # confirmation must arrive via different MCP channel
+  idempotency_key_required: true       # prevents replay attacks
+  block_on_missing_token: true         # fail-secure
+
+# Financial threshold for auto-confirmation-gate
+financial_threshold:
+  currency: "USD"
+  amount: 1000
+  block_above_without_confirmation: true
+
+# Trust score gate: low-trust agents require confirmation even for lower actions
+trust_score_gate:
+  below: 0.5
+  require_confirmation_for_all_irreversible: true
+
+policies:
+  - id: "VCF-001"
+    name: "Block irreversible action without signed confirmation token"
+    description: >
+      BLOCK: IRREVERSIBLE or DESTRUCTIVE action attempted without
+      a valid HMAC-SHA256 signed confirmation token within TTL.
+      Fail-secure: absent or expired token = BLOCK.
+    enabled: true
+    priority: 100
+    conditions:
+      action_impact_in:
+        - "IRREVERSIBLE"
+        - "DESTRUCTIVE"
+      confirmation_token_valid: false
+    action: BLOCK
+
+  - id: "VCF-002"
+    name: "Block financial transfer above threshold without confirmation"
+    description: >
+      BLOCK: financial transfer above USD 1000 (or equivalent)
+      without confirmation token, regardless of action_impact label.
+    enabled: true
+    priority: 100
+    conditions:
+      action_categories:
+        - "financial_transfer"
+      amount_exceeds_threshold: true
+      confirmation_token_valid: false
+    action: BLOCK
+
+  - id: "VCF-003"
+    name: "Block replay: confirmation token already consumed"
+    description: >
+      BLOCK: idempotency_key already used in this session.
+      Prevents adversarial token replay attacks.
+    enabled: true
+    priority: 100
+    conditions:
+      confirmation_token_already_consumed: true
+    action: BLOCK
+
+  - id: "VCF-004"
+    name: "Block low-trust agent irreversible action without confirmation"
+    description: >
+      BLOCK: agent trust_score < 0.5 attempting any irreversible
+      action, regardless of confirmation token presence.
+      High-risk agents require elevated confirmation (human SLA).
+    enabled: true
+    priority: 95
+    conditions:
+      agent_trust_score_below: 0.5
+      action_impact_in:
+        - "IRREVERSIBLE"
+    action: BLOCK
+
+  - id: "VCF-005"
+    name: "Educate on confirmation protocol"
+    description: >
+      EDUCATE: agent attempted irreversible action without token
+      but trust_score > 0.7 and first offense.
+      Apply Gilligan mercy: explain before BLOCK on retry.
+    enabled: true
+    priority: 60
+    conditions:
+      action_impact_in:
+        - "IRREVERSIBLE"
+      confirmation_token_valid: false
+      agent_trust_score_above: 0.70
+      first_offense: true
+    action: EDUCATE
+
+  - id: "VCF-006"
+    name: "Log all confirmation gate events"
+    description: >
+      LOG: every confirmation gate evaluation recorded with
+      token_status, action_impact, agent_id, trust_score
+      for DurableLedger audit chain.
+    enabled: true
+    priority: 10
+    conditions:
+      confirmation_gate_evaluated: true
+    action: LOG
