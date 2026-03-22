@@ -19,6 +19,9 @@ Changelog:
   v1.3.0 (Sprint 5, Gaps 1/9): SessionManager LRU+TTL — sessões expiradas
     são evictadas; ring buffer não polui com histórico obsoleto.
     max_sessions=10_000, ttl_s=1800 (alinhado com SessionTracker Rust).
+  v1.4.0: DriftDirection enum + pressure_accumulation_score em DriftReport.
+    Implementa detecção de direção assimétrica (ICLR 2026 — Asymmetric Goal
+    Drift). Retrocompatível: novos campos têm defaults em DriftReport.
 
 Filosofia: Jonas (responsabilidade preventiva), Rawls (SLA 24h contestavel).
 """
@@ -46,7 +49,7 @@ DRIFT_SCORE: dict[str, int] = {
     "None": 0, "Low": 1, "Medium": 2, "High": 3, "Critical": 4,
 }
 EFFICIENCY_PRESSURE_ACTIONS = frozenset({"ALLOW", "LOG"})
-SECURITY_PRESSURE_ACTIONS   = frozenset({"BLOCK", "REDACT", "EDUCATE", "ESCALATE_HUMAN"})
+SECURITY_PRESSURE_ACTIONS   = frozenset({"BLOCK", "REDACT", "EDUCATE", "ESCALATE_HUMAN", "REFUSE"})
 
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -57,6 +60,22 @@ class DriftAction(str, Enum):
     ALLOW           = "ALLOW"
     ESCALATE_HUMAN  = "ESCALATE_HUMAN"
     BLOCK           = "BLOCK"
+
+
+class DriftDirection(str, Enum):
+    """
+    Direção do drift de objetivo — Asymmetric Goal Drift (ICLR 2026).
+
+    SECURITY_TO_CONVENIENCE: vetor crítico — agente pressionado a abrir mão
+      de constraints de segurança em favor de eficiência/conveniência.
+      Paper 213: 100% violação nos timesteps finais sob esta pressão.
+    CONVENIENCE_TO_SECURITY: pressão inversa — ações de segurança impostas
+      enquanto drift permanece baixo (menos crítico).
+    NONE: sem padrão direcional detectável.
+    """
+    SECURITY_TO_CONVENIENCE = "SECURITY_TO_CONVENIENCE"
+    CONVENIENCE_TO_SECURITY = "CONVENIENCE_TO_SECURITY"
+    NONE                    = "NONE"
 
 
 @dataclass(frozen=True)
@@ -75,17 +94,22 @@ class DriftReport:
     explain_decision:        str
     decided_at_iso:          str
     signature:               str
+    # v1.4.0: Asymmetric Goal Drift direction + pressure accumulation (ICLR 2026)
+    drift_direction:              DriftDirection = DriftDirection.NONE
+    pressure_accumulation_score:  float          = 0.0   # [0.0, 1.0]
 
     def to_dict(self) -> dict:
         return {
-            "session_id":            self.session_id,
-            "policy_drift_detected": self.policy_drift_detected,
-            "drift_action":          self.drift_action.value,
-            "trend_pct":             self.trend_pct,
-            "asymmetric_pressure":   self.asymmetric_pressure,
-            "explain_decision":      self.explain_decision,
-            "decided_at_iso":        self.decided_at_iso,
-            "signature":             self.signature,
+            "session_id":                 self.session_id,
+            "policy_drift_detected":      self.policy_drift_detected,
+            "drift_action":               self.drift_action.value,
+            "trend_pct":                  self.trend_pct,
+            "asymmetric_pressure":        self.asymmetric_pressure,
+            "drift_direction":            self.drift_direction.value,
+            "pressure_accumulation_score": round(self.pressure_accumulation_score, 4),
+            "explain_decision":           self.explain_decision,
+            "decided_at_iso":             self.decided_at_iso,
+            "signature":                  self.signature,
         }
 
 
@@ -298,13 +322,17 @@ class GoalDriftSentinel:
         win.scores.append(score)
         win.actions.append(policy_action)
 
-        scores_list = list(win.scores)
-        trend_pct   = _compute_trend_pct(scores_list)
-        asym        = _detect_asymmetric_pressure(list(win.actions))
-        drift_det   = self._is_drift(scores_list, trend_pct, asym)
-        action      = self._decide_action(drift_det, scores_list)
-        explain     = self._build_explain(
-            session_id, drift_level, scores_list, trend_pct, asym, drift_det, action,
+        scores_list  = list(win.scores)
+        actions_list = list(win.actions)
+        trend_pct    = _compute_trend_pct(scores_list)
+        asym         = _detect_asymmetric_pressure(actions_list)
+        direction    = _compute_drift_direction(actions_list, asym)
+        pressure     = _compute_pressure_accumulation(trend_pct, asym)
+        drift_det    = self._is_drift(scores_list, trend_pct, asym)
+        action       = self._decide_action(drift_det, scores_list)
+        explain      = self._build_explain(
+            session_id, drift_level, scores_list, trend_pct, asym,
+            drift_det, action, direction, pressure,
         )
         now = datetime.now(timezone.utc).isoformat()
         sig = self._sign(session_id, drift_det, action, now)
@@ -318,6 +346,8 @@ class GoalDriftSentinel:
             explain_decision=explain,
             decided_at_iso=now,
             signature=sig,
+            drift_direction=direction,
+            pressure_accumulation_score=pressure,
         )
 
     def _get_or_create(self, session_id: str) -> _SessionWindow:
@@ -376,12 +406,15 @@ class GoalDriftSentinel:
         asym:        bool,
         detected:    bool,
         action:      DriftAction,
+        direction:   "DriftDirection" = DriftDirection.NONE,
+        pressure:    float = 0.0,
     ) -> str:
         burst = _is_burst(scores)
         parts = [
             f"[GoalDriftSentinel] session={session_id}  drift_detected={detected}",
             f"  drift_level={drift_level}  trend={trend_pct}%(ponderado)  "
             f"asymmetric_pressure={asym}  burst={burst}",
+            f"  drift_direction={direction.value}  pressure_accumulation={pressure:.4f}",
             f"  window(K={self._window_k}): {scores}",
             f"  action={action.value}",
         ]
@@ -427,6 +460,8 @@ class GoalDriftSentinel:
             explain_decision=explain,
             decided_at_iso=now,
             signature=sig,
+            drift_direction=DriftDirection.NONE,
+            pressure_accumulation_score=0.0,
         )
 
     def _sign(
@@ -486,6 +521,37 @@ def _detect_asymmetric_pressure(actions: list[str]) -> bool:
     recent = actions[-5:]
     eff_count = sum(1 for a in recent if a in EFFICIENCY_PRESSURE_ACTIONS)
     return eff_count > len(recent) // 2
+
+
+def _compute_drift_direction(actions: list[str], asym: bool) -> "DriftDirection":
+    """
+    Determina a direção do drift de objetivo (ICLR 2026 — Asymmetric Goal Drift).
+
+    SECURITY_TO_CONVENIENCE: asym=True — maioria ALLOW/LOG enquanto drift sobe.
+      Vetor crítico: paper 213 mostra 100% violação nos timesteps finais.
+    CONVENIENCE_TO_SECURITY: maioria BLOCK/ESCALATE sem pressão eficiência.
+    NONE: sem padrão direcional detectável.
+    """
+    if not actions or len(actions) < 2:
+        return DriftDirection.NONE
+    if asym:
+        return DriftDirection.SECURITY_TO_CONVENIENCE
+    recent = actions[-5:]
+    sec_count = sum(1 for a in recent if a in SECURITY_PRESSURE_ACTIONS)
+    if sec_count > len(recent) // 2:
+        return DriftDirection.CONVENIENCE_TO_SECURITY
+    return DriftDirection.NONE
+
+
+def _compute_pressure_accumulation(trend_pct: int, asym: bool) -> float:
+    """
+    Score [0.0, 1.0] de acumulação de pressão ao longo da janela temporal.
+
+    Pressão assimétrica SECURITY→CONVENIENCE recebe peso total (vetor crítico).
+    Pressão sem assimetria recebe peso reduzido (0.5x) — risco menor.
+    """
+    base = trend_pct / 100.0
+    return min(1.0, base if asym else base * 0.5)
 
 
 # ── C14: ModelPerformanceSentinel ─────────────────────────────────────────────

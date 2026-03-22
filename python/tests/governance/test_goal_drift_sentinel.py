@@ -4,8 +4,10 @@ pytest python/tests/governance/test_goal_drift_sentinel.py -v
 """
 import pytest
 from buildtovalue.governance.goal_drift_sentinel import (
-    GoalDriftSentinel, DriftAction, DriftReport, ModelPerformanceReport,
+    GoalDriftSentinel, DriftAction, DriftDirection, DriftReport,
+    ModelPerformanceReport,
     DRIFT_SCORE, _compute_trend_pct, _detect_asymmetric_pressure,
+    _compute_drift_direction, _compute_pressure_accumulation,
 )
 
 SECRET = b"btv-test-prop038-drift"
@@ -97,7 +99,8 @@ class TestInvariants:
         r = _sentinel().record_and_analyze("s1", "Low", "ALLOW")
         d = r.to_dict()
         for k in ("session_id", "policy_drift_detected", "drift_action",
-                  "trend_pct", "explain_decision", "signature"):
+                  "trend_pct", "explain_decision", "signature",
+                  "drift_direction", "pressure_accumulation_score"):
             assert k in d
 
     def test_sequence_recorded_in_report(self):
@@ -237,3 +240,125 @@ class TestModelPerformanceSentinel:
         # 15% drop — below default 20% but above custom 10%
         r = s.monitor_model_performance("model-h", 0.85, threshold=0.10)
         assert r.degradation_detected is True
+
+
+# ── v1.4.0: DriftDirection + pressure_accumulation_score ──────────────────────
+
+class TestDriftDirection:
+    """Testa detecção de direção de drift assimétrico (ICLR 2026)."""
+
+    def test_security_to_convenience_when_asymmetric(self):
+        """Maioria ALLOW/LOG enquanto drift sobe = vetor crítico."""
+        # 5 ações ALLOW com drift ascendente → asym=True → SECURITY_TO_CONVENIENCE
+        actions = ["ALLOW", "ALLOW", "ALLOW", "ALLOW", "ALLOW"]
+        direction = _compute_drift_direction(actions, asym=True)
+        assert direction == DriftDirection.SECURITY_TO_CONVENIENCE
+
+    def test_convenience_to_security_when_security_pressure(self):
+        """Maioria BLOCK/ESCALATE sem pressão de eficiência = inverso."""
+        actions = ["BLOCK", "BLOCK", "BLOCK", "ALLOW", "BLOCK"]
+        direction = _compute_drift_direction(actions, asym=False)
+        assert direction == DriftDirection.CONVENIENCE_TO_SECURITY
+
+    def test_none_when_no_pattern(self):
+        """Sem padrão dominante → NONE."""
+        actions = ["ALLOW", "BLOCK", "ALLOW", "BLOCK", "ALLOW"]
+        # asym=False, mas não há maioria de BLOCK
+        # 3 ALLOW vs 2 BLOCK em recent[-5:] → não maioria BLOCK → NONE
+        direction = _compute_drift_direction(actions, asym=False)
+        # ALLOW não é SECURITY_PRESSURE_ACTIONS, então sec_count=2, len=5, 2 > 2 → False
+        assert direction == DriftDirection.NONE
+
+    def test_none_with_insufficient_actions(self):
+        """Histórico insuficiente → NONE."""
+        assert _compute_drift_direction([], False) == DriftDirection.NONE
+        assert _compute_drift_direction(["ALLOW"], False) == DriftDirection.NONE
+
+    def test_direction_in_drift_report(self):
+        """DriftReport inclui drift_direction correto."""
+        s = _sentinel()
+        # 5 registros com ALLOW = pressão de eficiência + drift ascendente
+        for lv in ["None", "Low", "Medium", "High", "Critical"]:
+            r = s.record_and_analyze("s-dir", lv, "ALLOW")
+        # O último é Critical → asym=True → SECURITY_TO_CONVENIENCE
+        assert r.drift_direction == DriftDirection.SECURITY_TO_CONVENIENCE
+
+    def test_direction_none_when_no_drift(self):
+        """Sem pressão assimétrica e sem maioria de segurança → NONE."""
+        r = _sentinel().record_and_analyze("s-none", "Low", "ALLOW")
+        # Apenas 1 ação → insufficient → NONE
+        assert r.drift_direction == DriftDirection.NONE
+
+    def test_to_dict_includes_drift_direction(self):
+        """to_dict() expõe drift_direction como string."""
+        r = _sentinel().record_and_analyze("s-dict", "Low", "BLOCK")
+        d = r.to_dict()
+        assert "drift_direction" in d
+        assert d["drift_direction"] in {
+            DriftDirection.NONE.value,
+            DriftDirection.SECURITY_TO_CONVENIENCE.value,
+            DriftDirection.CONVENIENCE_TO_SECURITY.value,
+        }
+
+    def test_fail_secure_sets_none_direction(self, monkeypatch):
+        """Fail-secure usa NONE como direção conservadora."""
+        s = _sentinel()
+        monkeypatch.setattr(
+            s, "_analyze",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))
+        )
+        r = s.record_and_analyze("s-fs", "Low", "ALLOW")
+        assert r.drift_direction == DriftDirection.NONE
+
+
+class TestPressureAccumulation:
+    """Testa score de acumulação de pressão [0.0, 1.0]."""
+
+    def test_high_trend_with_asymmetric_gives_full_weight(self):
+        """trend_pct=80, asym=True → pressure=0.8."""
+        p = _compute_pressure_accumulation(80, asym=True)
+        assert abs(p - 0.80) < 1e-9
+
+    def test_high_trend_without_asymmetric_gives_half_weight(self):
+        """trend_pct=80, asym=False → pressure=0.4."""
+        p = _compute_pressure_accumulation(80, asym=False)
+        assert abs(p - 0.40) < 1e-9
+
+    def test_capped_at_one(self):
+        """trend_pct=100, asym=True → pressure capped at 1.0."""
+        p = _compute_pressure_accumulation(100, asym=True)
+        assert p == 1.0
+
+    def test_zero_trend_gives_zero(self):
+        """Sem trend → pressão zero."""
+        assert _compute_pressure_accumulation(0, asym=True) == 0.0
+        assert _compute_pressure_accumulation(0, asym=False) == 0.0
+
+    def test_pressure_in_drift_report(self):
+        """DriftReport inclui pressure_accumulation_score correto."""
+        r = _sentinel().record_and_analyze("s-pres", "High", "ALLOW")
+        assert isinstance(r.pressure_accumulation_score, float)
+        assert 0.0 <= r.pressure_accumulation_score <= 1.0
+
+    def test_to_dict_includes_pressure_score(self):
+        """to_dict() expõe pressure_accumulation_score como float arredondado."""
+        r = _sentinel().record_and_analyze("s-dict2", "Medium", "ALLOW")
+        d = r.to_dict()
+        assert "pressure_accumulation_score" in d
+        assert isinstance(d["pressure_accumulation_score"], float)
+
+    def test_fail_secure_gives_zero_pressure(self, monkeypatch):
+        """Fail-secure reporta pressure_accumulation_score=0.0."""
+        s = _sentinel()
+        monkeypatch.setattr(
+            s, "_analyze",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))
+        )
+        r = s.record_and_analyze("s-fs2", "Low", "ALLOW")
+        assert r.pressure_accumulation_score == 0.0
+
+    def test_explain_includes_direction_and_pressure(self):
+        """explain_decision menciona drift_direction e pressure_accumulation."""
+        r = _sentinel().record_and_analyze("s-exp", "None", "ALLOW")
+        assert "drift_direction" in r.explain_decision
+        assert "pressure_accumulation" in r.explain_decision
