@@ -40,6 +40,7 @@ from buildtovalue.governance.goal_drift_sentinel import GoalDriftSentinel, Drift
 from buildtovalue.governance.durable_ledger import DurableLedger
 
 from .a2a_channel import A2AChannel
+from .alignment_degradation_tracker import AlignmentDegradationTracker
 from .negotiation_guard import NegotiationGuard
 from .types import NegotiationMessage, NegotiationResult
 
@@ -86,6 +87,7 @@ class NegotiationEngine:
         timeout_seconds: float = 300.0,
         hmac_key: bytes = _DEFAULT_HMAC_KEY,
         session_id: Optional[str] = None,
+        tracker: Optional[AlignmentDegradationTracker] = None,
     ) -> None:
         self._own_policy = own_policy
         self._sentinel = goal_sentinel
@@ -96,6 +98,8 @@ class NegotiationEngine:
         self._hmac_key = hmac_key
         self._session_id = session_id or str(uuid.uuid4())
         self._state = NegotiationState.IDLE
+        self._tracker = tracker
+        self._last_drift_score: float = 0.0
 
     # ─── Public API ───────────────────────────────────────────────────────────
 
@@ -415,6 +419,7 @@ class NegotiationEngine:
             if k not in incoming_policy or incoming_policy[k] != self._own_policy[k]
         )
         concession_ratio = conceded / len(own_keys)
+        self._last_drift_score = concession_ratio
 
         if concession_ratio < 0.1:
             drift_level = "None"
@@ -489,7 +494,7 @@ class NegotiationEngine:
             shared_policy=shared_policy,
             rounds=rounds,
             duration_seconds=duration,
-            drift_score=0.0,
+            drift_score=self._last_drift_score,
             abort_reason=None,
             transcript=tuple(transcript),
             explain_decision=explain,
@@ -497,6 +502,14 @@ class NegotiationEngine:
             signature=sig,
         )
         self._log_result(result)
+        if self._tracker:
+            self._tracker.record_session(
+                agent_id=self._session_id,
+                session_id=self._session_id,
+                is_collaborative=True,
+                abort_reason=result.abort_reason,
+                drift_score=result.drift_score,
+            )
         return result
 
     def _abort(
@@ -521,7 +534,7 @@ class NegotiationEngine:
             shared_policy=None,
             rounds=rounds,
             duration_seconds=duration,
-            drift_score=0.0,
+            drift_score=self._last_drift_score,
             abort_reason=reason,
             transcript=tuple(transcript),
             explain_decision=explain,
@@ -529,6 +542,14 @@ class NegotiationEngine:
             signature=sig,
         )
         self._log_result(result)
+        if self._tracker:
+            self._tracker.record_session(
+                agent_id=self._session_id,
+                session_id=self._session_id,
+                is_collaborative=True,
+                abort_reason=result.abort_reason,
+                drift_score=result.drift_score,
+            )
         return result
 
     # ─── Ledger Logging ───────────────────────────────────────────────────────

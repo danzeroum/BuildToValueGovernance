@@ -1,0 +1,24 @@
+id: SC-015
+name: network_isolation_conflict_conflicting
+category: conflicting
+description: >
+  Agent A requires internet access for updates; Agent B requires full
+  air-gap (no external network). Mutually exclusive requirements.
+
+agent_a_policy:
+  internet_access: required
+  update_channel: external
+  cdn_allowed: true
+
+agent_b_policy:
+  air_gap: required
+  internet_access: forbidden
+  update_channel: internal_only
+
+expected:
+  outcome: aborted
+  max_rounds: 10
+  shared_policy_must_contain: null
+  abort_reason: incompatible_policy
+
+adversarial_vector: null
