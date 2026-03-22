@@ -1,0 +1,98 @@
+# pa_content_provenance.yaml — Scenario C41: Content Provenance Verification
+# Policy: BLOCK agent actions based on unverified or fabricated source claims.
+
+schema_version: "1.0"
+metadata:
+  name: "Content Provenance & Source Integrity Policy"
+  description: >
+    Prevents agents from propagating fabricated citations, hallucinated
+    statistics, or unverifiable source claims in A2A communication.
+    Any action derived from unverified factual claims (financial,
+    medical, legal) must be challenged before execution.
+    Implements C2PA-compatible provenance chain verification.
+  created_at: "2026-03-22"
+  updated_at: "2026-03-22"
+  author: "BTV Security Team"
+  scenario: "C41"
+  adrs: ["ADR-029", "ADR-041"]
+
+# Source classification
+source_trust_levels:
+  verified:
+    - "c2pa_signed"        # Coalition for Content Provenance and Authenticity
+    - "institutional_doi"  # doi.org verified publication
+    - "regulatory_feed"    # BACEN, SEC, FCA, EMA official feeds
+  unverified:
+    - "agent_generated"    # content produced by another agent without signature
+    - "peer_cited"         # agent cites a source but provides no verifiable URL
+    - "hallucinated_stat"  # numerical claim with no traceable origin
+
+# Actions requiring provenance check
+provenance_required_for:
+  - "publish_report"
+  - "financial_recommendation"
+  - "medical_guidance"
+  - "legal_opinion"
+  - "IRREVERSIBLE"
+
+# Minimum provenance score to allow action
+min_provenance_score: 0.75
+
+policies:
+  - id: "CPV-001"
+    name: "Block action based on unverified agent-generated claim"
+    description: >
+      BLOCK: any action where the triggering factual claim originates
+      from agent_generated or peer_cited source without C2PA signature
+      or institutional DOI, and the action category is high-impact.
+    enabled: true
+    priority: 100
+    conditions:
+      source_trust_level_in:
+        - "agent_generated"
+        - "peer_cited"
+      action_categories:
+        - "financial_recommendation"
+        - "medical_guidance"
+        - "legal_opinion"
+        - "publish_report"
+      provenance_verified: false
+    action: BLOCK
+
+  - id: "CPV-002"
+    name: "Block hallucinated statistical claim"
+    description: >
+      BLOCK: numerical claim (percentage, count, rate) propagated
+      by an agent with no traceable source URL or DOI.
+      Detected via StatisticalClaimValidator.assert_traceable().
+    enabled: true
+    priority: 100
+    conditions:
+      claim_type: "numerical_statistic"
+      source_trust_level: "hallucinated_stat"
+    action: BLOCK
+
+  - id: "CPV-003"
+    name: "Escalate low-provenance-score claims"
+    description: >
+      ESCALATE: provenance chain exists but score < 0.75.
+      Human review required before high-impact action proceeds.
+    enabled: true
+    priority: 80
+    conditions:
+      provenance_score_below: 0.75
+      action_categories:
+        - "financial_recommendation"
+        - "medical_guidance"
+    action: ESCALATE_HUMAN
+
+  - id: "CPV-004"
+    name: "Log all agent-to-agent citation chains"
+    description: >
+      LOG: every A2A message containing a factual claim must be
+      recorded with source metadata for audit trail reconstruction.
+    enabled: true
+    priority: 10
+    conditions:
+      contains_factual_claim: true
+    action: LOG
