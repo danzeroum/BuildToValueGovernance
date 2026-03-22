@@ -1,0 +1,126 @@
+# pa_privacy_geo.yaml — Scenario C43: Geographic Privacy & Cross-Border Transfer
+# Policy: BLOCK data transfers that violate jurisdictional privacy rules.
+
+schema_version: "1.0"
+metadata:
+  name: "Geographic Privacy & Cross-Border Data Transfer Policy"
+  description: >
+    Prevents agents from transferring personal data across jurisdictional
+    boundaries without adequate legal basis. Implements GDPR Art.44
+    (adequacy decisions), LGPD Art.33 (international transfer),
+    and HIPAA §164.512 (offshore disclosure).
+    Agent must declare data jurisdiction at session start;
+    any cross-border transfer requires explicit legal basis.
+  created_at: "2026-03-22"
+  updated_at: "2026-03-22"
+  author: "BTV Security Team"
+  scenario: "C43"
+  adrs: ["ADR-029", "ADR-033", "ADR-043"]
+
+# Jurisdiction classification
+jurisdictions:
+  adequate:            # GDPR adequacy decisions (EU Commission list)
+    - "EU"
+    - "UK"
+    - "CA"
+    - "JP"
+    - "NZ"
+    - "CH"
+  restricted:          # Requires Standard Contractual Clauses or equivalent
+    - "US"
+    - "IN"
+    - "SG"
+  blocked:             # No adequate protection recognised
+    - "UNKNOWN"
+    - "UNVERIFIED"
+
+# Data categories requiring geo enforcement
+geo_sensitive_categories:
+  - "health_record"
+  - "financial_pii"
+  - "biometric"
+  - "location_history"
+  - "child_data"         # COPPA / GDPR Art.8
+
+# Legal basis registry
+valid_legal_bases:
+  - "adequacy_decision"
+  - "standard_contractual_clauses"
+  - "binding_corporate_rules"
+  - "explicit_consent_documented"
+
+policies:
+  - id: "GEO-001"
+    name: "Block transfer to blocked jurisdiction"
+    description: >
+      BLOCK: any data transfer where destination_jurisdiction is
+      UNKNOWN or UNVERIFIED. Fail-secure: unknown geography = BLOCK.
+    enabled: true
+    priority: 100
+    conditions:
+      destination_jurisdiction_in:
+        - "UNKNOWN"
+        - "UNVERIFIED"
+      data_category_in:
+        - "health_record"
+        - "financial_pii"
+        - "biometric"
+        - "location_history"
+        - "child_data"
+    action: BLOCK
+
+  - id: "GEO-002"
+    name: "Block restricted jurisdiction transfer without legal basis"
+    description: >
+      BLOCK: transfer to restricted jurisdiction (US, IN, SG) without
+      a declared and verified legal basis (SCC, BCR, or consent).
+    enabled: true
+    priority: 100
+    conditions:
+      destination_jurisdiction_in:
+        - "US"
+        - "IN"
+        - "SG"
+      legal_basis_declared: false
+      data_category_in:
+        - "health_record"
+        - "financial_pii"
+        - "biometric"
+    action: BLOCK
+
+  - id: "GEO-003"
+    name: "Block child data cross-border transfer"
+    description: >
+      BLOCK: any cross-border transfer of child_data regardless of
+      jurisdiction. Requires explicit parental consent + COPPA/GDPR Art.8.
+    enabled: true
+    priority: 100
+    conditions:
+      data_category: "child_data"
+      cross_border_transfer: true
+      parental_consent_verified: false
+    action: BLOCK
+
+  - id: "GEO-004"
+    name: "Escalate undeclared jurisdiction at session start"
+    description: >
+      ESCALATE: agent does not declare data_jurisdiction at session
+      initiation. Human review required before any PII processing.
+    enabled: true
+    priority: 90
+    conditions:
+      jurisdiction_declared_at_session_start: false
+      session_processes_pii: true
+    action: ESCALATE_HUMAN
+
+  - id: "GEO-005"
+    name: "Log all cross-border transfers"
+    description: >
+      LOG: every cross-border data transfer recorded with
+      source_jurisdiction, destination_jurisdiction, legal_basis,
+      data_category for GDPR Art.30 records-of-processing audit.
+    enabled: true
+    priority: 10
+    conditions:
+      cross_border_transfer: true
+    action: LOG
