@@ -18,13 +18,14 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
 from .agent_pdp import ActionImpact, AgentDecisionRequest, AgentVerdict
 from .approval_workflow import ApprovalWorkflow
 from .chatbot_gates import GateResult
+from .visual_reasoning_guard import ReasoningGuardResult, VisualReasoningGuard
 
 logger = logging.getLogger("btv.governance.visual_input_firewall")
 
@@ -71,6 +72,7 @@ class FirewallResult:
     matched_pattern: Optional[str]
     sanitized_text: str
     explain: str
+    reasoning_check: Optional[ReasoningGuardResult] = field(default=None)
 
 
 class VisualInputFirewall:
@@ -108,11 +110,14 @@ class VisualInputFirewall:
         action_impact: str,
         request: AgentDecisionRequest,
         workflow: ApprovalWorkflow,
+        declared_task: Optional[str] = None,
+        generated_plan: Optional[str] = None,
     ) -> GateResult:
         """Sanitiza e aplica política de ação.
 
         Para ações Irreversible/Destructive de origem visual → ESCALATE.
         Para padrões adversariais → BLOCK.
+        Para planos com escalada de escopo (MM-Plan) → BLOCK (ADR-053).
         """
         result = self.sanitize(ocr_text)
 
@@ -124,6 +129,17 @@ class VisualInputFirewall:
                 gate="visual_input_firewall",
             )
 
+        # MM-Plan detection: verifica escopo do plano gerado (ADR-053)
+        if declared_task and generated_plan:
+            rg_result = VisualReasoningGuard().check_plan_scope(declared_task, generated_plan)
+            if not rg_result.allowed:
+                return GateResult(
+                    verdict=AgentVerdict.BLOCK,
+                    evidence_id=None,
+                    explain=rg_result.explain,
+                    gate="visual_input_firewall",
+                )
+
         # Ações irreversíveis de origem visual sempre requerem confirmação humana
         is_high_impact = action_impact in ("Irreversible", "IRREVERSIBLE", "Destructive", "DESTRUCTIVE")
         if is_high_impact:
@@ -132,7 +148,7 @@ class VisualInputFirewall:
         return GateResult(
             verdict=AgentVerdict.ALLOW,
             evidence_id=None,
-            explain=f"[visual_firewall] Texto OCR sanitizado — nenhum padrão adversarial detectado",
+            explain="[visual_firewall] Texto OCR sanitizado — nenhum padrão adversarial detectado",
             gate="visual_input_firewall",
         )
 
