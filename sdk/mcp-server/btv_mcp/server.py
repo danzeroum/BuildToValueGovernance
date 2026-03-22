@@ -1,12 +1,19 @@
 """
 BTV MCP Server — BuildToValue governance as MCP tools.
 
-Exposes 5 tools to any MCP-compatible AI agent (Claude, GPT, Gemini, open-source):
+Exposes 8 tools to any MCP-compatible AI agent (Claude, GPT, Gemini, open-source):
+
+Tier 1 — Governance (synchronous hot path, SLA < 50ms p99):
   1. validate_input   — Fast PII/risk scan via Rust kernel
   2. decide           — Full ethical governance (Rawls→Levinas→Jonas→Gilligan)
   3. submit_appeal    — Challenge a verdict (LGPD Art. 20 / EU AI Act Art. 14)
   4. get_trust_score  — Session trust score
   5. check_compliance — Compliance status for text
+
+Tier 2 — Agentic (async coordination path, SLA < 5s elicit, < 500ms negotiate/select):
+  6. elicit_policy    — Convert NL requirements to validated YAML policy (ADR-0055)
+  7. negotiate        — Negotiate shared security policy between agents (ADR-0056)
+  8. select_protocol  — Select security protocols for a policy (ADR-0057)
 
 Environment variables:
   BTV_API_KEY       — Required. Your BTV gateway API key.
@@ -15,6 +22,7 @@ Environment variables:
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from typing import Any
 
@@ -24,6 +32,17 @@ from mcp.types import Tool, TextContent
 
 from buildtovalue import AsyncBTVClient
 from buildtovalue.exceptions import BTVError
+
+# ─── Tier 2 Agentic imports (ADR-0054: separate from Tier 1 hot path) ────────
+
+from buildtovalue.agentic.policy_elicitor import PolicyElicitor, MockBackend
+from buildtovalue.agentic.protocol_designer import ProtocolDesigner
+from buildtovalue.agentic.protocol_registry import PROTOCOL_REGISTRY
+from buildtovalue.governance.durable_ledger import DurableLedger
+
+# Shared Tier 2 ledger (in-memory; production would use persistent storage)
+_tier2_ledger = DurableLedger(hmac_key=b"btv-mcp-tier2-v1")
+_protocol_designer = ProtocolDesigner(ledger=_tier2_ledger)
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -199,12 +218,101 @@ async def list_tools() -> list[Tool]:
                 "required": ["text"],
             },
         ),
+
+        # ── Tier 2 Agentic Tools (ADR-0054 §Performance Architecture) ──────────
+        # SLA: < 5s p99 (elicit_policy), < 500ms p99 (negotiate, select_protocol)
+
+        Tool(
+            name="elicit_policy",
+            description=(
+                "Convert natural language security requirements into a validated YAML policy. "
+                "ARIA sub-component 1 (Requirement Gathering). "
+                "Uses LLM for extraction only — policy is validated against existing PolicyEngine schema. "
+                "Tier 2 async path (SLA < 5s). Returns validated YAML dict + gap list + confidence score."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "nl_input": {
+                        "type": "string",
+                        "description": "Natural language description of security requirements",
+                    },
+                    "domain": {
+                        "type": "string",
+                        "description": "Policy domain for schema selection",
+                        "enum": [
+                            "general", "healthcare", "finance", "legal",
+                            "research", "education", "agents", "security",
+                        ],
+                    },
+                },
+                "required": ["nl_input", "domain"],
+            },
+        ),
+
+        Tool(
+            name="negotiate",
+            description=(
+                "Select appropriate security protocols for a given security policy. "
+                "ARIA sub-component 3a (Protocol Designer). "
+                "Rule-based whitelist matching — no LLM in selection loop. "
+                "Tier 2 async path (SLA < 500ms). "
+                "Returns selected protocols + unavailable roadmap protocols + rationale."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "policy": {
+                        "type": "object",
+                        "description": "Security policy dict (from elicit_policy or PolicyEngine)",
+                    },
+                    "session_id": {
+                        "type": "string",
+                        "description": "Optional session identifier for audit logging",
+                    },
+                },
+                "required": ["policy"],
+            },
+        ),
+
+        Tool(
+            name="select_protocol",
+            description=(
+                "Select appropriate security protocols for a given security policy. "
+                "ARIA sub-component 3a (Protocol Designer). "
+                "Rule-based whitelist matching — no LLM in selection loop. "
+                "Tier 2 async path (SLA < 500ms). "
+                "Returns selected protocols + unavailable roadmap protocols + rationale."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "policy": {
+                        "type": "object",
+                        "description": "Security policy dict (from elicit_policy or PolicyEngine)",
+                    },
+                    "session_id": {
+                        "type": "string",
+                        "description": "Optional session identifier for audit logging",
+                    },
+                },
+                "required": ["policy"],
+            },
+        ),
     ]
 
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     client = _get_client()
+
+    # Tier 2 agentic tools (no gateway client needed — local processing)
+    if name == "elicit_policy":
+        return await _elicit_policy(arguments)
+    elif name == "negotiate":
+        return await _negotiate_tool(arguments)
+    elif name == "select_protocol":
+        return await _select_protocol(arguments)
 
     try:
         async with client:
@@ -342,6 +450,102 @@ async def _check_compliance(client: AsyncBTVClient, args: dict) -> list[TextCont
         text += "\n**Result**: No compliance violations detected."
 
     return [TextContent(type="text", text=text)]
+
+
+# ─── Tier 2 Agentic Tool Handlers ────────────────────────────────────────────
+
+async def _elicit_policy(args: dict) -> list[TextContent]:
+    """Tier 2: Convert NL requirements to validated YAML policy (ADR-0055)."""
+    try:
+        # Use MockBackend in standalone mode (no API key configured for LLM)
+        # Production: replace with AnthropicBackend when BTV_LLM_API_KEY is set
+        llm_api_key = os.environ.get("BTV_LLM_API_KEY")
+        if llm_api_key:
+            from buildtovalue.agentic.policy_elicitor import AnthropicBackend
+            llm = AnthropicBackend(api_key=llm_api_key)
+        else:
+            # Standalone mode: return a template policy with gaps flagged
+            template_yaml = (
+                f"schema_version: '1.0'\n"
+                f"domain: {args.get('domain', 'general')}\n"
+                f"description: 'Policy elicited from: {args.get('nl_input', '')[:100]}'\n"
+            )
+            llm = MockBackend(template_yaml)
+
+        elicitor = PolicyElicitor(llm=llm, hmac_key=b"btv-mcp-elicitor-v1")
+        result = await elicitor.elicit(args["nl_input"], args.get("domain", "general"))
+
+        if result.success:
+            text = (
+                f"**PolicyElicitor Result** (ARIA sub-component 1)\n"
+                f"**Status**: {'SUCCESS' if result.success else 'FAILED'}\n"
+                f"**Domain**: {result.domain}\n"
+                f"**Confidence**: {result.confidence:.2f}\n"
+                f"**Gaps** (fields to specify): {list(result.gaps) or 'none'}\n\n"
+                f"**Generated Policy**:\n```yaml\n"
+                + "\n".join(f"{k}: {v}" for k, v in result.policy.items()) +
+                "\n```\n\n"
+                f"**Note**: Policy validated against {result.domain} schema. "
+                f"Gaps indicate fields that need manual specification."
+            )
+            if not llm_api_key:
+                text += (
+                    "\n\n⚠️ **Standalone mode**: Set BTV_LLM_API_KEY environment variable "
+                    "to enable full LLM extraction. Template policy returned."
+                )
+        else:
+            text = (
+                f"**PolicyElicitor Error**: {result.error}\n"
+                f"**Domain**: {result.domain}\n"
+                f"**Explanation**: {result.explain_decision}"
+            )
+        return [TextContent(type="text", text=text)]
+    except Exception as exc:
+        return [TextContent(type="text", text=f"elicit_policy error: {exc}")]
+
+
+async def _negotiate_tool(args: dict) -> list[TextContent]:
+    """
+    Tier 2: 'negotiate' tool — re-routes to select_protocol for this MVP.
+    Full A2A negotiation requires two connected agents; in MCP context, this
+    returns protocol recommendations for the given policy.
+    """
+    return await _select_protocol(args)
+
+
+async def _select_protocol(args: dict) -> list[TextContent]:
+    """Tier 2: Select security protocols for a policy (ADR-0057)."""
+    try:
+        policy = args.get("policy", {})
+        if not isinstance(policy, dict):
+            return [TextContent(type="text", text="select_protocol error: 'policy' must be a JSON object")]
+
+        plan = _protocol_designer.select(policy)
+
+        selected_lines = [
+            f"  - **{s.name}** ({s.category}, overhead={s.overhead}): "
+            f"satisfies {sorted(s.requirements_met)}"
+            for s in plan.selected
+        ] or ["  - *No matching available protocols*"]
+
+        unavailable_lines = [
+            f"  - **{u.name}** ({u.category}): {sorted(u.requirements_met)} [roadmap]"
+            for u in plan.unavailable
+        ] or []
+
+        text = (
+            f"**ProtocolDesigner Result** (ARIA sub-component 3a)\n"
+            f"**Level**: 2 (rule-based whitelist — deterministic, auditable)\n\n"
+            f"**Selected Protocols** ({len(plan.selected)} available today):\n"
+            + "\n".join(selected_lines) +
+            (f"\n\n**Roadmap Protocols** ({len(plan.unavailable)} planned):\n"
+             + "\n".join(unavailable_lines) if unavailable_lines else "") +
+            f"\n\n**Rationale**: {json.dumps(plan.rationale, indent=2)}\n"
+            f"**Explain**: {plan.explain_decision}\n"
+        )
+        return [TextContent(type="text", text=text)]
+    except Exception as exc:
+        return [TextContent(type="text", text=f"select_protocol error: {exc}")]
 
 
 # ─── Entry point ─────────────────────────────────────────────────────────────
