@@ -29,3 +29,10 @@ bft:
   byzantine_fault_tolerance: true
   max_faulty_agents_fraction: 0.33      # tolerates up to 33% Byzantine agents
   block_on_single_agent_critical_action: true  # solo critical actions = BLOCK
+
+# Multi-Agent Alignment Degradation — ICLR 2026 Gap
+# Detecta agentes cujo alinhamento piora em contextos colaborativos vs. solo.
+alignment_degradation:
+  threshold: 0.4        # score > 0.4 → BLOCK (taxa_problematica_collab - taxa_problematica_solo)
+  snapshot_window: 20   # ring buffer de snapshots por agente
+  min_samples: 3        # mínimo de amostras por categoria para ativar score
