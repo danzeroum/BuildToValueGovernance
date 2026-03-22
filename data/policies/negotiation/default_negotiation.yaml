@@ -1,0 +1,23 @@
+# BuildToValue v3.0 — Default Negotiation Policy
+# Composes from existing agent policies (both files confirmed at SHA c685301)
+# Used by NegotiationEngine as baseline when no domain-specific policy is provided.
+
+extends:
+  - agents/pa_commit_reveal.yaml
+  - agents/coordination_rules.yaml
+
+negotiation:
+  max_rounds: 10
+  timeout_seconds: 300
+  goal_drift_threshold: 0.3
+  require_commitment: true        # Uses commit_reveal protocol (ADR-0004)
+  require_consensus: false        # Only for >2-party negotiations
+  abort_on_drift: true            # Hard abort when GoalDriftSentinel triggers
+
+# Minimum security requirements that CANNOT be negotiated away
+non_negotiable:
+  - integrity_check: true         # HMAC verification on all messages
+  - audit_log: true               # DurableLedger append for all state transitions
+  - deobfuscation: true           # Rust kernel deobfuscation on incoming messages
+
+# ADR-054: Tier 2 agentic path — async, not on Tier 1 hot path

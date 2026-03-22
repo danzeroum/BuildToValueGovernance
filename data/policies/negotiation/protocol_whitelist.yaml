@@ -1,0 +1,75 @@
+# BuildToValue v3.0 — Protocol Whitelist
+# Maps security requirements to approved protocols.
+# Used by ProtocolDesigner (ARIA sub-component 3a).
+# This file is the authoritative source of truth for protocol_registry.py.
+# ADR-057: Protocol Designer — Level 2 (rule-based), sub-component 3a only.
+
+whitelist:
+  # ── Available today (implemented in BTV) ──────────────────────────────────
+
+  - name: commit_reveal
+    category: commitment
+    requirements: [integrity, non_repudiation]
+    trust_assumptions: []
+    overhead: low
+    implementation: buildtovalue.governance.commit_reveal
+    available: true
+    adr: 0004-immutable-ledger
+
+  - name: hmac_evidence
+    category: verification
+    requirements: [integrity, authenticity]
+    trust_assumptions: []
+    overhead: low
+    implementation: buildtovalue.governance.ffi_client
+    available: true
+    adr: 0052-forensic-audit-storage
+
+  - name: bft_consensus
+    category: consensus
+    requirements: [agreement, fault_tolerance]
+    trust_assumptions: [honest_majority]
+    overhead: medium
+    implementation: buildtovalue.governance.consensus_validator
+    available: true
+    adr: 0050-multi-run-consensus-validator
+
+  - name: blake2b_audit
+    category: verification
+    requirements: [integrity, forensics]
+    trust_assumptions: []
+    overhead: low
+    implementation: buildtovalue.governance.durable_ledger
+    available: true
+    adr: 0051-model-integrity-abliteration-detection
+
+  # ── Planned (Phase 1 — ARIA-funded M1-M6) ────────────────────────────────
+
+  - name: tee_attestation
+    category: verification
+    requirements: [confidentiality, integrity, remote_verification]
+    trust_assumptions: [tee_available]
+    overhead: medium
+    implementation: external:tee_sdk
+    available: false
+    adr: null
+
+  # ── Future (Phase 2 — Track 3 collaboration) ─────────────────────────────
+
+  - name: zk_proof
+    category: privacy
+    requirements: [privacy, verifiability]
+    trust_assumptions: []
+    overhead: high
+    implementation: external:arkworks
+    available: false
+    adr: null
+
+  - name: mpc_computation
+    category: privacy
+    requirements: [privacy, joint_computation]
+    trust_assumptions: [honest_majority]
+    overhead: high
+    implementation: external:mp_spdz
+    available: false
+    adr: null
