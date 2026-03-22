@@ -1,0 +1,21 @@
+id: SC-025
+name: empty_policy_a_edge_case
+category: edge_cases
+description: >
+  Agent A has an empty policy dict.
+  _evaluate_proposal returns "accept" immediately (own_keys is empty).
+  Should confirm in 1 round.
+
+agent_a_policy: {}
+
+agent_b_policy:
+  require_encryption: true
+  mfa_required: true
+
+expected:
+  outcome: confirmed
+  max_rounds: 1
+  shared_policy_must_contain: {}
+  abort_reason: null
+
+adversarial_vector: null

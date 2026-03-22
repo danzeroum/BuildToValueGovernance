@@ -1,0 +1,28 @@
+id: SC-002
+name: privacy_additive_compatible
+category: compatible
+description: >
+  Two agents coordinating data processing.
+  Agent A requires GDPR compliance; Agent B requires data minimisation.
+  Both are additive privacy requirements — should converge in ≤2 rounds.
+
+agent_a_policy:
+  gdpr_compliant: true
+  data_classification: personal
+  consent_required: true
+
+agent_b_policy:
+  gdpr_compliant: true
+  data_minimisation: true
+  consent_required: true
+  purpose_limitation: true
+
+expected:
+  outcome: confirmed
+  max_rounds: 2
+  shared_policy_must_contain:
+    gdpr_compliant: true
+    consent_required: true
+  abort_reason: null
+
+adversarial_vector: null

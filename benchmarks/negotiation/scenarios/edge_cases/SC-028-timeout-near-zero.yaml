@@ -1,0 +1,24 @@
+id: SC-028
+name: timeout_near_zero_edge_case
+category: edge_cases
+description: >
+  timeout_seconds=0.001 — essentially immediate timeout.
+  NegotiationEngine should abort with abort_reason=timeout before
+  any meaningful exchange can occur.
+
+agent_a_policy:
+  require_encryption: true
+
+agent_b_policy:
+  require_encryption: true
+
+engine_config:
+  timeout_seconds: 0.001
+
+expected:
+  outcome: aborted
+  max_rounds: 10
+  shared_policy_must_contain: null
+  abort_reason: timeout
+
+adversarial_vector: null

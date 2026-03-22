@@ -1,0 +1,28 @@
+id: SC-001
+name: resource_sharing_compatible
+category: compatible
+description: >
+  Two agents coordinating access to a shared database.
+  Agent A requires encryption; Agent B requires audit trail.
+  Both requirements are additive — should converge in ≤3 rounds.
+
+agent_a_policy:
+  require_encryption: true
+  data_classification: internal
+  audit_trail: optional
+
+agent_b_policy:
+  require_encryption: true
+  data_classification: internal
+  audit_trail: required
+  max_retention_days: 90
+
+expected:
+  outcome: confirmed
+  max_rounds: 3
+  shared_policy_must_contain:
+    require_encryption: true
+    audit_trail: required
+  abort_reason: null
+
+adversarial_vector: null
