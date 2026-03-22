@@ -1,0 +1,23 @@
+id: SC-013
+name: data_classification_conflict_conflicting
+category: conflicting
+description: >
+  Agent A classifies data as public; Agent B classifies same data as
+  top-secret. Classification conflict prevents policy merge.
+
+agent_a_policy:
+  data_classification: public
+  public_api_allowed: true
+
+agent_b_policy:
+  data_classification: top-secret
+  air_gap_required: true
+  public_api_allowed: false
+
+expected:
+  outcome: aborted
+  max_rounds: 10
+  shared_policy_must_contain: null
+  abort_reason: incompatible_policy
+
+adversarial_vector: null

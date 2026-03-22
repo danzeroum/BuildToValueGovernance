@@ -1,0 +1,28 @@
+id: SC-003
+name: cross_domain_trust_compatible
+category: compatible
+description: >
+  Agent A (finance domain) and Agent B (HR domain) establishing cross-domain
+  access. Both require MFA; Agent B additionally requires role-based access.
+  Additive security requirements — should converge in ≤3 rounds.
+
+agent_a_policy:
+  mfa_required: true
+  tls_version: "1.3"
+  data_classification: confidential
+
+agent_b_policy:
+  mfa_required: true
+  tls_version: "1.3"
+  rbac_required: true
+  data_classification: confidential
+
+expected:
+  outcome: confirmed
+  max_rounds: 3
+  shared_policy_must_contain:
+    mfa_required: true
+    tls_version: "1.3"
+  abort_reason: null
+
+adversarial_vector: null

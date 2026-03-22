@@ -1,0 +1,24 @@
+id: SC-007
+name: consensus_extension_compatible
+category: compatible
+description: >
+  Agents start with different but non-conflicting policies.
+  Through countering they build a consensus that extends both policies.
+
+agent_a_policy:
+  require_encryption: true
+  mfa_required: true
+
+agent_b_policy:
+  require_encryption: true
+  audit_trail: required
+  data_minimisation: true
+
+expected:
+  outcome: confirmed
+  max_rounds: 4
+  shared_policy_must_contain:
+    require_encryption: true
+  abort_reason: null
+
+adversarial_vector: null

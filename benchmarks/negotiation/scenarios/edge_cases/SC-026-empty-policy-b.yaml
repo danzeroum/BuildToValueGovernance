@@ -1,0 +1,22 @@
+id: SC-026
+name: empty_policy_b_edge_case
+category: edge_cases
+description: >
+  Agent B has an empty policy dict.
+  Agent B accepts Agent A's initial proposal immediately.
+  Should confirm in 1 round (responder accepts anything).
+
+agent_a_policy:
+  require_encryption: true
+  mfa_required: true
+
+agent_b_policy: {}
+
+expected:
+  outcome: confirmed
+  max_rounds: 2
+  shared_policy_must_contain:
+    require_encryption: true
+  abort_reason: null
+
+adversarial_vector: null
