@@ -1,0 +1,97 @@
+# pa_plugin_sandbox.yaml — Scenario C42: Plugin & Tool Execution Isolation
+# Policy: BLOCK unauthorised external code execution via agent tool-use.
+
+schema_version: "1.0"
+metadata:
+  name: "Plugin Sandbox & Tool Execution Policy"
+  description: >
+    Prevents agents from invoking plugins or tools that execute
+    arbitrary external code, access unauthorised network endpoints,
+    or escalate privileges beyond declared capability scope.
+    Implements capability-based sandboxing: every tool call must
+    match a pre-registered capability in capabilities.yaml.
+  created_at: "2026-03-22"
+  updated_at: "2026-03-22"
+  author: "BTV Security Team"
+  scenario: "C42"
+  adrs: ["ADR-027", "ADR-029", "ADR-042"]
+
+# Capability registry reference
+capability_registry: "data/policies/agents/capabilities.yaml"
+
+# Forbidden execution patterns
+forbidden_patterns:
+  - "exec_arbitrary_code"   # os.system(), subprocess, eval()
+  - "network_exfiltration"  # outbound call to non-whitelisted endpoint
+  - "privilege_escalation"  # tool requests scope beyond agent declaration
+  - "recursive_tool_call"   # tool spawns another tool without parent approval
+  - "filesystem_write_root" # write outside declared sandbox path
+
+# Sandboxing constraints
+sandbox:
+  network_whitelist_required: true   # only pre-approved endpoints
+  filesystem_scope: "declared_only"  # per capabilities.yaml
+  max_tool_call_depth: 3             # prevents recursive explosion
+  timeout_ms: 5000                   # hard timeout per tool call
+  block_on_undeclared_capability: true  # fail-secure
+
+policies:
+  - id: "PSB-001"
+    name: "Block undeclared capability invocation"
+    description: >
+      BLOCK: agent invokes a tool not listed in its capability profile
+      in capabilities.yaml. Fail-secure: unknown capability = BLOCK.
+    enabled: true
+    priority: 100
+    conditions:
+      capability_declared: false
+      tool_call: true
+    action: BLOCK
+
+  - id: "PSB-002"
+    name: "Block arbitrary code execution patterns"
+    description: >
+      BLOCK: tool call matches any forbidden_patterns entry.
+      Detected via PluginSandbox.assert_execution_pattern().
+    enabled: true
+    priority: 100
+    conditions:
+      execution_pattern_in:
+        - "exec_arbitrary_code"
+        - "network_exfiltration"
+        - "privilege_escalation"
+    action: BLOCK
+
+  - id: "PSB-003"
+    name: "Block recursive tool call beyond depth limit"
+    description: >
+      BLOCK: tool call depth exceeds max_tool_call_depth=3.
+      Prevents combinatorial explosion in adversarial agent graphs.
+    enabled: true
+    priority: 90
+    conditions:
+      tool_call_depth_exceeds: 3
+    action: BLOCK
+
+  - id: "PSB-004"
+    name: "Escalate first-time capability request"
+    description: >
+      ESCALATE: agent requests a capability not previously used in
+      this session. May indicate capability creep or prompt injection.
+    enabled: true
+    priority: 70
+    conditions:
+      capability_first_use_in_session: true
+      capability_risk_tier: "tier_1"  # per PatternRegistry
+    action: ESCALATE_HUMAN
+
+  - id: "PSB-005"
+    name: "Log all tool invocations"
+    description: >
+      LOG: every tool call recorded with capability_id, agent_id,
+      session_id, timestamp for DurableLedger audit chain.
+    enabled: true
+    priority: 10
+    conditions:
+      tool_call: true
+    action: LOG
