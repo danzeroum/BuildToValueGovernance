@@ -1,0 +1,111 @@
+# pa_rag_provenance.yaml — Scenario C44: RAG Source Poisoning & Retrieval Integrity
+# Policy: BLOCK agent actions derived from poisoned or unverified retrieval context.
+
+schema_version: "1.0"
+metadata:
+  name: "RAG Source Provenance & Retrieval Integrity Policy"
+  description: >
+    Prevents prompt injection via poisoned RAG documents.
+    An adversarial agent may inject a malicious document into a shared
+    vector store; when retrieved, it contaminates the target agent's
+    context. BTV validates the provenance chain of every retrieved
+    chunk before it enters the reasoning context.
+    Implements chunk-level BLAKE3 integrity verification.
+  created_at: "2026-03-22"
+  updated_at: "2026-03-22"
+  author: "BTV Security Team"
+  scenario: "C44"
+  adrs: ["ADR-029", "ADR-034", "ADR-044"]
+
+# Retrieval source trust levels
+retrieval_trust_levels:
+  trusted:
+    - "internal_verified"     # document ingested via BTV-signed pipeline
+    - "institutional_source"  # DOI, arXiv, regulatory feed
+  untrusted:
+    - "user_uploaded"         # uploaded without integrity check
+    - "agent_injected"        # written by another agent to shared store
+    - "external_webhook"      # retrieved from unchecked external URL
+
+# Chunk integrity requirements
+chunk_integrity:
+  blake3_hash_required: true       # every chunk must have stored BLAKE3
+  hash_verification: "at_retrieval" # verify on each retrieval, not just ingest
+  max_chunk_age_days: 90           # stale chunks require re-verification
+  block_on_hash_mismatch: true     # fail-secure
+
+# Injection pattern detection
+injection_patterns:
+  - "ignore_previous_instructions"
+  - "system_prompt_override"
+  - "role_reassignment"
+  - "jailbreak_prefix"
+  - "instruction_injection_in_document"
+
+policies:
+  - id: "RAG-001"
+    name: "Block action derived from agent-injected retrieval"
+    description: >
+      BLOCK: the reasoning context contains a chunk sourced from
+      agent_injected or external_webhook without BLAKE3 verification.
+      Fail-secure: unverified retrieval source = BLOCK on high-impact action.
+    enabled: true
+    priority: 100
+    conditions:
+      retrieval_source_in:
+        - "agent_injected"
+        - "external_webhook"
+      chunk_blake3_verified: false
+      action_categories:
+        - "financial_recommendation"
+        - "medical_guidance"
+        - "legal_opinion"
+        - "IRREVERSIBLE"
+    action: BLOCK
+
+  - id: "RAG-002"
+    name: "Block chunk with injection pattern"
+    description: >
+      BLOCK: retrieved chunk contains known injection pattern string.
+      Detected via InjectionPatternMatcher before context assembly.
+    enabled: true
+    priority: 100
+    conditions:
+      chunk_contains_injection_pattern: true
+    action: BLOCK
+
+  - id: "RAG-003"
+    name: "Block BLAKE3 hash mismatch"
+    description: >
+      BLOCK: stored BLAKE3 hash of chunk does not match recomputed
+      hash at retrieval time. Document was tampered post-ingest.
+    enabled: true
+    priority: 100
+    conditions:
+      chunk_hash_mismatch: true
+    action: BLOCK
+
+  - id: "RAG-004"
+    name: "Escalate stale chunk requiring re-verification"
+    description: >
+      ESCALATE: chunk age exceeds max_chunk_age_days=90.
+      Re-verification required before high-impact reasoning.
+    enabled: true
+    priority: 75
+    conditions:
+      chunk_age_exceeds_days: 90
+      action_categories:
+        - "financial_recommendation"
+        - "medical_guidance"
+    action: ESCALATE_HUMAN
+
+  - id: "RAG-005"
+    name: "Log all retrieval operations with provenance metadata"
+    description: >
+      LOG: every RAG retrieval recorded with chunk_id, source_type,
+      blake3_hash, retrieval_timestamp for audit chain integrity.
+    enabled: true
+    priority: 10
+    conditions:
+      rag_retrieval: true
+    action: LOG
