@@ -1,0 +1,27 @@
+id: SC-004
+name: identical_policies_compatible
+category: compatible
+description: >
+  Both agents propose identical policies.
+  Should be accepted in round 1 without any counter-offer.
+
+agent_a_policy:
+  require_encryption: true
+  tls_version: "1.3"
+  audit_trail: required
+
+agent_b_policy:
+  require_encryption: true
+  tls_version: "1.3"
+  audit_trail: required
+
+expected:
+  outcome: confirmed
+  max_rounds: 2
+  shared_policy_must_contain:
+    require_encryption: true
+    tls_version: "1.3"
+    audit_trail: required
+  abort_reason: null
+
+adversarial_vector: null

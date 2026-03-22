@@ -1,0 +1,31 @@
+id: SC-006
+name: partial_overlap_converge_compatible
+category: compatible
+description: >
+  Agents have partial overlap (>80% satisfaction) — proposer should accept
+  the responder's counter in round 2.
+
+agent_a_policy:
+  require_encryption: true
+  tls_version: "1.3"
+  audit_trail: required
+  mfa_required: true
+  data_classification: internal
+
+agent_b_policy:
+  require_encryption: true
+  tls_version: "1.3"
+  audit_trail: required
+  mfa_required: true
+  max_retention_days: 30
+
+expected:
+  outcome: confirmed
+  max_rounds: 4
+  shared_policy_must_contain:
+    require_encryption: true
+    tls_version: "1.3"
+    audit_trail: required
+  abort_reason: null
+
+adversarial_vector: null

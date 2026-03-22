@@ -1,0 +1,24 @@
+id: SC-011
+name: auth_level_mismatch_conflicting
+category: conflicting
+description: >
+  Agent A requires MFA; Agent B explicitly disallows MFA (legacy system
+  compatibility). Direct boolean conflict on mfa_required.
+
+agent_a_policy:
+  mfa_required: true
+  auth_level: high
+  sso_provider: "okta"
+
+agent_b_policy:
+  mfa_required: false
+  auth_level: basic
+  legacy_compat: true
+
+expected:
+  outcome: aborted
+  max_rounds: 10
+  shared_policy_must_contain: null
+  abort_reason: incompatible_policy
+
+adversarial_vector: null

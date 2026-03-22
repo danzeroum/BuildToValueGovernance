@@ -254,10 +254,14 @@ class ArenaReporter:
         negotiation_result: Optional[NegotiationResult],
     ) -> str:
         utility_str = f"{utility_score:.2f}" if utility_score is not None else "N/A (standalone mode)"
-        negot_str = (
-            f"negotiation_status={negotiation_result.status}, rounds={negotiation_result.rounds}"
-            if negotiation_result else "no negotiation"
-        )
+        if negotiation_result:
+            negot_str = (
+                f"negotiation_status={negotiation_result.status}, "
+                f"rounds={negotiation_result.rounds}, "
+                f"alignment_drift_score={negotiation_result.drift_score:.4f}"
+            )
+        else:
+            negot_str = "no negotiation"
         return (
             f"ArenaReport: session_id={session_id}. "
             f"Utility: {utility_str} (from Arena API). "

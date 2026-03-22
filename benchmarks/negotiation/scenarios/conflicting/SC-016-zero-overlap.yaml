@@ -1,0 +1,22 @@
+id: SC-016
+name: zero_overlap_conflicting
+category: conflicting
+description: >
+  Both agents have completely disjoint policy keys — no shared field names.
+  _evaluate_proposal returns "reject" immediately (satisfaction_ratio = 0.0).
+
+agent_a_policy:
+  require_encryption: true
+  mfa_required: true
+
+agent_b_policy:
+  data_sovereignty: eu-only
+  quantum_safe: true
+
+expected:
+  outcome: aborted
+  max_rounds: 10
+  shared_policy_must_contain: null
+  abort_reason: incompatible_policy
+
+adversarial_vector: null

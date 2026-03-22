@@ -1,0 +1,24 @@
+id: SC-012
+name: tls_version_conflict_conflicting
+category: conflicting
+description: >
+  Agent A requires TLS 1.3 minimum; Agent B is locked to TLS 1.0 (legacy).
+  Value conflict on tls_version — no common ground.
+
+agent_a_policy:
+  tls_version: "1.3"
+  tls_min_version: "1.3"
+  require_encryption: true
+
+agent_b_policy:
+  tls_version: "1.0"
+  legacy_tls_required: true
+  require_encryption: true
+
+expected:
+  outcome: aborted
+  max_rounds: 10
+  shared_policy_must_contain: null
+  abort_reason: incompatible_policy
+
+adversarial_vector: null
