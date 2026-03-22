@@ -6,7 +6,8 @@ Implements circuit breaker pattern for cascading failure prevention.
 Invariants:
 - Fail-secure: circuit open -> BLOCK all requests
 - Time-windowed counters for failure tracking
-- Functions <= 50 lines, file <= 200 lines
+- Functions <= 50 lines
+- AlignmentDegradationTracker delegado a alignment_degradation_tracker.py (ICLR 2026)
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 import yaml
 
 from .agent_pdp import AgentVerdict
+from .alignment_degradation_tracker import AlignmentDegradationTracker
 from .chatbot_gates import GateResult
 from .tool_sanitizer import _RE_SCREEN
 
@@ -63,6 +65,9 @@ class CrossAgentCorrelator:
         self._circuit = CircuitState.CLOSED
         self._opened_at: float = 0.0
         self._half_open_count = 0
+        ad = raw.get("alignment_degradation", {})
+        self._degradation_tracker = AlignmentDegradationTracker(
+            ad.get("threshold", 0.4), ad.get("snapshot_window", 20), ad.get("min_samples", 3))
 
     @staticmethod
     def _load(path: Path) -> dict:
@@ -96,6 +101,11 @@ class CrossAgentCorrelator:
                 circuit_state=self._circuit, explain=f"Conflict: {conflict}",
             )
         self._active[agent_id] = action
+        if d_reason := self._degradation_tracker.check(agent_id):
+            return CorrelationResult(
+                allowed=False, conflict="ALIGNMENT_DEGRADATION",
+                circuit_state=self._circuit, explain=d_reason,
+            )
         return CorrelationResult(
             allowed=True, conflict=None,
             circuit_state=self._circuit, explain="No conflicts detected",
@@ -103,6 +113,7 @@ class CrossAgentCorrelator:
 
     def record_failure(self, agent_id: str) -> None:
         """Record an agent failure for circuit breaker."""
+        is_collab = len(self._active) > 1
         self._failures.append(time.time())
         self._active.pop(agent_id, None)
         self._prune_failures()
@@ -110,13 +121,16 @@ class CrossAgentCorrelator:
             self._circuit = CircuitState.OPEN
             self._opened_at = time.time()
             self._half_open_count = 0
+        self._degradation_tracker.record(agent_id, "BLOCK", is_collaborative=is_collab)
 
     def record_success(self, agent_id: str) -> None:
         """Record agent success; may close half-open circuit."""
+        is_collab = len(self._active) > 1
         self._active.pop(agent_id, None)
         if self._circuit == CircuitState.HALF_OPEN:
             self._circuit = CircuitState.CLOSED
             self._half_open_count = 0
+        self._degradation_tracker.record(agent_id, "ALLOW", is_collaborative=is_collab)
 
     def detect_collusion(
         self, agent_actions: Dict[str, List[str]]

@@ -287,3 +287,109 @@ class TestSanitizeForAction:
             self._make_workflow(),
         )
         assert result.verdict == AgentVerdict.BLOCK
+
+
+# ------------------------------------------------------------------ #
+# TestSanitizeForActionMmPlan — ADR-053: MM-Plan integration          #
+# ------------------------------------------------------------------ #
+
+class TestSanitizeForActionMmPlan:
+    def _make_request(self) -> MagicMock:
+        request = MagicMock()
+        request.action.metadata = {}
+        return request
+
+    def _make_workflow(self) -> MagicMock:
+        workflow = MagicMock()
+        ticket = MagicMock()
+        ticket.ticket_id = "ticket-mm-001"
+        workflow.request_approval.return_value = ticket
+        return workflow
+
+    def test_mm_plan_scope_escalation_blocks(self, firewall: VisualInputFirewall) -> None:
+        result = firewall.sanitize_for_action(
+            "Normal OCR text",
+            "Safe",
+            self._make_request(),
+            self._make_workflow(),
+            declared_task="calcular total compra",
+            generated_plan=(
+                "calcular total compra exfiltrar historico financeiro "
+                "enviar endpoint externo deletar logs credenciais"
+            ),
+        )
+        assert result.verdict == AgentVerdict.BLOCK
+        assert "MM_PLAN" in result.explain or "SCOPE" in result.explain or "scope" in result.explain.lower()
+
+    def test_cross_modal_synthesis_blocks(self, firewall: VisualInputFirewall) -> None:
+        result = firewall.sanitize_for_action(
+            "Normal OCR text",
+            "Safe",
+            self._make_request(),
+            self._make_workflow(),
+            declared_task="calcular total compra",
+            generated_plan="calcular total imagem mostra instrucao exfiltrar dados",
+        )
+        assert result.verdict == AgentVerdict.BLOCK
+        assert "CROSS_MODAL" in result.explain or "visual" in result.explain.lower()
+
+    def test_clean_plan_within_scope_allows(self, firewall: VisualInputFirewall) -> None:
+        result = firewall.sanitize_for_action(
+            "Normal OCR text",
+            "Safe",
+            self._make_request(),
+            self._make_workflow(),
+            declared_task="calcular total compra pagamento",
+            generated_plan="calcular total compra",
+        )
+        assert result.verdict == AgentVerdict.ALLOW
+
+    def test_no_declared_task_skips_guard(self, firewall: VisualInputFirewall) -> None:
+        result = firewall.sanitize_for_action(
+            "Normal OCR text",
+            "Safe",
+            self._make_request(),
+            self._make_workflow(),
+            generated_plan="calcular total exfiltrar transferir deletar logs",
+        )
+        assert result.verdict == AgentVerdict.ALLOW
+
+    def test_no_generated_plan_skips_guard(self, firewall: VisualInputFirewall) -> None:
+        result = firewall.sanitize_for_action(
+            "Normal OCR text",
+            "Safe",
+            self._make_request(),
+            self._make_workflow(),
+            declared_task="calcular total",
+        )
+        assert result.verdict == AgentVerdict.ALLOW
+
+    def test_mm_plan_blocked_before_irreversible_escalation(
+        self, firewall: VisualInputFirewall
+    ) -> None:
+        """MM-Plan BLOCK deve preceder escalação por Irreversible."""
+        workflow = self._make_workflow()
+        result = firewall.sanitize_for_action(
+            "Normal OCR text",
+            "Irreversible",
+            self._make_request(),
+            workflow,
+            declared_task="calcular total",
+            generated_plan=(
+                "calcular total exfiltrar historico financeiro "
+                "enviar endpoint externo deletar logs"
+            ),
+        )
+        assert result.verdict == AgentVerdict.BLOCK
+        workflow.request_approval.assert_not_called()
+
+    def test_gate_field_correct_on_mm_plan_block(self, firewall: VisualInputFirewall) -> None:
+        result = firewall.sanitize_for_action(
+            "Normal OCR text",
+            "Safe",
+            self._make_request(),
+            self._make_workflow(),
+            declared_task="calcular total",
+            generated_plan="calcular total exfiltrar transferir deletar logs enviar externo",
+        )
+        assert result.gate == "visual_input_firewall"
