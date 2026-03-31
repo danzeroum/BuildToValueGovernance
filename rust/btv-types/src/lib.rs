@@ -10,8 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-// Custom serde for [u8; 64] — the serde version in this workspace only supports
-// arrays up to [T; 32] natively. Pattern matches existing kernel serde helpers.
+// Custom serde for [u8; 64] — serde only supports arrays up to [T; 32] natively.
 mod serde_bytes_64 {
     use serde::{Deserialize, Deserializer, Serializer};
 
@@ -28,6 +27,17 @@ mod serde_bytes_64 {
     }
 }
 
+/// Public re-export so btv-sigma and btv-core can use the same serde helper
+/// without duplicating the implementation.
+pub mod serde_bytes_64_pub {
+    pub use super::serde_bytes_64::serialize;
+    pub use super::serde_bytes_64::deserialize;
+}
+
+// ── Merkle verification (usable by btv-judicial without importing btv-sigma) ─────
+pub mod merkle_verify;
+pub use merkle_verify::verify_merkle_inclusion;
+
 // ── Primitive hash wrapper ────────────────────────────────────────────────────
 
 /// A BLAKE3 hash in wire format. All bytes are public — this is a read-only digest,
@@ -36,7 +46,7 @@ mod serde_bytes_64 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Blake3Hash(pub [u8; 32]);
 
-// ── Verdict types ─────────────────────────────────────────────────────────────
+// ── Verdict types ──────────────────────────────────────────────────────────────────
 
 /// Binary decision emitted by the Executive pipeline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +56,7 @@ pub enum Decision {
     Deny = 1,
 }
 
-/// Serialized verdict record — the wire format persisted to Σ and verified by
+/// Serialised verdict record — the wire format persisted to Σ and verified by
 /// `btv-judicial`. All fields are public for read access; construction requires
 /// `btv-core::Verdict::new` which consumes a linear `EvidenceToken ⊗ ComplianceToken`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,7 +70,7 @@ pub struct VerdictRecord {
     pub legislative_version: u64,
 }
 
-// ── Log-authority (Σ) types ───────────────────────────────────────────────────
+// ── Log-authority (Σ) types ──────────────────────────────────────────────────────────
 
 /// Merkle inclusion proof for a verdict in the append-only log Σ.
 /// Used by `btv-judicial` for independent verification without importing `btv-core`.
@@ -81,7 +91,7 @@ pub struct InclusionReceiptWire {
     pub timestamp: u64,
 }
 
-// ── Governance / mandate types ────────────────────────────────────────────────
+// ── Governance / mandate types ────────────────────────────────────────────────────
 
 /// Branch roles participating in MandateToken ratification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
