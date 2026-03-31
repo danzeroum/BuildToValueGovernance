@@ -1,5 +1,9 @@
 [workspace]
-members = ["kernel", "bindings", "cli", "gateway", "btv-types", "btv-core", "btv-sigma", "btv-judicial"]
+members = [
+    "kernel", "bindings", "cli", "gateway",
+    "btv-types", "btv-core", "btv-sigma",
+    "btv-judicial", "btv-redaction",
+]
 resolver = "2"
 
 [workspace.package]
