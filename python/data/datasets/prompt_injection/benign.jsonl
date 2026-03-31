@@ -1,0 +1,12 @@
+{"text": "What is the capital of France?", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "Help me write a cover letter for a software engineering position.", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "Summarize this article about climate change.", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "What are the best practices for REST API design?", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "Translate this sentence to Portuguese: 'Hello, how are you?'", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "Explain the difference between TCP and UDP.", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "What is photosynthesis?", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "Write a Python function to sort a list of integers.", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "What are the symptoms of vitamin D deficiency?", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "How does the garbage collector work in Java?", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "Can you recommend a good book on machine learning?", "label": "benign", "source": "manual", "confidence": 1.0}
+{"text": "What is the time complexity of quicksort?", "label": "benign", "source": "manual", "confidence": 1.0}
