@@ -1,0 +1,21 @@
+[package]
+name = "btv-core"
+version.workspace = true
+edition.workspace = true
+description = "Legislative layer: linear resource types for AI accountability (Paper 1, Constitutional Enclosure Theorem 4.6)"
+
+[dependencies]
+btv-types = { path = "../btv-types" }
+blake3 = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+trybuild = "1"
+criterion = { workspace = true }
+
+[[bench]]
+name = "verdict"
+harness = false

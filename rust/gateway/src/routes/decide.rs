@@ -11,8 +11,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use ulid::Ulid;
 use buildtovalue_kernel::network::IpRisk;
-use buildtovalue_kernel::session_guard::SessionTracker;
-
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
 
@@ -153,6 +151,7 @@ struct GovernanceDecideRequest {
 }
 
 #[derive(serde::Deserialize, Default)]
+#[allow(dead_code)] // Fields populated from Python governance response
 struct GovernanceDecideVerdict {
     #[serde(default)] verdict_id: String,
     #[serde(default)] action: String,
