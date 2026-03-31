@@ -8,7 +8,6 @@ use btv_redaction::{
     state_commitment::StateCommitment,
 };
 use ed25519_dalek::{SigningKey, Signer};
-use rand::RngCore;
 
 fn test_config() -> RedactionConfig {
     RedactionConfig {
@@ -35,11 +34,11 @@ fn sample_stats() -> LedgerStatistics {
     }
 }
 
-fn make_entry(group: &str, approved: bool, seed: u8) -> RedactionEntry {
-    let mut secret = [seed; 32];
+/// Constrói uma RedactionEntry com assinatura válida para o `timestamp` e `group` dados.
+fn make_entry(group: &str, approved: bool, seed: u8, timestamp: u64) -> RedactionEntry {
+    let secret = [seed; 32];
     let sk = SigningKey::from_bytes(&secret);
     let verdict_hash = [seed; 32];
-    let timestamp: u64 = 1_700_000_001;
 
     let mut msg = Vec::new();
     msg.extend_from_slice(&verdict_hash);
@@ -62,19 +61,20 @@ fn make_entry(group: &str, approved: bool, seed: u8) -> RedactionEntry {
 async fn balanced_redaction_passes() {
     let engine = AccountableRedaction::new(test_config(), RedactionVerifier::placeholder());
     let stats  = sample_stats();
+    let ts = 1_700_000_001u64;
 
     let entries = vec![
-        make_entry("gender:female", true,  0),
-        make_entry("gender:female", false, 1),
-        make_entry("gender:male",   true,  2),
-        make_entry("gender:male",   false, 3),
-        make_entry("race:black",    true,  4),
-        make_entry("race:black",    false, 5),
-        make_entry("race:white",    true,  6),
-        make_entry("race:white",    false, 7),
+        make_entry("gender:female", true,  0, ts),
+        make_entry("gender:female", false, 1, ts),
+        make_entry("gender:male",   true,  2, ts),
+        make_entry("gender:male",   false, 3, ts),
+        make_entry("race:black",    true,  4, ts),
+        make_entry("race:black",    false, 5, ts),
+        make_entry("race:white",    true,  6, ts),
+        make_entry("race:white",    false, 7, ts),
     ];
 
-    let result = engine.execute(&stats, entries, 1_700_000_001).await;
+    let result = engine.execute(&stats, entries, ts).await;
     assert!(result.is_ok(), "Balanced redaction should pass: {:?}", result.err());
 }
 
@@ -85,13 +85,14 @@ async fn selective_deletion_detected() {
         RedactionVerifier::placeholder(),
     );
     let stats = sample_stats();
+    let ts = 1_700_000_002u64;
 
     // Remove 100 denied de gender:female: taxa sobe de 80% para ~89% (delta=0.09 > epsilon=0.02)
     let entries: Vec<RedactionEntry> = (0..100u8)
-        .map(|i| make_entry("gender:female", false, i))
+        .map(|i| make_entry("gender:female", false, i, ts))
         .collect();
 
-    let result = engine.execute(&stats, entries, 1_700_000_002).await;
+    let result = engine.execute(&stats, entries, ts).await;
     assert!(result.is_err());
     match result.unwrap_err() {
         RedactionError::EpsilonViolation { group, delta, epsilon } => {
@@ -113,7 +114,8 @@ async fn empty_batch_rejected() {
 #[tokio::test]
 async fn commitment_pair_is_binding() {
     let stats_before = sample_stats();
-    let entries = vec![make_entry("gender:female", false, 10)];
+    let ts = 1_700_000_004u64;
+    let entries = vec![make_entry("gender:female", false, 10, ts)];
     let stats_after = stats_before.simulate_redaction(&entries);
 
     let com_before = StateCommitment::from_statistics(&stats_before);
