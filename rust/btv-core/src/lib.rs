@@ -1,16 +1,21 @@
 //! `btv-core` — Legislative layer: linear resource types for AI accountability.
 //!
-//! Implements the **Constitutional Enclosure Theorem (4.6)** from Paper 1:
-//! no well-typed program in Safe Rust can produce a `Verdict` without consuming
-//! exactly one `EvidenceToken ⊗ ComplianceToken`.
+//! **Phase 1**: Implements the Constitutional Enclosure Theorem (4.6) from Paper 1.
+//! **Phase 2**: Adds the Transparency Persistence layer (Paper 2, Theorem IV):
+//!   `InclusionReceipt`, `DeliveryToken`, `LogClient`.
 //!
-//! This crate is the **Legislativo** in the Algorithmic Republic:
-//! - It defines the rules that the Executivo (`btv-executive`) must obey.
-//! - It contains the `pub(crate)` constructors that are capability-guarded.
-//! - `btv-judicial` must import only `btv-types`, never this crate.
+//! No well-typed program in Safe Rust can deliver a decision without:
+//! 1. Consuming exactly one `EvidenceToken ⊗ ComplianceToken` (Phase 1)
+//! 2. Obtaining a signed `InclusionReceipt` from Σ (Phase 2)
+//!
+//! Architecture:
+//! - `btv-sigma` is a separate binary operating under independent custody (Paper 2, Axiom III-C).
+//! - `LogClient` lives here because `btv-executive` (Phase 3) calls it.
+//! - `btv-sigma` depends ONLY on `btv-types`, NEVER on `btv-core`.
 #![deny(unsafe_code)]
 #![deny(unused_must_use)]
 
+// Phase 1 modules
 mod hash;
 mod hmac;
 mod evidence_token;
@@ -21,8 +26,15 @@ mod operator_token;
 mod escalated_verdict;
 mod attestable;
 
-// ── Public API — carefully curated ───────────────────────────────────────────
+// Phase 2 modules
+mod inclusion_receipt;
+mod delivery_token;
+#[cfg(feature = "log-client")]
+mod log_client;
 
+// ── Public API ────────────────────────────────────────────────────────────────────
+
+// Phase 1
 pub use evidence_token::EvidenceToken;
 pub use compliance_token::ComplianceToken;
 pub use compliance_authority::{ComplianceAuthority, ComplianceRegistry, ComplianceError};
@@ -30,6 +42,12 @@ pub use verdict::Verdict;
 pub use operator_token::OperatorToken;
 pub use escalated_verdict::EscalatedVerdict;
 pub use attestable::{AttestableContext, AttestedEvidenceToken};
+
+// Phase 2
+pub use inclusion_receipt::InclusionReceipt;
+pub use delivery_token::{DeliveryToken, DeliveryPayload, SealError};
+#[cfg(feature = "log-client")]
+pub use log_client::{LogClient, LogClientError};
 
 // Re-export wire types for convenience
 pub use btv_types::{Decision, VerdictRecord, Blake3Hash as Blake3HashWire};
