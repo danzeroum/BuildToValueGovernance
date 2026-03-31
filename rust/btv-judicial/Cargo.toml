@@ -1,0 +1,29 @@
+[package]
+name = "btv-judicial"
+version.workspace = true
+edition.workspace = true
+description = "Judicial power: independent verification of executive decisions (Paper 5, Theorem 3.4)"
+
+[dependencies]
+# Invariante constitucional: btv-judicial depende APENAS de btv-types.
+# NUNCA btv-core, btv-executive, btv-kernel.
+btv-types = { path = "../btv-types" }
+sha2      = { workspace = true }
+hmac      = { workspace = true }
+ed25519-dalek = { workspace = true }
+reqwest   = { workspace = true }
+serde     = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono    = { workspace = true }
+hex       = { workspace = true }
+rand      = { workspace = true }
+tracing   = { workspace = true }
+
+[dev-dependencies]
+tokio     = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name    = "judicial"
+harness = false
