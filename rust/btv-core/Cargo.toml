@@ -2,7 +2,7 @@
 name = "btv-core"
 version.workspace = true
 edition.workspace = true
-description = "Legislative layer: linear resource types for AI accountability (Paper 1, Constitutional Enclosure Theorem 4.6)"
+description = "Legislative layer: linear resource types for AI accountability (Paper 1 + Paper 2)"
 
 [dependencies]
 btv-types = { path = "../btv-types" }
@@ -11,10 +11,21 @@ hmac = { workspace = true }
 sha2 = { workspace = true }
 ed25519-dalek = { workspace = true }
 thiserror = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# LogClient HTTP (Phase 2) — feature-gated to keep hot path free of async deps
+reqwest = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+
+[features]
+# Enable LogClient (requires reqwest + tokio)
+log-client = ["reqwest", "tokio"]
 
 [dev-dependencies]
 trybuild = "1"
 criterion = { workspace = true }
+tokio = { workspace = true }
 
 [[bench]]
 name = "verdict"
