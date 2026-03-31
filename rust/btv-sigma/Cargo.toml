@@ -1,0 +1,28 @@
+[package]
+name = "btv-sigma"
+version.workspace = true
+edition.workspace = true
+description = "Guardian of Σ — append-only Transparency Log Authority (Paper 2, Paper 5 Definition 3.1)"
+
+[[bin]]
+name = "btv-sigma"
+path = "src/main.rs"
+
+[dependencies]
+# btv-sigma depends ONLY on btv-types — NEVER btv-core (CI invariant)
+btv-types = { path = "../btv-types" }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+reqwest = { workspace = true }
