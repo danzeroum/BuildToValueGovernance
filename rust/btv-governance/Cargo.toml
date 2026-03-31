@@ -7,21 +7,22 @@ license.workspace = true
 description = "Pouvoir constituant: MandateToken, Tripartite Ratification, Living Constitution (Paper 6)"
 
 [dependencies]
-btv-types   = { path = "../btv-types" }
-blake3      = { workspace = true }
+btv-types     = { path = "../btv-types" }
+blake3        = { workspace = true }
 ed25519-dalek = { workspace = true }
-chrono      = { workspace = true }
-serde       = { workspace = true }
-serde_json  = { workspace = true }
-reqwest     = { workspace = true }
-thiserror   = { workspace = true }
-tracing     = { workspace = true }
+chrono        = { workspace = true }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+reqwest       = { workspace = true }
+thiserror     = { workspace = true }
+tracing       = { workspace = true }
+hex           = { workspace = true }
 
 [dev-dependencies]
-tokio     = { workspace = true, features = ["full"] }
-criterion = { workspace = true, features = ["html_reports"] }
+tokio         = { workspace = true, features = ["full"] }
+criterion     = { workspace = true, features = ["html_reports"] }
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
-rand      = { workspace = true }
+rand          = { workspace = true }
 
 [[bench]]
 name    = "governance"
