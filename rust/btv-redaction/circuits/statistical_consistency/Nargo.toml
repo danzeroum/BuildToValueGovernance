@@ -1,0 +1,10 @@
+[package]
+name = "statistical_consistency"
+type = "bin"
+authors = ["BuildToValue Team"]
+compiler_version = ">=0.36.0"
+
+# Paper 3, Theorem 4.1: epsilon-statistical consistency
+# Curva: BN254 (Barretenberg)
+# Proof system: Groth16 (ou PLONK se trusted setup indesejavel)
+# Gate count estimado: ~5.2M (a ser confirmado com nargo compile)
