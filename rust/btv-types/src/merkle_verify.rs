@@ -22,11 +22,11 @@ pub fn verify_merkle_inclusion(
         let mut hasher = Sha256::new();
         // Canonical ordering: smaller hash first prevents ordering oracle attacks.
         if &current <= node {
-            hasher.update(&current);
+            hasher.update(current);
             hasher.update(node);
         } else {
             hasher.update(node);
-            hasher.update(&current);
+            hasher.update(current);
         }
         current = hasher.finalize().into();
     }
