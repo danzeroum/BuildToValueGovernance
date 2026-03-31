@@ -64,16 +64,28 @@ impl std::fmt::Display for PolicyDecision {
 /// 1. `account_type` ausente → BLOCK (fail-secure).
 /// 2. Conta `Untouchable` → BLOCK absoluto.
 /// 3. Conta `Reserve` sem `has_human_sig` → BLOCK.
-/// 4. Finalidade `operational`/`gas_fee`/`compute_fee` em conta `Reserve` → BLOCK.
+/// 4. Finalidade `operational`/`gas_fee`/`compute_fee` em conta `Reserve` → BLOCK
+///    mesmo com assinatura humana — reservas nunca financiam manutenção do agente.
 /// 5. Demais casos → ALLOW.
 ///
 /// # Exemplos
 /// ```
 /// use buildtovalue_kernel::policy::budget_enforcer::{enforce, PolicyDecision};
+///
+/// // Regra 1: account_type ausente → BLOCK
 /// assert_eq!(enforce(None, "gas_fee", false), PolicyDecision::Block);
+///
+/// // Regra 3: reserve sem assinatura → BLOCK
 /// assert_eq!(enforce(Some("reserve"), "operational", false), PolicyDecision::Block);
+///
+/// // Regra 4: reserve + finalidade operacional → BLOCK mesmo com sig
+/// assert_eq!(enforce(Some("reserve"), "gas_fee", true), PolicyDecision::Block);
+///
+/// // Regra 5: operational account → ALLOW sem sig
 /// assert_eq!(enforce(Some("operational"), "gas_fee", false), PolicyDecision::Allow);
-/// assert_eq!(enforce(Some("reserve"), "gas_fee", true), PolicyDecision::Allow);
+///
+/// // Regra 5: reserve + finalidade não-operacional + sig humana → ALLOW
+/// assert_eq!(enforce(Some("reserve"), "emergency_medical", true), PolicyDecision::Allow);
 /// ```
 pub fn enforce(
     account_type: Option<&str>,
