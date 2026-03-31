@@ -13,8 +13,8 @@
 //!
 //! # Serde note
 //! `serde` does not derive `Deserialize` for `[u8; N]` when N > 32.
-//! We implement custom helpers via `serde_hex` (inline, uses `hex` from workspace)
-//! so the wire format is a lowercase hex string — zero external dependencies added.
+//! We provide `serde_hex` helpers (hex string wire format) using the
+//! `hex` crate already present in the workspace.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,31 +24,33 @@ use crate::ratification::verify_tripartite_signatures;
 
 // ── serde helpers for fixed-size byte arrays ─────────────────────────────────
 
-/// Serde module: serialises `[u8; N]` as a lowercase hex string.
-/// Works for any fixed-size array via the generic helpers below.
 mod serde_hex {
-    use serde::{Deserializer, Serializer, de::Error};
+    use serde::{Deserialize as _, Deserializer, Serializer, de::Error};
 
     pub mod bytes_64 {
         use super::*;
+
         pub fn serialize<S: Serializer>(v: &[u8; 64], s: S) -> Result<S::Ok, S::Error> {
             s.serialize_str(&hex::encode(v))
         }
+
         pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 64], D::Error> {
-            let s = <&str>::deserialize(d)?;
-            let b = hex::decode(s).map_err(D::Error::custom)?;
+            let s = String::deserialize(d)?;
+            let b = hex::decode(&s).map_err(D::Error::custom)?;
             b.try_into().map_err(|_| D::Error::custom("expected 64-byte hex string"))
         }
     }
 
     pub mod bytes_32 {
         use super::*;
+
         pub fn serialize<S: Serializer>(v: &[u8; 32], s: S) -> Result<S::Ok, S::Error> {
             s.serialize_str(&hex::encode(v))
         }
+
         pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 32], D::Error> {
-            let s = <&str>::deserialize(d)?;
-            let b = hex::decode(s).map_err(D::Error::custom)?;
+            let s = String::deserialize(d)?;
+            let b = hex::decode(&s).map_err(D::Error::custom)?;
             b.try_into().map_err(|_| D::Error::custom("expected 32-byte hex string"))
         }
     }
@@ -78,33 +80,28 @@ pub enum AmendmentId {
 /// are serialised as lowercase hex strings for JSON/YAML compatibility.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RatificationProof {
-    /// The amendment that was ratified.
     pub amendment: AmendmentId,
 
-    /// Ed25519 signature — Legislative branch.
     #[serde(with = "serde_hex::bytes_64")]
     pub legislative_sig: [u8; 64],
 
-    /// Ed25519 signature — Judicial branch.
     #[serde(with = "serde_hex::bytes_64")]
     pub judicial_sig: [u8; 64],
 
-    /// Ed25519 signature — Executive Representative.
     #[serde(with = "serde_hex::bytes_64")]
     pub executive_rep_sig: [u8; 64],
 
-    /// Anti-replay nonce — unique per ratification event.
     #[serde(with = "serde_hex::bytes_32")]
     pub nonce: [u8; 32],
 
-    /// UTC timestamp of ratification.
     pub timestamp: DateTime<Utc>,
 
-    /// Ed25519 verifying keys (32-byte compressed) for each branch.
     #[serde(with = "serde_hex::bytes_32")]
-    pub legislative_pubkey:   [u8; 32],
+    pub legislative_pubkey: [u8; 32],
+
     #[serde(with = "serde_hex::bytes_32")]
-    pub judicial_pubkey:      [u8; 32],
+    pub judicial_pubkey: [u8; 32],
+
     #[serde(with = "serde_hex::bytes_32")]
     pub executive_rep_pubkey: [u8; 32],
 }
@@ -113,72 +110,44 @@ pub struct RatificationProof {
 
 /// A constitutional mandate — binds a legislative version to an expiry time.
 ///
-/// This is the **only** token that authorises `Verdict::new`.
-/// It flows through the Transparency Log (Σ) — never via direct import
-/// from `btv-governance` into `btv-executive` (T3 enforced structurally).
+/// The **only** token that authorises `Verdict::new`.
+/// Flows through Σ (Transparency Log) — never via direct Rust import into
+/// `btv-executive` (T3 structurally enforced).
 ///
-/// Properties enforced by the type system:
-/// - Cannot be cloned or copied (linear resource)
-/// - `#[must_use]` — silent drop produces a compile warning
-/// - Expiry is checked on every use via `borrow_live()`
+/// - No `Clone`, no `Copy` — linear resource
+/// - `#[must_use]` — silent drop is a compile warning
+/// - Expiry checked on every use via `borrow_live()`
 #[must_use = "MandateToken must be published in Σ and consumed by the Executive pipeline"]
 pub struct MandateToken {
-    /// Legislative version this mandate covers.
     pub legislative_version: u64,
-
-    /// UTC expiry — after this instant `is_live()` returns `false`.
     pub expiry: DateTime<Utc>,
-
-    /// Proof of Tripartite Ratification (or genesis proof for v0).
     pub ratification: RatificationProof,
-
-    /// BLAKE3 hash of this mandate (private — only `btv-governance` writes it).
     mandate_hash: [u8; 32],
 }
 
 impl MandateToken {
-    /// Construct a new mandate from a ratified proof.
-    ///
-    /// The mandate is **not** yet published in Σ — call
-    /// `GovernanceBridge::publish_mandate` after construction.
     pub fn new(
         legislative_version: u64,
         expiry: DateTime<Utc>,
         ratification: RatificationProof,
     ) -> Self {
-        let mandate_hash =
-            Self::compute_hash(legislative_version, &expiry, &ratification);
-        Self {
-            legislative_version,
-            expiry,
-            ratification,
-            mandate_hash,
-        }
+        let mandate_hash = Self::compute_hash(legislative_version, &expiry, &ratification);
+        Self { legislative_version, expiry, ratification, mandate_hash }
     }
 
-    /// Returns `true` if the mandate has not yet expired.
-    ///
-    /// Paper 6, Theorem 3.6: if `t_now >= t_exp` the system must enter
-    /// Constitutional Interregnum — no new decisions are produced.
     #[inline]
     pub fn is_live(&self) -> bool {
         Utc::now() < self.expiry
     }
 
-    /// Wall-clock time remaining before expiry.
     pub fn time_remaining(&self) -> std::time::Duration {
         let now = Utc::now();
         if now >= self.expiry {
             return std::time::Duration::ZERO;
         }
-        (self.expiry - now)
-            .to_std()
-            .unwrap_or(std::time::Duration::ZERO)
+        (self.expiry - now).to_std().unwrap_or(std::time::Duration::ZERO)
     }
 
-    /// Borrow this mandate only if it is currently live.
-    ///
-    /// Returns `Err(GovernanceError::MandateExpired)` if expired.
     pub fn borrow_live(&self) -> Result<&Self, GovernanceError> {
         if self.is_live() {
             Ok(self)
@@ -190,30 +159,19 @@ impl MandateToken {
         }
     }
 
-    /// BLAKE3 hash of this mandate — used as the Σ entry key.
     #[inline]
-    pub fn hash(&self) -> &[u8; 32] {
-        &self.mandate_hash
-    }
+    pub fn hash(&self) -> &[u8; 32] { &self.mandate_hash }
 
-    /// Legislative version bound to this mandate.
     #[inline]
-    pub fn version(&self) -> u64 {
-        self.legislative_version
-    }
+    pub fn version(&self) -> u64 { self.legislative_version }
 
-    /// UTC expiry timestamp.
     #[inline]
-    pub fn expiry(&self) -> DateTime<Utc> {
-        self.expiry
-    }
+    pub fn expiry(&self) -> DateTime<Utc> { self.expiry }
 
-    /// Verify the embedded Tripartite Ratification proof.
     pub fn verify_ratification(&self) -> bool {
         verify_tripartite_signatures(&self.ratification)
     }
 
-    /// Serialise to wire format for Σ publication and Executive consumption.
     pub fn to_wire(&self) -> MandateWire {
         MandateWire {
             legislative_version: self.legislative_version,
@@ -222,8 +180,6 @@ impl MandateToken {
             mandate_hash:        self.mandate_hash,
         }
     }
-
-    // ── private ──────────────────────────────────────────────────────────────
 
     fn compute_hash(
         version:      u64,
@@ -245,28 +201,18 @@ impl MandateToken {
 
 // ── MandateWire ──────────────────────────────────────────────────────────────
 
-/// Wire representation of a MandateToken.
-///
-/// This is what flows through Σ and is consumed by `btv-executive`.
-/// Contains no private state; can be freely cloned/serialised.
+/// Serialisable wire format of a MandateToken.
+/// Flows through Σ; consumed by `btv-executive` via JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MandateWire {
-    /// Legislative version bound to this mandate.
     pub legislative_version: u64,
-
-    /// UTC expiry as Unix timestamp (seconds).
     pub expiry_utc: i64,
-
-    /// Tripartite ratification proof.
     pub ratification: RatificationProof,
-
-    /// BLAKE3 hash — used to verify wire integrity.
     #[serde(with = "serde_hex::bytes_32")]
     pub mandate_hash: [u8; 32],
 }
 
 impl MandateWire {
-    /// Returns `true` if the mandate has not yet expired.
     #[inline]
     pub fn is_live(&self) -> bool {
         Utc::now().timestamp() < self.expiry_utc
