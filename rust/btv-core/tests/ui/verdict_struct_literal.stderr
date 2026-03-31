@@ -1,0 +1,27 @@
+warning: unreachable expression
+ --> tests/ui/verdict_struct_literal.rs:9:19
+  |
+8 |         evidence_hash: todo!(),
+  |                        ------- any code following this expression is unreachable
+9 |         decision: Decision::Allow,
+  |                   ^^^^^^^^^^^^^^^ unreachable expression
+  |
+  = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+error[E0451]: fields `evidence_hash`, `decision`, `explanation`, `hmac_seal`, `jurisdiction` and `policy_version` of struct `Verdict` are private
+  --> tests/ui/verdict_struct_literal.rs:8:9
+   |
+ 7 |     let _v = Verdict {
+   |              ------- in this type
+ 8 |         evidence_hash: todo!(),
+   |         ^^^^^^^^^^^^^ private field
+ 9 |         decision: Decision::Allow,
+   |         ^^^^^^^^ private field
+10 |         explanation: String::new(),
+   |         ^^^^^^^^^^^ private field
+11 |         hmac_seal: [0u8; 32],
+   |         ^^^^^^^^^ private field
+12 |         jurisdiction: String::new(),
+   |         ^^^^^^^^^^^^ private field
+13 |         policy_version: String::new(),
+   |         ^^^^^^^^^^^^^^ private field

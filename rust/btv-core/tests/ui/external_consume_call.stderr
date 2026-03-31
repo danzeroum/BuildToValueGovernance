@@ -1,0 +1,10 @@
+error[E0624]: method `consume` is private
+ --> tests/ui/external_consume_call.rs:7:23
+  |
+7 |     let _hash = token.consume();
+  |                       ^^^^^^^ private method
+  |
+ ::: src/evidence_token.rs
+  |
+  |     pub(crate) fn consume(self) -> Blake3Hash {
+  |     ----------------------------------------- private method defined here

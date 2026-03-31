@@ -1,6 +1,6 @@
 
 use ring::hmac;
-use ring::signature::{Ed25519KeyPair, UnparsedPublicKey, ED25519};
+use ring::signature::{Ed25519KeyPair, KeyPair, UnparsedPublicKey, ED25519};
 use std::fs;
 use std::path::Path;
 use zeroize::Zeroizing;

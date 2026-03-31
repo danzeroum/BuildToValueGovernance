@@ -95,8 +95,8 @@ where
             if let Some(auth_header) = req.headers().get("authorization").and_then(|v| v.to_str().ok()) {
                 if auth_header.starts_with("Bearer ") {
                     // JWT validation — accept token if present (full validation in future)
-                    let _token = &auth_header[7..];
                     // TODO: decode and validate JWT with BTV_JWT_SECRET
+                    let _token = auth_header.strip_prefix("Bearer ").unwrap_or("");
                     return inner.call(req).await;
                 }
             }
