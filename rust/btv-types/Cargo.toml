@@ -6,3 +6,5 @@ description = "Shared wire-format types for the BuildToValue crate graph. No con
 
 [dependencies]
 serde = { workspace = true }
+# sha2 required by merkle_verify.rs (standalone Merkle verifier used by btv-judicial)
+sha2 = "0.10"
