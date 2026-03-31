@@ -38,13 +38,13 @@ pub mod serde_bytes_64_pub {
 pub mod merkle_verify;
 pub use merkle_verify::verify_merkle_inclusion;
 
-// ── Primitive hash wrapper ────────────────────────────────────────────────────
+// ── Primitive hash wrapper ─────────────────────────────────────────────
 
 /// A BLAKE3 hash in wire format. All bytes are public — read-only digest, not a capability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Blake3Hash(pub [u8; 32]);
 
-// ── Decision + Risk ──────────────────────────────────────────────────────────────────
+// ── Decision + Risk ───────────────────────────────────────────────────────────────────
 
 /// Binary decision emitted by the Executive pipeline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,7 +77,7 @@ impl RiskLevel {
     }
 }
 
-// ── Verdict ───────────────────────────────────────────────────────────────────────────
+// ── Verdict ──────────────────────────────────────────────────────────────────────────────────────
 
 /// Serialised verdict record — wire format persisted to Σ and verified by btv-judicial.
 /// Construction requires `btv-core::Verdict::new` which consumes a linear `E ⊗ C`.
@@ -92,7 +92,7 @@ pub struct VerdictRecord {
     pub legislative_version: u64,
 }
 
-// ── Log-authority (Σ) types ─────────────────────────────────────────────────────────
+// ── Log-authority (Σ) types ─────────────────────────────────────────────────────────────
 
 /// Merkle inclusion proof for independent verification by btv-judicial.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,7 +112,7 @@ pub struct InclusionReceiptWire {
     pub timestamp:   u64,
 }
 
-// ── Delivery (Phase 3) ────────────────────────────────────────────────────────────────
+// ── Delivery (Phase 3) ─────────────────────────────────────────────────────────────────────────
 
 /// The payload delivered to the end-user. Contains all public data.
 /// Integrity is guaranteed by HMAC seal (verdict) and Ed25519 signature (receipt),
@@ -136,7 +136,42 @@ pub struct AuditEntry {
     pub latency_us:      u64,
 }
 
-// ── Governance / mandate types ────────────────────────────────────────────────────
+// ── Redaction (Phase 5) ─────────────────────────────────────────────────────────────────────
+
+/// Wire format de RedactionReceipt — verificável pelo Judiciário (btv-judicial).
+///
+/// Contém a prova ZK (Groth16/PLONK) que garante
+/// |q_g^antes − q_g^depois| ≤ ε para TODOS os grupos protegidos g,
+/// sem revelar as estatísticas reais (Paper 3, Theorem 4.1).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RedactionReceiptWire {
+    /// ID único do batch de redação.
+    pub batch_id: String,
+    /// Número de entradas redacionadas.
+    pub entries_count: usize,
+    /// Pedersen commitment ANTES da redação (comprimido, 32 bytes).
+    pub commitment_before: [u8; 32],
+    /// Pedersen commitment APÓS a redação.
+    pub commitment_after: [u8; 32],
+    /// Tolerância ε usada para este batch.
+    pub epsilon: f64,
+    /// Grupos protegidos afetados.
+    pub affected_groups: Vec<String>,
+    /// Bytes da prova ZK (~3.2kB para Barretenberg).
+    /// Vazio no modo direct (sem Noir) — integração completa na Fase 5 (Semanas 18-30).
+    pub proof_bytes: Vec<u8>,
+    /// Inputs públicos usados para verificação (excluindo witness).
+    pub public_inputs: Vec<[u8; 32]>,
+    /// Timestamp da redação.
+    pub timestamp: u64,
+    /// Assinatura Ed25519 da autoridade redatora.
+    #[serde(with = "serde_bytes_64")]
+    pub authority_signature: [u8; 64],
+    /// Chave pública da autoridade redatora.
+    pub authority_pubkey: [u8; 32],
+}
+
+// ── Governance / mandate types ─────────────────────────────────────────────────────────
 
 /// Branch roles participating in MandateToken ratification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
