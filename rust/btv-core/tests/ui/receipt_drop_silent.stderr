@@ -1,7 +1,13 @@
 error[E0451]: fields `log_index`, `merkle_root`, `signature` and `timestamp` of struct `InclusionReceipt` are private
- --> tests/ui/receipt_drop_silent.rs:15:14
-  |
+  --> tests/ui/receipt_drop_silent.rs:15:9
+   |
 14 |     let _r = InclusionReceipt {
-  |              --------------- in this type
+   |              ---------------- in this type
 15 |         log_index:   0u64,
-  |         ^^^^^^^^^ private field
+   |         ^^^^^^^^^ private field
+16 |         merkle_root: [0u8; 32],
+   |         ^^^^^^^^^^^ private field
+17 |         signature:   [0u8; 64],
+   |         ^^^^^^^^^ private field
+18 |         timestamp:   0u64,
+   |         ^^^^^^^^^ private field

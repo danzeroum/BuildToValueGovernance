@@ -3,3 +3,13 @@ error[E0624]: associated function `new_verified` is private
   |
 4 |       let _r = InclusionReceipt::new_verified(0, [0u8; 32], [0u8; 64], 0);
   |                                  ^^^^^^^^^^^^ private associated function
+  |
+ ::: src/inclusion_receipt.rs
+  |
+  | /     pub(crate) fn new_verified(
+  | |         log_index:   u64,
+  | |         merkle_root: [u8; 32],
+  | |         signature:   [u8; 64],
+  | |         timestamp:   u64,
+  | |     ) -> Self {
+  | |_____________- private associated function defined here
