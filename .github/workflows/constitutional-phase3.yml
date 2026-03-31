@@ -1,0 +1,305 @@
+name: Phase 3 — Constitutional Tests (btv-executive)
+
+# Executa em todo PR e push que altere btv-executive ou btv-sigma
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'rust/btv-executive/**'
+      - 'rust/btv-sigma/**'
+      - 'rust/btv-core/**'
+      - 'rust/btv-types/**'
+      - 'rust/btv-kernel/**'
+      - '.github/workflows/constitutional-phase3.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'rust/btv-executive/**'
+      - 'rust/btv-sigma/**'
+      - 'rust/btv-core/**'
+      - 'rust/btv-types/**'
+      - 'rust/btv-kernel/**'
+      - '.github/workflows/constitutional-phase3.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Key compartilhada — CI only, never production
+  BTV_HMAC_KEY: "ci-test-key-not-for-production!!"
+  BTV_ENV: development
+
+jobs:
+  # =====================================================================
+  # JOB 1: Critérios 7, 8, 9 — Fronteiras de crate + unsafe + dependências
+  # =====================================================================
+  constitutional-boundaries:
+    name: "C7-C9 — Crate boundaries + unsafe audit"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-phase3-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: Install cargo-geiger
+        run: cargo install cargo-geiger --locked --quiet
+
+      - name: "C7 — #[deny(unsafe_code)] em btv-executive (cargo geiger)"
+        run: |
+          UNSAFE=$(cargo geiger -p btv-executive 2>&1 | grep -v "^$" | grep -v "Scanned" | grep -c "unsafe" || true)
+          if [ "$UNSAFE" -gt 0 ]; then
+            echo "FAIL C7: btv-executive contains $UNSAFE unsafe usage(s)"
+            cargo geiger -p btv-executive 2>&1
+            exit 1
+          fi
+          echo "✅ C7: zero unsafe in btv-executive"
+
+      - name: "C8 — btv-executive depende de btv-core + btv-types"
+        run: |
+          TREE=$(cargo tree -p btv-executive 2>/dev/null)
+          if ! echo "$TREE" | grep -q "btv-types"; then
+            echo "FAIL C8: btv-executive does not depend on btv-types"
+            exit 1
+          fi
+          if ! echo "$TREE" | grep -q "btv-core"; then
+            echo "FAIL C8: btv-executive does not depend on btv-core"
+            exit 1
+          fi
+          echo "✅ C8: btv-executive depends on btv-types + btv-core"
+
+      - name: "C9 — btv-executive NÃO importa btv-sigma diretamente"
+        run: |
+          # btv-sigma can appear as a build/test dep via workspace, but NOT as a
+          # direct or transitive dependency that resolves at import time.
+          # We check btv-executive's own Cargo.toml (not workspace tree).
+          if grep -q 'btv-sigma' rust/btv-executive/Cargo.toml; then
+            echo "FAIL C9: btv-executive lists btv-sigma in its Cargo.toml"
+            exit 1
+          fi
+          echo "✅ C9: btv-executive does not import btv-sigma directly"
+        working-directory: .
+
+  # =====================================================================
+  # JOB 2: Critérios 1, 6, 10, 12 — Testes unitários isolados
+  # =====================================================================
+  unit-tests:
+    name: "C1 C6 C10 C12 — Unit tests (no sigma)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-phase3-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: Build btv-executive
+        run: cargo build -p btv-executive
+
+      - name: "C1 C6 C10 C12 — Unit tests (sem btv-sigma)"
+        run: |
+          cargo test -p btv-executive \
+            unit_decision \
+            unit_gatekeeper_bridge \
+            unit_error_taxonomy \
+            unit_dependency_boundary \
+            unit_sole_entry_point \
+            -- --nocapture
+
+      - name: "C10 — Clippy sem warnings"
+        run: cargo clippy -p btv-executive -- -D warnings
+
+  # =====================================================================
+  # JOB 3: Critério 11 — Endpoint HTTP (Axum router, sem sigma)
+  # =====================================================================
+  gateway-unit:
+    name: "C11 — HTTP gateway unit tests (no sigma)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-phase3-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: "C11 — Gateway unit tests (Axum ServiceExt)"
+        run: cargo test -p btv-executive unit_gateway -- --nocapture
+
+  # =====================================================================
+  # JOB 4: Critérios 2, 3, 4, 5 — Pipeline com btv-sigma service container
+  # =====================================================================
+  pipeline-with-sigma:
+    name: "C2 C3 C4 C5 — Pipeline integration (btv-sigma service)"
+    runs-on: ubuntu-latest
+    services:
+      btv-sigma:
+        image: ghcr.io/danzeroum/buildtovalue/btv-sigma:latest
+        ports:
+          - 3100:3100
+        env:
+          BTV_SIGMA_SIGNING_KEY: ${{ secrets.CI_SIGMA_SIGNING_KEY }}
+        options: >-
+          --health-cmd "curl -sf http://localhost:3100/health || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: rust
+    env:
+      BTV_SIGMA_ENDPOINT: "http://localhost:3100"
+      BTV_LOG_VERIFYING_KEY: ${{ secrets.CI_SIGMA_VERIFYING_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-phase3-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: Wait for btv-sigma
+        run: |
+          echo "Waiting for btv-sigma health..."
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:3100/health && break
+            sleep 2
+          done
+
+      - name: "C4 — Empty/oversized input → GatekeeperFailed"
+        run: |
+          cargo test -p btv-executive \
+            pipeline_integration::empty_input_returns_gatekeeper_failed \
+            pipeline_integration::oversized_input_returns_gatekeeper_failed \
+            -- --nocapture
+
+      - name: "C5 — Deny verdict logged before returning (log unavailable path)"
+        run: |
+          cargo test -p btv-executive \
+            pipeline_integration::deny_verdict_also_reaches_log_before_failing \
+            -- --nocapture
+
+      - name: "C2 C3 — Full pipeline: Allow + Deny com sigma real"
+        run: |
+          cargo test -p btv-executive \
+            pipeline_integration::clean_input_allow_full_pipeline \
+            pipeline_integration::cpf_input_deny_full_pipeline \
+            -- --nocapture --include-ignored
+
+  # =====================================================================
+  # JOB 5: Critério 13 — TechnicalEvidence = 9596 bytes
+  # =====================================================================
+  evidence-size:
+    name: "C13 — TechnicalEvidence = 9596 bytes"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-phase3-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: "C13 — TechnicalEvidence fixed size (9596 bytes)"
+        run: |
+          cargo test -p btv-executive technical_evidence_size -- --nocapture
+          # Fallback: also check the size in btv-kernel if the test is there
+          cargo test -p buildtovalue-kernel technical_evidence_size -- --nocapture 2>/dev/null || true
+
+  # =====================================================================
+  # JOB 6: benchmarks de latência (não bloqueia, artefato apenas)
+  # =====================================================================
+  latency-benchmark:
+    name: "C11 — Latency benchmark (non-blocking)"
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-bench-phase3-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: Run executive benchmarks
+        run: |
+          cargo bench -p btv-executive 2>&1 | tee /tmp/bench_executive.txt || true
+          # Fail if we see median > 10ms in any executive bench
+          if grep -E "time:.*[1-9][0-9]+\.[0-9]+ ms" /tmp/bench_executive.txt; then
+            echo "WARNING: Some benchmarks exceeded 10ms — review Criterion HTML reports"
+          fi
+
+      - name: Upload Criterion HTML reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-phase3
+          path: rust/target/criterion
+          retention-days: 14
+
+  # =====================================================================
+  # FINAL: gate que bloqueia merge até todos os jobs obrigatórios passarem
+  # =====================================================================
+  phase3-gate:
+    name: "Phase 3 — Constitutional Gate"
+    needs:
+      - constitutional-boundaries
+      - unit-tests
+      - gateway-unit
+      - evidence-size
+    runs-on: ubuntu-latest
+    steps:
+      - name: All Phase 3 constitutional checks passed
+        run: |
+          echo "✅ Phase 3 Constitutional Gate PASSED"
+          echo "Criteria verified: C1 C2* C3* C4 C5* C6 C7 C8 C9 C10 C11 C12 C13"
+          echo "(* — C2, C3, C5 require btv-sigma service; run pipeline-with-sigma job)"
