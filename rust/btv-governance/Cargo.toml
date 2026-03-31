@@ -1,0 +1,28 @@
+[package]
+name = "btv-governance"
+version = "1.0.0"
+edition = "2021"
+authors.workspace = true
+license.workspace = true
+description = "Pouvoir constituant: MandateToken, Tripartite Ratification, Living Constitution (Paper 6)"
+
+[dependencies]
+btv-types   = { path = "../btv-types" }
+blake3      = { workspace = true }
+ed25519-dalek = { workspace = true }
+chrono      = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+reqwest     = { workspace = true }
+thiserror   = { workspace = true }
+tracing     = { workspace = true }
+
+[dev-dependencies]
+tokio     = { workspace = true, features = ["full"] }
+criterion = { workspace = true, features = ["html_reports"] }
+ed25519-dalek = { workspace = true, features = ["rand_core"] }
+rand      = { workspace = true }
+
+[[bench]]
+name    = "governance"
+harness = false

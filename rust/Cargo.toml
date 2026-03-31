@@ -3,6 +3,7 @@ members = [
     "kernel", "bindings", "cli", "gateway",
     "btv-types", "btv-core", "btv-sigma",
     "btv-judicial", "btv-redaction",
+    "btv-governance",
 ]
 resolver = "2"
 
@@ -53,7 +54,7 @@ colored = "2.0"
 axum = { version = "0.7", features = ["json"] }
 reqwest = { version = "0.12", features = ["json"] }
 
-# FFI (build‑time only)
+# FFI (build-time only)
 maturin = "1.5"
 
 # Observability
