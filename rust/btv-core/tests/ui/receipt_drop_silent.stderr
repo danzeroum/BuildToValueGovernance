@@ -1,1 +1,7 @@
-error[E0277]: `EvidenceToken` cannot be sent between threads safely
+error[E0451]: fields `log_index`, `merkle_root`, `signature` and `timestamp` of struct `InclusionReceipt` are private
+ --> tests/ui/receipt_drop_silent.rs:15:14
+  |
+14 |     let _r = InclusionReceipt {
+  |              --------------- in this type
+15 |         log_index:   0u64,
+  |         ^^^^^^^^^ private field
