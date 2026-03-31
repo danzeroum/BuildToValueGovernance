@@ -67,21 +67,33 @@ def compliance_report(
     (e2e, dashboards) can inspect rules without running a full evaluation.
     """
     evaluator = _get_evaluator()
-    try:
-        fw = evaluator.registry.get_framework(framework_id)
-        articles = evaluator.registry.get_all_articles(framework_id)
-    except (KeyError, ValueError):
+
+    # ComplianceEvaluator stores frameworks in self._frameworks dict directly.
+    # There is no separate .registry object — access via internal dict.
+    fw_data = evaluator._frameworks.get(framework_id)
+    if fw_data is None:
         raise HTTPException(
             status_code=404,
             detail=f"Unknown compliance framework: {framework_id}",
         )
-    serialised_articles = [
-        a.to_dict() if hasattr(a, "to_dict") else {"id": str(a)}
-        for a in articles
-    ]
+
+    articles_raw = fw_data.get("articles", {})
+    serialised_articles = []
+    for article_key, rules in articles_raw.items():
+        if isinstance(rules, list):
+            for rule in rules:
+                serialised_articles.append({
+                    "article": str(article_key),
+                    "policy_name": rule.get("policy_name", ""),
+                    "requirement_text": rule.get("requirement_text", ""),
+                    "action": rule.get("policy_action", "LOG"),
+                    "confidence": rule.get("confidence", 0.5),
+                })
+
+    metadata = fw_data.get("_metadata", {})
     return {
         "framework": framework_id,
-        "name": getattr(fw, "name", framework_id),
+        "name": metadata.get("framework_name", framework_id),
         "article_count": len(serialised_articles),
         "articles": serialised_articles,
     }
