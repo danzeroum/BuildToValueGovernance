@@ -4,6 +4,9 @@
 //! Nenhum dado real de grupo é revelado na prova (apenas os commitments são públicos).
 use serde::{Deserialize, Serialize};
 
+/// Quatro elementos de campo de 32 bytes: (total, approved, denied, redacted).
+pub type FieldQuad = ([u8; 32], [u8; 32], [u8; 32], [u8; 32]);
+
 /// Estatísticas de um grupo protegido.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GroupStats {
@@ -22,7 +25,7 @@ impl GroupStats {
     }
 
     /// Serializa para elementos de campo (fixed-point, big-endian 32 bytes).
-    pub fn to_field_elements(&self) -> [([u8; 32], [u8; 32], [u8; 32], [u8; 32]); 1] {
+    pub fn to_field_elements(&self) -> [FieldQuad; 1] {
         [(
             field_from_u64(self.total),
             field_from_u64(self.approved),
