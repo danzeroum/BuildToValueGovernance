@@ -5,7 +5,6 @@ use crate::{
     state_commitment::StateCommitment,
     authorized_redaction::AuthorizationVerifier,
     redaction_receipt::RedactionReceipt,
-    verifier::RedactionVerifier,
 };
 
 /// Configuração do protocolo de redação.
@@ -56,6 +55,7 @@ pub enum RedactionError {
 }
 
 /// Resultado de uma redação bem-sucedida.
+#[derive(Debug)]
 pub struct RedactionResult {
     pub receipt:        RedactionReceipt,
     pub new_statistics: LedgerStatistics,
@@ -63,13 +63,12 @@ pub struct RedactionResult {
 
 /// Motor de Accountable Redaction.
 pub struct AccountableRedaction {
-    config:   RedactionConfig,
-    verifier: RedactionVerifier,
+    config: RedactionConfig,
 }
 
 impl AccountableRedaction {
-    pub fn new(config: RedactionConfig, verifier: RedactionVerifier) -> Self {
-        Self { config, verifier }
+    pub fn new(config: RedactionConfig, _verifier: crate::verifier::RedactionVerifier) -> Self {
+        Self { config }
     }
 
     /// Executa o protocolo completo de 4 fases.
