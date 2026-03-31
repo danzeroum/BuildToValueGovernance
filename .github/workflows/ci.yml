@@ -42,6 +42,21 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings
 
+      - name: Crate boundary audit
+        run: |
+          # btv-types must not depend on kernel or btv-core
+          if cargo tree -p btv-types 2>/dev/null | grep -E "buildtovalue-kernel|btv-core"; then
+            echo "ERROR: btv-types must not depend on kernel or btv-core"
+            exit 1
+          fi
+          echo "btv-types boundary: OK"
+          # btv-core must not depend on kernel
+          if cargo tree -p btv-core 2>/dev/null | grep "buildtovalue-kernel"; then
+            echo "ERROR: btv-core must not depend on buildtovalue-kernel"
+            exit 1
+          fi
+          echo "btv-core boundary: OK"
+
   python:
     name: Python Governance
     runs-on: ubuntu-latest

@@ -1,0 +1,16 @@
+error: unused `EvidenceToken` that must be used
+ --> tests/ui/dropped_evidence_token.rs:7:5
+  |
+7 |     EvidenceToken::new(b"test context");
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: EvidenceToken must be consumed by Verdict::new — dropping it silently is a silent decision (Paper 1, Case C)
+note: the lint level is defined here
+ --> tests/ui/dropped_evidence_token.rs:3:9
+  |
+3 | #![deny(unused_must_use)]
+  |         ^^^^^^^^^^^^^^^
+help: use `let _ = ...` to ignore the resulting value
+  |
+7 |     let _ = EvidenceToken::new(b"test context");
+  |     +++++++

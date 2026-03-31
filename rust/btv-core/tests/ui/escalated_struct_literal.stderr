@@ -1,0 +1,11 @@
+error[E0451]: fields `operator_id`, `reason` and `hmac_seal` of struct `EscalatedVerdict` are private
+ --> tests/ui/escalated_struct_literal.rs:7:9
+  |
+6 |     let _v = EscalatedVerdict {
+  |              ---------------- in this type
+7 |         operator_id: "admin".to_string(),
+  |         ^^^^^^^^^^^ private field
+8 |         reason: "timeout".to_string(),
+  |         ^^^^^^ private field
+9 |         hmac_seal: [0u8; 32],
+  |         ^^^^^^^^^ private field

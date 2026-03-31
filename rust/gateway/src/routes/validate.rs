@@ -8,8 +8,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use ulid::Ulid;
 use buildtovalue_kernel::network::IpRisk;
-use buildtovalue_kernel::session_guard::SessionTracker;
-
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
 
@@ -179,7 +177,6 @@ pub async fn validate_handler(
 
         // ADR-044: drift calculado dentro do bloco onde evidence existe
         let drift_level = {
-            use buildtovalue_kernel::session_guard::SessionTracker;
             let sid: u128 = req.session_id
                 .as_deref().and_then(|s| s.parse().ok()).unwrap_or(0);
             if let Ok(mut tracker) = state.session_tracker.lock() {

@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `token`
+ --> tests/ui/escalated_token_reuse.rs:9:37
+  |
+6 |     let token = OperatorToken::new("admin".to_string());
+  |         ----- move occurs because `token` has type `OperatorToken`, which does not implement the `Copy` trait
+7 |     let _v1 = EscalatedVerdict::new(token, "reason1".to_string());
+  |                                     ----- value moved here
+8 |     // `token` was moved — reuse must fail E0382
+9 |     let _v2 = EscalatedVerdict::new(token, "reason2".to_string());
+  |                                     ^^^^^ value used here after move
