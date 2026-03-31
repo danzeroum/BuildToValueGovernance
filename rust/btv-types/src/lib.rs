@@ -40,55 +40,100 @@ pub use merkle_verify::verify_merkle_inclusion;
 
 // ── Primitive hash wrapper ────────────────────────────────────────────────────
 
-/// A BLAKE3 hash in wire format. All bytes are public — this is a read-only digest,
-/// not a capability token. External crates can hold and inspect it but cannot forge
-/// a new one (that requires `btv-core::Blake3Hash::of`, which is `pub(crate)`).
+/// A BLAKE3 hash in wire format. All bytes are public — read-only digest, not a capability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Blake3Hash(pub [u8; 32]);
 
-// ── Verdict types ──────────────────────────────────────────────────────────────────
+// ── Decision + Risk ──────────────────────────────────────────────────────────────────
 
 /// Binary decision emitted by the Executive pipeline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Decision {
     Allow = 0,
-    Deny = 1,
+    Deny  = 1,
 }
 
-/// Serialised verdict record — the wire format persisted to Σ and verified by
-/// `btv-judicial`. All fields are public for read access; construction requires
-/// `btv-core::Verdict::new` which consumes a linear `EvidenceToken ⊗ ComplianceToken`.
+/// Risk level produced by the gatekeeper scan (Phase 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum RiskLevel {
+    Safe     = 0,
+    Low      = 1,
+    Medium   = 2,
+    High     = 3,
+    Critical = 4,
+}
+
+impl RiskLevel {
+    pub fn from_score(score: f32) -> Self {
+        match score {
+            s if s < 0.2 => Self::Safe,
+            s if s < 0.4 => Self::Low,
+            s if s < 0.6 => Self::Medium,
+            s if s < 0.8 => Self::High,
+            _             => Self::Critical,
+        }
+    }
+}
+
+// ── Verdict ───────────────────────────────────────────────────────────────────────────
+
+/// Serialised verdict record — wire format persisted to Σ and verified by btv-judicial.
+/// Construction requires `btv-core::Verdict::new` which consumes a linear `E ⊗ C`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerdictRecord {
-    pub evidence_hash: Blake3Hash,
-    pub decision: Decision,
-    pub explanation_hash: Blake3Hash,
+    pub evidence_hash:       Blake3Hash,
+    pub decision:            Decision,
+    pub explanation_hash:    Blake3Hash,
     /// HMAC-SHA256 tag binding evidence_hash + decision + explanation.
-    pub hmac_tag: [u8; 32],
-    /// Version of the MandateToken in effect at decision time (placeholder: 0 until Phase 6).
+    pub hmac_tag:            [u8; 32],
+    /// Version of MandateToken in effect (placeholder: 0 until Phase 6).
     pub legislative_version: u64,
 }
 
-// ── Log-authority (Σ) types ──────────────────────────────────────────────────────────
+// ── Log-authority (Σ) types ─────────────────────────────────────────────────────────
 
-/// Merkle inclusion proof for a verdict in the append-only log Σ.
-/// Used by `btv-judicial` for independent verification without importing `btv-core`.
+/// Merkle inclusion proof for independent verification by btv-judicial.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MerkleProof {
-    pub path: Vec<[u8; 32]>,
+    pub path:       Vec<[u8; 32]>,
     pub leaf_index: u64,
 }
 
-/// Receipt issued by Σ confirming a verdict's inclusion in the log.
+/// Receipt issued by Σ confirming a verdict's inclusion in the append-only log.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InclusionReceiptWire {
-    pub log_index: u64,
+    pub log_index:   u64,
     pub merkle_root: [u8; 32],
     /// Ed25519 signature by the Σ authority key.
     #[serde(with = "serde_bytes_64")]
-    pub signature: [u8; 64],
-    pub timestamp: u64,
+    pub signature:   [u8; 64],
+    pub timestamp:   u64,
+}
+
+// ── Delivery (Phase 3) ────────────────────────────────────────────────────────────────
+
+/// The payload delivered to the end-user. Contains all public data.
+/// Integrity is guaranteed by HMAC seal (verdict) and Ed25519 signature (receipt),
+/// not by Rust's type system — btv-judicial (Phase 4) verifies both.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeliveryPayload {
+    pub verdict: VerdictRecord,
+    pub receipt: InclusionReceiptWire,
+}
+
+/// Audit trail entry for observability / btv-judicial ingestion.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditEntry {
+    pub verdict_hash:    [u8; 32],
+    pub decision:        Decision,
+    pub risk_level:      RiskLevel,
+    pub composite_risk:  f32,
+    pub findings_count:  usize,
+    pub log_index:       u64,
+    pub timestamp_us:    u64,
+    pub latency_us:      u64,
 }
 
 // ── Governance / mandate types ────────────────────────────────────────────────────
@@ -98,7 +143,7 @@ pub struct InclusionReceiptWire {
 #[repr(u8)]
 pub enum BranchRole {
     Legislative = 0,
-    Judicial = 1,
+    Judicial    = 1,
     ExecutiveRep = 2,
 }
 
@@ -106,17 +151,15 @@ pub enum BranchRole {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignatureWire {
     pub signer_role: BranchRole,
-    pub pubkey: [u8; 32],
+    pub pubkey:      [u8; 32],
     #[serde(with = "serde_bytes_64")]
-    pub signature: [u8; 64],
+    pub signature:   [u8; 64],
 }
 
-/// MandateToken wire format — publicable in Σ, verifiable by all branches.
-/// Three-party ratification (Legislative + Judicial + ExecutiveRep) before any
-/// Executive decision is authorised (Tension 2 / Tension 3 resolution, Phase 6).
+/// MandateToken wire format — three-party ratification (Fase 6).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MandateWire {
     pub legislative_version: u64,
-    pub expiry_utc: u64,
-    pub ratification_sigs: [SignatureWire; 3],
+    pub expiry_utc:          u64,
+    pub ratification_sigs:   [SignatureWire; 3],
 }
