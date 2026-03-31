@@ -55,9 +55,9 @@ impl MerkleTree {
         let level_count = self.nodes.len();
         for level_idx in 0..level_count.saturating_sub(1) {
             let level = &self.nodes[level_idx];
-            let sibling = if idx % 2 == 0 { idx + 1 } else { idx - 1 };
+            let sibling = if idx.is_multiple_of(2) { idx + 1 } else { idx - 1 };
             if sibling < level.len() {
-                let side = if idx % 2 == 0 { Side::Right } else { Side::Left };
+                let side = if idx.is_multiple_of(2) { Side::Right } else { Side::Left };
                 path.push((level[sibling], side));
             }
             idx /= 2;
@@ -76,7 +76,7 @@ impl MerkleTree {
             if current.len() == 1 {
                 break;
             }
-            let mut next = Vec::with_capacity((current.len() + 1) / 2);
+            let mut next = Vec::with_capacity(current.len().div_ceil(2));
             for chunk in current.chunks(2) {
                 let hash = if chunk.len() == 2 {
                     hash_pair(&chunk[0], &chunk[1])
@@ -106,6 +106,7 @@ pub fn hash_pair(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
 
 /// Standalone Merkle proof verifier.
 /// Pure function — usable by btv-judicial via btv-types without importing btv-sigma.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn verify_proof(
     root: &[u8; 32],
     leaf_hash: &[u8; 32],
@@ -114,7 +115,7 @@ pub fn verify_proof(
     let mut current = *leaf_hash;
     for (sibling, side) in proof {
         current = match side {
-            Side::Left => hash_pair(sibling, &current),
+            Side::Left  => hash_pair(sibling, &current),
             Side::Right => hash_pair(&current, sibling),
         };
     }
