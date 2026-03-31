@@ -7,15 +7,52 @@
 //!
 //! Invariants:
 //! - No `Clone`, no `Copy`  — consumed at most once (linear resource)
-//! - `#[must_use]` — silent drop is a compile warning
+//! - `#[must_use]`          — silent drop is a compile warning
 //! - `mandate_hash` field is private — only `btv-governance` can compute it
 //! - `borrow_live()` enforces expiry check at every use
+//!
+//! # Serde note
+//! `serde` does not derive `Deserialize` for `[u8; N]` when N > 32.
+//! We implement custom helpers via `serde_hex` (inline, uses `hex` from workspace)
+//! so the wire format is a lowercase hex string — zero external dependencies added.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::error::GovernanceError;
 use crate::ratification::verify_tripartite_signatures;
+
+// ── serde helpers for fixed-size byte arrays ─────────────────────────────────
+
+/// Serde module: serialises `[u8; N]` as a lowercase hex string.
+/// Works for any fixed-size array via the generic helpers below.
+mod serde_hex {
+    use serde::{Deserializer, Serializer, de::Error};
+
+    pub mod bytes_64 {
+        use super::*;
+        pub fn serialize<S: Serializer>(v: &[u8; 64], s: S) -> Result<S::Ok, S::Error> {
+            s.serialize_str(&hex::encode(v))
+        }
+        pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 64], D::Error> {
+            let s = <&str>::deserialize(d)?;
+            let b = hex::decode(s).map_err(D::Error::custom)?;
+            b.try_into().map_err(|_| D::Error::custom("expected 64-byte hex string"))
+        }
+    }
+
+    pub mod bytes_32 {
+        use super::*;
+        pub fn serialize<S: Serializer>(v: &[u8; 32], s: S) -> Result<S::Ok, S::Error> {
+            s.serialize_str(&hex::encode(v))
+        }
+        pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 32], D::Error> {
+            let s = <&str>::deserialize(d)?;
+            let b = hex::decode(s).map_err(D::Error::custom)?;
+            b.try_into().map_err(|_| D::Error::custom("expected 32-byte hex string"))
+        }
+    }
+}
 
 // ── AmendmentId ──────────────────────────────────────────────────────────────
 
@@ -36,30 +73,40 @@ pub enum AmendmentId {
 /// Proof that all three constitutional branches signed a mandate.
 ///
 /// Paper 6, Definition 3.3: "Valid(ΔL*) ⇔ σ_L ∧ σ_J ∧ σ_Erep"
+///
+/// All `[u8; 64]` (signatures) and `[u8; 32]` (keys / nonce) fields
+/// are serialised as lowercase hex strings for JSON/YAML compatibility.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RatificationProof {
     /// The amendment that was ratified.
     pub amendment: AmendmentId,
 
     /// Ed25519 signature — Legislative branch.
+    #[serde(with = "serde_hex::bytes_64")]
     pub legislative_sig: [u8; 64],
 
     /// Ed25519 signature — Judicial branch.
+    #[serde(with = "serde_hex::bytes_64")]
     pub judicial_sig: [u8; 64],
 
     /// Ed25519 signature — Executive Representative.
+    #[serde(with = "serde_hex::bytes_64")]
     pub executive_rep_sig: [u8; 64],
 
     /// Anti-replay nonce — unique per ratification event.
+    #[serde(with = "serde_hex::bytes_32")]
     pub nonce: [u8; 32],
 
     /// UTC timestamp of ratification.
     pub timestamp: DateTime<Utc>,
 
     /// Ed25519 verifying keys (32-byte compressed) for each branch.
-    pub legislative_pubkey:    [u8; 32],
-    pub judicial_pubkey:       [u8; 32],
-    pub executive_rep_pubkey:  [u8; 32],
+    #[serde(with = "serde_hex::bytes_32")]
+    pub legislative_pubkey:   [u8; 32],
+    #[serde(with = "serde_hex::bytes_32")]
+    pub judicial_pubkey:      [u8; 32],
+    #[serde(with = "serde_hex::bytes_32")]
+    pub executive_rep_pubkey: [u8; 32],
 }
 
 // ── MandateToken ─────────────────────────────────────────────────────────────
@@ -132,8 +179,6 @@ impl MandateToken {
     /// Borrow this mandate only if it is currently live.
     ///
     /// Returns `Err(GovernanceError::MandateExpired)` if expired.
-    /// This is the method called by the Executive pipeline when it reads
-    /// the mandate from Σ and needs to construct a `Verdict`.
     pub fn borrow_live(&self) -> Result<&Self, GovernanceError> {
         if self.is_live() {
             Ok(self)
@@ -181,8 +226,8 @@ impl MandateToken {
     // ── private ──────────────────────────────────────────────────────────────
 
     fn compute_hash(
-        version:     u64,
-        expiry:      &DateTime<Utc>,
+        version:      u64,
+        expiry:       &DateTime<Utc>,
         ratification: &RatificationProof,
     ) -> [u8; 32] {
         let mut data = Vec::with_capacity(8 + 8 + 64 + 64 + 64 + 32);
@@ -203,7 +248,7 @@ impl MandateToken {
 /// Wire representation of a MandateToken.
 ///
 /// This is what flows through Σ and is consumed by `btv-executive`.
-/// It contains no private state and can be freely cloned / serialised.
+/// Contains no private state; can be freely cloned/serialised.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MandateWire {
     /// Legislative version bound to this mandate.
@@ -216,6 +261,7 @@ pub struct MandateWire {
     pub ratification: RatificationProof,
 
     /// BLAKE3 hash — used to verify wire integrity.
+    #[serde(with = "serde_hex::bytes_32")]
     pub mandate_hash: [u8; 32],
 }
 
