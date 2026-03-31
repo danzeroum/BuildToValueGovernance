@@ -1,5 +1,5 @@
 [workspace]
-members = ["kernel", "bindings", "cli", "gateway", "btv-types", "btv-core"]
+members = ["kernel", "bindings", "cli", "gateway", "btv-types", "btv-core", "btv-sigma"]
 resolver = "2"
 
 [workspace.package]
@@ -45,6 +45,9 @@ whatlang = "0.16"
 # CLI
 clap = { version = "4", features = ["derive"] }
 colored = "2.0"
+# HTTP server (btv-sigma)
+axum = { version = "0.7", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
 
 # FFI (build‑time only)
 maturin = "1.5"
