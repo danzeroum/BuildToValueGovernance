@@ -1,15 +1,19 @@
 """
 POST /v1/compliance/evaluate — Evaluate agent against compliance frameworks.
-GET  /v1/compliance/report/{framework_id} — Summary report for a framework.
 P1: Condition template evaluation (activates EU AI Act, LGPD, NIST rules).
+
+NOTE: GET /v1/compliance/report/{framework} is intentionally NOT defined here.
+The canonical handler lives in app.py and returns the shape expected by E2E tests:
+{"framework", "version", "total_requirements", "compliant", "partial",
+ "non_compliant", "compliance_rate", "generated_at", "artifacts"}.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
 
 from buildtovalue.compliance.compliance_evaluator import ComplianceEvaluator
-from buildtovalue.api.app import require_api_key
+from buildtovalue.api.auth import require_api_key
 
 router = APIRouter(prefix="/v1/compliance", tags=["compliance"])
 
@@ -54,46 +58,3 @@ def evaluate_compliance(
         frameworks=req.frameworks,
     )
     return result.to_dict()
-
-
-@router.get("/report/{framework_id}")
-def compliance_report(
-    framework_id: str,
-    _=Depends(require_api_key),
-):
-    """Summary report for a registered compliance framework.
-
-    Returns framework metadata and all articles so external tools
-    (e2e, dashboards) can inspect rules without running a full evaluation.
-    """
-    evaluator = _get_evaluator()
-
-    # ComplianceEvaluator stores frameworks in self._frameworks dict directly.
-    # There is no separate .registry object — access via internal dict.
-    fw_data = evaluator._frameworks.get(framework_id)
-    if fw_data is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Unknown compliance framework: {framework_id}",
-        )
-
-    articles_raw = fw_data.get("articles", {})
-    serialised_articles = []
-    for article_key, rules in articles_raw.items():
-        if isinstance(rules, list):
-            for rule in rules:
-                serialised_articles.append({
-                    "article": str(article_key),
-                    "policy_name": rule.get("policy_name", ""),
-                    "requirement_text": rule.get("requirement_text", ""),
-                    "action": rule.get("policy_action", "LOG"),
-                    "confidence": rule.get("confidence", 0.5),
-                })
-
-    metadata = fw_data.get("_metadata", {})
-    return {
-        "framework": framework_id,
-        "name": metadata.get("framework_name", framework_id),
-        "article_count": len(serialised_articles),
-        "articles": serialised_articles,
-    }
