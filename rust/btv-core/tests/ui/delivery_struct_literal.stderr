@@ -15,6 +15,6 @@ error[E0451]: fields `verdict_record` and `receipt_wire` of struct `DeliveryToke
 4 |     let _d = DeliveryToken {
   |              ------------- in this type
 5 |         verdict_record: todo!(),
-  |          ^^^^^^^^^^^^^^ private field
+  |         ^^^^^^^^^^^^^^ private field
 6 |         receipt_wire: todo!(),
-  |          ^^^^^^^^^^^^ private field
+  |         ^^^^^^^^^^^^ private field
