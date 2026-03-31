@@ -1,7 +1,7 @@
 //! Relatório de auditoria assinado pelo Judiciário.
 //!
 //! Paper 5, §4.2: "J assina o relatório de auditoria com sua própria chave Ed25519."
-use ed25519_dalek::{SigningKey, Signer, VerifyingKey, Signature};
+use ed25519_dalek::{SigningKey, Signer, VerifyingKey, Verifier, Signature};
 use rand::RngCore;
 
 /// Detalhe de uma falha de verificação.
@@ -52,7 +52,7 @@ impl JudicialAuditor {
     pub fn sign_report(&self, report: &mut AuditReport) {
         let msg = canonical_bytes(report);
         let sig: Signature = self.signing_key.sign(&msg);
-        report.signature    = sig.to_bytes();
+        report.signature      = sig.to_bytes();
         report.auditor_pubkey = *self.signing_key.verifying_key().as_bytes();
     }
 
@@ -65,7 +65,7 @@ impl JudicialAuditor {
     }
 }
 
-/// Serialização canônica dos campos estruéveis do relatório (exceto signature e pubkey).
+/// Serialização canônica dos campos estruturáveis do relatório (exceto signature e pubkey).
 fn canonical_bytes(r: &AuditReport) -> Vec<u8> {
     format!(
         "{}|{}|{}|{}|{}|{}|{}|{}|{}",
