@@ -1,0 +1,5 @@
+error[E0624]: associated function `new_verified` is private
+ --> tests/ui/receipt_constructor_external.rs:4:32
+  |
+4 |       let _r = InclusionReceipt::new_verified(0, [0u8; 32], [0u8; 64], 0);
+  |                                  ^^^^^^^^^^^^ private associated function
