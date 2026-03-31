@@ -1,3 +1,5 @@
+// FFI: unsafe is required for C ABI bindings
+#![allow(unsafe_code)]
 // BuildToValue v2.0 - FFI Bridge for Validators
 // Expõe validators Rust para Python via C ABI
 //

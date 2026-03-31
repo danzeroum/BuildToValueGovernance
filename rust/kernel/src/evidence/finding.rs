@@ -103,14 +103,32 @@ impl Finding {
 
     // === Helpers ===
 
-    /// Serializa para bytes de forma segura (para hashing/FFI)
+    /// Serializa para bytes de forma segura (para hashing/FFI).
+    /// repr(C, align(8)) layout: module(0), severity(1..3), confidence(3),
+    /// pos_start(4..6), pos_end(6..8), rule_id(8..40), threat_category(40..72),
+    /// matched_text(72..136), _padding(136..144).
     pub fn to_bytes(&self) -> [u8; 144] {
-        unsafe {
-            let mut bytes = [0u8; 144];
-            let ptr = self as *const Finding as *const u8;
-            std::ptr::copy_nonoverlapping(ptr, bytes.as_mut_ptr(), size_of::<Finding>());
-            bytes
-        }
+        let mut buf = [0u8; 144];
+        buf[0] = self.module as u8;
+        // TechnicalSeverity is repr(u8): 1-byte discriminant + 1-byte payload
+        let (disc, payload) = match self.severity {
+            TechnicalSeverity::Info => (0u8, 0u8),
+            TechnicalSeverity::Low => (1, 0),
+            TechnicalSeverity::Medium => (2, 0),
+            TechnicalSeverity::High => (3, 0),
+            TechnicalSeverity::Critical(v) => (4, v),
+            TechnicalSeverity::PolicyViolation => (255, 0),
+        };
+        buf[1] = disc;
+        buf[2] = payload;
+        buf[3] = self.confidence;
+        buf[4..6].copy_from_slice(&self.position_start.to_le_bytes());
+        buf[6..8].copy_from_slice(&self.position_end.to_le_bytes());
+        buf[8..40].copy_from_slice(&self.rule_id);
+        buf[40..72].copy_from_slice(&self.threat_category);
+        buf[72..136].copy_from_slice(&self.matched_text);
+        // buf[136..144] = _padding, stays zero
+        buf
     }
 
     fn str_to_fixed<const N: usize>(s: &str) -> [u8; N] {

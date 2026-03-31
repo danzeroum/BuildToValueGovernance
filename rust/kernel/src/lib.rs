@@ -1,4 +1,6 @@
 //! BuildToValue Sovereign Kernel v1
+#![deny(unsafe_code)]
+#![deny(unused_must_use)]
 
 pub mod api;
 pub mod batch;
