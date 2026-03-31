@@ -55,7 +55,7 @@ impl RustKernel {
         let mut gatekeeper = self.gatekeeper.lock().unwrap();
         let audit_trail_id = Uuid::new_v4().as_u128();
         let evidence = gatekeeper.scan_for_evidence(input, audit_trail_id);
-        Ok(PyTechnicalEvidence { inner: evidence })
+        Ok(PyTechnicalEvidence { inner: Arc::new(evidence) })
     }
 
     fn append_to_ledger(&self, evidence: &PyTechnicalEvidence) -> PyResult<u64> {
@@ -109,7 +109,7 @@ impl RustKernel {
         let items: Vec<PyBatchItem> = result.items.into_iter().map(|item| {
             PyBatchItem {
                 index: item.index,
-                evidence: item.evidence.map(|e| PyTechnicalEvidence { inner: e }),
+                evidence: item.evidence.map(|e| PyTechnicalEvidence { inner: Arc::new(e) }),
                 status: match item.status {
                     BatchItemStatus::Ok => "ok".to_string(),
                     BatchItemStatus::Timeout => "timeout".to_string(),
@@ -150,7 +150,8 @@ impl RustKernel {
 #[pyclass]
 #[derive(Clone)]
 pub struct PyTechnicalEvidence {
-    pub(crate) inner: TechnicalEvidence,
+    // Arc allows cheap Clone without requiring TechnicalEvidence: Clone
+    pub(crate) inner: Arc<TechnicalEvidence>,
 }
 
 #[pymethods]

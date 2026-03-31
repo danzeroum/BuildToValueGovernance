@@ -235,12 +235,20 @@ impl InputStatistics {
     }
 
     pub fn to_bytes(&self) -> [u8; 32] {
-        unsafe {
-            let mut bytes = [0u8; 32];
-            let raw = std::mem::transmute::<InputStatistics, [u8; 32]>(*self);
-            bytes.copy_from_slice(&raw);
-            bytes
-        }
+        // repr(C, align(8)) layout: entropy(0..4), z_score(4..8), input_size(8..12),
+        // digit_ratio(12..16), letter_ratio(16..20), symbol_ratio(20..24),
+        // unique_chars(24..26), [pad 26..28], total_chars(28..32)
+        let mut buf = [0u8; 32];
+        buf[0..4].copy_from_slice(&self.entropy.to_le_bytes());
+        buf[4..8].copy_from_slice(&self.z_score.to_le_bytes());
+        buf[8..12].copy_from_slice(&self.input_size.to_le_bytes());
+        buf[12..16].copy_from_slice(&self.digit_ratio.to_le_bytes());
+        buf[16..20].copy_from_slice(&self.letter_ratio.to_le_bytes());
+        buf[20..24].copy_from_slice(&self.symbol_ratio.to_le_bytes());
+        buf[24..26].copy_from_slice(&self.unique_chars.to_le_bytes());
+        // bytes 26..28 are C alignment padding — stay zero
+        buf[28..32].copy_from_slice(&self.total_chars.to_le_bytes());
+        buf
     }
 }
 

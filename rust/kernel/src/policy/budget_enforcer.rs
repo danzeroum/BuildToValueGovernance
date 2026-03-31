@@ -22,7 +22,7 @@ pub enum AccountTier {
 impl AccountTier {
     /// Converte string para AccountTier.
     /// Fail-secure: string desconhecida → `Reserve` (não `Operational`).
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s.trim().to_lowercase().as_str() {
             "operational" => AccountTier::Operational,
             "untouchable" => AccountTier::Untouchable,
@@ -86,7 +86,7 @@ pub fn enforce(
         Some(t) => t,
     };
 
-    let tier = AccountTier::from_str(raw);
+    let tier = AccountTier::parse(raw);
 
     // Regra 2: Untouchable → BLOCK absoluto
     if tier == AccountTier::Untouchable {

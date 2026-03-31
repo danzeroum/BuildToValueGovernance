@@ -20,7 +20,7 @@ lazy_static! {
 
     /// Regex para DMS: 48°51'30"N 2°17'40"E  ou  48°51'N 2°17'E
     static ref RE_DMS: Regex = Regex::new(
-        r"(?i)\d{1,3}°\d{1,2}'(?:\d{1,2}(?:[.,]\d+)?\")?[NSns][\s,;]+\d{1,3}°\d{1,2}'(?:\d{1,2}(?:[.,]\d+)?\")?[EWew]"
+        r#"(?i)\d{1,3}°\d{1,2}'(?:\d{1,2}(?:[.,]\d+)?")?[NSns][\s,;]+\d{1,3}°\d{1,2}'(?:\d{1,2}(?:[.,]\d+)?")?[EWew]"#
     ).expect("RE_DMS compile");
 
     /// Regex para Open Location Code (Plus Codes): 6GCR+F5  ou  6GCR+F5 São Paulo
