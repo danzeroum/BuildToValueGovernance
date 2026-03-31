@@ -24,6 +24,8 @@ pub struct InclusionReceipt {
 impl InclusionReceipt {
     /// Only callable within btv-core — invoked by `LogClient` after signature verification.
     /// External crates cannot forge a receipt without a valid Ed25519 signature.
+    // TODO(Phase 2): LogClient::submit() will call this after verifying the Log Authority sig.
+    #[expect(dead_code, reason = "called by LogClient (Phase 2, not yet implemented)")]
     pub(crate) fn new_verified(
         log_index:   u64,
         merkle_root: [u8; 32],
@@ -43,8 +45,12 @@ impl InclusionReceipt {
         }
     }
 
+    // TODO(Phase 2): consumed by DeliveryToken::seal and judicial audit path.
+    #[expect(dead_code, reason = "consumed by DeliveryToken::seal (Phase 2, not yet implemented)")]
     pub(crate) fn log_index(&self)    -> u64        { self.log_index }
+    #[expect(dead_code, reason = "consumed by DeliveryToken::seal (Phase 2, not yet implemented)")]
     pub(crate) fn merkle_root(&self)  -> &[u8; 32]  { &self.merkle_root }
+    #[expect(dead_code, reason = "consumed by DeliveryToken::seal (Phase 2, not yet implemented)")]
     pub(crate) fn signature(&self)    -> &[u8; 64]  { &self.signature }
 }
 
