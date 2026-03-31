@@ -1,0 +1,5 @@
+error[E0599]: no method named `clone` found for struct `EvidenceToken` in the current scope
+ --> tests/ui/clone_evidence_token.rs:7:25
+  |
+7 |     let _cloned = token.clone();
+  |                         ^^^^^ method not found in `EvidenceToken`

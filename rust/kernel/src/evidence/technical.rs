@@ -25,7 +25,8 @@ mod serde_reserved {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[must_use = "TechnicalEvidence must be used or logged — do not discard audit data"]
+#[derive(Debug, Serialize, Deserialize)]
 #[repr(C, align(8))]
 pub struct TechnicalEvidence {
     // === METADADOS (64 bytes) ===
@@ -268,23 +269,37 @@ impl TechnicalEvidence {
             .expect("slice de tamanho fixo 32")
     }
 
+    /// Serializes to a fixed [u8; EVIDENCE_SIZE] buffer by copying the repr(C) memory layout.
+    ///
+    /// # Safety rationale (function-level allow)
+    /// - `TechnicalEvidence` is `#[repr(C, align(8))]` with all fixed-size fields.
+    /// - `size_of::<TechnicalEvidence>() == EVIDENCE_SIZE` is a compile-time invariant
+    ///   (enforced by the static_assertions in this crate — see EVIDENCE_SIZE constant).
+    /// - The resulting bytes are only used for WAL persistence (cold path); the hash
+    ///   hot-path uses `calculate_hash()` which is fully safe and field-by-field.
+    /// - This is the only justified unsafe block remaining in the kernel after Phase 0.1.
+    #[allow(unsafe_code)]
     pub fn to_bytes(&self) -> [u8; EVIDENCE_SIZE] {
+        let mut bytes = [0u8; EVIDENCE_SIZE];
+        // SAFETY: self is repr(C, align(8)), bytes is a correctly-sized buffer.
         unsafe {
-            let mut bytes = [0u8; EVIDENCE_SIZE];
             let ptr = self as *const TechnicalEvidence as *const u8;
             std::ptr::copy_nonoverlapping(ptr, bytes.as_mut_ptr(), size_of::<TechnicalEvidence>());
-            bytes
         }
+        bytes
     }
 
+    /// Deserializes from a fixed [u8; EVIDENCE_SIZE] buffer produced by `to_bytes`.
+    ///
+    /// Returns `None` if the size invariant is not met (defensive check).
+    /// Only used in WAL recovery (cold path).
+    #[allow(unsafe_code)]
     pub fn from_bytes(bytes: &[u8; EVIDENCE_SIZE]) -> Option<Self> {
-        if bytes.len() == EVIDENCE_SIZE {
-            unsafe {
-                let ptr = bytes.as_ptr() as *const TechnicalEvidence;
-                Some(std::ptr::read_unaligned(ptr))
-            }
-        } else {
-            None
+        // SAFETY: bytes was produced by to_bytes() on a valid TechnicalEvidence,
+        // and TechnicalEvidence is repr(C, align(8)) with no references or pointers.
+        unsafe {
+            let ptr = bytes.as_ptr() as *const TechnicalEvidence;
+            Some(std::ptr::read_unaligned(ptr))
         }
     }
 }

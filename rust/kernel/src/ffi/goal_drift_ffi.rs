@@ -1,3 +1,5 @@
+// FFI: unsafe is required for C ABI bindings
+#![allow(unsafe_code)]
 //! goal_drift_ffi — Gap 4: FFI bindings para GoalDriftBuffer (C ABI).
 //!
 //! Expõe o GoalDriftBuffer do kernel Rust para uso em Python via ctypes/cffi.

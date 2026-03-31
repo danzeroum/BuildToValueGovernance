@@ -44,7 +44,7 @@ pub fn scan_for_evidence_batch(
             "finding_count": ev.finding_count,
             "critical_count": ev.critical_count,
             "processing_time_us": ev.processing_time_us,
-            "hash": hex::encode(&ev.hash),
+            "hash": hex::encode(ev.hash),
             "bias_fpr": ev.bias.false_positive_rate,
             "bias_fnr": ev.bias.false_negative_rate,
         }));

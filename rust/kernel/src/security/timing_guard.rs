@@ -46,20 +46,8 @@ impl Drop for TimingGuard {
         
         if elapsed < target {
             let padding = target - elapsed;
-            spin_sleep::sleep(padding);
+            std::thread::sleep(padding);
         }
         // Se elapsed > target, não faz nada (já demorou mais que esperado)
     }
-}
-
-// Uso:
-pub fn validate_with_timing_guard(text: &str) -> ValidationResult {
-    // Garante que função sempre leva 50μs ± 10%
-    let _guard = TimingGuard::new(50, 0.10);
-    
-    // Lógica normal
-    let result = validate_cpf(text);
-    
-    result
-    // Drop do guard adiciona padding + jitter
 }
