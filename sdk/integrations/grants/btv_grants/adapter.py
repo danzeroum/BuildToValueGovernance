@@ -5,14 +5,14 @@ The GrantGuard class integrates BTV governance into grant evaluation pipelines
 (e.g. Gitcoin Rounds, DAO treasury, quadratic funding platforms).
 
 PATTERN: Follows the 4-element BTV adapter contract:
-  1. Custom Exception  -> GrantBlockedError (exceptions.py)
-  2. Guard Class        -> GrantGuard (this file)
-  3. _validate()        -> Pre-flight structural validation
-  4. _sanitize()        -> Input transformation for safe kernel processing
+  1. Custom Exception  → GrantBlockedError (exceptions.py)
+  2. Guard Class        → GrantGuard (this file)
+  3. _validate()        → Pre-flight structural validation
+  4. _sanitize()        → Input transformation for safe kernel processing
 
 DESIGN DECISIONS (documented in ADR-043):
   - use_decide=True by default (intentional deviation from other adapters' False).
-    Grants carry real financial risk -> full ethical pipeline is warranted.
+    Grants carry real financial risk → full ethical pipeline is warranted.
   - hard_blocked checked BEFORE action (Rust gatekeeper override takes precedence).
   - HMAC-SHA256 for session_id (Rust kernel handles BLAKE3 internally).
   - JSON minified serialization (avoids English-prefix language confusion).
@@ -28,9 +28,6 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any, Callable, Dict, List, Optional, Set
-
-from buildtovalue import BTVClient
-from buildtovalue.models import Verdict
 
 from .exceptions import (
     GrantBlockedError,
@@ -59,7 +56,8 @@ class GrantGuardConfig:
 
     Attributes:
         block_on: Set of Verdict actions that trigger GrantBlockedError.
-                  Defaults to {'BLOCK', 'REDACT'}. 'EDUCATE' is NOT blocking.
+                  Defaults to {'BLOCK', 'REDACT'}. 'EDUCATE' is NOT blocking —
+                  it allows the proposal through with educational guidance.
         raise_on_block: If False, blocked proposals return the Verdict without
                         raising. Useful for dry-run / audit modes.
         use_decide: If True, calls /v1/decide (full ethical pipeline ~30ms).
@@ -68,12 +66,15 @@ class GrantGuardConfig:
                     governance. Documented in ADR-043 §1 as intentional deviation
                     from other adapters (LangChain, CrewAI default to False).
         policy_path: Path to the sector-specific YAML policy file.
+                     Defaults to data/policies/sectors/grant-eligibility-v1.yaml.
         agent_id: Identifier for this adapter in BTV audit logs.
         bias_declarations: Per-linguistic-group bias calibration data.
+                           Defaults to DEFAULT_BIAS_DECLARATIONS from models.py.
         session_salt: HMAC-SHA256 salt for session_id derivation.
                       MUST be rotated per environment (dev/staging/prod).
-        sanitize_strip_emoji: Strip emoji from proposal text before BTV kernel.
-        sanitize_max_length: Maximum character length for description field.
+        sanitize_strip_emoji: Whether to strip emoji from proposal text before
+                              sending to BTV kernel.
+        sanitize_max_length: Maximum character length for the description field.
         sanitize_wallet_pattern: Regex pattern for Ethereum wallet validation.
         dry_run: If True, logs what would happen without calling BTV kernel.
     """
@@ -113,11 +114,9 @@ class GrantGuard:
     """BTV Governance Guard for grant proposal evaluation.
 
     Usage:
-        from buildtovalue import BTVClient
-        from btv_grants import GrantGuard, GrantProposal, GrantCategory
+        from btv_grants import GrantGuard, GrantGuardConfig, GrantProposal, GrantCategory
 
-        client = BTVClient(api_key="...")
-        guard = GrantGuard(client)
+        guard = GrantGuard(client, GrantGuardConfig(dry_run=True))
 
         proposal = GrantProposal(
             applicant_id="0xabc...123",
@@ -139,7 +138,7 @@ class GrantGuard:
 
     def __init__(
         self,
-        client: BTVClient,
+        client: Any,  # BTVClient — kept as Any to avoid hard dependency
         config: Optional[GrantGuardConfig] = None,
     ) -> None:
         self._client = client
@@ -154,17 +153,21 @@ class GrantGuard:
             self._config.dry_run,
         )
 
+    # ------------------------------------------------------------------
+    # Hook Registration
+    # ------------------------------------------------------------------
+
     def register_validate_hook(
         self, hook: Callable[[GrantProposal], None]
     ) -> "GrantGuard":
-        """Register a custom validation hook (called during _validate())."""
+        """Register a custom validation hook (raises GrantValidationError on failure)."""
         self._validate_hooks.append(hook)
         return self
 
     def register_sanitize_hook(
         self, hook: Callable[[GrantProposal], GrantProposal]
     ) -> "GrantGuard":
-        """Register a custom sanitization hook (called during _sanitize())."""
+        """Register a custom sanitization hook (raises GrantSanitizationError on failure)."""
         self._sanitize_hooks.append(hook)
         return self
 
@@ -180,6 +183,7 @@ class GrantGuard:
         """
         logger.debug("Validating proposal for applicant: %s", proposal.applicant_id)
 
+        # Budget sanity checks
         if proposal.budget_usd > 10_000_000:
             raise GrantValidationError(
                 "budget_usd",
@@ -187,6 +191,7 @@ class GrantGuard:
                 proposal,
             )
 
+        # Wallet format validation
         if proposal.wallet_address:
             if not re.match(self._config.sanitize_wallet_pattern, proposal.wallet_address):
                 raise GrantValidationError(
@@ -195,12 +200,15 @@ class GrantGuard:
                     proposal,
                 )
 
+        # Bias declaration availability check
         if proposal.linguistic_group not in self._config.bias_declarations:
             logger.warning(
-                "No BiasDeclaration for linguistic group '%s'.",
+                "No BiasDeclaration for linguistic group '%s'. "
+                "Governance results may be unreliable for this group.",
                 proposal.linguistic_group.value,
             )
 
+        # Custom hooks
         for hook in self._validate_hooks:
             hook(proposal)
 
@@ -213,7 +221,7 @@ class GrantGuard:
     def _sanitize(self, proposal: GrantProposal) -> GrantProposal:
         """Normalize proposal input for safe processing by the BTV kernel.
 
-        Returns a NEW sanitized proposal — original is not mutated.
+        The sanitized proposal is a NEW object — the original is not mutated.
 
         Raises:
             GrantSanitizationError: If sanitization encounters an unrecoverable state.
@@ -236,23 +244,30 @@ class GrantGuard:
                     "\\U00010000-\\U0010ffff"
                     "\\u2640-\\u2642"
                     "\\u2600-\\u2B55"
-                    "\\u200d\\u23cf\\u23e9\\u231a\\ufe0f\\u3030"
+                    "\\u200d"
+                    "\\u23cf"
+                    "\\u23e9"
+                    "\\u231a"
+                    "\\ufe0f"
+                    "\\u3030"
                     "]+",
                     flags=re.UNICODE,
                 )
                 data["title"] = emoji_pattern.sub("", data["title"])
                 data["description"] = emoji_pattern.sub("", data["description"])
 
+            # Truncate description
             if len(data["description"]) > self._config.sanitize_max_length:
                 original_len = len(data["description"])
                 data["description"] = data["description"][: self._config.sanitize_max_length]
                 logger.warning(
-                    "Description truncated from %d to %d chars for applicant: %s",
+                    "Description truncated from %d to %d characters for applicant: %s",
                     original_len,
                     self._config.sanitize_max_length,
                     proposal.applicant_id,
                 )
 
+            # Normalize unicode whitespace
             for text_field in ("title", "description"):
                 data[text_field] = re.sub(r"\s+", " ", data[text_field]).strip()
 
@@ -287,24 +302,23 @@ class GrantGuard:
     # evaluate() — Main Entry Point
     # ------------------------------------------------------------------
 
-    def evaluate(self, proposal: GrantProposal) -> Verdict:
+    def evaluate(self, proposal: GrantProposal) -> Any:
         """Evaluate a grant proposal through the BTV governance pipeline.
 
-        Steps:
-          1. _validate() — structural pre-flight checks
-          2. _sanitize() — input normalization
-          3. Call BTV kernel (/v1/decide or /v1/validate)
-          4. Check hard_blocked BEFORE action (fail-secure priority, ADR-043 §4)
-          5. Raise GrantBlockedError if blocked and raise_on_block=True
+        CRITICAL: hard_blocked is checked FIRST (fail-secure gate).
+        Even if Gilligan's mercy would change BLOCK→EDUCATE, a hard block
+        is final and non-contestable.
 
-        CRITICAL: hard_blocked is checked FIRST. The Rust gatekeeper sets
-        hard_blocked=True for hard deny-list matches (scam addresses, sanctioned
-        entities). This overrides all pipeline outputs including Gilligan mercy.
+        Args:
+            proposal: The grant proposal to evaluate.
+
+        Returns:
+            Verdict from BTV kernel.
 
         Raises:
             GrantValidationError: If structural validation fails.
             GrantSanitizationError: If sanitization fails.
-            GrantBlockedError: If blocked and raise_on_block=True.
+            GrantBlockedError: If the proposal is blocked and raise_on_block=True.
         """
         # Step 1: Validate
         self._validate(proposal)
@@ -317,24 +331,31 @@ class GrantGuard:
         session_id = sanitized.to_session_id(secret=self._config.session_salt)
 
         logger.info(
-            "Evaluating grant | applicant=%s... | session=%s... | use_decide=%s",
-            sanitized.applicant_id[:12],
-            session_id[:16],
+            "Evaluating grant proposal | applicant=%s | session=%s | use_decide=%s",
+            sanitized.applicant_id[:12] + "...",
+            session_id[:16] + "...",
             self._config.use_decide,
         )
 
+        # Dry-run mode
         if self._config.dry_run:
             logger.info("DRY RUN — skipping BTV kernel call")
-            return Verdict(
-                verdict_id="VRD-DRYRUN00000000000000000000",
-                action="ALLOW",
-                hard_blocked=False,
-                contestable=False,
-                appeal_deadline_hours=0,
-                mercy_applied=False,
-                composite_risk=0.0,
-                jurisdiction_bitmask=0,
-            )
+            from dataclasses import dataclass as _dc
+
+            @_dc
+            class _MockVerdict:
+                verdict_id: str = "VRD-DRYRUN00000000000000000000"
+                action: str = "ALLOW"
+                hard_blocked: bool = False
+                contestable: bool = False
+                appeal_deadline_hours: int = 0
+                mercy_applied: bool = False
+                composite_risk: float = 0.0
+                jurisdiction_bitmask: int = 0
+                rationale: str = "DRY_RUN"
+                trust_score: float = 1.0
+
+            return _MockVerdict()
 
         # Step 4: Call BTV kernel
         try:
@@ -359,6 +380,7 @@ class GrantGuard:
             )
             raise
 
+        # Step 5: Evaluate verdict — hard_blocked FIRST (fail-secure)
         action_str = (
             verdict.action.value
             if hasattr(verdict.action, "value")
@@ -366,7 +388,8 @@ class GrantGuard:
         )
 
         logger.info(
-            "BTV verdict | id=%s | action=%s | hard_blocked=%s | risk=%.4f | trust=%.4f | mercy=%s",
+            "BTV verdict received | verdict=%s | action=%s | hard_blocked=%s "
+            "| risk=%.4f | trust=%.4f | mercy=%s",
             verdict.verdict_id,
             action_str,
             verdict.hard_blocked,
@@ -375,9 +398,7 @@ class GrantGuard:
             verdict.mercy_applied,
         )
 
-        # Step 5a: HARD_BLOCKED CHECK — absolute precedence over action
-        # Even Gilligan mercy (BLOCK->EDUCATE) cannot override a hard block.
-        # ADR-043 §4: hard_blocked gate checked before action gate.
+        # HARD_BLOCKED CHECK — absolute precedence
         if verdict.hard_blocked:
             if self._config.raise_on_block:
                 raise GrantBlockedError(
@@ -389,11 +410,12 @@ class GrantGuard:
                     composite_risk=verdict.composite_risk,
                     trust_score=getattr(verdict, "trust_score", None),
                     mercy_applied=verdict.mercy_applied,
+                    hard_blocked=True,
                     raw_verdict=verdict,
                 )
             return verdict
 
-        # Step 5b: ACTION CHECK — check if action is in the block_on set
+        # ACTION CHECK
         if action_str in self._config.block_on:
             if self._config.raise_on_block:
                 raise GrantBlockedError(
@@ -405,8 +427,15 @@ class GrantGuard:
                     composite_risk=verdict.composite_risk,
                     trust_score=getattr(verdict, "trust_score", None),
                     mercy_applied=verdict.mercy_applied,
+                    hard_blocked=False,
                     raw_verdict=verdict,
                 )
             return verdict
 
+        logger.info(
+            "Grant proposal ALLOWED | applicant=%s | action=%s | risk=%.4f",
+            sanitized.applicant_id[:12] + "...",
+            action_str,
+            verdict.composite_risk or 0.0,
+        )
         return verdict
