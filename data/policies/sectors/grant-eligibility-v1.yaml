@@ -1,0 +1,196 @@
+# ==========================================================================
+# BuildToValue Governance Policy — Grant Eligibility v1
+# ==========================================================================
+# Sector: Grant Funding (Quadratic Funding, DAO Treasury, Public Goods)
+# Version: 1.0.0
+# Created: 2025-11-01
+# Expires: 2026-02-01  (90-day expiry — Jonas integrity principle)
+# Path:   data/policies/sectors/grant-eligibility-v1.yaml
+# ==========================================================================
+#
+# This policy governs the evaluation of grant proposals through the BTV
+# ethical pipeline. Loaded by GrantGuard and passed to the BTV kernel
+# via the `profile` parameter on /v1/decide.
+#
+# Policy structure follows BTV Policy-as-Code conventions:
+#   - Rules are versioned with mandatory 90-day expiry (Jonas principle)
+#   - Risk weights multiply the composite_risk score
+#   - Thresholds define action boundaries (ALLOW/BLOCK/EDUCATE/INSPECT)
+#   - Sector-specific overrides take precedence over base policy
+# ==========================================================================
+
+metadata:
+  policy_id: "POL-GRANT-ELIG-001"
+  name: "Grant Eligibility Policy"
+  version: "1.0.0"
+  sector: "grants"
+  created: "2025-11-01T00:00:00Z"
+  expires: "2026-02-01T00:00:00Z"
+  author: "BTV Governance Team"
+  description: >
+    Governs evaluation of grant proposals for quadratic funding rounds,
+    DAO treasury disbursements, and public goods funding. Covers financial
+    risk, identity verification, deliverable feasibility, and jurisdictional
+    compliance.
+
+# ---------------------------------------------------------------------------
+# Jurisdiction Configuration
+# ---------------------------------------------------------------------------
+jurisdiction:
+  bitmask_schema:
+    0x01: "OFAC — US Office of Foreign Assets Control"
+    0x02: "EU — European Union AML Directives"
+    0x04: "UK — UK OFAC Sanctions"
+    0x08: "UN — United Nations Security Council"
+    0x10: "BR — Brazilian Central Bank (BCB) Crypto Regulations"
+    0x20: "SG — Monetary Authority of Singapore"
+    0x40: "JP — Japanese Financial Services Agency"
+    0x80: "KE — Central Bank of Kenya"
+
+  # Sanctioned country codes — hard block regardless of proposal content
+  # BTV Rust gatekeeper enforces these as hard_blocked=True
+  hard_block_countries:
+    - "KP"  # North Korea (OFAC SDN)
+    - "IR"  # Iran (OFAC SDN)
+    - "SY"  # Syria (OFAC SDN)
+    - "CU"  # Cuba (OFAC SDN)
+    - "RU"  # Russia (EU/UK sanctions post-2022)
+
+# ---------------------------------------------------------------------------
+# Risk Thresholds — Action Boundaries
+# ---------------------------------------------------------------------------
+thresholds:
+  allow_below: 0.30      # composite_risk < 0.30 -> ALLOW
+  educate_below: 0.55    # 0.30 <= risk < 0.55  -> EDUCATE
+  inspect_below: 0.70    # 0.55 <= risk < 0.70  -> INSPECT
+  block_above: 0.70      # risk >= 0.70          -> BLOCK
+
+# ---------------------------------------------------------------------------
+# Hard Deny Patterns — Rust Gatekeeper (hard_blocked=True)
+# ---------------------------------------------------------------------------
+# These patterns trigger hard_blocked=True in the Rust gatekeeper BEFORE
+# the ethical pipeline runs. They cannot be overridden by mercy.
+hard_deny:
+  scam_patterns:
+    - pattern: "guaranteed.*return"
+      flags: ["CASE_INSENSITIVE"]
+      description: "Guaranteed returns — classic Ponzi/scam signal"
+    - pattern: "guaranteed.*roi"
+      flags: ["CASE_INSENSITIVE"]
+      description: "Guaranteed ROI — scam signal"
+    - pattern: "\\d{3,}%.*apy"
+      flags: ["CASE_INSENSITIVE"]
+      description: "Unrealistic APY claims (>= 100%)"
+    - pattern: "recruit.*friend.*earn"
+      flags: ["CASE_INSENSITIVE"]
+      description: "Pyramid/MLM recruitment pattern"
+    - pattern: "renda.*garantida"
+      flags: ["CASE_INSENSITIVE"]
+      description: "pt-BR: guaranteed income — scam signal"
+    - pattern: "ingresos.*garantizados"
+      flags: ["CASE_INSENSITIVE"]
+      description: "es: guaranteed income — scam signal"
+    - pattern: "mapato.*yanayodhamirika"
+      flags: ["CASE_INSENSITIVE"]
+      description: "sw: guaranteed income — scam signal"
+
+  known_scam_wallets:
+    - "0x0000000000000000000000000000000000000000"  # Null address
+    - "0xdead000000000000000000000000000000000000"  # Dead address
+    - "0x000000000000000000000000000000000000dEaD"  # Dead address variant
+
+# ---------------------------------------------------------------------------
+# Risk Weights — Per Feature
+# ---------------------------------------------------------------------------
+risk_weights:
+  # Budget scaling — larger requests need more scrutiny
+  budget_tiers:
+    - max: 10_000
+      weight: 1.0
+    - max: 100_000
+      weight: 1.2
+    - max: 500_000
+      weight: 1.4
+    - max: 1_000_000
+      weight: 1.6
+    - max: 5_000_000
+      weight: 1.8
+    - max: 10_000_000
+      weight: 2.0
+
+  # Team size factor — solo projects need more scrutiny
+  team_size:
+    solo: 1.3       # team_size == 1
+    small: 1.1      # team_size 2-3
+    medium: 1.0     # team_size 4-10
+    large: 0.9      # team_size > 10
+
+  # Category risk multipliers
+  category_multipliers:
+    defi: 1.5             # Highest risk — financial protocol attacks
+    infrastructure: 1.3   # Smart contract risk
+    governance: 1.2       # Capture/manipulation risk
+    research: 1.0         # Baseline
+    education: 0.9        # Lower financial risk
+    public_goods: 0.8     # Lowest risk — transparent public benefit
+    climate: 0.85
+    community: 0.9
+    open_source: 0.9
+    other: 1.1
+
+  # Impact classification multipliers
+  action_impact:
+    irreversible: 1.5
+    conditionally_reversible: 1.2
+    reversible: 1.0
+
+# ---------------------------------------------------------------------------
+# Mercy Configuration — Gilligan Stage
+# ---------------------------------------------------------------------------
+# Gilligan can upgrade BLOCK->EDUCATE when:
+#   - hard_blocked is False (never mercy for hard blocks)
+#   - trust_score >= mercy_threshold
+#   - composite_risk < mercy_risk_ceiling
+#   - No critical findings in the Rawls/Levinas/Jonas stages
+mercy:
+  enabled: true
+  trust_threshold: 0.60         # trust_score must be >= 0.60
+  mercy_risk_ceiling: 0.80      # composite_risk must be < 0.80
+  max_upgrade: "EDUCATE"        # Mercy can NEVER produce ALLOW
+  critical_findings_block: true # Critical findings override mercy
+
+# ---------------------------------------------------------------------------
+# Bias Declaration Enforcement — Jonas Integrity Principle
+# ---------------------------------------------------------------------------
+# BTV enforces explicit bias declarations per linguistic group.
+# Uncalibrated groups (sw) MUST have fpr/fnr = null — never fabricated.
+bias_declaration_enforcement:
+  require_declaration: true
+  uncalibrated_groups:
+    - group: "sw"
+      action_on_null: "INSPECT"  # Uncalibrated proposals get INSPECT by default
+      reason: >
+        Swahili (sw) linguistic group is uncalibrated — no real proposal
+        data available yet. FPR/FNR fabrication is prohibited by the Jonas
+        integrity principle. Proposals from this group are routed to human
+        review (INSPECT) until calibration data is collected.
+    enforcement_level: "strict"  # Reject if declaration is missing or fabricated
+
+# ---------------------------------------------------------------------------
+# Contestability SLA — Levinas Principle
+# ---------------------------------------------------------------------------
+# Every blocked entity MUST know if they can appeal and within what timeframe.
+contestability:
+  policy_block_sla_hours: 168   # 7 days for policy blocks
+  hard_block_contestable: false # Hard blocks are NEVER contestable
+  hard_block_sla_hours: 0       # No appeal window for hard blocks
+
+# ---------------------------------------------------------------------------
+# Observability
+# ---------------------------------------------------------------------------
+observability:
+  emit_metrics: true
+  metrics_prefix: "btv.grants"
+  log_level: "INFO"
+  audit_log: true
+  audit_retention_days: 365
