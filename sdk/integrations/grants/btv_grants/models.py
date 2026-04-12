@@ -19,7 +19,7 @@ CRITICAL DESIGN DECISIONS (see ADR-043):
 from __future__ import annotations
 
 import hashlib
-import hmac
+import hmac as hmac_lib
 import json
 import uuid
 from dataclasses import dataclass, field
@@ -90,9 +90,10 @@ class BiasDeclaration:
 
     Attributes:
         group: Linguistic group this declaration covers.
-        fpr: False Positive Rate (0.0-1.0) or None if uncalibrated.
-        fnr: False Negative Rate (0.0-1.0) or None if uncalibrated.
+        fpr: False Positive Rate (0.0–1.0) or None if uncalibrated.
+        fnr: False Negative Rate (0.0–1.0) or None if uncalibrated.
         sample_size: Number of real-world samples used for calibration.
+                     0 means no calibration data (synthetic-only).
         calibration_date: ISO 8601 date of last calibration, or None.
         notes: Free-form notes about calibration methodology.
     """
@@ -129,6 +130,54 @@ class BiasDeclaration:
 
 
 # ---------------------------------------------------------------------------
+# Default Bias Declarations
+# ---------------------------------------------------------------------------
+
+DEFAULT_BIAS_DECLARATIONS: Dict[LinguisticGroup, BiasDeclaration] = {
+    LinguisticGroup.EN_US: BiasDeclaration(
+        group=LinguisticGroup.EN_US,
+        fpr=0.03,
+        fnr=0.05,
+        sample_size=2400,
+        calibration_date="2025-11-01",
+        notes="Calibrated against 2,400 Gitcoin Grants Round 18 proposals. "
+              "FPR measured as ALLOW→should-BLOCK rate; FNR as BLOCK→should-ALLOW.",
+    ),
+    LinguisticGroup.PT_BR: BiasDeclaration(
+        group=LinguisticGroup.PT_BR,
+        fpr=0.07,
+        fnr=0.09,
+        sample_size=800,
+        calibration_date="2025-11-01",
+        notes="Calibrated against 800 Web3 Comunidade proposals + 200 synthetic edge cases. "
+              "Higher FPR/FNR than en-US due to informal register patterns in Portuguese.",
+    ),
+    LinguisticGroup.ES: BiasDeclaration(
+        group=LinguisticGroup.ES,
+        fpr=0.06,
+        fnr=0.08,
+        sample_size=600,
+        calibration_date="2025-11-01",
+        notes="Calibrated against 600 Spanish-speaking DAO proposals. "
+              "FNR slightly elevated due to code-switching patterns.",
+    ),
+    # Swahili — UNCALIBRATED. FPR/FNR MUST remain None.
+    # The Jonas integrity principle forbids fabricating bias data.
+    # Calibration target: 500+ real proposals from East African Web3 community.
+    LinguisticGroup.SW: BiasDeclaration(
+        group=LinguisticGroup.SW,
+        fpr=None,
+        fnr=None,
+        sample_size=0,
+        calibration_date=None,
+        notes="UNCALIBRATED — no real Swahili grant proposals available yet. "
+              "DO NOT fabricate FPR/FNR values. Target: 500+ proposals from "
+              "East African Web3 community (Kenya, Tanzania, Uganda, Rwanda).",
+    ),
+}
+
+
+# ---------------------------------------------------------------------------
 # Grant Proposal
 # ---------------------------------------------------------------------------
 
@@ -142,7 +191,9 @@ class GrantProposal:
     which is critical for the BTV language detector and multilingual governance.
 
     Attributes:
-        applicant_id: Unique identifier for the grant applicant.
+        applicant_id: Unique identifier for the grant applicant (e.g. Ethereum
+                      address, GitHub handle, or UUID). Used to derive session_id
+                      via HMAC-SHA256 — NOT sent in plaintext to BTV.
         title: Grant proposal title in the applicant's own language.
         description: Full proposal description in the applicant's own language.
         category: Grant category for sector-specific policy routing.
@@ -150,8 +201,9 @@ class GrantProposal:
         budget_usd: Requested funding amount in USD.
         team_size: Number of team members involved.
         linguistic_group: Primary language of the proposal content.
-        action_impact: Impact classification. Defaults to IRREVERSIBLE (fail-secure).
-        country_code: ISO 3166-1 alpha-2 country code.
+        action_impact: Impact classification. Defaults to IRREVERSIBLE
+                       (fail-secure — missing this field triggers stricter checks).
+        country_code: ISO 3166-1 alpha-2 country code of the applicant/team.
         wallet_address: Ethereum wallet address for fund disbursement.
         deliverables: List of expected deliverables / milestones.
         tags: Free-form tags for additional categorization.
@@ -227,6 +279,7 @@ class GrantProposal:
             "action_impact": self.action_impact.value,
         }
 
+        # Append optional fields only if present (avoids null pollution)
         if self.country_code:
             payload["country_code"] = self.country_code
         if self.wallet_address:
@@ -251,13 +304,15 @@ class GrantProposal:
         branch handles all BLAKE3 operations.
 
         HMAC-SHA256 provides:
-          - Deterministic session IDs per applicant
+          - Deterministic session IDs per applicant (same applicant = same session)
           - Resistance to length-extension attacks (vs plain SHA-256)
           - A distinct salt domain from the kernel's BLAKE3 operations
+
+        The salt should be rotated per deployment environment (dev/staging/prod).
         """
         if not self.applicant_id or not self.applicant_id.strip():
             return str(uuid.uuid4())
-        return hmac.new(
+        return hmac_lib.new(
             secret,
             self.applicant_id.encode("utf-8"),
             hashlib.sha256,
@@ -284,47 +339,23 @@ class GrantProposal:
 
 
 # ---------------------------------------------------------------------------
-# Default Bias Declarations
+# Grant Verdict (enriched adapter model)
 # ---------------------------------------------------------------------------
 
-DEFAULT_BIAS_DECLARATIONS: Dict[LinguisticGroup, BiasDeclaration] = {
-    LinguisticGroup.EN_US: BiasDeclaration(
-        group=LinguisticGroup.EN_US,
-        fpr=0.03,
-        fnr=0.05,
-        sample_size=2400,
-        calibration_date="2025-11-01",
-        notes="Calibrated against 2,400 Gitcoin Grants Round 18 proposals. "
-              "FPR measured as ALLOW->should-BLOCK rate; FNR as BLOCK->should-ALLOW.",
-    ),
-    LinguisticGroup.PT_BR: BiasDeclaration(
-        group=LinguisticGroup.PT_BR,
-        fpr=0.07,
-        fnr=0.09,
-        sample_size=800,
-        calibration_date="2025-11-01",
-        notes="Calibrated against 800 Web3 Comunidade proposals + 200 synthetic edge cases. "
-              "Higher FPR/FNR than en-US due to informal register patterns in Portuguese.",
-    ),
-    LinguisticGroup.ES: BiasDeclaration(
-        group=LinguisticGroup.ES,
-        fpr=0.06,
-        fnr=0.08,
-        sample_size=600,
-        calibration_date="2025-11-01",
-        notes="Calibrated against 600 Spanish-speaking DAO proposals. "
-              "FNR slightly elevated due to code-switching patterns.",
-    ),
-    # Swahili — UNCALIBRATED. FPR/FNR MUST remain None.
-    # The Jonas integrity principle forbids fabricating bias data.
-    LinguisticGroup.SW: BiasDeclaration(
-        group=LinguisticGroup.SW,
-        fpr=None,
-        fnr=None,
-        sample_size=0,
-        calibration_date=None,
-        notes="UNCALIBRATED — no real Swahili grant proposals available yet. "
-              "DO NOT fabricate FPR/FNR values. Target: 500+ proposals from "
-              "East African Web3 community (Kenya, Tanzania, Uganda, Rwanda).",
-    ),
-}
+@dataclass
+class GrantVerdict:
+    """Enriched verdict returned by GrantGuard.evaluate().
+
+    Wraps the raw BTV Verdict with grant-specific computed fields
+    for easier consumption by upstream callers.
+    """
+    verdict_id: str
+    action: str
+    is_hard_block: bool
+    can_appeal: bool
+    appeal_deadline_hours: int
+    composite_risk: float
+    trust_score: float
+    mercy_applied: bool
+    explanation: str
+    raw_verdict: Optional[object] = None
