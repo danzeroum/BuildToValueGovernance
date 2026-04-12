@@ -24,18 +24,27 @@ class GrantBlockedError(Exception):
     appeal deadline (Levinas SLA principle from the BTV separation of powers).
 
     Attributes:
-        verdict_id: Unique ULID identifier of the verdict.
+        verdict_id: Unique ULID identifier of the verdict (VRD-[0-9A-HJKMNP-TV-Z]{26}).
         action: The governance action taken — typically 'BLOCK', but may also be
-                'REDACT' depending on policy configuration.
-        rationale: Human-readable rationale combining Rawls + Levinas + Jonas + Gilligan.
+                'REDACT' or 'EDUCATE' depending on policy configuration.
+        rationale: Human-readable rationale from the BTV explain module,
+                   combining Rawls + Levinas + Jonas + Gilligan stages.
         contestable: Whether the applicant can file an appeal via /v1/appeals.
-                     Always False when hard_blocked is True.
-        appeal_deadline_hours: Hours remaining to file an appeal.
-                               0 when contestable is False.
-        composite_risk: Aggregate risk score (0.0-1.0).
-        trust_score: Post-pipeline trust score.
-        mercy_applied: Whether Gilligan's mercy algorithm intervened.
-        raw_verdict: Optional reference to the original Verdict object.
+                     Determined by Levinas stage; False if hard_blocked is True
+                     (hard blocks bypass the appeals pathway per BTV fail-secure design).
+        appeal_deadline_hours: Hours remaining to file an appeal. Only meaningful
+                               when contestable is True. Derived from the Levinas
+                               SLA timer configured in the policy YAML.
+        composite_risk: Aggregate risk score (0.0–1.0) from the BTV pipeline.
+                        Useful for upstream systems to prioritize review queues.
+        trust_score: Post-pipeline trust score reflecting Jonas calibration
+                     and Gilligan mercy evaluation.
+        mercy_applied: Whether Gilligan's mercy algorithm intervened (e.g.
+                       BLOCK -> EDUCATE). Relevant for auditing and transparency.
+        hard_blocked: Whether this block originated from the Rust fail-secure gate
+                      (hard deny-list: sanctioned entities, known scams).
+        raw_verdict: Optional reference to the original Verdict object for
+                     advanced consumers that need full explain.* fields.
     """
 
     def __init__(
@@ -48,6 +57,7 @@ class GrantBlockedError(Exception):
         composite_risk: Optional[float] = None,
         trust_score: Optional[float] = None,
         mercy_applied: Optional[bool] = None,
+        hard_blocked: bool = False,
         raw_verdict: Optional[object] = None,
     ) -> None:
         self.verdict_id = verdict_id
@@ -58,19 +68,22 @@ class GrantBlockedError(Exception):
         self.composite_risk = composite_risk
         self.trust_score = trust_score
         self.mercy_applied = mercy_applied
+        self.hard_blocked = hard_blocked
         self.raw_verdict = raw_verdict
 
+        # Build a rich error message for logging / debugging
         appeal_info = (
             f" | Contestable: YES (appeal within {appeal_deadline_hours}h)"
             if contestable
             else " | Contestable: NO (hard block — no appeal pathway)"
         )
         mercy_info = " | Mercy: YES (Gilligan intervention)" if mercy_applied else ""
+        hard_info = " | HARD_BLOCK: YES (fail-secure gate)" if hard_blocked else ""
 
         msg = (
             f"[BTV GRANT BLOCKED] verdict={verdict_id} action={action} "
             f"risk={composite_risk or 'N/A'} trust={trust_score or 'N/A'}"
-            f"{appeal_info}{mercy_info}\n"
+            f"{appeal_info}{mercy_info}{hard_info}\n"
             f"  Rationale: {rationale}"
         )
         super().__init__(msg)
@@ -79,13 +92,18 @@ class GrantBlockedError(Exception):
 class GrantValidationError(Exception):
     """Raised when a grant proposal fails structural validation.
 
-    Raised by _validate() BEFORE the proposal reaches the BTV kernel.
-    Catches missing required fields, malformed addresses, budget errors.
+    This is raised by the `_validate()` method of GrantGuard BEFORE the
+    proposal reaches the BTV kernel. It catches issues like missing required
+    fields, malformed addresses, or budget arithmetic errors.
+
+    This aligns with the BTV adapter pattern where adapters perform a
+    lightweight pre-validation pass, and the Rust kernel performs a deeper
+    cryptographic + semantic validation via /v1/validate.
 
     Attributes:
-        field: The field name that failed validation.
-        reason: Human-readable description of the failure.
-        proposal_ref: Optional reference to the GrantProposal.
+        field: The field name that failed validation (e.g. 'applicant_id', 'budget_usd').
+        reason: Human-readable description of the validation failure.
+        proposal_ref: Optional reference to the GrantProposal for debugging.
     """
 
     def __init__(
@@ -103,9 +121,13 @@ class GrantValidationError(Exception):
 class GrantSanitizationError(Exception):
     """Raised when sanitization of a grant proposal fails unexpectedly.
 
+    Sanitization normally transforms the input for safe processing by the
+    BTV kernel (e.g. stripping PII, normalizing unicode). This error is
+    raised only when the sanitizer itself encounters an unrecoverable state.
+
     Attributes:
-        stage: Which sanitization stage failed.
-        detail: Technical detail for debugging.
+        stage: Which sanitization stage failed (e.g. 'pii_removal', 'unicode_norm').
+        detail: Technical detail about the failure for debugging.
     """
 
     def __init__(self, stage: str, detail: str) -> None:
