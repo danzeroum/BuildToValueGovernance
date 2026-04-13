@@ -1,180 +1,252 @@
-# BuildToValue — Grant Eligibility Policy v1
-# Sector: grants / quadratic-funding / DAO-treasury
-# Path: data/policies/sectors/grant-eligibility-v1.yaml
-#
-# This policy governs the ethical pipeline for grant proposal evaluation.
-# It integrates with the BTV Rust kernel (Executive branch) and the
-# Python Governance layer (Judicial branch).
-#
-# Philosophical foundations:
-#   Rawls  — equitable distribution of access regardless of applicant origin
-#   Levinas — every blocked applicant deserves to know why and how to appeal
-#   Jonas  — responsibility: do not fabricate bias data for uncalibrated groups
-#   Gilligan — mercy: use EDUCATE before BLOCK for first-time borderline cases
-#
-# ADR reference: docs/adr/0043-unified-verdict-identity.md
+# ==========================================================================
+# BuildToValue Governance Policy — Grant Eligibility v1
+# ==========================================================================
+# Sector: Grant Funding (Quadratic Funding, DAO Treasury, Public Goods)
+# Version: 1.0.0
+# Created: 2025-11-01
+# Expires: 2026-05-01  (90-day expiry — Jonas integrity principle)
+# Path:   data/policies/sectors/grant-eligibility-v1.yaml
+# ==========================================================================
 
-schema_version: "2"
-policy_id: "grant-eligibility-v1"
-description: "Grant proposal eligibility evaluation — multi-jurisdiction, multilingual"
-sector: "grants"
-effective_date: "2026-04-11"
+metadata:
+  policy_id: "POL-GRANT-ELIG-001"
+  name: "Grant Eligibility Policy"
+  version: "1.0.0"
+  sector: "grants"
+  created: "2025-11-01T00:00:00Z"
+  expires: "2026-05-01T00:00:00Z"
+  author: "BTV Governance Team"
+  description: >
+    Governs evaluation of grant proposals for quadratic funding rounds,
+    DAO treasury disbursements, and public goods funding. Covers financial
+    risk, identity verification, deliverable feasibility, and jurisdictional
+    compliance.
 
-# ---------------------------------------------------------------------------
-# Risk Thresholds
-# ---------------------------------------------------------------------------
-risk_thresholds:
-  low:       { max: 0.30 }
-  moderate:  { min: 0.30, max: 0.55 }
-  elevated:  { min: 0.55, max: 0.70 }
-  high:      { min: 0.70, max: 0.85 }
-  critical:  { min: 0.85 }
+jurisdiction:
+  bitmask_schema:
+    0x01: "OFAC — US Office of Foreign Assets Control"
+    0x02: "EU — European Union AML Directives"
+    0x04: "UK — UK OFAC Sanctions"
+    0x08: "UN — United Nations Security Council"
+    0x10: "BR — Brazilian Central Bank (BCB) Crypto Regulations"
+    0x20: "SG — Monetary Authority of Singapore"
+    0x40: "JP — Japanese Financial Services Agency"
+    0x80: "KE — Central Bank of Kenya"
 
-# ---------------------------------------------------------------------------
-# Decision Mapping
-# ---------------------------------------------------------------------------
-decision_matrix:
-  - risk_level: low
-    action: ALLOW
-    contestable: false
-    appeal_deadline_hours: 0
+  sanctioned_country_codes:
+    - "KP"  # North Korea
+    - "IR"  # Iran
+    - "SY"  # Syria
+    - "CU"  # Cuba
+    - "VE"  # Venezuela (partial)
 
-  - risk_level: moderate
-    action: EDUCATE
-    contestable: false
-    appeal_deadline_hours: 0
-    notes: "Gilligan mercy — provide guidance before blocking"
+  elevated_risk_country_codes:
+    - "RU"  # Russia
+    - "BY"  # Belarus
+    - "MM"  # Myanmar
 
-  - risk_level: elevated
-    action: INSPECT
+financial:
+  budget_tiers:
+    - tier: "micro"
+      max_usd: 1000
+      risk_multiplier: 0.8
+      description: "Small community grants — reduced scrutiny"
+
+    - tier: "small"
+      max_usd: 10000
+      risk_multiplier: 1.0
+      description: "Standard individual grants — normal scrutiny"
+
+    - tier: "medium"
+      max_usd: 100000
+      risk_multiplier: 1.3
+      description: "Team grants — elevated scrutiny"
+
+    - tier: "large"
+      max_usd: 500000
+      risk_multiplier: 1.6
+      description: "Major grants — high scrutiny, mandatory human review on INSPECT"
+
+    - tier: "mega"
+      max_usd: null
+      risk_multiplier: 2.0
+      description: "Ecosystem grants — maximum scrutiny"
+
+  anomaly_checks:
+    budget_per_deliverable_max_usd: 250000
+    budget_per_team_member_max_usd: 500000
+    budget_description_ratio_min: 0.01
+    budget_description_ratio_max: 100.0
+
+thresholds:
+  allow:
+    max_risk: 0.30
+    description: "Low risk — allow with standard logging"
+
+  educate:
+    min_risk: 0.30
+    max_risk: 0.50
+    description: "Moderate risk — allow with educational guidance"
+
+  inspect:
+    min_risk: 0.50
+    max_risk: 0.70
+    description: "Elevated risk — requires human review before disbursement"
+
+  block:
+    min_risk: 0.70
+    max_risk: 0.90
+    description: "High risk — block with contestability (Levinas appeal pathway)"
+
+  hard_block:
+    min_risk: 0.90
+    description: "Critical risk — hard block, no appeal pathway"
+
+actions:
+  ALLOW:
+    description: "Proposal passes governance — proceed with funding"
+    post_action: "LOG"
+    human_review: false
+
+  EDUCATE:
+    description: "Proposal passes with conditions — applicant receives guidance"
+    post_action: "LOG"
+    human_review: false
+    educate_message: >
+      Your proposal has been approved with educational guidance. Please review
+      the attached recommendations for strengthening your project's governance
+      practices before fund disbursement.
+
+  INSPECT:
+    description: "Proposal requires human review before final decision"
+    post_action: "LOG"
+    human_review: true
+    review_sla_hours: 72
+    review_escalation_hours: 168
+
+  BLOCK:
+    description: "Proposal blocked — applicant may appeal"
+    post_action: "LOG"
+    human_review: false
     contestable: true
-    appeal_deadline_hours: 168  # 7 days
+    appeal_deadline_hours: 168
+    appeal_endpoint: "/v1/appeals"
 
-  - risk_level: high
-    action: BLOCK
+  REDACT:
+    description: "Proposal has sensitive content redacted before review"
+    post_action: "LOG"
+    human_review: true
     contestable: true
-    appeal_deadline_hours: 168  # 7 days (Levinas SLA)
-    notes: "Policy block — applicant may file appeal within 7 days"
+    appeal_deadline_hours: 168
 
-  - risk_level: critical
-    action: BLOCK
-    hard_block: true
-    contestable: false
-    appeal_deadline_hours: 0
-    notes: "Hard block — sanctioned entity, known scam, or OFAC match"
+  LOG:
+    description: "Informational — no governance action required"
+    post_action: "LOG"
+    human_review: false
 
-# ---------------------------------------------------------------------------
-# Hard Block Triggers (Rust kernel fast-path)
-# ---------------------------------------------------------------------------
-hard_block_triggers:
-  sanctioned_countries:
-    - KP  # North Korea
-    - IR  # Iran
-    - SY  # Syria
-    - CU  # Cuba
-    description: "OFAC-sanctioned jurisdictions — financial transactions prohibited"
+rawls:
+  fairness_weights:
+    community_benefit: 0.30
+    accessibility: 0.25
+    inclusivity: 0.20
+    transparency: 0.15
+    accountability: 0.10
+  veil_of_ignorance:
+    enabled: true
+    strip_identity_fields:
+      - "applicant_id"
+      - "wallet_address"
+      - "country_code"
+      - "team_size"
 
-  scam_patterns:
-    - pattern: "guaranteed.*\\d+x"
-      description: "Guaranteed multiplier returns"
-    - pattern: "(guaranteed|garantido|garantizado).*\\d+%.*\\d+\\s*(days?|dias?|días?)"
-      description: "Guaranteed percentage return in X days (multilingual)"
-    - pattern: "(pyramid|piramidal|pirâmide|esquema ponzi)"
-      description: "Pyramid/Ponzi scheme language"
-    - pattern: "(recruit|recrutar|reclutar).*friends.*earn"
-      description: "Multi-level recruitment schemes"
-    - pattern: "guaranteed.*passive.*income"
-      description: "Guaranteed passive income"
+levinas:
+  sla:
+    initial_response_hours: 24
+    appeal_response_hours: 72
+    escalation_hours: 168
+  contestability:
+    contestable_actions:
+      - "BLOCK"
+      - "REDACT"
+    non_contestable_actions:
+      - "ALLOW"
+      - "LOG"
+    hard_block_contestable: false
+  language:
+    supported_groups:
+      - "en-US"
+      - "pt-BR"
+      - "es"
+      - "sw"
+    fallback_group: "en-US"
+    translation_required_for: []
 
-  deny_list_wallets:
-    description: "Known scam wallet addresses — updated from chainanalysis feed"
-    source: "data/deny-lists/wallets.json"
+jonas:
+  policy_expiry_days: 90
+  retention:
+    verdict_retention_days: 365
+    session_retention_days: 180
+    appeal_retention_days: 730
+  bias:
+    require_declaration: true
+    uncalibrated_groups:
+      - group: "sw"
+        action: "FLAG"
+        description: >
+          Swahili group is uncalibrated. Proposals in this group will be
+          flagged for additional review. FPR/FNR must NOT be fabricated.
+          Target: 500+ real proposals for calibration.
 
-# ---------------------------------------------------------------------------
-# Category-Specific Overrides
-# ---------------------------------------------------------------------------
-category_overrides:
-  defi:
-    risk_adjustment: +0.10
-    notes: "DeFi proposals carry additional financial risk — risk score bumped +10%"
-    require_fields:
-      - audit_status
-      - smart_contract_address
+gilligan:
+  mercy:
+    enabled: true
+    max_intervention: "EDUCATE"
+    trust_threshold: 0.6
+    critical_findings_override: false
+  care_factors:
+    first_time_applicant_bonus: 0.05
+    community_endorsement_weight: 0.15
+    previous_grants_completed_weight: 0.20
+    previous_grants_failed_weight: -0.25
 
-  governance:
-    risk_adjustment: +0.05
-    notes: "Governance proposals affecting protocol parameters — elevated scrutiny"
-
+categories:
   public_goods:
     risk_adjustment: -0.05
-    notes: "Public goods with open-source commitment — risk score reduced -5%"
-    require_fields:
-      - open_source_license
-
-# ---------------------------------------------------------------------------
-# BiasDeclaration Requirements (Jonas integrity principle)
-# ---------------------------------------------------------------------------
-bias_declarations:
-  en-US:
-    status: calibrated
-    fpr: 0.03
-    fnr: 0.05
-    sample_size: 2400
-    last_calibrated: "2025-11-01"
-    notes: "Calibrated against Gitcoin Grants Round 18"
-
-  pt-BR:
-    status: calibrated
-    fpr: 0.07
-    fnr: 0.09
-    sample_size: 800
-    last_calibrated: "2025-11-01"
-    notes: "Calibrated against Web3 Comunidade proposals"
-
-  es:
-    status: calibrated
-    fpr: 0.06
-    fnr: 0.08
-    sample_size: 600
-    last_calibrated: "2025-11-01"
-    notes: "Calibrated against Spanish-speaking DAO proposals"
-
-  sw:
-    status: uncalibrated
-    fpr: null  # DO NOT fabricate — Jonas principle
-    fnr: null  # DO NOT fabricate — Jonas principle
-    sample_size: 0
-    last_calibrated: null
-    notes: |
-      UNCALIBRATED — no real Swahili grant proposals available yet.
-      FPR/FNR MUST remain null. Never fabricate calibration data.
-      Target: 500+ proposals from East African Web3 community
-      (Kenya, Tanzania, Uganda, Rwanda).
-      Default action for sw proposals: INSPECT (elevated scrutiny)
-      until calibration data is available.
-    default_action_override: INSPECT
-
-# ---------------------------------------------------------------------------
-# Contestability SLA (Levinas principle)
-# ---------------------------------------------------------------------------
-contestability:
-  sla_hours: 168  # 7 days
-  appeals_endpoint: "/v1/appeals"
-  response_sla_hours: 24  # BTV commits to 24h response
-  hard_block_contestable: false  # Hard blocks bypass appeal pathway
-  notification_channels:
-    - email
-    - webhook
-
-# ---------------------------------------------------------------------------
-# Transparency Requirements (Radical Transparency)
-# ---------------------------------------------------------------------------
-transparency:
-  explain_decision: true      # explain_decision() mandatory for all actions
-  bias_declaration: true      # BiasDeclaration must be attached to every verdict
-  audit_log: true             # All decisions logged to immutable ledger
-  rationale_languages:        # Rationale must be provided in applicant's language
-    - en-US
-    - pt-BR
-    - es
-    - sw
+    max_budget_multiplier: 2.0
+    description: "Open-source, free services, commons infrastructure"
+  infrastructure:
+    risk_adjustment: 0.0
+    max_budget_multiplier: 3.0
+    description: "Protocol development, tooling, node operations"
+  community:
+    risk_adjustment: -0.03
+    max_budget_multiplier: 1.5
+    description: "Events, education, meetup programs, content creation"
+  education:
+    risk_adjustment: -0.05
+    max_budget_multiplier: 1.5
+    description: "Educational content, courses, workshops, research grants"
+  climate:
+    risk_adjustment: -0.02
+    max_budget_multiplier: 2.5
+    description: "Environmental sustainability, carbon offset, regenerative"
+  defi:
+    risk_adjustment: 0.10
+    max_budget_multiplier: 2.0
+    description: "DeFi protocols, lending, AMMs, yield strategies"
+  governance:
+    risk_adjustment: 0.05
+    max_budget_multiplier: 2.0
+    description: "DAO tooling, voting mechanisms, governance frameworks"
+  open_source:
+    risk_adjustment: -0.05
+    max_budget_multiplier: 2.0
+    description: "Open-source software, libraries, frameworks"
+  research:
+    risk_adjustment: 0.03
+    max_budget_multiplier: 3.0
+    description: "Academic research, R&D, experimental protocols"
+  other:
+    risk_adjustment: 0.0
+    max_budget_multiplier: 1.5
+    description: "Uncategorized proposals — standard risk profile"

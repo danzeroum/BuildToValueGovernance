@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BTV Grant Decision Adapter — Adversarial Test Dataset Schema",
+  "description": "JSON Schema for validating adversarial test cases used in the GrantDecisionAdapter test suite.",
+  "type": "object",
+  "required": ["version", "generated_at", "total_cases", "categories", "linguistic_groups", "cases"],
+  "properties": {
+    "version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "total_cases": { "type": "integer", "minimum": 800 },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["structural", "sanitization", "hard_block", "policy_block", "mercy", "language", "bias", "session"]
+      },
+      "minItems": 8
+    },
+    "linguistic_groups": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["en-US", "pt-BR", "es", "sw"] },
+      "minItems": 4
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "description", "ground_truth", "linguistic_group", "risk_level", "proposal_data"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Z]{2,4}-\\d{3,4}$" },
+          "category": {
+            "type": "string",
+            "enum": ["structural", "sanitization", "hard_block", "policy_block", "mercy", "language", "bias", "session"]
+          },
+          "description": { "type": "string", "minLength": 10 },
+          "ground_truth": {
+            "type": "string",
+            "enum": ["ALLOW", "BLOCK", "EDUCATE", "INSPECT", "REDACT", "LOG", "HARD_BLOCK", "VALIDATION_ERROR"]
+          },
+          "linguistic_group": { "type": "string", "enum": ["en-US", "pt-BR", "es", "sw"] },
+          "risk_level": {
+            "type": "string",
+            "enum": ["low", "moderate", "elevated", "high", "critical", "n/a"]
+          },
+          "proposal_data": {
+            "type": "object",
+            "required": ["applicant_id", "title", "description"],
+            "properties": {
+              "applicant_id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "category": {
+                "type": "string",
+                "enum": ["public_goods", "infrastructure", "community", "education", "climate", "defi", "governance", "open_source", "research", "other"],
+                "default": "other"
+              },
+              "budget_usd": { "type": "number", "minimum": 0, "default": 0 },
+              "team_size": { "type": "integer", "minimum": 1, "default": 1 },
+              "country_code": { "type": ["string", "null"], "pattern": "^[A-Z]{2}$" },
+              "wallet_address": { "type": ["string", "null"], "pattern": "^0x[0-9a-fA-F]{40}$" }
+            }
+          },
+          "mock_verdict_override": {
+            "type": "object",
+            "properties": {
+              "action": { "type": "string", "enum": ["ALLOW", "BLOCK", "EDUCATE", "INSPECT", "REDACT", "LOG"] },
+              "hard_blocked": { "type": "boolean", "default": false },
+              "contestable": { "type": "boolean", "default": true },
+              "appeal_deadline_hours": { "type": "integer", "minimum": 0, "default": 168 },
+              "mercy_applied": { "type": "boolean", "default": false },
+              "composite_risk": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+              "trust_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+            }
+          },
+          "should_raise": { "type": "boolean", "default": false },
+          "expected_exception": { "type": ["string", "null"] },
+          "notes": { "type": "string" }
+        }
+      },
+      "minItems": 800
+    },
+    "bias_declarations": {
+      "type": "object",
+      "required": ["en-US", "pt-BR", "es", "sw"],
+      "properties": {
+        "en-US": {
+          "type": "object",
+          "required": ["fpr", "fnr", "sample_size"],
+          "properties": {
+            "fpr": { "type": "number", "minimum": 0, "maximum": 1 },
+            "fnr": { "type": "number", "minimum": 0, "maximum": 1 },
+            "sample_size": { "type": "integer", "minimum": 0 },
+            "calibration_date": { "type": ["string", "null"], "format": "date" }
+          }
+        },
+        "pt-BR": {
+          "type": "object",
+          "required": ["fpr", "fnr", "sample_size"],
+          "properties": {
+            "fpr": { "type": "number", "minimum": 0, "maximum": 1 },
+            "fnr": { "type": "number", "minimum": 0, "maximum": 1 },
+            "sample_size": { "type": "integer", "minimum": 0 },
+            "calibration_date": { "type": ["string", "null"], "format": "date" }
+          }
+        },
+        "es": {
+          "type": "object",
+          "required": ["fpr", "fnr", "sample_size"],
+          "properties": {
+            "fpr": { "type": "number", "minimum": 0, "maximum": 1 },
+            "fnr": { "type": "number", "minimum": 0, "maximum": 1 },
+            "sample_size": { "type": "integer", "minimum": 0 },
+            "calibration_date": { "type": ["string", "null"], "format": "date" }
+          }
+        },
+        "sw": {
+          "type": "object",
+          "description": "Swahili — UNCALIBRATED. fpr and fnr MUST be null (Jonas integrity principle).",
+          "required": ["fpr", "fnr", "sample_size"],
+          "properties": {
+            "fpr": { "type": "null" },
+            "fnr": { "type": "null" },
+            "sample_size": { "type": "integer", "minimum": 0, "maximum": 0 },
+            "calibration_date": { "type": "null" }
+          }
+        }
+      }
+    }
+  }
+}
