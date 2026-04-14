@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import importlib
+import importlib.util
 import json
 import os
 import re
@@ -69,6 +71,8 @@ class Week1CI:
     def __init__(self, project_root: str = ".") -> None:
         self.project_root = project_root
         self.adapter_path = os.path.join(project_root, self.ADAPTER_DIR)
+        # Parent dir of btv_grants package (sdk/integrations/grants/)
+        self.package_parent = os.path.dirname(self.adapter_path)
         self.results: List[CheckResult] = []
 
     def _ensure_path(self) -> bool:
@@ -77,6 +81,11 @@ class Week1CI:
             print(f"FATAL: Adapter directory not found: {self.adapter_path}")
             return False
         return True
+
+    def _inject_package_path(self) -> None:
+        """Ensure parent dir is on sys.path so 'btv_grants' is importable as a package."""
+        if self.package_parent not in sys.path:
+            sys.path.insert(0, self.package_parent)
 
     def _run_check(self, check_id: str, description: str, fn: Callable[[], Tuple[bool, str]]) -> CheckResult:
         """Run a single check and record the result."""
@@ -124,36 +133,46 @@ class Week1CI:
     # W1.2 — Module Imports
     # ------------------------------------------------------------------
     def check_module_imports(self) -> Tuple[bool, str]:
-        sys.path.insert(0, self.adapter_path)
-        imported = []
+        # Insert the PARENT directory of btv_grants so that relative imports
+        # within the package (from .exceptions import ...) resolve correctly.
+        self._inject_package_path()
+
+        imported: List[str] = []
         sdk_dep_available = True
 
-        # Phase 1: Import modules that do NOT depend on buildtovalue SDK
+        # Phase 1: Import standalone modules via the package namespace.
+        # Using 'btv_grants.exceptions' / 'btv_grants.models' ensures Python
+        # treats them as package modules and resolves all relative imports.
         try:
-            from exceptions import (  # noqa: F401
-                GrantBlockedError, GrantValidationError,
-                GrantSanitizationError, BiasDeclarationError,
-            )
+            exc_mod = importlib.import_module("btv_grants.exceptions")
+            for sym in ("GrantBlockedError", "GrantValidationError",
+                        "GrantSanitizationError", "BiasDeclarationError"):
+                if not hasattr(exc_mod, sym):
+                    return False, f"exceptions missing symbol: {sym}"
             imported.extend(["GrantBlockedError", "GrantValidationError",
                               "GrantSanitizationError", "BiasDeclarationError"])
         except ImportError as exc:
-            return False, f"exceptions import failed: {exc}"
+            return False, f"btv_grants.exceptions import failed: {exc}"
 
         try:
-            from models import (  # noqa: F401
-                GrantProposal, GrantCategory, GrantStage,
-                LinguisticGroup, ActionImpact, BiasDeclaration,
-                DEFAULT_BIAS_DECLARATIONS,
-            )
+            models_mod = importlib.import_module("btv_grants.models")
+            for sym in ("GrantProposal", "GrantCategory", "GrantStage",
+                        "LinguisticGroup", "ActionImpact", "BiasDeclaration",
+                        "DEFAULT_BIAS_DECLARATIONS"):
+                if not hasattr(models_mod, sym):
+                    return False, f"models missing symbol: {sym}"
             imported.extend(["GrantProposal", "GrantCategory", "GrantStage",
                               "LinguisticGroup", "ActionImpact", "BiasDeclaration",
                               "DEFAULT_BIAS_DECLARATIONS"])
         except ImportError as exc:
-            return False, f"models import failed: {exc}"
+            return False, f"btv_grants.models import failed: {exc}"
 
-        # Phase 2: Try adapter imports (requires buildtovalue SDK)
+        # Phase 2: Try adapter (requires buildtovalue SDK at runtime).
         try:
-            from adapter import GrantGuard, GrantGuardConfig  # noqa: F401
+            adapter_mod = importlib.import_module("btv_grants.adapter")
+            for sym in ("GrantGuard", "GrantGuardConfig"):
+                if not hasattr(adapter_mod, sym):
+                    return False, f"adapter missing symbol: {sym}"
             imported.extend(["GrantGuard", "GrantGuardConfig"])
         except ImportError:
             sdk_dep_available = False
@@ -164,23 +183,27 @@ class Week1CI:
                 else:
                     return False, f"{cls} not found in adapter.py"
 
-        # Phase 3: Verify __init__.py exports
+        # Phase 3: Verify __init__.py package exports.
         if sdk_dep_available:
             try:
-                from btv_grants import (  # noqa: F401
-                    GrantGuard, GrantGuardConfig,
-                    GrantProposal, GrantCategory, GrantStage,
-                    LinguisticGroup, ActionImpact, BiasDeclaration,
-                    DEFAULT_BIAS_DECLARATIONS,
-                    GrantBlockedError, GrantValidationError,
-                    GrantSanitizationError, BiasDeclarationError,
-                )
+                btv_pkg = importlib.import_module("btv_grants")
+                expected = [
+                    "GrantGuard", "GrantGuardConfig",
+                    "GrantProposal", "GrantCategory", "GrantStage",
+                    "LinguisticGroup", "ActionImpact", "BiasDeclaration",
+                    "DEFAULT_BIAS_DECLARATIONS",
+                    "GrantBlockedError", "GrantValidationError",
+                    "GrantSanitizationError", "BiasDeclarationError",
+                ]
+                missing = [s for s in expected if not hasattr(btv_pkg, s)]
+                if missing:
+                    return False, f"__init__.py missing exports: {missing}"
                 return True, f"All 13 public symbols imported ({len(imported)} direct)"
             except ImportError as exc:
-                return False, f"__init__.py import failed: {exc}"
+                return False, f"btv_grants __init__ import failed: {exc}"
         else:
             init_source = open(os.path.join(self.adapter_path, "__init__.py")).read()
-            __all__: List[str] = []
+            all_symbols: List[str] = []
             in_all = False
             for line in init_source.split("\n"):
                 if "__all__" in line and "[" in line:
@@ -190,16 +213,22 @@ class Week1CI:
                         break
                     symbol = line.strip().strip('"').strip("'").strip(",")
                     if symbol:
-                        __all__.append(symbol)
-            if len(__all__) >= 13:
-                return True, f"{len(imported)} imported + {len(__all__)} exports verified (SDK not installed)"
-            return False, f"__init__.py has {len(__all__)} exports, expected >= 13"
+                        all_symbols.append(symbol)
+            if len(all_symbols) >= 13:
+                return True, (
+                    f"{len(imported)} imported + {len(all_symbols)} exports verified "
+                    "(SDK not installed)"
+                )
+            return False, f"__init__.py has {len(all_symbols)} exports, expected >= 13"
 
     # ------------------------------------------------------------------
     # W1.3 — HMAC-SHA256 Invariant
     # ------------------------------------------------------------------
     def check_hmac_sha256(self) -> Tuple[bool, str]:
-        from models import GrantProposal, GrantCategory
+        self._inject_package_path()
+        models_mod = importlib.import_module("btv_grants.models")
+        GrantProposal = models_mod.GrantProposal
+        GrantCategory = models_mod.GrantCategory
 
         issues = []
 
@@ -251,7 +280,11 @@ class Week1CI:
     # W1.4 — JSON Minified Invariant
     # ------------------------------------------------------------------
     def check_json_minified(self) -> Tuple[bool, str]:
-        from models import GrantProposal, GrantCategory, LinguisticGroup
+        self._inject_package_path()
+        models_mod = importlib.import_module("btv_grants.models")
+        GrantProposal = models_mod.GrantProposal
+        GrantCategory = models_mod.GrantCategory
+        LinguisticGroup = models_mod.LinguisticGroup
 
         test_cases = [
             (LinguisticGroup.PT_BR, "Monitoramento Ambiental", "Sensoriamento na Amaz\u00f4nia"),
@@ -296,7 +329,9 @@ class Week1CI:
     # W1.5 — GrantBlockedError Fields
     # ------------------------------------------------------------------
     def check_blocked_error_fields(self) -> Tuple[bool, str]:
-        from exceptions import GrantBlockedError
+        self._inject_package_path()
+        exc_mod = importlib.import_module("btv_grants.exceptions")
+        GrantBlockedError = exc_mod.GrantBlockedError
 
         issues = []
 
@@ -400,7 +435,11 @@ class Week1CI:
     # W1.8 — BiasDeclaration Jonas Enforcement
     # ------------------------------------------------------------------
     def check_bias_jonas(self) -> Tuple[bool, str]:
-        from models import BiasDeclaration, LinguisticGroup, DEFAULT_BIAS_DECLARATIONS
+        self._inject_package_path()
+        models_mod = importlib.import_module("btv_grants.models")
+        BiasDeclaration = models_mod.BiasDeclaration
+        LinguisticGroup = models_mod.LinguisticGroup
+        DEFAULT_BIAS_DECLARATIONS = models_mod.DEFAULT_BIAS_DECLARATIONS
 
         issues = []
 
