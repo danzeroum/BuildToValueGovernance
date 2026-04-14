@@ -19,16 +19,30 @@ from typing import Optional
 class GrantBlockedError(Exception):
     """Raised when a grant proposal is blocked by the BTV governance pipeline.
 
+    This exception captures the full Verdict context required for the
+    applicant-facing response, including contestability status and the
+    appeal deadline (Levinas SLA principle from the BTV separation of powers).
+
     Attributes:
-        verdict_id: Unique ULID identifier of the verdict.
-        action: The governance action taken — typically 'BLOCK'.
-        rationale: Human-readable rationale combining Rawls/Levinas/Jonas/Gilligan.
+        verdict_id: Unique ULID identifier of the verdict (VRD-[0-9A-HJKMNP-TV-Z]{26}).
+        action: The governance action taken — typically 'BLOCK', but may also be
+                'REDACT' or 'EDUCATE' depending on policy configuration.
+        rationale: Human-readable rationale from the BTV explain module,
+                   combining Rawls + Levinas + Jonas + Gilligan stages.
         contestable: Whether the applicant can file an appeal via /v1/appeals.
-        appeal_deadline_hours: Hours remaining to file an appeal.
-        composite_risk: Aggregate risk score (0.0–1.0).
-        trust_score: Post-pipeline trust score.
-        mercy_applied: Whether Gilligan's mercy algorithm intervened.
-        raw_verdict: Optional reference to the original Verdict object.
+                     Determined by Levinas stage; False if hard_blocked is True
+                     (hard blocks bypass the appeals pathway per BTV fail-secure design).
+        appeal_deadline_hours: Hours remaining to file an appeal. Only meaningful
+                               when contestable is True. Derived from the Levinas
+                               SLA timer configured in the policy YAML.
+        composite_risk: Aggregate risk score (0.0–1.0) from the BTV pipeline.
+                        Useful for upstream systems to prioritize review queues.
+        trust_score: Post-pipeline trust score reflecting Jonas calibration
+                     and Gilligan mercy evaluation.
+        mercy_applied: Whether Gilligan's mercy algorithm intervened (e.g.
+                       BLOCK -> EDUCATE). Relevant for auditing and transparency.
+        raw_verdict: Optional reference to the original Verdict object for
+                     advanced consumers that need full explain.* fields.
     """
 
     def __init__(
@@ -72,10 +86,14 @@ class GrantBlockedError(Exception):
 class GrantValidationError(Exception):
     """Raised when a grant proposal fails structural validation.
 
+    Raised by the `_validate()` method of GrantGuard BEFORE the proposal
+    reaches the BTV kernel. Catches missing required fields, malformed
+    addresses, or budget arithmetic errors.
+
     Attributes:
         field: The field name that failed validation.
-        reason: Human-readable description of the failure.
-        proposal_ref: Optional reference to the GrantProposal.
+        reason: Human-readable description of the validation failure.
+        proposal_ref: Optional reference to the GrantProposal for debugging.
     """
 
     def __init__(
@@ -94,8 +112,8 @@ class GrantSanitizationError(Exception):
     """Raised when sanitization of a grant proposal fails unexpectedly.
 
     Attributes:
-        stage: Which sanitization stage failed.
-        detail: Technical detail about the failure.
+        stage: Which sanitization stage failed (e.g. 'pii_removal', 'unicode_norm').
+        detail: Technical detail about the failure for debugging.
     """
 
     def __init__(self, stage: str, detail: str) -> None:
@@ -106,6 +124,11 @@ class GrantSanitizationError(Exception):
 
 class BiasDeclarationError(Exception):
     """Raised when the BiasDeclaration for a linguistic group is misconfigured.
+
+    BTV requires explicit bias declarations per linguistic group. For
+    uncalibrated groups (e.g. Swahili), FPR/FNR MUST be null — never
+    fabricated. This error catches attempts to use non-null values for
+    uncalibrated groups, or missing declarations entirely.
 
     Attributes:
         group: The linguistic group code (e.g. 'sw', 'pt-BR').
