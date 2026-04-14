@@ -90,10 +90,9 @@ class BiasDeclaration:
 
     Attributes:
         group: Linguistic group this declaration covers.
-        fpr: False Positive Rate (0.0–1.0) or None if uncalibrated.
-        fnr: False Negative Rate (0.0–1.0) or None if uncalibrated.
+        fpr: False Positive Rate (0.0-1.0) or None if uncalibrated.
+        fnr: False Negative Rate (0.0-1.0) or None if uncalibrated.
         sample_size: Number of real-world samples used for calibration.
-                     0 means no calibration data (synthetic-only).
         calibration_date: ISO 8601 date of last calibration, or None.
         notes: Free-form notes about calibration methodology.
     """
@@ -106,9 +105,7 @@ class BiasDeclaration:
 
     def __post_init__(self) -> None:
         """Validate bias declaration integrity (Jonas principle)."""
-        if self.group == LinguisticGroup.SW and (
-            self.fpr is not None or self.fnr is not None
-        ):
+        if self.group == LinguisticGroup.SW and (self.fpr is not None or self.fnr is not None):
             raise ValueError(
                 f"BiasDeclaration for '{self.group.value}' (Swahili) must have "
                 f"FPR=None and FNR=None — group is uncalibrated. "
@@ -131,55 +128,20 @@ class BiasDeclaration:
         }
 
 
-# Default bias declarations per linguistic group
-DEFAULT_BIAS_DECLARATIONS: Dict[str, BiasDeclaration] = {
-    LinguisticGroup.EN_US.value: BiasDeclaration(
-        group=LinguisticGroup.EN_US,
-        fpr=0.032,
-        fnr=0.018,
-        sample_size=15_420,
-        calibration_date="2024-11-01",
-        notes="Calibrated on Gitcoin GR15-GR21 historical data",
-    ),
-    LinguisticGroup.PT_BR.value: BiasDeclaration(
-        group=LinguisticGroup.PT_BR,
-        fpr=0.041,
-        fnr=0.023,
-        sample_size=3_280,
-        calibration_date="2024-10-15",
-        notes="Calibrated on BrazilDAO + Gitcoin BR rounds",
-    ),
-    LinguisticGroup.ES.value: BiasDeclaration(
-        group=LinguisticGroup.ES,
-        fpr=0.038,
-        fnr=0.021,
-        sample_size=2_940,
-        calibration_date="2024-10-15",
-        notes="Calibrated on LatAm Web3 grant data (es-MX, es-AR, es-CO)",
-    ),
-    LinguisticGroup.SW.value: BiasDeclaration(
-        group=LinguisticGroup.SW,
-        fpr=None,  # MUST be null — uncalibrated (Jonas principle)
-        fnr=None,  # MUST be null — uncalibrated (Jonas principle)
-        sample_size=0,
-        calibration_date=None,
-        notes="UNCALIBRATED: No production data for Swahili proposals. "
-              "FPR/FNR fabrication forbidden. INSPECT path forced until calibrated.",
-    ),
-}
-
-
 # ---------------------------------------------------------------------------
 # Grant Proposal
 # ---------------------------------------------------------------------------
+
+_SESSION_SALT = b"btv-grant-adapter-v1"
+
 
 @dataclass
 class GrantProposal:
     """Core data model for a grant proposal entering the BTV governance pipeline.
 
     Serialized via to_btv_input() into JSON minified format before being sent
-    to the BTV kernel. JSON format preserves the original language of all text
-    fields, critical for the BTV language detector and multilingual governance.
+    to the BTV kernel. JSON preserves the original language of all text fields,
+    critical for the BTV language detector and multilingual governance.
 
     Attributes:
         applicant_id: Unique identifier for the grant applicant. Used to derive
@@ -191,92 +153,132 @@ class GrantProposal:
         budget_usd: Requested funding amount in USD.
         team_size: Number of team members involved.
         linguistic_group: Primary language of the proposal content.
-        action_impact: Impact classification. Defaults to IRREVERSIBLE (fail-secure).
-        country_code: ISO 3166-1 alpha-2 country code of the applicant/team.
-        wallet_address: Ethereum wallet address for fund disbursement.
-        deliverables: List of expected deliverables / milestones.
-        tags: Free-form tags for additional categorization.
-        extra: Arbitrary additional fields passed through to BTV metadata.
+        wallet_address: Optional Ethereum wallet address (0x + 40 hex chars).
+        country_code: ISO 3166-1 alpha-2 country code for jurisdiction checks.
+        action_impact: Reversibility classification — defaults to IRREVERSIBLE.
+        tags: Free-form tags for additional context.
+        metadata: Arbitrary key-value metadata for extensibility.
     """
     applicant_id: str
     title: str
     description: str
-    category: str = GrantCategory.OTHER.value
-    stage: str = GrantStage.SUBMITTED.value
+    category: GrantCategory = GrantCategory.OTHER
+    stage: GrantStage = GrantStage.DRAFT
     budget_usd: float = 0.0
     team_size: int = 1
-    linguistic_group: str = LinguisticGroup.EN_US.value
-    action_impact: str = ActionImpact.IRREVERSIBLE.value
-    country_code: Optional[str] = None
+    linguistic_group: LinguisticGroup = LinguisticGroup.EN_US
     wallet_address: Optional[str] = None
-    deliverables: List[str] = field(default_factory=list)
+    country_code: Optional[str] = None
+    action_impact: ActionImpact = ActionImpact.IRREVERSIBLE
     tags: List[str] = field(default_factory=list)
-    extra: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Structural validation — runs before the proposal reaches the BTV kernel."""
+        from .exceptions import GrantValidationError
+
+        if not self.applicant_id or not self.applicant_id.strip():
+            raise GrantValidationError(
+                field="applicant_id",
+                reason="applicant_id must not be empty or whitespace-only",
+                proposal_ref=self,
+            )
+        if not self.title or not self.title.strip():
+            raise GrantValidationError(
+                field="title",
+                reason="title must not be empty",
+                proposal_ref=self,
+            )
+        if not self.description or not self.description.strip():
+            raise GrantValidationError(
+                field="description",
+                reason="description must not be empty",
+                proposal_ref=self,
+            )
+        if self.budget_usd < 0:
+            raise GrantValidationError(
+                field="budget_usd",
+                reason=f"budget_usd must be >= 0, got {self.budget_usd}",
+                proposal_ref=self,
+            )
+        if self.budget_usd > 10_000_000:
+            raise GrantValidationError(
+                field="budget_usd",
+                reason=f"budget_usd exceeds $10M maximum, got {self.budget_usd}",
+                proposal_ref=self,
+            )
+        if self.team_size < 1:
+            raise GrantValidationError(
+                field="team_size",
+                reason=f"team_size must be >= 1, got {self.team_size}",
+                proposal_ref=self,
+            )
+        if self.wallet_address is not None:
+            self._validate_wallet_address(self.wallet_address)
+
+    def _validate_wallet_address(self, address: str) -> None:
+        """Validate Ethereum wallet address format (0x + 40 hex chars)."""
+        from .exceptions import GrantValidationError
+        import re
+        pattern = re.compile(r'^0x[0-9a-fA-F]{40}$')
+        if not pattern.match(address):
+            raise GrantValidationError(
+                field="wallet_address",
+                reason=(
+                    f"wallet_address must match 0x[0-9a-fA-F]{{40}}, got '{address}'. "
+                    f"Ensure address starts with '0x' and contains 40 hex characters."
+                ),
+                proposal_ref=self,
+            )
+
+    def to_session_id(self) -> str:
+        """Derive a deterministic session ID using HMAC-SHA256.
+
+        Uses applicant_id as the message and a fixed salt as the key.
+        Produces a stable 64-character hex string for the same applicant_id.
+
+        Returns:
+            64-character lowercase hex string (HMAC-SHA256 digest).
+
+        Note:
+            Uses HMAC-SHA256, NOT hashlib.blake3. The Rust gatekeeper uses
+            BLAKE3 internally — adapters must not replicate kernel primitives.
+        """
+        mac = hmac_lib.new(
+            key=_SESSION_SALT,
+            msg=self.applicant_id.encode("utf-8"),
+            digestmod=hashlib.sha256,
+        )
+        return mac.hexdigest()
 
     def to_btv_input(self) -> str:
-        """Serialize proposal to JSON minified string for BTV kernel input.
+        """Serialize the proposal to JSON minified format for the BTV kernel.
 
-        CRITICAL: Uses JSON format, NOT English text prefixes like "Title: ..."
-        Text prefixes would confuse the BTV LanguageDetector for non-English
-        proposals. JSON keys are language-neutral identifiers.
+        Produces compact JSON with all relevant fields. Text fields are passed
+        as-is in the applicant's language — do NOT use English prefixes like
+        'Title:', 'Description:', 'Budget:' as they bias the language detector
+        for pt-BR, es, and sw proposals.
 
         Returns:
-            Minified JSON string ready for /v1/decide content field.
+            JSON minified string (no extra whitespace) with proposal fields.
         """
         payload: Dict[str, Any] = {
-            "t": self.title,
-            "d": self.description,
-            "cat": self.category,
-            "budget": self.budget_usd,
-            "team": self.team_size,
-            "lang": self.linguistic_group,
-            "impact": self.action_impact,
-        }
-        if self.country_code:
-            payload["cc"] = self.country_code
-        if self.deliverables:
-            payload["deliv"] = self.deliverables
-        if self.tags:
-            payload["tags"] = self.tags
-        if self.extra:
-            payload["extra"] = self.extra
-        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-
-    def to_session_id(self, secret_key: bytes) -> str:
-        """Derive a deterministic session ID via HMAC-SHA256.
-
-        Uses HMAC-SHA256, NOT hashlib.blake3. The Rust kernel handles BLAKE3
-        internally for evidence hashing. Adapters must not double-hash or
-        duplicate the Rust kernel's cryptographic responsibilities.
-
-        Args:
-            secret_key: Secret bytes for HMAC derivation. Must be >= 32 bytes.
-
-        Returns:
-            Hex-encoded HMAC-SHA256 digest (64 hex chars).
-        """
-        msg = f"{self.applicant_id}:{self.title}:{self.budget_usd}".encode("utf-8")
-        return hmac_lib.new(secret_key, msg, hashlib.sha256).hexdigest()
-
-    def to_metadata(self, secret_key: bytes) -> Dict[str, Any]:
-        """Build the BTV metadata dict for the /v1/decide request."""
-        bias = DEFAULT_BIAS_DECLARATIONS.get(
-            self.linguistic_group,
-            DEFAULT_BIAS_DECLARATIONS[LinguisticGroup.SW.value],
-        )
-        return {
-            "session_id": self.to_session_id(secret_key),
-            "source": "grant-decision-adapter",
-            "version": "1.0.0",
-            "linguistic_group": self.linguistic_group,
-            "bias_declaration": bias.to_dict(),
-            "action_impact": self.action_impact,
-            "category": self.category,
+            "title": self.title,
+            "description": self.description,
+            "category": self.category.value,
+            "stage": self.stage.value,
             "budget_usd": self.budget_usd,
             "team_size": self.team_size,
-            "country_code": self.country_code,
-            "wallet_address": self.wallet_address,
+            "linguistic_group": self.linguistic_group.value,
+            "action_impact": self.action_impact.value,
         }
+        if self.country_code:
+            payload["country_code"] = self.country_code
+        if self.tags:
+            payload["tags"] = self.tags
+        if self.metadata:
+            payload["metadata"] = self.metadata
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
 # ---------------------------------------------------------------------------
@@ -285,20 +287,36 @@ class GrantProposal:
 
 @dataclass(frozen=True)
 class GrantVerdict:
-    """Enriched verdict returned to callers after BTV pipeline evaluation.
+    """Enriched result from the BTV governance pipeline for a grant proposal.
 
-    Wraps the raw BTV Verdict with grant-domain semantics, adding
-    can_appeal, is_hard_block, and explanation fields for applicant UX.
+    Wraps the raw BTV Verdict with grant-specific derived fields, making it
+    easier for downstream consumers to render actionable information without
+    re-querying the BTV kernel.
+
+    Attributes:
+        verdict_id: BTV verdict ULID (VRD-...).
+        action: The governance action (ALLOW, BLOCK, EDUCATE, INSPECT, REDACT).
+        hard_blocked: True if the block is final and non-contestable.
+        contestable: Whether the applicant can appeal via /v1/appeals.
+        appeal_deadline_hours: Hours remaining to file an appeal (0 if not contestable).
+        composite_risk: Aggregate risk score (0.0-1.0).
+        trust_score: Post-pipeline trust score.
+        mercy_applied: Whether the Gilligan mercy algorithm intervened.
+        rationale: Human-readable rationale from the BTV explain module.
+        rawls_rationale: Distributive justice assessment.
+        levinas_rationale: SLA + appeal rights assessment.
+        jonas_rationale: Responsibility calibration assessment.
+        gilligan_rationale: Mercy + care ethics assessment.
     """
     verdict_id: str
     action: str
-    composite_risk: float
-    rationale: str
-    trust_score: float
+    hard_blocked: bool
     contestable: bool
     appeal_deadline_hours: int
-    mercy_applied: bool = False
-    hard_blocked: bool = False
+    composite_risk: float
+    trust_score: float
+    mercy_applied: bool
+    rationale: str
     rawls_rationale: str = ""
     levinas_rationale: str = ""
     jonas_rationale: str = ""
@@ -306,40 +324,34 @@ class GrantVerdict:
 
     @property
     def can_appeal(self) -> bool:
-        """True if applicant can file an appeal via /v1/appeals."""
-        return self.contestable and not self.hard_blocked
+        """True if the applicant can file an appeal (contestable + window open)."""
+        return self.contestable and self.appeal_deadline_hours > 0
 
     @property
     def is_hard_block(self) -> bool:
-        """True if this is a hard block (sanctioned entity, scam pattern, etc.)."""
+        """True if this verdict represents a hard (non-contestable) block."""
         return self.hard_blocked
 
     @property
     def explanation(self) -> str:
-        """Multi-stage philosophical explanation for the governance decision."""
-        parts = [self.rationale]
-        if self.rawls_rationale:
-            parts.append(f"[Rawls] {self.rawls_rationale}")
-        if self.levinas_rationale:
-            parts.append(f"[Levinas] {self.levinas_rationale}")
-        if self.jonas_rationale:
-            parts.append(f"[Jonas] {self.jonas_rationale}")
-        if self.gilligan_rationale:
-            parts.append(f"[Gilligan] {self.gilligan_rationale}")
-        return " | ".join(parts)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Serialize to dict for API response or audit log."""
-        return {
-            "verdict_id": self.verdict_id,
-            "action": self.action,
-            "composite_risk": self.composite_risk,
-            "rationale": self.rationale,
-            "trust_score": self.trust_score,
-            "contestable": self.contestable,
-            "can_appeal": self.can_appeal,
-            "appeal_deadline_hours": self.appeal_deadline_hours,
-            "is_hard_block": self.is_hard_block,
-            "mercy_applied": self.mercy_applied,
-            "explanation": self.explanation,
-        }
+        """Single-sentence explanation for the applicant UI."""
+        if self.action == "ALLOW":
+            return "Your grant proposal has been approved for processing."
+        if self.is_hard_block:
+            return (
+                "Your proposal has been permanently blocked due to policy violations "
+                "that do not allow appeal."
+            )
+        if self.can_appeal:
+            return (
+                f"Your proposal has been blocked. You may appeal within "
+                f"{self.appeal_deadline_hours} hours."
+            )
+        if self.action == "EDUCATE":
+            return (
+                "Your proposal needs revisions before it can be approved. "
+                "Please review the guidance below."
+            )
+        if self.action == "INSPECT":
+            return "Your proposal is under manual review. You will be notified of the outcome."
+        return f"Your proposal received action '{self.action}'. Rationale: {self.rationale}"

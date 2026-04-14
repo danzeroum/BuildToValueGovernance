@@ -35,7 +35,7 @@ class GrantBlockedError(Exception):
         appeal_deadline_hours: Hours remaining to file an appeal. Only meaningful
                                when contestable is True. Derived from the Levinas
                                SLA timer configured in the policy YAML.
-        composite_risk: Aggregate risk score (0.0–1.0) from the BTV pipeline.
+        composite_risk: Aggregate risk score (0.0-1.0) from the BTV pipeline.
                         Useful for upstream systems to prioritize review queues.
         trust_score: Post-pipeline trust score reflecting Jonas calibration
                      and Gilligan mercy evaluation.
@@ -86,12 +86,12 @@ class GrantBlockedError(Exception):
 class GrantValidationError(Exception):
     """Raised when a grant proposal fails structural validation.
 
-    Raised by the `_validate()` method of GrantGuard BEFORE the proposal
-    reaches the BTV kernel. Catches missing required fields, malformed
-    addresses, or budget arithmetic errors.
+    This is raised by the `_validate()` method of GrantGuard BEFORE the
+    proposal reaches the BTV kernel. It catches issues like missing required
+    fields, malformed addresses, or budget arithmetic errors.
 
     Attributes:
-        field: The field name that failed validation.
+        field: The field name that failed validation (e.g. 'applicant_id', 'budget_usd').
         reason: Human-readable description of the validation failure.
         proposal_ref: Optional reference to the GrantProposal for debugging.
     """
