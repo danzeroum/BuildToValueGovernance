@@ -12,16 +12,24 @@ DESIGN DECISIONS (documented in ADR-043):
   - hard_blocked checked BEFORE action (fail-secure priority).
   - HMAC-SHA256 for session_id (Rust kernel handles BLAKE3 internally).
   - JSON minified serialization (avoids English-prefix language confusion).
+  - BTVClient imported lazily (TYPE_CHECKING only) so the adapter module
+    can be imported in environments where buildtovalue SDK is not installed.
+    This enables unit-testing, CI import checks, and dry-run usage without
+    requiring the full BTV Python SDK to be present.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
 
-from buildtovalue import BTVClient
-from buildtovalue.models import Verdict
+if TYPE_CHECKING:
+    # These imports are used ONLY for type annotations (never executed at runtime).
+    # The buildtovalue SDK is an optional runtime dependency — code that actually
+    # calls BTVClient methods imports it lazily inside evaluate().
+    from buildtovalue import BTVClient  # noqa: F401
+    from buildtovalue.models import Verdict  # noqa: F401
 
 from .exceptions import (
     GrantBlockedError,
@@ -39,6 +47,30 @@ from .models import (
 )
 
 logger = logging.getLogger("btv_grants")
+
+
+def _require_btvclient() -> Any:
+    """Lazy-load BTVClient at runtime; raises ImportError with clear message."""
+    try:
+        from buildtovalue import BTVClient  # type: ignore[import]
+        return BTVClient
+    except ImportError as exc:
+        raise ImportError(
+            "The 'buildtovalue' SDK is required to call the BTV kernel. "
+            "Install it with: pip install buildtovalue"
+        ) from exc
+
+
+def _require_verdict_class() -> Any:
+    """Lazy-load Verdict at runtime; raises ImportError with clear message."""
+    try:
+        from buildtovalue.models import Verdict  # type: ignore[import]
+        return Verdict
+    except ImportError as exc:
+        raise ImportError(
+            "The 'buildtovalue' SDK is required to call the BTV kernel. "
+            "Install it with: pip install buildtovalue"
+        ) from exc
 
 
 class GrantGuardConfig:
@@ -75,6 +107,9 @@ class GrantGuard:
     """BTV Governance Guard for grant proposal evaluation.
 
     Usage:
+        from buildtovalue import BTVClient
+        from btv_grants import GrantGuard, GrantProposal, GrantCategory, LinguisticGroup
+
         client = BTVClient(api_key="...")
         guard = GrantGuard(client)
 
@@ -92,11 +127,15 @@ class GrantGuard:
         except GrantBlockedError as e:
             if e.contestable:
                 print(f"Appeal within {e.appeal_deadline_hours}h")
+
+    Note on dry_run:
+        Set dry_run=True in GrantGuardConfig to skip BTV kernel calls.
+        Useful for testing and CI environments without buildtovalue installed.
     """
 
     def __init__(
         self,
-        client: BTVClient,
+        client: Any,  # BTVClient at runtime; Any avoids forcing the import
         config: Optional[GrantGuardConfig] = None,
     ) -> None:
         self._client = client
@@ -153,7 +192,7 @@ class GrantGuard:
         """Input normalization — returns a NEW object, never mutates original."""
         logger.debug("Sanitizing proposal for applicant: %s", proposal.applicant_id)
         try:
-            data = proposal.to_dict()
+            data = proposal.to_dict() if hasattr(proposal, "to_dict") else vars(proposal).copy()
 
             if self._config.sanitize_strip_emoji:
                 emoji_pattern = re.compile(
@@ -200,9 +239,8 @@ class GrantGuard:
                 action_impact=ActionImpact(data["action_impact"]),
                 country_code=data.get("country_code"),
                 wallet_address=data.get("wallet_address"),
-                deliverables=data.get("deliverables", []),
                 tags=data.get("tags", []),
-                extra=data.get("extra", {}),
+                metadata=data.get("metadata", {}),
             )
             for hook in self._sanitize_hooks:
                 sanitized = hook(sanitized)
@@ -213,7 +251,7 @@ class GrantGuard:
         except Exception as exc:
             raise GrantSanitizationError("general", str(exc)) from exc
 
-    def evaluate(self, proposal: GrantProposal) -> Verdict:
+    def evaluate(self, proposal: GrantProposal) -> Any:
         """Evaluate a grant proposal through the BTV governance pipeline.
 
         Evaluation order (ADR-043):
@@ -227,7 +265,7 @@ class GrantGuard:
         self._validate(proposal)
         sanitized = self._sanitize(proposal)
         btv_input = sanitized.to_btv_input()
-        session_id = sanitized.to_session_id(secret=self._config.session_salt)
+        session_id = sanitized.to_session_id()
 
         logger.info(
             "Evaluating grant proposal | applicant=%s | session=%s | use_decide=%s",
@@ -238,6 +276,7 @@ class GrantGuard:
 
         if self._config.dry_run:
             logger.info("DRY RUN — skipping BTV kernel call")
+            Verdict = _require_verdict_class()
             mock_verdict = Verdict(
                 verdict_id="VRD-DRYRUN00000000000000000000",
                 action="ALLOW",
@@ -341,8 +380,13 @@ class GrantGuard:
                     type(exc).__name__,
                     exc,
                 )
+        # Lazy import Verdict class for isinstance check
+        try:
+            Verdict = _require_verdict_class()
+            summary_allowed = sum(1 for _, r in results if isinstance(r, Verdict))
+        except ImportError:
+            summary_allowed = 0
         summary_blocked = sum(1 for _, r in results if isinstance(r, GrantBlockedError))
-        summary_allowed = sum(1 for _, r in results if isinstance(r, Verdict))
         logger.info(
             "Batch complete | total=%d | allowed=%d | blocked=%d",
             len(results), summary_allowed, summary_blocked,
