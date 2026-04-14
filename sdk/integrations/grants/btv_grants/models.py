@@ -285,11 +285,16 @@ class GrantProposal:
                 proposal_ref=self,
             )
 
-    def to_session_id(self) -> str:
+    def to_session_id(self, secret: Optional[bytes] = None) -> str:
         """Derive a deterministic session ID using HMAC-SHA256.
 
-        Uses applicant_id as the message and a fixed salt as the key.
-        Produces a stable 64-character hex string for the same applicant_id.
+        Uses applicant_id as the message and a salt as the HMAC key.
+        Produces a stable 64-character hex string for the same (applicant_id, secret).
+
+        Args:
+            secret: Optional salt bytes for environment-specific isolation
+                    (e.g. staging vs production). Defaults to the module-level
+                    _SESSION_SALT constant when None.
 
         Returns:
             64-character lowercase hex string (HMAC-SHA256 digest).
@@ -298,8 +303,9 @@ class GrantProposal:
             Uses HMAC-SHA256, NOT hashlib.blake3. The Rust gatekeeper uses
             BLAKE3 internally — adapters must not replicate kernel primitives.
         """
+        key = secret if secret is not None else _SESSION_SALT
         mac = hmac_lib.new(
-            key=_SESSION_SALT,
+            key=key,
             msg=self.applicant_id.encode("utf-8"),
             digestmod=hashlib.sha256,
         )
