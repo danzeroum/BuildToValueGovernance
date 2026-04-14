@@ -28,6 +28,7 @@ on:
       - "docs/adr/ADR-043*"
       - "tests/**"
       - ".github/workflows/ci.yml"
+      - "scripts/ci/**"
       - "Makefile"
   pull_request:
     branches: [main]
@@ -36,6 +37,8 @@ on:
       - "data/policies/sectors/**"
       - "docs/adr/ADR-043*"
       - "tests/**"
+      - ".github/workflows/ci.yml"
+      - "scripts/ci/**"
   workflow_dispatch:
     inputs:
       week_filter:
@@ -108,15 +111,20 @@ jobs:
           cd sdk/integrations/grants
           python -c "
           import sys
-          sys.path.insert(0, 'btv_grants')
-          from exceptions import GrantBlockedError, GrantValidationError, GrantSanitizationError, BiasDeclarationError
+          # Aponta para sdk/integrations/grants/ — pai de btv_grants/
+          # Isso permite que relative imports dentro de adapter.py funcionem
+          sys.path.insert(0, '.')
+          from btv_grants.exceptions import (
+              GrantBlockedError, GrantValidationError,
+              GrantSanitizationError, BiasDeclarationError,
+          )
           print('  ✅ exceptions — all 4 exception classes')
-          from models import (
+          from btv_grants.models import (
               GrantProposal, GrantCategory, GrantStage, LinguisticGroup,
               ActionImpact, BiasDeclaration, DEFAULT_BIAS_DECLARATIONS,
           )
           print('  ✅ models — all 7 classes + 1 constant')
-          from adapter import GrantGuard, GrantGuardConfig
+          from btv_grants.adapter import GrantGuard, GrantGuardConfig
           print('  ✅ adapter — GrantGuard + GrantGuardConfig')
           from btv_grants import (
               GrantGuard, GrantGuardConfig,
@@ -137,8 +145,8 @@ jobs:
           cd sdk/integrations/grants
           python -c "
           import sys
-          sys.path.insert(0, 'btv_grants')
-          from models import GrantProposal, GrantCategory
+          sys.path.insert(0, '.')
+          from btv_grants.models import GrantProposal, GrantCategory
           p = GrantProposal(
               applicant_id='0xhmac-test',
               title='HMAC Test',
@@ -173,8 +181,8 @@ jobs:
           cd sdk/integrations/grants
           python -c "
           import sys, json
-          sys.path.insert(0, 'btv_grants')
-          from models import GrantProposal, GrantCategory, LinguisticGroup
+          sys.path.insert(0, '.')
+          from btv_grants.models import GrantProposal, GrantCategory, LinguisticGroup
           proposals = [
               ('pt-BR', 'Monitoramento Ambiental', 'Sensoriamento para a Amazônia'),
               ('es', 'Identidad Descentralizada', 'Plataforma soberana en Ethereum'),
@@ -205,8 +213,8 @@ jobs:
           cd sdk/integrations/grants
           python -c "
           import sys
-          sys.path.insert(0, 'btv_grants')
-          from exceptions import GrantBlockedError
+          sys.path.insert(0, '.')
+          from btv_grants.exceptions import GrantBlockedError
           err = GrantBlockedError(
               verdict_id='VRD-CITEST01', action='BLOCK', rationale='Test rationale',
               contestable=True, appeal_deadline_hours=168, composite_risk=0.75,
@@ -259,8 +267,8 @@ jobs:
           cd sdk/integrations/grants
           python -c "
           import sys
-          sys.path.insert(0, 'btv_grants')
-          from adapter import GrantGuardConfig
+          sys.path.insert(0, '.')
+          from btv_grants.adapter import GrantGuardConfig
           config = GrantGuardConfig()
           assert config.use_decide is True
           config2 = GrantGuardConfig(use_decide=False)
@@ -275,8 +283,8 @@ jobs:
           cd sdk/integrations/grants
           python -c "
           import sys
-          sys.path.insert(0, 'btv_grants')
-          from models import BiasDeclaration, LinguisticGroup, DEFAULT_BIAS_DECLARATIONS
+          sys.path.insert(0, '.')
+          from btv_grants.models import BiasDeclaration, LinguisticGroup, DEFAULT_BIAS_DECLARATIONS
           bd = BiasDeclaration(group=LinguisticGroup.SW)
           assert bd.fpr is None and bd.fnr is None
           print(f'  ✅ sw: fpr={bd.fpr}, fnr={bd.fnr} (null — valid)')
