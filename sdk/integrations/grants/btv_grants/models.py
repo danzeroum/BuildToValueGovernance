@@ -10,8 +10,9 @@ CRITICAL DESIGN DECISIONS (see ADR-043):
   1. to_btv_input() uses JSON minified — NOT text with English prefixes.
      Text prefixes like "Title:", "Description:" would confuse the BTV
      language detector for non-English proposals (pt-BR, es, sw).
-  2. to_session_id() uses HMAC-SHA256 — NOT hashlib.blake3. The Rust kernel
-     handles BLAKE3 internally; adapters must NOT double-hash.
+  2. to_session_id() uses HMAC-SHA256 — NOT the Rust kernel hash primitive.
+     The kernel handles content hashing internally; adapters must NOT
+     double-hash or replicate kernel-level cryptographic primitives.
   3. BiasDeclaration uses null for uncalibrated linguistic groups (sw).
      Never fabricate FPR/FNR values — BTV integrity principle (Jonas).
 """
@@ -300,8 +301,9 @@ class GrantProposal:
             64-character lowercase hex string (HMAC-SHA256 digest).
 
         Note:
-            Uses HMAC-SHA256, NOT hashlib.blake3. The Rust gatekeeper uses
-            BLAKE3 internally — adapters must not replicate kernel primitives.
+            This method uses HMAC-SHA256 exclusively. Do not replace or augment
+            with kernel-internal hash primitives — the Rust gatekeeper owns
+            content hashing; adapters are responsible only for session identity.
         """
         key = secret if secret is not None else _SESSION_SALT
         mac = hmac_lib.new(
