@@ -116,10 +116,7 @@ pub async fn get_proof(
         .ok_or(axum::http::StatusCode::NOT_FOUND)?;
     let root = state.store.root();
 
-    let wire_proof = btv_types::MerkleProof {
-        path: proof.clone(),
-        leaf_index: index,
-    };
+    let wire_proof = crate::merkle::to_wire_proof(proof.clone(), index);
 
     Ok(Json(ProofResponse {
         leaf_hash: leaf,
