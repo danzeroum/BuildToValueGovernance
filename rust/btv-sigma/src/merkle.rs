@@ -225,4 +225,84 @@ mod tests {
         let proof = tree.proof(0).unwrap();
         assert!(!verify_proof(&root, &[0xFFu8; 32], &proof));
     }
+
+    // ── CI-named cross-verification tests ─────────────────────────────────────
+
+    /// Every proof from btv-sigma must verify with btv_types::verify_merkle_inclusion.
+    /// Named to match fail_secure_ci.yml: merkle::tests::proof_cross_verifies_with_btv_types
+    #[test]
+    fn proof_cross_verifies_with_btv_types() {
+        let mut tree = MerkleTree::new();
+        for i in 0u8..8 {
+            tree.append([i; 32]);
+        }
+        let root = tree.root();
+        for i in 0..8u64 {
+            let proof = tree.proof(i).unwrap();
+            let btv_proof = btv_types::MerkleProof { path: proof, leaf_index: i };
+            assert!(
+                btv_types::verify_merkle_inclusion(&root, &tree.leaves[i as usize], &btv_proof),
+                "cross-verification failed for leaf {i}",
+            );
+        }
+    }
+
+    /// Cross-verify proofs for trees of various sizes (1, 2, 3, 4, 8, 16, 20 leaves).
+    /// Named to match fail_secure_ci.yml: merkle::tests::cross_verify_various_tree_sizes
+    #[test]
+    fn cross_verify_various_tree_sizes() {
+        for &size in &[1usize, 2, 3, 4, 8, 16, 20] {
+            let mut tree = MerkleTree::new();
+            for i in 0u8..(size as u8) {
+                tree.append([i; 32]);
+            }
+            let root = tree.root();
+            for i in 0..size as u64 {
+                let proof = tree.proof(i).unwrap();
+                let btv_proof = btv_types::MerkleProof { path: proof, leaf_index: i };
+                assert!(
+                    btv_types::verify_merkle_inclusion(&root, &tree.leaves[i as usize], &btv_proof),
+                    "size={size}: cross-verification failed for leaf {i}",
+                );
+            }
+        }
+    }
+
+    /// Cross-verify proofs for trees built from arbitrary (unsorted) leaf hashes.
+    /// Named to match fail_secure_ci.yml: merkle::tests::cross_verify_unsorted_leaves
+    #[test]
+    fn cross_verify_unsorted_leaves() {
+        let leaves: &[[u8; 32]] = &[
+            [0xFF; 32], [0x00; 32], [0xAB; 32], [0x12; 32],
+            [0x7F; 32], [0x80; 32], [0x01; 32], [0xFE; 32],
+        ];
+        let mut tree = MerkleTree::new();
+        for leaf in leaves {
+            tree.append(*leaf);
+        }
+        let root = tree.root();
+        for (i, leaf) in leaves.iter().enumerate() {
+            let proof = tree.proof(i as u64).unwrap();
+            let btv_proof = btv_types::MerkleProof { path: proof, leaf_index: i as u64 };
+            assert!(
+                btv_types::verify_merkle_inclusion(&root, leaf, &btv_proof),
+                "unsorted: cross-verification failed for leaf {i}",
+            );
+        }
+    }
+
+    /// hash_pair(a, b) == hash_pair(b, a) — canonical ordering is commutative.
+    /// Named to match fail_secure_ci.yml: merkle::tests::canonical_ordering_is_commutative
+    #[test]
+    fn canonical_ordering_is_commutative() {
+        let a = [0xAA; 32];
+        let b = [0xBB; 32];
+        assert_eq!(hash_pair(&a, &b), hash_pair(&b, &a));
+        let c = [0x00; 32];
+        let d = [0xFF; 32];
+        assert_eq!(hash_pair(&c, &d), hash_pair(&d, &c));
+        // Equal inputs
+        let e = [0x42; 32];
+        assert_eq!(hash_pair(&e, &e), hash_pair(&e, &e));
+    }
 }
