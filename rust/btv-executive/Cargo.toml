@@ -12,7 +12,6 @@ btv-core   = { path = "../btv-core", features = ["log-client"] }
 # btv-executive wraps those findings in constitutional types.
 btv-kernel = { path = "../kernel" }
 blake3     = { workspace = true }
-axum       = { workspace = true }
 tokio      = { workspace = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }
@@ -24,7 +23,6 @@ hex        = { workspace = true }
 trybuild   = "1"
 criterion  = { workspace = true }
 tokio      = { workspace = true }
-tower      = { version = "0.4", features = ["util"] }
 
 [[bench]]
 name    = "executive"
