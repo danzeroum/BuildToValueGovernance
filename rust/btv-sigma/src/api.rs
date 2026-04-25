@@ -84,7 +84,9 @@ pub async fn get_root(
 #[derive(Serialize)]
 pub struct ProofResponse {
     pub leaf_hash: [u8; 32],
-    pub proof: Vec<([u8; 32], String)>, // (sibling_hash, "left"|"right")
+    /// Sibling hashes in bottom-up order — canonical ordering (no side labels needed).
+    /// Verify with btv-types::verify_merkle_inclusion or btv-sigma::merkle::verify_proof.
+    pub proof: Vec<[u8; 32]>,
     pub root: [u8; 32],
 }
 
@@ -99,13 +101,7 @@ pub async fn get_proof(
 
     Ok(Json(ProofResponse {
         leaf_hash: leaf,
-        proof: proof.into_iter().map(|(h, s)| {
-            let label = match s {
-                crate::merkle::Side::Left  => "left",
-                crate::merkle::Side::Right => "right",
-            };
-            (h, label.to_string())
-        }).collect(),
+        proof,
         root: state.store.root(),
     }))
 }
