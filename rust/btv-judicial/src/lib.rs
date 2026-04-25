@@ -26,5 +26,5 @@ pub use audit_report::{AuditReport, FailureDetail, JudicialAuditor};
 pub use ed25519_verify::ReceiptVerifier;
 pub use hmac_verify::{HmacVerifier, JudicialError};
 pub use ledger_query::LedgerQuery;
-pub use merkle_verify::{verify_merkle_inclusion, verify_root_consistency};
+pub use merkle_verify::{verify_merkle_inclusion, verify_side_proof, ProofSide, verify_root_consistency};
 pub use monitor::{Monitor, VerifiedPayload};

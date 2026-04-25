@@ -1,291 +1,262 @@
 """
-FFI Client v2.0 - Rust ↔ Python bridge com segurança.
+FFI Client v3.0 — Rust <-> Python bridge (Phase 3).
 
-CHANGELOG v2.0:
-- [SECURITY] Integração com FFIBuffer (BLAKE3 checksum)
-- [SECURITY] Bounds checking automático
-- [SECURITY] Timestamp validation
-- [PERFORMANCE] Batch processing support
+Bridge priority:
+  1. PyO3 (buildtovalue_governance.scan_for_evidence_batch) — preferred
+  2. ctypes C ABI (libbuildtovalue_governance.so) — fallback
 
-Gate: G1 (FFI Safety Review)
+Fail-strict: any error → raise, never return mock/empty data.
+
+Phase 3 changes from stripped v2.x:
+  - FFIClient class restored with real kernel integration
+  - _scan_pyo3 uses scan_for_evidence_batch (single-item call)
+  - _deserialize_evidence_ctypes parses JSON from real kernel
+  - DeserializationError raised on any parse failure, never silently suppressed
 """
+from __future__ import annotations
 
+import json
 import logging
 import ctypes
 import os
-from typing import Optional, List, Dict, Any
-from dataclasses import dataclass
-from pathlib import Path
+import time
+import uuid
+from dataclasses import dataclass, field
+from typing import Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
-# ═══════════════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO
-# ═══════════════════════════════════════════════════════════════════════════
-
-# Path para biblioteca Rust
 RUST_LIB_PATH = os.environ.get(
-    'BUILDTOVALUE_RUST_LIB',
-    'target/release/libbuildtovalue_kernel.so'  # Linux
+    "BUILDTOVALUE_RUST_LIB",
+    "target/release/libbuildtovalue_governance.so",
 )
+MAX_BUFFER_SIZE = 10 * 1024 * 1024  # 10 MB
 
-# Constantes de segurança (sincronizadas com Rust)
-MAX_BUFFER_SIZE = 1024 * 1024  # 1MB
-MAX_DATA_AGE_SECS = 30
-BLAKE3_HASH_SIZE = 32
 
-# ═══════════════════════════════════════════════════════════════════════════
-# EXCEÇÕES
-# ═══════════════════════════════════════════════════════════════════════════
+# ── Exceptions ────────────────────────────────────────────────────────────────
 
 class FFIError(Exception):
-    """Erro em chamada FFI."""
     pass
 
 class BufferOverflowError(FFIError):
-    """Buffer excede tamanho máximo."""
     pass
 
-class IntegrityError(FFIError):
-    """Falha de integridade (checksum)."""
+class DeserializationError(FFIError):
     pass
 
-class StaleDataError(FFIError):
-    """Dados muito antigos."""
+class BridgeNotAvailableError(FFIError):
     pass
 
-# ═══════════════════════════════════════════════════════════════════════════
-# TIPOS DE DADOS
-# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Wire types (FFI-layer, richer than governance/types.py) ───────────────────
+
+@dataclass
+class BiasDeclaration:
+    false_positive_rate: float = 0.0
+    false_negative_rate: float = 0.0
+    calibration_date: int = 0
+    test_dataset_size: int = 0
+    is_valid: bool = False
+
 
 @dataclass
 class Finding:
-    """Finding de segurança."""
-    title: str
-    description: str
-    severity: float
-    confidence: float
-    location: str
-    evidence: str
-    category: str
+    title: str = ""
+    description: str = ""
+    severity: float = 0.5
+    confidence: float = 0.5
+    location: str = ""
+    evidence: str = ""
+    category: str = ""
+
 
 @dataclass
 class TechnicalEvidence:
-    """Evidência técnica do Rust."""
-    finding_count: int
-    critical_count: int
-    composite_risk: float
-    findings: List[Finding]
-    critical: List[Finding]
-    stats: Dict[str, Any]
-    hash: str
-    timestamp: int
-
-    # v2.0: Métricas de segurança FFI
+    """FFI wire-format evidence returned by the real Rust kernel."""
+    version: int = 0
+    timestamp: int = 0
+    audit_trail_id: str = ""
+    composite_risk: float = 0.0
+    risk_level: str = "Unknown"
+    finding_count: int = 0
+    critical_count: int = 0
+    entropy: float = 0.0
+    input_size: int = 0
+    executed_modules: int = 0
+    processing_time_us: int = 0
+    hash: str = ""
+    max_severity: str = "Unknown"
+    bias: Optional[BiasDeclaration] = None
+    findings: List[Finding] = field(default_factory=list)
+    critical: List[Finding] = field(default_factory=list)
+    stats: Dict[str, float] = field(default_factory=dict)
     ffi_validation_time_ms: float = 0.0
     ffi_buffer_size: int = 0
 
-# ═══════════════════════════════════════════════════════════════════════════
-# FFI CLIENT v2.0
-# ═══════════════════════════════════════════════════════════════════════════
+
+# ── FFI Client ────────────────────────────────────────────────────────────────
 
 class FFIClient:
     """
-    Cliente FFI seguro para Rust kernel v2.0.
+    Rust kernel FFI client v3.0.
 
-    Features v2.0:
-    - BLAKE3 checksum validation
-    - Bounds checking automático
-    - Timestamp validation
-    - Batch processing
+    Uses PyO3 (buildtovalue_governance module) if available;
+    falls back to ctypes C ABI. Raises on any error — never returns mock data.
     """
 
-    def __init__(self, lib_path: Optional[str] = None):
-        """
-        Inicializa cliente FFI.
-
-        Args:
-            lib_path: Path para lib Rust (opcional)
-        """
-        self.lib_path = lib_path or RUST_LIB_PATH
-        self.lib = None
-        self._load_library()
-
-        # Métricas
-        self.metrics = {
-            'calls_total': 0,
-            'integrity_failures': 0,
-            'buffer_overflows': 0,
-            'stale_data': 0,
+    def __init__(self, lib_path: Optional[str] = None) -> None:
+        self._lib_path = lib_path or RUST_LIB_PATH
+        self._ctypes_lib: Optional[ctypes.CDLL] = None
+        self.bridge_mode: str = "none"
+        self._metrics: Dict[str, int] = {
+            "calls_total": 0,
+            "buffer_overflows": 0,
+            "deserialization_errors": 0,
         }
+        self._init_bridge()
 
-    def _load_library(self):
-        """Carrega biblioteca Rust."""
+    def _init_bridge(self) -> None:
         try:
-            self.lib = ctypes.CDLL(self.lib_path)
-            logger.info(f"Rust library loaded: {self.lib_path}")
+            import buildtovalue_governance  # noqa: F401 — just verify import
+            self.bridge_mode = "pyo3"
+            logger.info("FFI bridge: PyO3 (buildtovalue_governance)")
+            return
+        except ImportError:
+            logger.debug("PyO3 bridge unavailable, trying ctypes")
 
-            # Define function signatures
-            self._setup_function_signatures()
+        try:
+            lib = ctypes.CDLL(self._lib_path)
+            lib.btv_scan_for_evidence.argtypes = [
+                ctypes.POINTER(ctypes.c_uint8),
+                ctypes.c_size_t,
+                ctypes.c_void_p,
+            ]
+            lib.btv_scan_for_evidence.restype = ctypes.c_int
+            self._ctypes_lib = lib
+            self.bridge_mode = "ctypes"
+            logger.info("FFI bridge: ctypes C ABI (%s)", self._lib_path)
+            return
+        except OSError as exc:
+            logger.error("ctypes bridge unavailable: %s", exc)
 
-        except OSError as e:
-            logger.error(f"Failed to load Rust library: {e}")
-            raise FFIError(f"Cannot load Rust library: {e}")
-
-    def _setup_function_signatures(self):
-        """Define assinaturas de funções FFI."""
-        # scan_for_evidence(input: *const u8, len: usize) -> *mut TechnicalEvidence
-        self.lib.scan_for_evidence.argtypes = [
-            ctypes.POINTER(ctypes.c_uint8),
-            ctypes.c_size_t
-        ]
-        self.lib.scan_for_evidence.restype = ctypes.c_void_p
-
-        # validate_ffi_buffer(data: *const u8, len: usize, checksum: *const u8) -> bool
-        self.lib.validate_ffi_buffer.argtypes = [
-            ctypes.POINTER(ctypes.c_uint8),
-            ctypes.c_size_t,
-            ctypes.POINTER(ctypes.c_uint8)
-        ]
-        self.lib.validate_ffi_buffer.restype = ctypes.c_bool
-
-        # free_evidence(ptr: *mut TechnicalEvidence)
-        self.lib.free_evidence.argtypes = [ctypes.c_void_p]
-        self.lib.free_evidence.restype = None
+        raise BridgeNotAvailableError(
+            "No Rust bridge found. Run `maturin develop` or `cargo build --release`."
+        )
 
     def scan(self, input_text: str) -> TechnicalEvidence:
         """
-        Escaneia texto com Rust kernel (v2.0 com validação).
-
-        Args:
-            input_text: Texto a escanear
-
-        Returns:
-            TechnicalEvidence com findings
+        Scan text with the real Rust kernel.
 
         Raises:
-            BufferOverflowError: Se input excede MAX_BUFFER_SIZE
-            IntegrityError: Se validação de checksum falhar
+            BufferOverflowError: input exceeds 10 MB
+            DeserializationError: kernel response cannot be parsed
+            FFIError: kernel call failed
         """
-        import time
         start = time.perf_counter()
+        self._metrics["calls_total"] += 1
 
-        self.metrics['calls_total'] += 1
+        raw = input_text.encode("utf-8")
+        if len(raw) > MAX_BUFFER_SIZE:
+            self._metrics["buffer_overflows"] += 1
+            raise BufferOverflowError(f"Input {len(raw)} bytes exceeds {MAX_BUFFER_SIZE}")
 
         try:
-            # 1. Valida tamanho
-            input_bytes = input_text.encode('utf-8')
-            if len(input_bytes) > MAX_BUFFER_SIZE:
-                self.metrics['buffer_overflows'] += 1
-                raise BufferOverflowError(
-                    f"Input size {len(input_bytes)} exceeds {MAX_BUFFER_SIZE}"
-                )
-
-            # 2. Cria buffer C
-            buffer = (ctypes.c_uint8 * len(input_bytes))(*input_bytes)
-
-            # 3. Chama Rust (com bounds checking interno)
-            result_ptr = self.lib.scan_for_evidence(buffer, len(input_bytes))
-
-            if not result_ptr:
-                raise FFIError("Rust returned NULL pointer")
-
-            # 4. Deserializa resultado
-            # (Simplified: em produção usaria Protobuf)
-            evidence = self._deserialize_evidence(result_ptr)
-
-            # 5. Libera memória Rust
-            self.lib.free_evidence(result_ptr)
-
-            # 6. Adiciona métricas FFI
-            ffi_time = (time.perf_counter() - start) * 1000
-            evidence.ffi_validation_time_ms = ffi_time
-            evidence.ffi_buffer_size = len(input_bytes)
-
-            return evidence
-
-        except Exception as e:
-            logger.error(f"FFI call failed: {e}")
+            if self.bridge_mode == "pyo3":
+                ev = self._scan_pyo3(input_text)
+            elif self.bridge_mode == "ctypes":
+                ev = self._scan_ctypes(input_text)
+            else:
+                raise BridgeNotAvailableError("No bridge configured")
+        except (BufferOverflowError, DeserializationError, BridgeNotAvailableError):
             raise
+        except Exception as exc:
+            raise FFIError(f"Rust scan failed: {exc}") from exc
 
-    def validate_buffer_integrity(
-        self,
-        data: bytes,
-        expected_checksum: bytes
-    ) -> bool:
-        """
-        Valida integridade de buffer (BLAKE3).
+        ev.ffi_validation_time_ms = (time.perf_counter() - start) * 1000
+        ev.ffi_buffer_size = len(raw)
+        return ev
 
-        Args:
-            data: Dados a validar
-            expected_checksum: Checksum esperado (32 bytes)
+    def _scan_pyo3(self, input_text: str) -> TechnicalEvidence:
+        import buildtovalue_governance as btv
 
-        Returns:
-            True se válido
-        """
-        if len(expected_checksum) != BLAKE3_HASH_SIZE:
-            raise ValueError(
-                f"Invalid checksum size: {len(expected_checksum)} "
-                f"(expected {BLAKE3_HASH_SIZE})"
+        trail_id = uuid.uuid4().int
+        try:
+            result_bytes = btv.scan_for_evidence_batch([input_text], [trail_id])
+        except Exception as exc:
+            raise FFIError(f"PyO3 scan_for_evidence_batch failed: {exc}") from exc
+
+        try:
+            data_list = json.loads(result_bytes)
+            data = data_list[0]
+        except (json.JSONDecodeError, IndexError, TypeError) as exc:
+            self._metrics["deserialization_errors"] += 1
+            raise DeserializationError(f"Failed to parse PyO3 response: {exc}") from exc
+
+        return self._parse_evidence_dict(data)
+
+    def _scan_ctypes(self, input_text: str) -> TechnicalEvidence:
+        assert self._ctypes_lib is not None
+        raw = input_text.encode("utf-8")
+        buf = (ctypes.c_uint8 * len(raw))(*raw)
+        out_buf = ctypes.create_string_buffer(65536)
+        rc = self._ctypes_lib.btv_scan_for_evidence(buf, len(raw), out_buf)
+        if rc != 0:
+            raise FFIError(f"btv_scan_for_evidence returned {rc}")
+        try:
+            data = json.loads(out_buf.value.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            self._metrics["deserialization_errors"] += 1
+            raise DeserializationError(f"Invalid JSON from C ABI: {exc}") from exc
+        return self._parse_evidence_dict(data)
+
+    def _parse_evidence_dict(self, data: dict) -> TechnicalEvidence:
+        required = ["composite_risk", "risk_level", "finding_count",
+                    "critical_count", "hash", "processing_time_us"]
+        missing = [k for k in required if k not in data]
+        if missing:
+            self._metrics["deserialization_errors"] += 1
+            raise DeserializationError(f"Missing required fields: {missing}")
+
+        bias = None
+        bias_fpr = data.get("bias_fpr")
+        bias_fnr = data.get("bias_fnr")
+        if bias_fpr is not None and bias_fnr is not None:
+            bias = BiasDeclaration(
+                false_positive_rate=float(bias_fpr),
+                false_negative_rate=float(bias_fnr),
+                calibration_date=int(data.get("bias_calibration_date", 0)),
             )
 
-        # Cria buffers C
-        data_buf = (ctypes.c_uint8 * len(data))(*data)
-        checksum_buf = (ctypes.c_uint8 * BLAKE3_HASH_SIZE)(*expected_checksum)
-
-        # Chama Rust para validação
-        is_valid = self.lib.validate_ffi_buffer(
-            data_buf,
-            len(data),
-            checksum_buf
-        )
-
-        if not is_valid:
-            self.metrics['integrity_failures'] += 1
-
-        return is_valid
-
-    def _deserialize_evidence(self, ptr: int) -> TechnicalEvidence:
-        """
-        Deserializa TechnicalEvidence do Rust.
-
-        Note: Versão simplificada. Em produção usaria Protobuf.
-        """
-        # Mock implementation (substituir por Protobuf real)
         return TechnicalEvidence(
-            finding_count=0,
-            critical_count=0,
-            composite_risk=0.0,
-            findings=[],
-            critical=[],
-            stats={},
-            hash="mock_hash",
-            timestamp=0
+            version=int(data.get("version", 0)),
+            timestamp=int(data.get("timestamp", 0)),
+            audit_trail_id=str(data.get("audit_trail_id", "")),
+            composite_risk=float(data["composite_risk"]),
+            risk_level=str(data["risk_level"]),
+            finding_count=int(data["finding_count"]),
+            critical_count=int(data["critical_count"]),
+            entropy=float(data.get("entropy", 0.0)),
+            input_size=int(data.get("input_size", 0)),
+            executed_modules=int(data.get("executed_modules", 0)),
+            processing_time_us=int(data["processing_time_us"]),
+            hash=str(data["hash"]),
+            max_severity=str(data.get("max_severity", "Unknown")),
+            bias=bias,
         )
 
-    def get_metrics(self) -> Dict[str, Any]:
-        """Retorna métricas FFI."""
+    def get_metrics(self) -> dict:
+        total = max(self._metrics["calls_total"], 1)
         return {
-            **self.metrics,
-            'integrity_failure_rate': (
-                self.metrics['integrity_failures'] /
-                max(self.metrics['calls_total'], 1)
-            ),
-            'buffer_overflow_rate': (
-                self.metrics['buffer_overflows'] /
-                max(self.metrics['calls_total'], 1)
-            )
+            **self._metrics,
+            "buffer_overflow_rate": self._metrics["buffer_overflows"] / total,
+            "deserialization_error_rate": self._metrics["deserialization_errors"] / total,
+            "bridge_mode": self.bridge_mode,
         }
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# SINGLETON GLOBAL
-# ═══════════════════════════════════════════════════════════════════════════
 
 _ffi_client: Optional[FFIClient] = None
 
 def get_ffi_client() -> FFIClient:
-    """Retorna singleton FFI client."""
     global _ffi_client
     if _ffi_client is None:
         _ffi_client = FFIClient()

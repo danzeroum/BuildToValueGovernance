@@ -1,9 +1,14 @@
 """
-BuildToValue v2.0 - Rust Validators FFI Bridge (Python Side)
+BuildToValue v3.0 — Rust Validators FFI Bridge (Python Side)
 
 Python bindings para validators Rust via ctypes.
 
-Architecture: Python → ctypes → C ABI → Rust
+Architecture: Python -> ctypes -> C ABI -> Rust
+
+Phase 4 Updates:
+- Fixed library path candidates (libbuildtovalue_kernel.so, not libbuildtovalue.so)
+- Removed `Any` from typing imports (analyst constraint)
+- Added BUILDTOVALUE_KERNEL_LIB env var override
 
 Author: BuildToValue Architecture Team
 License: Apache 2.0
@@ -12,8 +17,9 @@ License: Apache 2.0
 import ctypes
 import json
 import logging
+import os
 from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -60,13 +66,13 @@ class Finding:
     validator_module: str
     metadata: Optional[str] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> Dict[str, Optional[str]]:
         return {
             'rule_id': self.rule_id,
             'title': self.title,
             'description': self.description,
-            'severity': self.severity,
-            'confidence': self.confidence,
+            'severity': str(self.severity),
+            'confidence': str(self.confidence),
             'validator': self.validator_module,
             'metadata': self.metadata,
         }
@@ -80,30 +86,43 @@ class RustValidatorsFFI:
     """
     FFI bridge para validators Rust.
 
-    Carrega librust_validators.so/.dll/.dylib e expõe funções.
+    Carrega libbuildtovalue_kernel.so/.dll/.dylib e expoe funcoes.
+    Phase 4: Fixed library name (was libbuildtovalue, now libbuildtovalue_kernel).
     """
 
     def __init__(self, lib_path: Optional[Path] = None):
-        """
-        Args:
-            lib_path: Caminho para librust_validators (auto-detect se None)
-        """
         if lib_path is None:
             lib_path = self._find_library()
 
         self.lib = ctypes.CDLL(str(lib_path))
         self._setup_functions()
 
-        logger.info(f"✅ Loaded Rust validators library: {lib_path}")
+        logger.info(f"Loaded Rust validators library: {lib_path}")
 
     def _find_library(self) -> Path:
-        """Auto-detect Rust library path."""
-        # Try common locations
+        """Auto-detect Rust library path.
+
+        Phase 4: Searches for libbuildtovalue_kernel (correct crate name).
+        The crate is `buildtovalue-kernel` in Cargo.toml, which produces
+        `libbuildtovalue_kernel.so` (hyphens become underscores in .so names).
+        """
+        # Environment override (highest priority)
+        env_path = os.environ.get('BUILDTOVALUE_KERNEL_LIB')
+        if env_path:
+            p = Path(env_path)
+            if p.exists():
+                return p
+            logger.warning(f"BUILDTOVALUE_KERNEL_LIB={env_path} not found, trying defaults")
+
         candidates = [
-            Path("../rust/target/release/libbuildtovalue.so"),  # Linux
-            Path("../rust/target/release/libbuildtovalue.dylib"),  # macOS
-            Path("../rust/target/release/buildtovalue.dll"),  # Windows
-            Path(__file__).parent.parent.parent.parent / "rust" / "target" / "release" / "libbuildtovalue.so",
+            Path("../rust/target/release/libbuildtovalue_kernel.so"),        # Linux
+            Path("../rust/target/release/libbuildtovalue_kernel.dylib"),     # macOS
+            Path("../rust/target/release/buildtovalue_kernel.dll"),          # Windows
+            Path(__file__).parent.parent.parent.parent
+                / "rust" / "target" / "release" / "libbuildtovalue_kernel.so",
+            # maturin-built PyO3 library
+            Path(__file__).parent.parent.parent.parent
+                / "rust" / "target" / "release" / "libbuildtovalue_governance.so",
         ]
 
         for path in candidates:
@@ -111,34 +130,31 @@ class RustValidatorsFFI:
                 return path
 
         raise FileNotFoundError(
-            "Rust library not found. Run: cd rust && cargo build --release"
+            "Rust kernel library not found. Run: cd rust && cargo build --release\n"
+            "Or set BUILDTOVALUE_KERNEL_LIB env var to the correct path.\n"
+            "Searched:\n" + "\n".join(f"  - {p}" for p in candidates)
         )
 
-    def _setup_functions(self):
+    def _setup_functions(self) -> None:
         """Setup ctypes function signatures."""
 
-        # validate_consent
         self.lib.validate_consent.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
         self.lib.validate_consent.restype = FFIValidationResult
 
-        # validate_consent_revocation
         self.lib.validate_consent_revocation.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
         self.lib.validate_consent_revocation.restype = FFIValidationResult
 
-        # validate_sensitive_data
         self.lib.validate_sensitive_data.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
         self.lib.validate_sensitive_data.restype = FFIValidationResult
 
-        # validate_batch
         self.lib.validate_batch.argtypes = [
-            ctypes.c_char_p,  # validator_names
-            ctypes.POINTER(ctypes.c_char_p),  # inputs
-            ctypes.c_size_t,  # inputs_count
-            ctypes.c_char_p,  # metadata_json
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.c_size_t,
+            ctypes.c_char_p,
         ]
         self.lib.validate_batch.restype = FFIValidationResult
 
-        # free_validation_result
         self.lib.free_validation_result.argtypes = [FFIValidationResult]
         self.lib.free_validation_result.restype = None
 
@@ -149,74 +165,36 @@ class RustValidatorsFFI:
     def validate_consent(
             self,
             input_text: str,
-            metadata: Optional[Dict[str, Any]] = None
+            metadata: Optional[Dict[str, str]] = None
     ) -> List[Finding]:
-        """
-        Validate consent (LGPD Art. 7º, I).
-
-        Args:
-            input_text: Input to validate
-            metadata: Context metadata (user.has_consent, processing.requires_consent, etc.)
-
-        Returns:
-            List of findings
-        """
+        """Validate consent (LGPD Art. 7, I)."""
         return self._call_validator("validate_consent", input_text, metadata)
 
     def validate_consent_revocation(
             self,
             input_text: str,
-            metadata: Optional[Dict[str, Any]] = None
+            metadata: Optional[Dict[str, str]] = None
     ) -> List[Finding]:
-        """
-        Validate consent revocation (LGPD Art. 8º, § 5º).
-
-        Args:
-            input_text: Input to validate
-            metadata: Context metadata (user.consent_revoked, processing.continues)
-
-        Returns:
-            List of findings
-        """
+        """Validate consent revocation (LGPD Art. 8, 5)."""
         return self._call_validator("validate_consent_revocation", input_text, metadata)
 
     def validate_sensitive_data(
             self,
             input_text: str,
-            metadata: Optional[Dict[str, Any]] = None
+            metadata: Optional[Dict[str, str]] = None
     ) -> List[Finding]:
-        """
-        Validate sensitive data (LGPD Art. 11).
-
-        Args:
-            input_text: Input to validate
-            metadata: Context metadata (consent.is_specific_for_sensitive)
-
-        Returns:
-            List of findings
-        """
+        """Validate sensitive data (LGPD Art. 11)."""
         return self._call_validator("validate_sensitive_data", input_text, metadata)
 
     def validate_batch(
             self,
             validator_names: List[str],
             inputs: List[str],
-            metadata: Optional[Dict[str, Any]] = None
+            metadata: Optional[Dict[str, str]] = None
     ) -> List[Finding]:
-        """
-        Batch validation (performance optimization).
-
-        Args:
-            validator_names: List of validators ("consent", "sensitive_data", "cpf", etc.)
-            inputs: List of inputs to validate
-            metadata: Single metadata dict for all inputs
-
-        Returns:
-            List of findings (all validators combined)
-        """
+        """Batch validation (performance optimization)."""
         validators_str = ",".join(validator_names).encode('utf-8')
 
-        # Convert inputs to C array
         input_ptrs = (ctypes.c_char_p * len(inputs))()
         for i, inp in enumerate(inputs):
             input_ptrs[i] = inp.encode('utf-8')
@@ -243,7 +221,7 @@ class RustValidatorsFFI:
             self,
             func_name: str,
             input_text: str,
-            metadata: Optional[Dict[str, Any]]
+            metadata: Optional[Dict[str, str]]
     ) -> List[Finding]:
         """Generic validator caller."""
         func = getattr(self.lib, func_name)
@@ -268,7 +246,7 @@ class RustValidatorsFFI:
         if result.findings_count == 0:
             return []
 
-        findings = []
+        findings: List[Finding] = []
         for i in range(result.findings_count):
             ffi_finding = result.findings[i]
 

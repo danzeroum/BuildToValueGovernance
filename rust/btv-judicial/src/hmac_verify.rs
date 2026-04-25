@@ -61,13 +61,11 @@ impl HmacVerifier {
     }
 }
 
-/// Comparação constant-time de dois arrays de 32 bytes.
+/// Constant-time comparison — v2.3.1: delegates to btv-types::crypto_utils.
+/// The Judicial uses the same BTV_HMAC_KEY as the Executive but verifies
+/// independently — constitutional separation is preserved.
 fn constant_time_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
-    let mut diff: u8 = 0;
-    for i in 0..32 {
-        diff |= a[i] ^ b[i];
-    }
-    diff == 0
+    btv_types::crypto_utils::constant_time_eq(a, b)
 }
 
 #[cfg(test)]

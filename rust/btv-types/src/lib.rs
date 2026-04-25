@@ -34,6 +34,10 @@ pub mod serde_bytes_64_pub {
     pub use super::serde_bytes_64::deserialize;
 }
 
+// ── Cryptographic utilities shared by btv-core and btv-judicial ──────────────────
+// v2.3.1: Centralized to eliminate constant_time_eq duplication (ADR DRY enforcement).
+pub mod crypto_utils;
+
 // ── Merkle verification (usable by btv-judicial without importing btv-sigma) ─────
 pub mod merkle_verify;
 pub use merkle_verify::verify_merkle_inclusion;

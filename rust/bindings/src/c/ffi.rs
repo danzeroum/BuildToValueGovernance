@@ -1,104 +1,148 @@
-//! C Foreign Function Interface
+//! C Foreign Function Interface — Phase 3 (fail-secure, real kernel).
 //!
-//! Funções exportadas com `#[no_mangle]` para interoperabilidade C.
+//! Phase 3 Changes:
+//! - process_evidence_real() calls buildtovalue_kernel::Gatekeeper (not stub)
+//! - No more hardcoded risk=42 or audit_trail_id=123456789
+//! - Input validation: max 10MB, non-empty, valid UTF-8
+//! - Fail-secure: any error → return code -3, never panic
 //!
 //! # Safety
-//! Todas as funções que recebem pointers raw são `unsafe` e requerem
-//! que os ponteiros sejam válidos e não nulos.
+//! All functions receiving raw pointers are `unsafe` and require
+//! non-null, valid pointers for the declared lengths.
 
 use std::slice;
+use std::time;
 use super::TechnicalEvidence;
 
-/// Scans input for technical evidence (C-compatible interface)
+const MAX_INPUT_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+
+/// Scans input for technical evidence using the real kernel Gatekeeper.
 ///
 /// # Safety
 /// - `input_ptr` must point to a valid buffer of at least `input_len` bytes
-/// - `input_len` must be the exact length of the buffer
-/// - `output_ptr` must point to a valid `TechnicalEvidence` struct
+/// - `output_ptr` must point to a valid writable `TechnicalEvidence`
 ///
 /// # Returns
-/// - `0` on success
-/// - `-1` on null pointer
-/// - `-2` on invalid input
-/// - `-3` on processing error
+/// - `0`  success
+/// - `-1` null pointer
+/// - `-2` invalid input (empty, too large, invalid UTF-8)
+/// - `-3` processing error (logged, fail-secure)
 #[no_mangle]
 pub unsafe extern "C" fn btv_scan_for_evidence(
     input_ptr: *const u8,
     input_len: usize,
     output_ptr: *mut TechnicalEvidence,
 ) -> i32 {
-    // Validação de ponteiros
     if input_ptr.is_null() || output_ptr.is_null() {
+        log::error!("btv_scan_for_evidence: null pointer");
         return -1;
     }
-
-    if input_len == 0 || input_len > 10 * 1024 * 1024 { // 10MB max
+    if input_len == 0 || input_len > MAX_INPUT_SIZE {
+        log::error!("btv_scan_for_evidence: invalid input_len={input_len}");
         return -2;
     }
 
-    // Converte para slice seguro
     let input_slice = slice::from_raw_parts(input_ptr, input_len);
-
-    // Processamento real - substitua por sua lógica
-    match process_evidence(input_slice) {
-        Ok(evidence) => {
-            // Escreve resultado no ponteiro de saída
-            *output_ptr = evidence;
-            0 // Sucesso
+    let input_str = match std::str::from_utf8(input_slice) {
+        Ok(s) => s,
+        Err(e) => {
+            log::error!("btv_scan_for_evidence: invalid UTF-8: {e}");
+            return -2;
         }
-        Err(_) => -3, // Erro de processamento
+    };
+
+    match process_evidence_real(input_str) {
+        Ok(ev) => { *output_ptr = ev; 0 }
+        Err(e) => {
+            log::error!("btv_scan_for_evidence: processing error: {e}");
+            -3
+        }
     }
 }
 
-/// Versão da API C
+/// C API version.
 #[no_mangle]
 pub extern "C" fn btv_api_version() -> u32 {
     super::C_API_VERSION
 }
 
-/// Inicializa o sistema (pode ser chamado uma vez no início)
+/// Initialize (no-op; Gatekeeper is stateless).
 #[no_mangle]
 pub extern "C" fn btv_initialize() -> i32 {
-    // Inicialização do sistema
-    // Retorna 0 em sucesso, negativo em erro
+    log::info!("btv_initialize: C FFI v{}", super::C_API_VERSION);
     0
 }
 
-/// Libera recursos (chamar no final)
+/// Cleanup (no-op).
 #[no_mangle]
-pub extern "C" fn btv_cleanup() {
-    // Cleanup se necessário
-}
+pub extern "C" fn btv_cleanup() {}
 
-// Função de processamento interna
-fn process_evidence(input: &[u8]) -> anyhow::Result<TechnicalEvidence> {
-    // TODO: Implementar processamento real com kernel
-    let evidence = TechnicalEvidence {
-        protocol_version: 2,
-        audit_trail_id: 123456789,
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
-        evidence_hash: sha256_hash(input),
-        composite_risk: calculate_risk(input),
-        input_size: input.len(),
-        processing_time_us: 0, // Será preenchido
+fn process_evidence_real(input: &str) -> Result<TechnicalEvidence, String> {
+    use buildtovalue_kernel::{Gatekeeper, RiskLevel};
+    use uuid::Uuid;
+
+    let start = time::Instant::now();
+    let audit_trail_id = Uuid::new_v4().as_u128();
+
+    let mut gatekeeper = Gatekeeper::new();
+    let ev = gatekeeper.scan_for_evidence(input, audit_trail_id);
+    let elapsed_us = start.elapsed().as_micros() as u64;
+
+    let risk_level_u8 = match ev.risk_level {
+        RiskLevel::Safe     => 0u8,
+        RiskLevel::Low      => 1,
+        RiskLevel::Medium   => 2,
+        RiskLevel::High     => 3,
+        RiskLevel::Critical => 4,
     };
 
-    Ok(evidence)
+    Ok(TechnicalEvidence {
+        protocol_version: 2,
+        audit_trail_id,
+        timestamp: ev.timestamp as u64,
+        evidence_hash: ev.hash,
+        composite_risk: (ev.composite_risk * 255.0) as u8,
+        risk_level: risk_level_u8,
+        finding_count: ev.finding_count,
+        critical_count: ev.critical_count,
+        input_size: ev.input_size as usize,
+        processing_time_us: elapsed_us,
+    })
 }
 
-// Funções auxiliares
-fn sha256_hash(data: &[u8]) -> [u8; 32] {
-    use sha2::{Sha256, Digest};
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    result.into()
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn calculate_risk(_data: &[u8]) -> u8 {
-    // TODO: Implementar cálculo de risco real
-    42 // Placeholder
+    #[test]
+    fn process_evidence_real_returns_real_data() {
+        let ev = process_evidence_real("test input").unwrap();
+        assert_ne!(ev.audit_trail_id, 123456789, "STUB: hardcoded audit_trail_id");
+        assert_ne!(ev.composite_risk, 42, "STUB: hardcoded risk=42");
+        assert_eq!(ev.protocol_version, 2);
+        assert!(ev.processing_time_us > 0);
+        assert!(ev.input_size > 0);
+    }
+
+    #[test]
+    fn null_pointers_return_error() {
+        unsafe {
+            let mut output = TechnicalEvidence::default();
+            assert_eq!(btv_scan_for_evidence(std::ptr::null(), 10, &mut output), -1);
+        }
+    }
+
+    #[test]
+    fn empty_input_returns_error() {
+        unsafe {
+            let byte = 0u8;
+            let mut output = TechnicalEvidence::default();
+            assert_eq!(btv_scan_for_evidence(&byte, 0, &mut output), -2);
+        }
+    }
+
+    #[test]
+    fn api_version_is_2() {
+        assert_eq!(btv_api_version(), 2);
+    }
 }

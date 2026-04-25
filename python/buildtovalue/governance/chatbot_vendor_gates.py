@@ -16,7 +16,6 @@ Invariantes ADR-031:
 ≤ 200 linhas
 """
 from __future__ import annotations
-import hashlib
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -26,7 +25,7 @@ from .agent_pdp import (
     ActionImpact, AgentAction, AgentContext,
     AgentDecisionRequest, AgentVerdict,
 )
-from .chatbot_gates import DataClassification, GateResult
+from .chatbot_gates import DataClassification, GateResult, _make_hash, _fail_secure
 
 logger = logging.getLogger("btv.governance.chatbot_vendor_gates")
 
@@ -44,20 +43,6 @@ class VendorConfig:
     has_dpa:        bool   = False
     has_zdr:        bool   = False  # Zero Data Retention
     data_residency: str    = "US"
-
-
-def _make_hash(content: str) -> str:
-    return hashlib.sha256(content.encode()).hexdigest()[:64]
-
-
-def _fail_secure(gate: str, reason: str) -> GateResult:
-    logger.error("fail-secure: gate=%s reason=%s", gate, reason)
-    return GateResult(
-        verdict=AgentVerdict.BLOCK,
-        evidence_id=None,
-        explain=f"[fail-secure] {gate}: {reason}",
-        gate=gate,
-    )
 
 
 def vendor_send_gate(
