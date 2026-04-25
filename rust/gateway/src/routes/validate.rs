@@ -1,15 +1,17 @@
 //! POST /v1/validate — Scan + Policy + Governance (República Algorítmica).
 //! Gap #4: Profile-aware governance (sector whitelist via Python).
 //! ADR-043: verdict_id gerado pelo Rust antes do scan, imutável até o cliente.
+//!
+//! v2.3.1: extract_client_ip, ip_risk_to_str, FALLBACK_POLICY moved to common.rs.
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
 use ulid::Ulid;
-use buildtovalue_kernel::network::IpRisk;
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
+use super::common::{extract_client_ip, ip_risk_to_str, FALLBACK_POLICY};
 
 // ── REQUEST / RESPONSE ────────────────────────────────────────
 
@@ -103,28 +105,6 @@ struct ScanResult {
     total_chars: u32,
     blake3_hash: String,
     drift_level: String,  // ADR-044
-}
-
-// ── HELPERS ADR-044 ──────────────────────────────────────────────
-
-fn extract_client_ip(headers: &axum::http::HeaderMap) -> String {
-    headers.get("X-Forwarded-For")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(|s| s.trim().to_string())
-        .or_else(|| headers.get("X-Real-IP")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string()))
-        .unwrap_or_else(|| "0.0.0.0".to_string())
-}
-
-fn ip_risk_to_str(risk: IpRisk) -> &'static str {
-    match risk {
-        IpRisk::Low      => "Low",
-        IpRisk::Medium   => "Medium",
-        IpRisk::High     => "High",
-        IpRisk::Critical => "Critical",
-    }
 }
 
 // ── HANDLER ───────────────────────────────────────────────────
@@ -391,18 +371,3 @@ pub async fn validate_handler(
     }))
 }
 
-// ── FALLBACK POLICY ───────────────────────────────────────────
-
-const FALLBACK_POLICY: &str = r#"
-version: "1.0"
-metadata:
-  name: "Fallback"
-  description: "Minimal fallback"
-  created_at: "2026-01-01"
-  updated_at: "2026-01-01"
-  author: "System"
-hard_blocks:
-  - "DROP TABLE"
-  - "<script>"
-policies: []
-"#;

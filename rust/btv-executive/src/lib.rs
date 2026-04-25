@@ -28,10 +28,8 @@ mod gatekeeper_bridge;
 mod executive;
 mod decision;
 pub mod error;
-pub mod gateway;
 
 pub use executive::{Executive, ExecutiveResult, ScanSummary};
 pub use decision::DecisionMaker;
 pub use error::DecisionError;
-// Re-export wire types consumed by gateway callers
 pub use btv_types::{Decision, RiskLevel, DeliveryPayload};
