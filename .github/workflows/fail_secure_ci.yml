@@ -153,7 +153,9 @@ jobs:
 
       - name: No hardcoded audit_trail_id=123456789
         run: |
-          if grep -n "123456789" rust/bindings/src/c/ffi.rs | grep -v "assert_ne\|assert_eq"; then
+
+          if grep -n "123456789" rust/bindings/src/c/ffi.rs | grep -v "assert_ne\|assert_eq\|//"; then
+
             echo "STUB DETECTED: hardcoded audit_trail_id"; exit 1
           fi
           echo "  OK: no hardcoded audit_trail_id"

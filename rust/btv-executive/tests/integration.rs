@@ -52,7 +52,6 @@ mod executive_tests {
             .await
             .expect("clean input must succeed");
         assert_eq!(result.delivery.verdict.decision, Decision::Allow);
-        assert!(result.delivery.receipt.log_index > 0 || result.delivery.receipt.log_index == 0);
         assert!(result.scan_summary.composite_risk < 0.5);
     }
 

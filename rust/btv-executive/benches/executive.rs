@@ -5,7 +5,7 @@
 //! with the server pre-started.
 use criterion::{criterion_group, criterion_main, Criterion, black_box};
 use btv_core::{ComplianceAuthority, ComplianceRegistry, ComplianceError};
-use btv_executive::{Executive, DecisionMaker};
+use btv_executive::Executive;
 
 struct StubRegistry;
 impl ComplianceRegistry for StubRegistry {
@@ -20,7 +20,7 @@ fn make_executive() -> Executive {
 
 fn bench_scan_only(c: &mut Criterion) {
     // Benchmark the scan pipeline without the log round-trip.
-    let scanner = btv_executive::__private::GatekeeperBridge::new();
+    let scanner = btv_executive::__testhelpers::GatekeeperBridgeHandle::new();
 
     c.bench_function("gatekeeper_bridge::scan (clean 64B)", |b| {
         b.iter(|| scanner.scan(black_box(b"Hello, normal message here.")))
@@ -42,14 +42,14 @@ fn bench_full_pipeline(c: &mut Criterion) {
     let exec = make_executive();
 
     c.bench_function("executive::decide (clean 64B, loopback)", |b| {
-        b.to_async(&rt).iter(|| {
-            exec.decide(black_box(b"Hello, normal message here."), "BR", "LGPD-v1")
+        b.iter(|| {
+            rt.block_on(exec.decide(black_box(b"Hello, normal message here."), "BR", "LGPD-v1"))
         });
     });
 
     c.bench_function("executive::decide (CPF 64B, loopback)", |b| {
-        b.to_async(&rt).iter(|| {
-            exec.decide(black_box(b"CPF: 123.456.789-09"), "BR", "LGPD-v1")
+        b.iter(|| {
+            rt.block_on(exec.decide(black_box(b"CPF: 123.456.789-09"), "BR", "LGPD-v1"))
         });
     });
 }
