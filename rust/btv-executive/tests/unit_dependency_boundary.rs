@@ -44,6 +44,6 @@ mod dependency_boundary {
     fn no_unsafe_code_policy_documented() {
         // A garantia real é #![deny(unsafe_code)] em lib.rs.
         // cargo geiger no CI valida a ausência em runtime.
-        assert!(true, "unsafe policy enforced by #![deny(unsafe_code)] in lib.rs");
+        // (invariant: unsafe policy enforced by #![deny(unsafe_code)] in lib.rs)
     }
 }

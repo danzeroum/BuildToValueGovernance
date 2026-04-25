@@ -20,11 +20,10 @@ mod sole_entry_point {
     /// going through Executive::decide).
     #[test]
     fn executive_decide_is_primary_path_documented() {
-        // Existência do método decide com a assinatura corretaé verificada
+        // Existência do método decide com a assinatura correta é verificada
         // pelo fato de `integration_pipeline.rs` o usar sem erros de compilação.
         // Este teste documenta o invariante arquitetural.
-        assert!(true,
-            "Executive::decide() is the sole path to DeliveryPayload — Paper 5 Theorem 3.5");
+        // (invariant: Executive::decide() is the sole path to DeliveryPayload — Paper 5 Theorem 3.5)
     }
 
     /// DeliveryPayload fields are pub (wire format), but construction
