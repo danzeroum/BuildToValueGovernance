@@ -1,9 +1,12 @@
 //! Verificação de inclusão Merkle.
 //!
-//! Reutiliza `btv_types::verify_merkle_inclusion` (função pura, sem network).
-//! btv-judicial pode verificar proofs offline após buscar root + proof do log.
+//! Para proofs emitidos por btv-sigma use `verify_side_proof` + `ProofSide`
+//! (ordem posicional estrita Side::Left / Side::Right).
+//! `verify_merkle_inclusion` (ordem canônica min-first) é mantido apenas
+//! para formatos legados.
 
-/// Re-exporta a função de verificação de `btv-types`.
+/// Re-exporta verificação posicional (btv-sigma) e API legada de `btv-types`.
+pub use btv_types::merkle_verify::{verify_side_proof, ProofSide};
 pub use btv_types::verify_merkle_inclusion;
 
 /// Verifica consistência do root: receipt.merkle_root == log_root.

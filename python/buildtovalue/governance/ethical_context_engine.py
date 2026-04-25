@@ -30,7 +30,7 @@ from .trust_score import TrustScoreCalculator
 from .mercy_algorithm import MercyCalculator
 from .profile_manager import Profile, ProfileManager
 from .policy_signer import PolicySigner, PolicySigningError
-from .ffi_client import TechnicalEvidence, Finding
+from .types import TechnicalEvidence, Finding
 from .contestability_loop import ContestabilityLoop
 from .consensus_validator import ConsensusValidator, ConsensusDecision, Reversibility
 from .bias_guardian import BiasGuardian

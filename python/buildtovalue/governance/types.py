@@ -133,3 +133,34 @@ class SimpleTechnicalEvidence:
     @property
     def critical(self) -> List[SimpleFinding]:
         return [f for f in self.findings if f.severity >= 0.8]
+
+
+@dataclass
+class Finding:
+    """FFI finding record — canonical definition (v2.3.1: moved from ffi_client.py)."""
+    title: str = ""
+    description: str = ""
+    severity: float = 0.5
+    confidence: float = 0.5
+    location: str = ""
+    evidence: str = ""
+    category: str = ""
+
+
+@dataclass
+class TechnicalEvidence:
+    """
+    Technical evidence from kernel scan — canonical definition (v2.3.1: moved from ffi_client.py).
+
+    .stats is a _Stats instance; access via .stats.has_pii / .stats.entropy.
+    """
+    finding_count: int = 0
+    critical_count: int = 0
+    composite_risk: float = 0.0
+    findings: List[Finding] = field(default_factory=list)
+    critical: List[Finding] = field(default_factory=list)
+    stats: _Stats = field(default_factory=_Stats)
+    hash: str = ""
+    timestamp: int = field(default_factory=lambda: int(time.time()))
+    ffi_validation_time_ms: float = 0.0
+    ffi_buffer_size: int = 0
