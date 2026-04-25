@@ -39,8 +39,8 @@ pub fn verify_side_proof(
     for (sibling, side) in proof {
         let mut hasher = Sha256::new();
         match side {
-            ProofSide::Left  => { hasher.update(sibling); hasher.update(&current); }
-            ProofSide::Right => { hasher.update(&current); hasher.update(sibling); }
+            ProofSide::Left  => { hasher.update(sibling); hasher.update(current); }
+            ProofSide::Right => { hasher.update(current); hasher.update(sibling); }
         }
         current = hasher.finalize().into();
     }
@@ -66,7 +66,7 @@ pub fn verify_merkle_inclusion(
             hasher.update(node);
         } else {
             hasher.update(node);
-            hasher.update(&current);
+            hasher.update(current);
         }
         current = hasher.finalize().into();
     }

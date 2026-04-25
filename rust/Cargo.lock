@@ -761,6 +761,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "btv-executive"
+version = "1.0.0"
+dependencies = [
+ "blake3",
+ "btv-core",
+ "btv-types",
+ "buildtovalue-kernel",
+ "criterion",
+ "ed25519-dalek",
+ "hex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "trybuild",
+]
+
+[[package]]
 name = "btv-gateway"
 version = "1.0.0"
 dependencies = [

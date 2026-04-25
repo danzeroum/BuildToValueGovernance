@@ -53,6 +53,7 @@ impl DeliveryToken {
 }
 
 /// The payload delivered to the end-user. All fields are public for read access.
+#[derive(Debug)]
 pub struct DeliveryPayload {
     pub verdict: btv_types::VerdictRecord,
     pub receipt: btv_types::InclusionReceiptWire,

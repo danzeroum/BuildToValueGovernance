@@ -24,12 +24,16 @@
 #![deny(unsafe_code)]
 #![deny(unused_must_use)]
 
-mod gatekeeper_bridge;
+pub(crate) mod gatekeeper_bridge;
 mod executive;
 mod decision;
 pub mod error;
 
+#[doc(hidden)]
+pub mod __testhelpers;
+
 pub use executive::{Executive, ExecutiveResult, ScanSummary};
 pub use decision::DecisionMaker;
 pub use error::DecisionError;
-pub use btv_types::{Decision, RiskLevel, DeliveryPayload};
+pub use btv_core::DeliveryPayload;
+pub use btv_types::{Decision, RiskLevel};

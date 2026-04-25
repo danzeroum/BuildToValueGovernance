@@ -8,9 +8,11 @@
 //! **This is the only module that imports both `btv-kernel` and `btv-core`.**
 //! All other modules import only one or the other.
 
+use buildtovalue_kernel::TechnicalSeverity;
 use btv_types::RiskLevel;
 
 /// Structured scan output — bridges kernel scan to constitutional types.
+#[derive(Debug)]
 pub struct ScanResult {
     pub findings:         Vec<FindingRecord>,
     pub composite_risk:   f32,
@@ -51,15 +53,17 @@ pub enum ScanError {
     InputSizeViolation(usize),
     #[error("Input is not valid UTF-8")]
     InvalidUtf8,
-    #[error("Kernel scan error: {0}")]
-    KernelError(String),
 }
 
-/// Thin wrapper around `btv_kernel::Gatekeeper`.
+/// Thin wrapper around `buildtovalue_kernel::Gatekeeper`.
 ///
 /// Does NOT replicate scan logic — delegates entirely to the kernel.
 /// Only responsibility: convert `TechnicalEvidence` → `ScanResult`.
 pub struct GatekeeperBridge;
+
+impl Default for GatekeeperBridge {
+    fn default() -> Self { Self::new() }
+}
 
 impl GatekeeperBridge {
     pub fn new() -> Self { Self }
@@ -74,40 +78,49 @@ impl GatekeeperBridge {
 
         let start = std::time::Instant::now();
 
-        // Delegate to kernel gatekeeper
-        let kernel_result = btv_kernel::Gatekeeper::default()
-            .scan(input_str)
-            .map_err(|e| ScanError::KernelError(e.to_string()))?;
+        // Delegate to kernel gatekeeper — returns TechnicalEvidence directly (no Result)
+        let audit_id = 0u128;
+        let ev = buildtovalue_kernel::Gatekeeper::new()
+            .scan_for_evidence(input_str, audit_id);
 
-        let findings: Vec<FindingRecord> = kernel_result
-            .findings
-            .iter()
-            .map(|f| FindingRecord {
-                rule_id:          f.rule_id.clone(),
-                title:            f.title.clone(),
-                severity:         severity_to_u8(f.severity),
-                confidence:       (f.confidence * 255.0) as u8,
-                validator_module: f.module.clone(),
-                category:         f.category.clone(),
+        // Convert all findings (normal + critical) to Vec<FindingRecord>
+        let findings: Vec<FindingRecord> = ev.get_all_findings()
+            .into_iter()
+            .map(|f| {
+                let rule_id = fixed_to_string(&f.rule_id);
+                let category = fixed_to_string(&f.threat_category);
+                let module_name = format!("{:?}", f.module);
+                FindingRecord {
+                    rule_id:          rule_id.clone(),
+                    title:            rule_id,
+                    severity:         severity_to_u8(f.severity),
+                    confidence:       f.confidence,
+                    validator_module: module_name,
+                    category,
+                }
             })
             .collect();
 
+        let stats = ev.stats;
         let statistics = InputStatistics {
-            entropy:      kernel_result.entropy,
-            z_score:      kernel_result.z_score,
-            input_size:   input.len(),
-            digit_ratio:  kernel_result.digit_ratio,
-            letter_ratio: kernel_result.letter_ratio,
-            symbol_ratio: kernel_result.symbol_ratio,
-            unique_chars: kernel_result.unique_chars,
-            total_chars:  kernel_result.total_chars,
+            entropy:      stats.entropy,
+            z_score:      stats.z_score,
+            input_size:   stats.input_size as usize,
+            digit_ratio:  stats.digit_ratio,
+            letter_ratio: stats.letter_ratio,
+            symbol_ratio: stats.symbol_ratio,
+            unique_chars: stats.unique_chars as usize,
+            total_chars:  stats.total_chars as usize,
         };
 
-        let composite_risk = compute_composite_risk(&findings);
-        let risk_level     = RiskLevel::from_score(composite_risk);
+        let composite_risk = ev.composite_risk;
+        let risk_level = RiskLevel::from_score(composite_risk);
 
         let original_hash: [u8; 32] = blake3::hash(input).into();
         let evidence_bytes = build_evidence_bytes(&original_hash, &findings, &statistics);
+
+        // executed_modules is u32 bitmask; count set bits for a comparable u8 stage count
+        let executed_stages = ev.executed_modules.count_ones() as u8;
 
         Ok(ScanResult {
             findings,
@@ -115,8 +128,8 @@ impl GatekeeperBridge {
             risk_level,
             statistics,
             evidence_bytes,
-            executed_stages: kernel_result.executed_stages,
-            detected_language: kernel_result.detected_language,
+            executed_stages,
+            detected_language: String::new(),
             scan_duration_us: start.elapsed().as_micros() as u64,
         })
     }
@@ -124,22 +137,26 @@ impl GatekeeperBridge {
 
 // ── Private helpers ─────────────────────────────────────────────────────────
 
-fn severity_to_u8(s: btv_kernel::TechnicalSeverity) -> u8 {
-    match s {
-        btv_kernel::TechnicalSeverity::Critical => 230,
-        btv_kernel::TechnicalSeverity::High     => 180,
-        btv_kernel::TechnicalSeverity::Medium   => 120,
-        btv_kernel::TechnicalSeverity::Low      => 60,
-        btv_kernel::TechnicalSeverity::Info     => 20,
-    }
+/// Encode a float as a stable i64 (4 decimal places) to avoid ULP non-determinism
+/// from HashMap-based accumulators in the kernel's statistics computation.
+fn stable_float(v: f32) -> [u8; 8] {
+    ((v * 10_000.0).round() as i64).to_le_bytes()
 }
 
-fn compute_composite_risk(findings: &[FindingRecord]) -> f32 {
-    if findings.is_empty() { return 0.0; }
-    let sum: f32 = findings.iter()
-        .map(|f| (f.severity as f32 / 255.0) * (f.confidence as f32 / 255.0))
-        .sum();
-    (sum / findings.len() as f32).min(1.0)
+fn fixed_to_string(buf: &[u8]) -> String {
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf[..end]).to_string()
+}
+
+fn severity_to_u8(s: TechnicalSeverity) -> u8 {
+    match s {
+        TechnicalSeverity::Critical(_)      => 230,
+        TechnicalSeverity::PolicyViolation  => 230,
+        TechnicalSeverity::High             => 180,
+        TechnicalSeverity::Medium           => 120,
+        TechnicalSeverity::Low              => 60,
+        TechnicalSeverity::Info             => 20,
+    }
 }
 
 /// Deterministic serialisation of scan evidence for `EvidenceToken`.
@@ -157,13 +174,13 @@ fn build_evidence_bytes(
     // 2. Original input BLAKE3 hash
     buf.extend_from_slice(original_hash);
 
-    // 3. Statistics (deterministic LE encoding)
-    buf.extend_from_slice(&stats.entropy.to_le_bytes());
-    buf.extend_from_slice(&stats.z_score.to_le_bytes());
+    // 3. Statistics (stable integer encoding — floats rounded to 4dp to avoid ULP noise)
+    buf.extend_from_slice(&stable_float(stats.entropy));
+    buf.extend_from_slice(&stable_float(stats.z_score));
     buf.extend_from_slice(&(stats.input_size as u64).to_le_bytes());
-    buf.extend_from_slice(&stats.digit_ratio.to_le_bytes());
-    buf.extend_from_slice(&stats.letter_ratio.to_le_bytes());
-    buf.extend_from_slice(&stats.symbol_ratio.to_le_bytes());
+    buf.extend_from_slice(&stable_float(stats.digit_ratio));
+    buf.extend_from_slice(&stable_float(stats.letter_ratio));
+    buf.extend_from_slice(&stable_float(stats.symbol_ratio));
     buf.extend_from_slice(&(stats.unique_chars as u64).to_le_bytes());
     buf.extend_from_slice(&(stats.total_chars as u64).to_le_bytes());
 

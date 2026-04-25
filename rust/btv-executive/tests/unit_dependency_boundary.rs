@@ -21,7 +21,7 @@ mod dependency_boundary {
     #[test]
     fn btv_core_types_accessible() {
         // Apenas verificamos que o módulo é acessível (sem construir tokens).
-        use btv_core::DecisionMaker as _;
+        let _: Option<btv_core::DeliveryPayload> = None;
         // Se compilou, btv-core é dependência.
     }
 

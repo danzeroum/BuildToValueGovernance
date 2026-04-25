@@ -118,13 +118,13 @@ jobs:
 
       - name: "C1 C6 C10 C12 — Unit tests (sem btv-sigma)"
         run: |
-          cargo test -p btv-executive -- \
-            unit_decision \
-            unit_gatekeeper_bridge \
-            unit_error_taxonomy \
-            unit_dependency_boundary \
-            unit_sole_entry_point \
-            --nocapture
+          cargo test -p btv-executive \
+            --test unit_decision \
+            --test unit_gatekeeper_bridge \
+            --test unit_error_taxonomy \
+            --test unit_dependency_boundary \
+            --test unit_sole_entry_point \
+            -- --nocapture
 
       - name: "C10 — Clippy sem warnings"
         run: cargo clippy -p btv-executive -- -D warnings

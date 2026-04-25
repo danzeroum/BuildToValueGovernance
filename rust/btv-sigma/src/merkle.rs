@@ -63,7 +63,7 @@ impl MerkleTree {
         let level_count = self.nodes.len();
         for level_idx in 0..level_count.saturating_sub(1) {
             let level = &self.nodes[level_idx];
-            let sibling = if idx % 2 == 0 { idx + 1 } else { idx - 1 };
+            let sibling = if idx.is_multiple_of(2) { idx + 1 } else { idx - 1 };
             if sibling < level.len() {
                 path.push(level[sibling]);
             }
