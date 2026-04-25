@@ -13,7 +13,11 @@
 //!   GET  /v1/appeals/metrics
 //!   GET  /health/bias         — BiasGuardian (ADR-036)
 //!   GET  /v1/trust/:session   — TrustScore (ADR-039)
+//!
+//! v2.3.1: Added `common` module (extract_client_ip, ip_risk_to_str, FALLBACK_POLICY)
+//!   to eliminate duplication between validate.rs and decide.rs.
 
+pub mod common;   // v2.3.1: shared helpers — import before route modules
 pub mod validate;
 pub mod health;
 pub mod metrics;
