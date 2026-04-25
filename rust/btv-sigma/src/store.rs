@@ -2,6 +2,9 @@
 //!
 //! The trait allows future replacement with a persistent store
 //! (RocksDB, PostgreSQL, etc.) without touching the API layer.
+//!
+//! Phase 4: proof() returns Vec<[u8; 32]> (no Side) to match btv-types::MerkleProof.path.
+
 use crate::merkle::MerkleTree;
 use std::sync::Mutex;
 
@@ -11,7 +14,9 @@ pub trait LogStore: Send + Sync {
     fn root(&self) -> [u8; 32];
     fn size(&self) -> u64;
     fn leaf_at(&self, index: u64) -> Option<[u8; 32]>;
-    fn proof(&self, index: u64) -> Option<Vec<([u8; 32], crate::merkle::Side)>>;
+    /// Returns sibling hashes only — compatible with btv-types::MerkleProof.path.
+    /// Phase 4: removed Side enum (canonical ordering makes it unnecessary).
+    fn proof(&self, index: u64) -> Option<Vec<[u8; 32]>>;
 }
 
 /// In-memory store — reference implementation for tests and development.
@@ -47,7 +52,7 @@ impl LogStore for InMemoryStore {
             .leaves.get(index as usize).copied()
     }
 
-    fn proof(&self, index: u64) -> Option<Vec<([u8; 32], crate::merkle::Side)>> {
+    fn proof(&self, index: u64) -> Option<Vec<[u8; 32]>> {
         self.tree.lock().expect("store lock poisoned").proof(index)
     }
 }
