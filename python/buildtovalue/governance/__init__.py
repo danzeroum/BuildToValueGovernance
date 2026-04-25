@@ -1,7 +1,13 @@
 """
-BuildToValue Governance Layer v1.0.0
+BuildToValue Governance Layer v2.3.1
 Judiciary of the Algorithmic Republic.
 Canonical imports — use these instead of reaching into submodules.
+
+v2.3.1: Consolidated EthicalContextEngine (removed context_engine.py v1.9.1 duplicate).
+  - EthicalContextEngine = v1.1.0 unified (TechnicalLayer + GovernanceLayer)
+  - EthicalContextEngineV3 kept for backward compat with tests (delegates to v1.1.0)
+  - AlignmentDegradationTracker imported from agentic/ (strictly superior: DurableLedger,
+    HMAC, fail-secure semantics)
 """
 from .types import (
     ActionType,
@@ -14,12 +20,19 @@ from .types import (
 from .mercy_factor import MercyFactor
 from .mercy_algorithm import MercyCalculator
 from .trust_score import TrustScoreCalculator
-from .context_engine import EthicalContextEngine
+# v2.3.1: Consolidated engine — v1.1.0 unified is the single source of truth.
+# context_engine.py (v1.9.1) was removed as part of Phase 1 restructuring.
+from .ethical_context_engine import EthicalContextEngine, EthicalContextEngineV3
 from .contestability_loop import ContestabilityLoop
 from .sensitivity_accumulator import SessionSensitivityAccumulator, SensitivityState
 from .bias_guardian import DivergenceLevel
-# Re-export V3 alias for backward compatibility with tests
-from .ethical_context_engine import EthicalContextEngineV3
+# v2.3.1: AlignmentDegradationTracker imported from agentic/ (ADR-053).
+# The governance/ version was removed: the agentic version has DurableLedger integration,
+# HMAC-SHA256 signed reports, and fail-secure semantics (score=1.0 on error).
+from buildtovalue.agentic.alignment_degradation_tracker import (
+    AlignmentDegradationTracker,
+    DegradationReport,
+)
 
 __all__ = [
     # Types
@@ -37,6 +50,8 @@ __all__ = [
     "MercyCalculator",
     "TrustScoreCalculator",
     "ContestabilityLoop",
+    "AlignmentDegradationTracker",
+    "DegradationReport",
     # ADR-046: Hybrid Alignment
     "SessionSensitivityAccumulator",
     "SensitivityState",
