@@ -39,8 +39,8 @@ pub fn verify_side_proof(
     for (sibling, side) in proof {
         let mut hasher = Sha256::new();
         match side {
-            ProofSide::Left  => { hasher.update(sibling); hasher.update(&current); }
-            ProofSide::Right => { hasher.update(&current); hasher.update(sibling); }
+            ProofSide::Left  => { hasher.update(sibling); hasher.update(current); }
+            ProofSide::Right => { hasher.update(current); hasher.update(sibling); }
         }
         current = hasher.finalize().into();
     }
@@ -50,8 +50,9 @@ pub fn verify_side_proof(
 /// Verify a Merkle inclusion proof using canonical (min-first) ordering.
 ///
 /// Canonical ordering: `min(current, sibling) || max(current, sibling)`.
-/// This ordering does NOT match btv-sigma — use `verify_side_proof` for
-/// proofs produced by btv-sigma. This function is kept for legacy formats.
+/// Since Phase 4, btv-sigma also uses this canonical ordering, so proofs
+/// from btv-sigma verify correctly with this function.
+/// `verify_side_proof` is kept for side-labelled proof formats.
 pub fn verify_merkle_inclusion(
     root: &[u8; 32],
     leaf_hash: &[u8; 32],
@@ -65,7 +66,7 @@ pub fn verify_merkle_inclusion(
             hasher.update(node);
         } else {
             hasher.update(node);
-            hasher.update(&current);
+            hasher.update(current);
         }
         current = hasher.finalize().into();
     }

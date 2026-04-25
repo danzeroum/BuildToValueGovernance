@@ -10,7 +10,6 @@
 
 #[cfg(test)]
 mod sole_entry_point {
-    use btv_executive::Executive;
 
     /// Verify that `Executive` has exactly one async public method
     /// (the `decide` method) that can produce a DeliveryPayload.
