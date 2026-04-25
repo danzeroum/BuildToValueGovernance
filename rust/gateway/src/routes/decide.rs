@@ -1,5 +1,7 @@
 //! POST /v1/decide — Pipeline ético completo (ADR-040).
 //! ADR-043: verdict_id gerado pelo Rust antes do scan, imutável até o cliente.
+//!
+//! v2.3.1: extract_client_ip, ip_risk_to_str, FALLBACK_POLICY moved to common.rs.
 
 use axum::{
     extract::State,
@@ -10,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
 use ulid::Ulid;
-use buildtovalue_kernel::network::IpRisk;
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use crate::state::AppState;
+use super::common::{extract_client_ip, ip_risk_to_str, FALLBACK_POLICY};
 
 // ── JURISDICTION BITMASK (stub ADR-032) ──────────────────────
 
@@ -103,20 +105,6 @@ pub struct ExplainDecision {
 
 const DEFAULT_POLICY: &str = include_str!("../../../../data/policies/core/default.yaml");
 
-const FALLBACK_POLICY: &str = r#"
-version: "1.0"
-metadata:
-  name: "Fallback"
-  description: "Minimal fallback"
-  created_at: "2026-01-01"
-  updated_at: "2026-01-01"
-  author: "System"
-hard_blocks:
-  - "DROP TABLE"
-  - "<script>"
-policies: []
-"#;
-
 #[derive(serde::Serialize)]
 struct GovernanceDecideRequest {
     finding_count: u32,
@@ -179,28 +167,6 @@ struct GovernanceExplain {
     #[serde(default)] jonas_rationale: String,
     #[serde(default)] gilligan_rationale: String,
     #[serde(default)] pipeline_trace: Vec<String>,
-}
-
-// ── HELPERS ADR-044 ─────────────────────────────────────────────
-
-fn extract_client_ip(headers: &HeaderMap) -> String {
-    headers.get("X-Forwarded-For")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(|s| s.trim().to_string())
-        .or_else(|| headers.get("X-Real-IP")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string()))
-        .unwrap_or_else(|| "0.0.0.0".to_string())
-}
-
-fn ip_risk_to_str(risk: IpRisk) -> &'static str {
-    match risk {
-        IpRisk::Low      => "Low",
-        IpRisk::Medium   => "Medium",
-        IpRisk::High     => "High",
-        IpRisk::Critical => "Critical",
-    }
 }
 
 // ── HANDLER ───────────────────────────────────────────────────
