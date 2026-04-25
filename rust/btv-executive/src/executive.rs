@@ -6,9 +6,9 @@
 //!  traversing EvidenceToken ⊗ ComplianceToken → Verdict → InclusionReceipt."
 use btv_core::{
     EvidenceToken, ComplianceAuthority, Verdict,
-    DeliveryToken, LogClient,
+    DeliveryToken, LogClient, DeliveryPayload,
 };
-use btv_types::{Decision, RiskLevel, DeliveryPayload};
+use btv_types::RiskLevel;
 use crate::gatekeeper_bridge::GatekeeperBridge;
 use crate::decision::DecisionMaker;
 use crate::error::DecisionError;
@@ -43,6 +43,7 @@ impl From<&crate::gatekeeper_bridge::ScanResult> for ScanSummary {
 }
 
 /// Full output of a successful `Executive::decide()` call.
+#[derive(Debug)]
 pub struct ExecutiveResult {
     pub delivery:            DeliveryPayload,
     pub scan_summary:        ScanSummary,

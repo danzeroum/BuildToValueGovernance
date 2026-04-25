@@ -10,7 +10,7 @@ btv-core   = { path = "../btv-core", features = ["log-client"] }
 # Re-uses kernel scan infrastructure rather than duplicating it.
 # The kernel crate is NOT the executive: it produces TechnicalEvidence.
 # btv-executive wraps those findings in constitutional types.
-btv-kernel = { path = "../kernel" }
+buildtovalue-kernel = { path = "../kernel" }
 blake3     = { workspace = true }
 tokio      = { workspace = true }
 serde      = { workspace = true }
@@ -20,9 +20,10 @@ thiserror  = { workspace = true }
 hex        = { workspace = true }
 
 [dev-dependencies]
-trybuild   = "1"
-criterion  = { workspace = true }
-tokio      = { workspace = true }
+trybuild         = "1"
+criterion        = { workspace = true }
+tokio            = { workspace = true }
+ed25519-dalek    = { workspace = true }
 
 [[bench]]
 name    = "executive"
