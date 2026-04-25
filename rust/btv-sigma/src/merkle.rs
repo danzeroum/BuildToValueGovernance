@@ -120,6 +120,7 @@ pub fn hash_pair(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
 
 /// Verify a Merkle inclusion proof using canonical ordering.
 /// Identical logic to btv-types::verify_merkle_inclusion.
+#[allow(dead_code)]
 pub fn verify_proof(
     root: &[u8; 32],
     leaf_hash: &[u8; 32],
