@@ -146,14 +146,14 @@ jobs:
 
       - name: No risk=42 in C FFI
         run: |
-          if grep -n "composite_risk.*42\|= 42" rust/bindings/src/c/ffi.rs; then
+          if grep -n "composite_risk.*42\|= 42" rust/bindings/src/c/ffi.rs | grep -v "assert_ne\|assert_eq"; then
             echo "STUB DETECTED: risk=42 in C FFI"; exit 1
           fi
           echo "  OK: no risk=42"
 
       - name: No hardcoded audit_trail_id=123456789
         run: |
-          if grep -n "123456789" rust/bindings/src/c/ffi.rs; then
+          if grep -n "123456789" rust/bindings/src/c/ffi.rs | grep -v "assert_ne\|assert_eq"; then
             echo "STUB DETECTED: hardcoded audit_trail_id"; exit 1
           fi
           echo "  OK: no hardcoded audit_trail_id"

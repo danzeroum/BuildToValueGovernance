@@ -25,7 +25,7 @@ impl InclusionReceipt {
     /// Only callable within btv-core — invoked by `LogClient` after signature verification.
     /// External crates cannot forge a receipt without a valid Ed25519 signature.
     // TODO(Phase 2): LogClient::submit() will call this after verifying the Log Authority sig.
-    #[expect(dead_code, reason = "called by LogClient (Phase 2, not yet implemented)")]
+    #[allow(dead_code)]
     pub(crate) fn new_verified(
         log_index:   u64,
         merkle_root: [u8; 32],

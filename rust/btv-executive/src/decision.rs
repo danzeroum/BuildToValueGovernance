@@ -48,7 +48,7 @@ impl DecisionMaker {
                     .collect();
                 if criticals.is_empty() {
                     format!(
-                        "DENY: composite_risk={:.3} \u2265 threshold={:.3}. Fail-secure.",
+                        "DENY: composite_risk={:.3} \u{2265} threshold={:.3}. Fail-secure.",
                         scan.composite_risk, self.block_threshold,
                     )
                 } else {
