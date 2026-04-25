@@ -1,12 +1,27 @@
 """
-OpenTelemetry tracing for Python Governance Layer.
-Integrates with Rust kernel via W3C Trace Context propagation.
+OpenTelemetry tracing integration for BuildToValue Governance.
+
+Provides:
+- TracerProvider setup with OTLP exporter
+- trace_function decorator and trace_span context manager
+- Rust-Python trace context propagation
+- InstrumentedEthicalContextEngine wrapper
+
+v2.3.1: Fixed broken imports.
+  - Removed import from ffi_client (broken FFI with mock _deserialize_evidence).
+  - EthicalContextEngine imported from canonical ethical_context_engine module.
+  - EthicalVerdict imported from context_engine_types (where it is defined).
+  - Type hints are lazy strings (from __future__ import annotations) so runtime
+    duck-typing is preserved for evidence objects from any source.
 """
-import os
-import json
-from typing import Optional, Dict, Any
-from contextlib import contextmanager
+from __future__ import annotations
 import functools
+import json
+import logging
+import os
+import time
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Optional
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider, sampling
@@ -16,13 +31,16 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.propagate import extract, inject, set_global_textmap
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
-# CORRIGIDO: Imports corretos
-from buildtovalue.governance.ethical_context_engine import (
-    EthicalContextEngine,
+# v2.3.1: Canonical engine path (ethical_context_engine.py = v1.1.0 unified).
+from buildtovalue.governance.ethical_context_engine import EthicalContextEngine
+# EthicalVerdict, RequestContext are defined in context_engine_types (not in the engine file).
+from buildtovalue.governance.context_engine_types import (
     EthicalVerdict,
-    RequestMetadata
+    RequestContext,
 )
-from buildtovalue.governance.ffi_client import TechnicalEvidence
+from buildtovalue.governance.types import RequestMetadata
+
+logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -219,9 +237,9 @@ class InstrumentedEthicalContextEngine(EthicalContextEngine):
     @trace_function("ethical_decision")
     def decide(
             self,
-            evidence: TechnicalEvidence,
+            evidence: Any,
             context: RequestMetadata,
-            profile_name: str
+            profile_name: str,
     ) -> EthicalVerdict:
         """
         Make ethical decision (with tracing).

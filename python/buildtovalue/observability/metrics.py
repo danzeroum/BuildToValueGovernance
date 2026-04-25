@@ -247,21 +247,26 @@ class InstrumentedGovernanceLayer:
 
     def _make_decision(self, evidence, context, profile, trust_score, mercy_score):
         """
-        Decision logic extension point.
+        Decision logic extension point — must be overridden in subclass.
 
-        Override in subclass to integrate with EthicalContextEngine
+        Override to integrate with EthicalContextEngine
         (see buildtovalue.governance.ethical_context_engine).
         """
-        pass
+        raise NotImplementedError(
+            "Subclass must implement _make_decision or use InstrumentedGovernanceLayer "
+            "wrapping EthicalContextEngine directly."
+        )
 
     def _write_to_ledger(self, verdict):
         """
-        Ledger write extension point.
+        Ledger write extension point — must be overridden in subclass.
 
-        Override in subclass to integrate with DurableLedger
+        Override to integrate with DurableLedger
         (see buildtovalue.governance.durable_ledger).
         """
-        pass
+        raise NotImplementedError(
+            "Subclass must implement _write_to_ledger or use ContestabilityLoop directly."
+        )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -383,8 +388,6 @@ TRUST_SCORE_CURRENT = Gauge(
 # Helpers ADR-041
 # ═══════════════════════════════════════════════════════════════
 
-from contextlib import contextmanager
-
 @contextmanager
 def measure_pipeline_stage(stage: str):
     """Mede duração de estágio filosófico. Uso: with measure_pipeline_stage('rawls'): ..."""
@@ -454,7 +457,6 @@ BENIGN_REFUSAL_RATE = Gauge(
 )
 
 # -- Action Graph Observability (ADR-041) --
-from prometheus_client import Counter, Histogram, Gauge
 
 ACTION_TRANSITION_TOTAL = Counter(
     "btv_action_transition_total",

@@ -34,11 +34,8 @@ pub(crate) fn compute_seal(
 }
 
 /// Constant-time equality check for HMAC tags.
+/// v2.3.1: Delegates to btv-types::crypto_utils to eliminate duplication with
+/// btv-judicial. Both crates already depend on btv-types, so this is free.
 pub(crate) fn constant_time_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
-    // XOR all bytes and check none differ — prevents early-exit timing leak
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
+    btv_types::crypto_utils::constant_time_eq(a, b)
 }
