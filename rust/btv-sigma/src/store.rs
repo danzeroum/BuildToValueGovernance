@@ -11,7 +11,7 @@ pub trait LogStore: Send + Sync {
     fn root(&self) -> [u8; 32];
     fn size(&self) -> u64;
     fn leaf_at(&self, index: u64) -> Option<[u8; 32]>;
-    fn proof(&self, index: u64) -> Option<Vec<([u8; 32], crate::merkle::Side)>>;
+    fn proof(&self, index: u64) -> Option<Vec<[u8; 32]>>;
 }
 
 /// In-memory store — reference implementation for tests and development.
@@ -47,7 +47,7 @@ impl LogStore for InMemoryStore {
             .leaves.get(index as usize).copied()
     }
 
-    fn proof(&self, index: u64) -> Option<Vec<([u8; 32], crate::merkle::Side)>> {
+    fn proof(&self, index: u64) -> Option<Vec<[u8; 32]>> {
         self.tree.lock().expect("store lock poisoned").proof(index)
     }
 }

@@ -11,7 +11,7 @@ pub mod bridge;
 
 // Importar funções públicas dos submódulos
 use batch::calculate_penalties_batch;
-use bridge::scan_for_evidence_batch;
+use bridge::{scan_for_evidence_batch, test_bridge};
 
 /// BuildToValue Governance Python Module
 ///
@@ -42,6 +42,7 @@ fn buildtovalue_governance(py: Python, m: &PyModule) -> PyResult<()> {
     // Funções principais
     m.add_function(wrap_pyfunction!(calculate_penalties_batch, m)?)?;
     m.add_function(wrap_pyfunction!(scan_for_evidence_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(test_bridge, m)?)?;
 
     // Função de versão
     m.add_function(wrap_pyfunction!(version, m)?)?;

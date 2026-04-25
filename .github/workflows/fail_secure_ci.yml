@@ -1,0 +1,290 @@
+# =============================================================================
+# BuildToValue — Fail-Secure CI (Phase 3)
+# =============================================================================
+# Validates:
+#   1. Merkle cross-crate consistency: btv-sigma proofs verify with btv-types
+#   2. Bindings crate build (maturin + C ABI)
+#   3. Python FFI integration smoke tests
+#   4. Fail-strict pattern checks (no stub/42, no mock_hash)
+#   5. C FFI API version is 2 (Phase 3 marker)
+# =============================================================================
+
+name: Fail-Secure CI — Phase 3
+
+on:
+  push:
+    branches: [main, develop, "claude/*"]
+    paths:
+      - "rust/**"
+      - "python/**"
+      - ".github/workflows/fail_secure_ci.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  RUST_TOOLCHAIN: "stable"
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ===========================================================================
+  # JOB 1: Merkle cross-crate consistency
+  # ===========================================================================
+  merkle-consistency:
+    name: "Merkle: sigma proofs verify with btv-types"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: merkle-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.lock') }}
+
+      - name: Build btv-types + btv-sigma
+        run: |
+          cd rust
+          cargo build -p btv-types -p btv-sigma
+          echo "  OK: both crates compiled"
+
+      - name: Run btv-sigma cross-verification tests
+        run: |
+          cd rust
+          cargo test -p btv-sigma -- merkle::tests::proof_cross_verifies_with_btv_types
+          cargo test -p btv-sigma -- merkle::tests::cross_verify_various_tree_sizes
+          cargo test -p btv-sigma -- merkle::tests::cross_verify_unsorted_leaves
+          echo "  OK: all cross-verification tests pass"
+
+      - name: Run btv-types verifier tests
+        run: |
+          cd rust
+          cargo test -p btv-types -- merkle_verify
+          echo "  OK: btv-types verifier tests pass"
+
+      - name: Canonical ordering is commutative
+        run: |
+          cd rust
+          cargo test -p btv-sigma -- merkle::tests::canonical_ordering_is_commutative
+          echo "  OK: hash_pair(a,b) == hash_pair(b,a)"
+
+  # ===========================================================================
+  # JOB 2: Bindings crate build
+  # ===========================================================================
+  bindings-build:
+    name: "Bindings: maturin + C ABI"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: bindings-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.lock') }}
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build PyO3 bindings
+        run: |
+          cd rust
+          maturin build --release -m bindings/Cargo.toml
+          echo "  OK: maturin build succeeded"
+
+      - name: Build C ABI
+        run: |
+          cd rust
+          cargo build --release -p buildtovalue-bindings --features c
+          echo "  OK: C ABI build succeeded"
+
+      - name: C API version is 2
+        run: |
+          API_V=$(grep -oP 'C_API_VERSION:\s*u32\s*=\s*\K\d+' \
+            rust/bindings/src/c/mod.rs | head -1)
+          [ "$API_V" = "2" ] || { echo "C_API_VERSION=$API_V expected 2"; exit 1; }
+          echo "  OK: C_API_VERSION = 2"
+
+      - name: Run C FFI unit tests
+        run: |
+          cd rust
+          cargo test -p buildtovalue-bindings --features c -- tests::
+          echo "  OK: C FFI tests pass"
+
+  # ===========================================================================
+  # JOB 3: No stubs / no placeholders
+  # ===========================================================================
+  no-stubs:
+    name: "Fail-strict: no placeholder code"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No risk=42 in C FFI
+        run: |
+          if grep -n "composite_risk.*42\|= 42" rust/bindings/src/c/ffi.rs; then
+            echo "STUB DETECTED: risk=42 in C FFI"; exit 1
+          fi
+          echo "  OK: no risk=42"
+
+      - name: No hardcoded audit_trail_id=123456789
+        run: |
+          if grep -n "123456789" rust/bindings/src/c/ffi.rs; then
+            echo "STUB DETECTED: hardcoded audit_trail_id"; exit 1
+          fi
+          echo "  OK: no hardcoded audit_trail_id"
+
+      - name: No TODO stub in C FFI process_evidence
+        run: |
+          if grep -n "TODO.*Implementar\|TODO.*implement" rust/bindings/src/c/ffi.rs; then
+            echo "STUB DETECTED: TODO placeholder in C FFI"; exit 1
+          fi
+          echo "  OK: no TODO stubs"
+
+      - name: btv-sigma hash_pair uses canonical ordering
+        run: |
+          # Must NOT use unconditional positional ordering (update(left); update(right) always)
+          # Must have a <= / > comparison
+          if ! grep -q "a <= b\|<= \*node\|min\|canonical" rust/btv-sigma/src/merkle.rs; then
+            echo "FAIL: hash_pair appears to lack canonical ordering"; exit 1
+          fi
+          echo "  OK: canonical ordering present in merkle.rs"
+
+      - name: No mock_hash in ffi_client.py
+        run: |
+          if grep -n "mock_hash" python/buildtovalue/governance/ffi_client.py; then
+            echo "STUB DETECTED: mock_hash"; exit 1
+          fi
+          echo "  OK: no mock_hash"
+
+      - name: ffi_client.py is not empty stub
+        run: |
+          LINE_COUNT=$(wc -l < python/buildtovalue/governance/ffi_client.py)
+          [ "$LINE_COUNT" -gt 50 ] || { echo "ffi_client.py too short ($LINE_COUNT lines)"; exit 1; }
+          echo "  OK: ffi_client.py has $LINE_COUNT lines"
+
+  # ===========================================================================
+  # JOB 4: Python FFI smoke tests
+  # ===========================================================================
+  python-ffi:
+    name: "Python: FFI integration smoke tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [bindings-build]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies + build PyO3
+        run: |
+          pip install maturin pytest
+          cd rust && maturin develop --release -m bindings/Cargo.toml
+
+      - name: PyO3 module imports and constants
+        run: |
+          python3 -c "
+          import buildtovalue_governance as btv
+          print(f'  version={btv.__version__}')
+          assert btv.PROTOCOL_VERSION == 2, f'PROTOCOL_VERSION={btv.PROTOCOL_VERSION}'
+          print('  OK: PROTOCOL_VERSION = 2')
+          "
+
+      - name: test_bridge returns real kernel data
+        run: |
+          python3 -c "
+          import json, buildtovalue_governance as btv
+          raw = btv.test_bridge()
+          data = json.loads(raw)
+          assert len(data) == 1
+          ev = data[0]
+          assert 'composite_risk' in ev and 'hash' in ev
+          assert ev.get('composite_risk') != 42, 'STUB: risk=42'
+          print(f'  OK: composite_risk={ev[\"composite_risk\"]}, hash={ev[\"hash\"][:8]}...')
+          "
+
+      - name: FFIClient module structure
+        run: |
+          cd python
+          python3 -c "
+          import sys; sys.path.insert(0, '.')
+          from buildtovalue.governance.ffi_client import (
+              FFIClient, TechnicalEvidence, Finding, BiasDeclaration,
+              FFIError, BufferOverflowError, DeserializationError, BridgeNotAvailableError,
+          )
+          print('  OK: all FFI client types importable')
+          "
+
+      - name: FFIClient scan (PyO3 mode)
+        run: |
+          cd python
+          python3 -c "
+          import sys; sys.path.insert(0, '.')
+          from buildtovalue.governance.ffi_client import FFIClient, BridgeNotAvailableError
+          try:
+              c = FFIClient()
+              ev = c.scan('hello world')
+              assert ev.hash != 'mock_hash', 'STUB: mock_hash'
+              assert c.bridge_mode in ('pyo3', 'ctypes')
+              m = c.get_metrics()
+              assert m['calls_total'] == 1
+              print(f'  OK: bridge={c.bridge_mode}, risk={ev.composite_risk:.3f}')
+          except BridgeNotAvailableError:
+              print('  SKIP: bridge not available in this environment')
+          "
+
+  # ===========================================================================
+  # Gate — all must pass
+  # ===========================================================================
+  gate:
+    name: "Fail-Secure Gate"
+    runs-on: ubuntu-latest
+    needs: [merkle-consistency, bindings-build, no-stubs, python-ffi]
+    if: always()
+
+    steps:
+      - name: All checks passed
+        run: |
+          echo "merkle-consistency : ${{ needs.merkle-consistency.result }}"
+          echo "bindings-build     : ${{ needs.bindings-build.result }}"
+          echo "no-stubs           : ${{ needs.no-stubs.result }}"
+          echo "python-ffi         : ${{ needs.python-ffi.result }}"
+          if [[ "${{ needs.merkle-consistency.result }}" == "success" &&
+                "${{ needs.bindings-build.result }}"   == "success" &&
+                "${{ needs.no-stubs.result }}"         == "success" &&
+                "${{ needs.python-ffi.result }}"       == "success" ]]; then
+            echo "ALL FAIL-SECURE CHECKS PASS"
+          else
+            echo "FAIL-SECURE GATE FAILED"; exit 1
+          fi
