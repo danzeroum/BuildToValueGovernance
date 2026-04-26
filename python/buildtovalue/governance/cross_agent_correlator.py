@@ -22,7 +22,7 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 import yaml
 
 from .agent_pdp import AgentVerdict
-from .alignment_degradation_tracker import AlignmentDegradationTracker
+from buildtovalue.agentic.alignment_degradation_tracker import AlignmentDegradationTracker
 from .chatbot_gates import GateResult
 from .tool_sanitizer import _RE_SCREEN
 
