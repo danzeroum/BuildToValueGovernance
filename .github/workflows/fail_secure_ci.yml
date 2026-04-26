@@ -222,8 +222,8 @@ jobs:
 
       - name: Install dependencies + build PyO3
         run: |
-          pip install maturin pytest
-          cd rust && maturin develop --release -m bindings/Cargo.toml
+          pip install maturin pytest pyyaml httpx
+          cd rust && maturin build --release -m bindings/Cargo.toml && pip install target/wheels/*.whl
 
       - name: PyO3 module imports and constants
         run: |
