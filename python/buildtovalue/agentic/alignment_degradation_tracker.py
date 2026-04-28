@@ -30,9 +30,10 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from buildtovalue.governance.durable_ledger import DurableLedger
+if TYPE_CHECKING:
+    from buildtovalue.governance.durable_ledger import DurableLedger
 
 logger = logging.getLogger("btv.agentic.alignment_degradation_tracker")
 
@@ -103,7 +104,7 @@ class AlignmentDegradationTracker:
 
     def __init__(
         self,
-        ledger: DurableLedger,
+        ledger: "DurableLedger",
         window: int = 20,
         threshold: float = 0.4,
         hmac_key: bytes = _DEFAULT_HMAC_KEY,
