@@ -126,6 +126,25 @@ cd ops && bash e2e-tests.sh
 # 27 tests: 21 pass, 4 fail (known), 2 skip
 ```
 
+### ARIA Arena Demo (Track 2)
+Iterative, step-by-step walkthrough of the Scaling Trust Arena scenarios —
+the same five tests in `python/tests/agentic/test_arena_simulation.py`,
+replayed one NegotiationMessage / guard verdict / drift check at a time.
+
+```bash
+make arena-demo            # Streamlit on http://localhost:8501
+make arena-demo-cli        # Terminal walkthrough (all 5 scenarios)
+```
+
+Single scenario, machine-readable export:
+```bash
+cd python && python -m buildtovalue.cli.main arena-demo \
+    --scenario red_team --auto --json /tmp/arena.json
+```
+
+Scenarios: `cooperative`, `red_team`, `drift`, `generalisation`, `leaderboard`.
+See ADR-0058 for the (Utility; Security; Cost Efficiency) scoring rubric.
+
 ## ADRs
 
 52+ ADRs referenced (42 formal in `docs/adr/` + ADR-042, 049, 051 implemented in v2.2):

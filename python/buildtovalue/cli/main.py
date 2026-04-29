@@ -1,6 +1,9 @@
 """BuildToValue CLI entrypoint"""
 import click
 
+from buildtovalue.cli.commands.arena_demo import arena_demo_cmd
+
+
 @click.group()
 @click.version_option(version="1.0.0")
 def cli():
@@ -11,6 +14,10 @@ def cli():
 def version():
     """Show version"""
     click.echo("BuildToValue v2.2.0")
+
+
+cli.add_command(arena_demo_cmd)
+
 
 if __name__ == "__main__":
     cli()
