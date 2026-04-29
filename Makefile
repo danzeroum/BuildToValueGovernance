@@ -66,6 +66,16 @@ benchmark:
 	@echo "Running BTV benchmark..."
 	cd benchmarks/comparative && python runner.py --adapters btv
 
+# ARIA Scaling Trust Arena — iterative demo (Streamlit)
+arena-demo:
+	@echo "Launching Arena demo on http://localhost:8501 ..."
+	streamlit run playground/arena_demo.py
+
+# ARIA Scaling Trust Arena — iterative demo (CLI walkthrough)
+arena-demo-cli:
+	@echo "Walking through all Arena scenarios in the terminal..."
+	cd python && python -m buildtovalue.cli.main arena-demo --scenario all
+
 # Atalho para desenvolvedor Rust
 quick:
 	[cite_start]@echo "⚡ Teste rápido do Kernel..." [cite: 8]
