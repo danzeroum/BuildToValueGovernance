@@ -1,167 +1,175 @@
-# Quickstart — 5 minutos
+# Quickstart — Under 5 Minutes
 
-## 1. Suba o gateway
+Choose your path. **No Docker required** for the primary flow.
 
-```bash
-git clone https://github.com/buildtovalue/buildtovalue
-cd buildtovalue/ops
+---
 
-# Sobe gateway (Rust) + governança (Python)
-docker compose up --build
-```
+## Path A — Rust (Compile-Time Guarantee)
 
-O gateway estará em `http://localhost:8080`. Verifique:
+The fastest way to see BTV's core invariant: a decision that compiles without evidence is impossible.
 
 ```bash
-curl http://localhost:8080/health
-# {"status":"ok","uptime_seconds":3.2}
+cargo new my-agent && cd my-agent
+cargo add buildtovalue
 ```
 
-## 2. Instale o SDK
+```rust
+use buildtovalue::{EvidenceToken, ComplianceToken, Verdict, Decision};
 
-=== "Python"
+fn main() {
+    // Simulate what your AI agent saw (prompt + context)
+    let context = b"loan application: score=520, threshold=600";
 
-    ```bash
-    pip install buildtovalue
-    ```
+    // 1. Bind evidence — BLAKE3 hash of the context
+    let evidence = EvidenceToken::new(context);
 
-=== "TypeScript / Node"
+    // 2. Declare compliance jurisdiction
+    let compliance = ComplianceToken::new("GDPR", "v1", 720); // 720h = 30-day appeal window
 
-    ```bash
-    npm install @buildtovalue/sdk
-    ```
+    // 3. Issue verdict — atomically consumes both tokens
+    let verdict = Verdict::new(evidence, compliance, Decision::Deny, "Score below threshold".into());
 
-=== "MCP (Claude Desktop)"
-
-    ```bash
-    pip install btv-mcp-server
-    ```
-
-## 3. Faça sua primeira chamada
-
-=== "Python"
-
-    ```python
-    from buildtovalue import BTVClient
-
-    btv = BTVClient(
-        api_key="dev-key",  # (1)
-        gateway_url="http://localhost:8080",
-    )
-
-    verdict = btv.decide(
-        "Meu CPF é 123.456.789-09",
-        session_id="sess-user-001",   # (2)
-        profile="healthcare",          # (3)
-    )
-
-    print(verdict.action)         # EDUCATE
-    print(verdict.composite_risk) # 0.71
-    print(verdict.contestable)    # True
-    ```
-
-    1. Configure `BTV_API_KEYS=dev-key` no gateway (já vem configurado no docker-compose local).
-    2. Use um identificador opaco de sessão — nunca o ID real do usuário (LGPD Art. 5).
-    3. Perfis disponíveis: `general`, `healthcare`, `finance`, `legal`, `research`, `education`.
-
-=== "TypeScript"
-
-    ```typescript
-    import { BTVClient } from "@buildtovalue/sdk";
-
-    const btv = new BTVClient({
-      apiKey: "dev-key",
-      gatewayUrl: "http://localhost:8080",
-    });
-
-    const verdict = await btv.decide("Meu CPF é 123.456.789-09", {
-      sessionId: "sess-user-001",
-      profile: "healthcare",
-    });
-
-    console.log(verdict.action);         // "EDUCATE"
-    console.log(verdict.composite_risk); // 0.71
-    console.log(verdict.contestable);    // true
-    ```
-
-=== "curl"
-
-    ```bash
-    curl -s -X POST http://localhost:8080/v1/decide \
-      -H "X-API-Key: dev-key" \
-      -H "Content-Type: application/json" \
-      -d '{
-        "input": "Meu CPF é 123.456.789-09",
-        "session_id": "sess-user-001",
-        "profile": "healthcare"
-      }' | jq .action
-    # "EDUCATE"
-    ```
-
-## 4. Entenda o verdict
-
-```python
-verdict = btv.decide("SELECT * FROM users WHERE 1=1")
-
-verdict.action           # "BLOCK" — ação a tomar
-verdict.original_action  # "BLOCK" — antes da misericórdia
-verdict.mercy_applied    # False — sem misericórdia aqui
-verdict.composite_risk   # 0.94 — risco agregado [0-1]
-verdict.finding_count    # 2 — evidências encontradas
-verdict.critical_count   # 1 — evidências críticas
-verdict.hard_blocked     # True — não contestável
-verdict.contestable      # False
-verdict.verdict_id       # "VRD-01ARZ3NDEK..." — ID imutável para auditoria
-
-# Rationale filosófico (só em /v1/decide, não em /v1/validate)
-verdict.explain.summary           # "SQL injection detectado. Risco crítico."
-verdict.explain.rawls_rationale   # "Viola política sob o véu da ignorância."
-verdict.explain.levinas_rationale # "Exposição de dados de terceiros."
-verdict.explain.trust_score       # 0.85
+    // 4. Immutable receipt
+    println!("evidence_id : {}", verdict.evidence_id());
+    println!("hmac_seal   : {}", verdict.hmac());
+    println!("contestable : {}", verdict.contestable());
+}
 ```
 
-## 5. Lidar com um BLOCK
-
-```python
-verdict = btv.decide(input_text, session_id=session_id)
-
-if verdict.action == "BLOCK":
-    if verdict.hard_blocked:
-        # Sem saída — violação absoluta (ex: termos de hard-block)
-        return {"error": "Conteúdo não permitido."}
-
-    if verdict.contestable:
-        # Usuário pode contestar (LGPD Art. 20)
-        appeal = btv.appeal(
-            verdict.verdict_id,
-            reason="Este CPF é de um dataset de teste ABNT, não é PII real.",
-            grounds=["technical_error", "false_positive"],
-        )
-        return {
-            "blocked": True,
-            "appeal_id": appeal.appeal_id,
-            "message": verdict.rationale,
-        }
+```bash
+cargo run
+# evidence_id : a3f8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0
+# hmac_seal   : 9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
+# contestable : true
 ```
 
-## 6. Context manager para sessões
+> **Try breaking it:** Delete the `evidence` argument from `Verdict::new` and run `cargo build`. You will get a **compile error**, not a runtime failure. This is the BTV guarantee.
 
-Use `BTVSession` para não repetir `session_id` em cada chamada:
+---
+
+## Path B — HTTP Sidecar (Python / TypeScript / any stack)
+
+For teams that do not write Rust. The sidecar wraps any agent decision.
+
+```bash
+docker run -p 3000:3000 \
+  -e BTV_HMAC_KEY=dev-key-change-in-prod \
+  buildtovalue/gateway:latest
+```
+
+```bash
+curl -s -X POST http://localhost:3000/v1/decide \
+  -H "Content-Type: application/json" \
+  -d '{
+    "context": "loan application: score=520, threshold=600",
+    "decision": "deny",
+    "explanation": "Score below threshold",
+    "jurisdiction": "GDPR"
+  }' | jq .
+```
+
+```json
+{
+  "verdict_id": "VRD-01ARZ3NDEK...",
+  "decision": "deny",
+  "evidence_id": "a3f8b2c1...",
+  "hmac_seal": "9b2c3d4e...",
+  "contestable": true,
+  "appeal_deadline_hours": 720,
+  "latency_us": 1670
+}
+```
+
+**Python SDK:**
+
+```bash
+pip install buildtovalue-sdk
+```
 
 ```python
-with btv.session("sess-user-001") as session:
-    v1 = session.decide("Olá, como posso ajudar?")
-    v2 = session.validate("Meu email é user@example.com")
-    ts = session.trust_score()  # Score atual da sessão
-    print(ts.trust_score)       # 0.82
-    print(ts.level)             # "high"
+from buildtovalue import BTVClient
+
+client = BTVClient("http://localhost:3000")
+
+receipt = client.decide(
+    context="loan application: score=520, threshold=600",
+    decision="deny",
+    explanation="Score below threshold",
+    jurisdiction="GDPR"
+)
+
+print(receipt.evidence_id)   # BLAKE3 hash — your immutable proof
+print(receipt.hmac_seal)     # HMAC-SHA256 — tamper-evident seal
+print(receipt.contestable)   # True — user can appeal within 720h
 ```
 
 ---
 
-## Próximos passos
+## Path C — MCP (Claude Desktop / Cursor)
 
-- [→ Conceitos: o que é a República Algorítmica?](concepts.md)
-- [→ Integrar com LangChain](integrations/langchain.md)
-- [→ Configurar MCP para Claude Desktop](integrations/mcp.md)
-- [→ Referência completa da API](api-reference.md)
+For teams using MCP-compatible AI platforms.
+
+```bash
+pip install btv-mcp-server
+```
+
+Add to your MCP config:
+
+```json
+{
+  "mcpServers": {
+    "btv": {
+      "command": "btv-mcp-server",
+      "env": {
+        "BTV_GATEWAY_URL": "http://localhost:3000"
+      }
+    }
+  }
+}
+```
+
+Your AI agent now calls `btv_decide()` as a tool — every decision is automatically wrapped with cryptographic evidence.
+
+---
+
+## Understanding the Receipt
+
+Every BTV verdict contains:
+
+| Field | What it means |
+|---|---|
+| `evidence_id` | BLAKE3 hash of exactly what the AI saw at decision time |
+| `hmac_seal` | HMAC-SHA256 over the full verdict — detects tampering |
+| `contestable` | Whether the affected party can file an appeal |
+| `appeal_deadline_hours` | Time window for appeal (GDPR: 720h / 30 days) |
+| `verdict_id` | Globally unique, immutable ID for audit trail |
+
+To verify any stored verdict:
+
+```rust
+let is_valid = stored_verdict.verify_integrity(); // 327ns — audit at 3M/sec/core
+```
+
+---
+
+## What Happens if Evidence is Missing?
+
+This is BTV's core guarantee. Without evidence, `Verdict::new` does not compile:
+
+```rust
+// This fails at compile time — E0061: missing required argument
+let bad_verdict = Verdict::new(compliance, Decision::Deny, "reason".into());
+//                             ^^^^^^^^^^
+//                             error: expected EvidenceToken, got ComplianceToken
+```
+
+No silent decisions. No logging pipeline to misconfigure. The compiler is the enforcement mechanism.
+
+---
+
+## Next Steps
+
+- [API Reference](api-reference.md) — full endpoint documentation
+- [Benchmarks](../benchmarks/) — comparative latency vs Guardrails AI / NeMo
+- [LangChain integration](integrations/langchain.md)
+- [Architecture](../docs/ARCHITECTURE_ATLAS.md)
