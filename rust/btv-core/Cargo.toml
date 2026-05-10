@@ -1,27 +1,28 @@
 [package]
-# Nome público no crates.io — usado via: cargo add buildtovalue
-name = "buildtovalue"
+# Nome interno do workspace — preserva a taxonomia do monolito modular (ADR-009)
+# O nome comercial público (crates.io) é exposto via crate facade: rust/buildtovalue/
+name = "btv-core"
 version = "3.0.0-alpha.1"
 edition.workspace = true
+authors = ["Daniel Lau Pereira Soares"]
 
-# Metadados obrigatórios para publicação no crates.io
-description = "Evidência criptográfica imutável para decisões de Agentes de IA. Fail-Secure por design, auditável por construção."
+# Metadados internos (não publicado diretamente no crates.io)
+description = "Núcleo criptográfico interno do BTV. Exposto publicamente via crate buildtovalue."
 repository = "https://github.com/danzeroum/BuildToValueGovernance"
-homepage = "https://github.com/danzeroum/BuildToValueGovernance"
-readme = "../../README.md"
 license = "MIT OR Apache-2.0"
-keywords = ["ai", "security", "governance", "cryptography", "audit"]
-categories = ["cryptography", "development-tools"]
 
-# Apenas src/, benches/ e tests/ são incluídos no crate publicado.
-# Exclui explicitamente red-team, ops/, docs/ e qualquer artefato
-# de desenvolvimento que não deve vazar para o registro público.
+# Apenas src/, benches/ e tests/ são incluídos se empacotado.
+# Exclui red-team, ops/, docs/ e artefatos de desenvolvimento.
 include = [
   "src/**/*",
   "benches/**/*",
   "tests/**/*",
   "Cargo.toml",
 ]
+
+[lib]
+# Nome do artefato compilado (underscores por convenção Rust)
+name = "btv_core"
 
 [dependencies]
 btv-types = { path = "../btv-types" }
