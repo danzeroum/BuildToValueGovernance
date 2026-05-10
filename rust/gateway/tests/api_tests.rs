@@ -2,7 +2,6 @@
 
 #[cfg(test)]
 mod tests {
-    use axum::http::StatusCode;
     use axum_test::TestServer;
     use serde_json::json;
     use std::sync::Arc;
