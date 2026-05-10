@@ -3,7 +3,8 @@
 //! Testes de rede requerem btv-sigma rodando em localhost:3100.
 //! Testes unitários (HMAC, Merkle) rodam sem rede.
 use btv_judicial::{HmacVerifier, JudicialAuditor};
-use btv_judicial::audit_report::JudicialAuditor as Auditor;
+// fix(unused-imports): removido alias duplicado de JudicialAuditor.
+// btv_judicial::JudicialAuditor já está no escopo via use acima.
 use btv_types::{Blake3Hash, Decision, VerdictRecord, MerkleProof};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;

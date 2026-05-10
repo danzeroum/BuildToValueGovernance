@@ -339,7 +339,9 @@ policies:
                 relevant.push(&self.policy_set.policies[i]);
             }
         }
-        relevant.sort_by(|a, b| b.priority.cmp(&a.priority));
+        // fix(clippy::unnecessary_sort_by): sort_by_key com Reverse é idiomático
+        // e evita criar closure que captura campo externo para comparação invertida.
+        relevant.sort_by_key(|p| std::cmp::Reverse(p.priority));
 
         for policy in relevant {
             // ADR-045: filtrar policies fora do perímetro do scan
@@ -536,8 +538,6 @@ policies:
 "#
     }
 
-    // ── testes existentes (inalterados) ──────────────────────────────────────
-
     #[test]
     fn test_policy_from_yaml() {
         let engine = PolicyEngine::from_yaml_str(test_yaml()).unwrap();
@@ -623,11 +623,8 @@ policies:
         assert!(m.matches_total > 0);
     }
 
-    // ── ADR-045: novos testes de ThreatModel ─────────────────────────────────
-
     #[test]
     fn test_policy_without_threat_model_defaults_public() {
-        // Policies sem threat_model devem funcionar idêntico ao comportamento atual
         let mut engine = PolicyEngine::from_yaml_str(test_yaml()).unwrap();
         let a1 = engine.evaluate("cpf", "", 0.8, 0.95);
         let a2 = engine.evaluate_with_context("cpf", "", 0.8, 0.95, "public");
@@ -637,7 +634,6 @@ policies:
 
     #[test]
     fn test_threat_model_internal_skipped_in_public_scan() {
-        // Policy com trust_boundary "internal" NÃO deve disparar em scan "public"
         let mut engine = PolicyEngine::from_yaml_str(internal_policy_yaml()).unwrap();
         let action = engine.evaluate_with_context("debug", "", 0.5, 0.5, "public");
         assert_eq!(action, PolicyAction::Allow, "internal policy must not fire in public scan");
@@ -645,7 +641,6 @@ policies:
 
     #[test]
     fn test_threat_model_internal_fires_in_internal_scan() {
-        // Policy com trust_boundary "internal" DEVE disparar em scan "internal"
         let mut engine = PolicyEngine::from_yaml_str(internal_policy_yaml()).unwrap();
         let action = engine.evaluate_with_context("debug", "", 0.5, 0.5, "internal");
         assert_eq!(action, PolicyAction::Block, "internal policy must fire in internal scan");
@@ -653,7 +648,6 @@ policies:
 
     #[test]
     fn test_threat_model_public_applies_to_all_scans() {
-        // Policy "public" aplica em qualquer scan (public, federated, internal)
         let mut engine = PolicyEngine::from_yaml_str(internal_policy_yaml()).unwrap();
         for boundary in &["public", "federated", "internal"] {
             let action = engine.evaluate_with_context("cpf", "", 0.8, 0.95, boundary);
@@ -664,7 +658,6 @@ policies:
 
     #[test]
     fn test_evaluate_wrapper_backward_compat() {
-        // evaluate() existente = evaluate_with_context(..., "public")
         let mut engine = PolicyEngine::from_yaml_str(internal_policy_yaml()).unwrap();
         let a1 = engine.evaluate("cpf", "", 0.8, 0.95);
         let a2 = engine.evaluate_with_context("cpf", "", 0.8, 0.95, "public");
@@ -682,7 +675,6 @@ policies:
 
     #[test]
     fn test_yaml_without_threat_model_parses() {
-        // YAML original sem nenhum threat_model → retrocompatível
         let engine = PolicyEngine::from_yaml_str(test_yaml()).unwrap();
         for p in &engine.policy_set.policies {
             assert!(p.threat_model.is_none());
@@ -691,7 +683,6 @@ policies:
 
     #[test]
     fn test_boundary_level_unknown_is_public() {
-        // String desconhecida → 2 (public) — fail-secure
         assert_eq!(ThreatModel::boundary_level("unknown"), 2);
         assert_eq!(ThreatModel::boundary_level(""), 2);
     }
