@@ -1,4 +1,0 @@
-streamlit>=1.32
-buildtovalue>=0.1
-httpx>=0.27
-pydantic>=2.0
