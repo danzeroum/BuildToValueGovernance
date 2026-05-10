@@ -32,10 +32,10 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
         b.iter_batched(
             || Gatekeeper::new(),
             |mut gk| {
-                black_box(gk.scan_for_evidence(
+                let _ = black_box(gk.scan_for_evidence(
                     black_box("Hello, this is a normal message."),
                     black_box(0x1001),
-                ))
+                ));
             },
             BatchSize::SmallInput,
         );
@@ -46,10 +46,10 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
         b.iter_batched(
             || Gatekeeper::new(),
             |mut gk| {
-                black_box(gk.scan_for_evidence(
+                let _ = black_box(gk.scan_for_evidence(
                     black_box("Meu CPF é 123.456.789-09"),
                     black_box(0x2002),
-                ))
+                ));
             },
             BatchSize::SmallInput,
         );
@@ -62,10 +62,10 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
         b.iter_batched(
             || Gatekeeper::new(),
             |mut gk| {
-                black_box(gk.scan_for_evidence(
+                let _ = black_box(gk.scan_for_evidence(
                     black_box(input),
                     black_box(0x3003),
-                ))
+                ));
             },
             BatchSize::SmallInput,
         );
@@ -78,10 +78,10 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
         b.iter_batched(
             || Gatekeeper::new(),
             |mut gk| {
-                black_box(gk.scan_for_evidence(
+                let _ = black_box(gk.scan_for_evidence(
                     black_box(input),
                     black_box(0x4004),
-                ))
+                ));
             },
             BatchSize::SmallInput,
         );
@@ -93,10 +93,10 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
         b.iter_batched(
             || Gatekeeper::new(),
             |mut gk| {
-                black_box(gk.scan_for_evidence(
+                let _ = black_box(gk.scan_for_evidence(
                     black_box(&input),
                     black_box(0x5005),
-                ))
+                ));
             },
             BatchSize::SmallInput,
         );
@@ -108,10 +108,10 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
         b.iter_batched(
             || Gatekeeper::new(),
             |mut gk| {
-                black_box(gk.scan_for_evidence(
+                let _ = black_box(gk.scan_for_evidence(
                     black_box(input),
                     black_box(0x6006),
-                ))
+                ));
             },
             BatchSize::SmallInput,
         );
@@ -123,10 +123,10 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
         b.iter_batched(
             || Gatekeeper::new(),
             |mut gk| {
-                black_box(gk.scan_for_evidence(
+                let _ = black_box(gk.scan_for_evidence(
                     black_box(input),
                     black_box(0x7007),
-                ))
+                ));
             },
             BatchSize::SmallInput,
         );
@@ -140,10 +140,10 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
         b.iter_batched(
             || Gatekeeper::new(),
             |mut gk| {
-                black_box(gk.scan_for_evidence(
+                let _ = black_box(gk.scan_for_evidence(
                     black_box(&input),
                     black_box(0x8008),
-                ))
+                ));
             },
             BatchSize::SmallInput,
         );
@@ -176,7 +176,7 @@ fn bench_evidence_protocol(c: &mut Criterion) {
             for _ in 0..10 {
                 ev.add_finding(Finding::new(
                     ValidatorModule::CPF,
-                    TechnicalSeverity::PolicyViolation,  // ← unitária, OK
+                    TechnicalSeverity::PolicyViolation,
                     "BENCH_FINDING",
                     "Benchmark synthetic finding",
                     "benchmark",
@@ -194,7 +194,7 @@ fn bench_evidence_protocol(c: &mut Criterion) {
             for _ in 0..3 {
                 ev.add_finding(Finding::new(
                     ValidatorModule::CPF,
-                    TechnicalSeverity::Critical(0),  // ← FIX: precisa do u8
+                    TechnicalSeverity::Critical(0),
                     "CRITICAL_BENCH",
                     "Critical benchmark finding",
                     "benchmark",
@@ -204,7 +204,7 @@ fn bench_evidence_protocol(c: &mut Criterion) {
             black_box(&ev);
         });
     });
-    
+
     group.finish();
 }
 
@@ -236,7 +236,7 @@ fn bench_throughput(c: &mut Criterion) {
             || Gatekeeper::new(),
             |mut gk| {
                 for (i, input) in inputs.iter().enumerate() {
-                    black_box(gk.scan_for_evidence(
+                    let _ = black_box(gk.scan_for_evidence(
                         black_box(input),
                         black_box(i as u128),
                     ));
@@ -257,7 +257,7 @@ fn bench_throughput(c: &mut Criterion) {
             || Gatekeeper::new(),
             |mut gk| {
                 for (i, input) in bulk.iter().enumerate() {
-                    black_box(gk.scan_for_evidence(
+                    let _ = black_box(gk.scan_for_evidence(
                         black_box(input.as_str()),
                         black_box(i as u128),
                     ));
