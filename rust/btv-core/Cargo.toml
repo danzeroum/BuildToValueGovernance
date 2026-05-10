@@ -1,8 +1,27 @@
 [package]
-name = "btv-core"
-version.workspace = true
+# Nome público no crates.io — usado via: cargo add buildtovalue
+name = "buildtovalue"
+version = "3.0.0-alpha.1"
 edition.workspace = true
-description = "Legislative layer: linear resource types for AI accountability (Paper 1 + Paper 2)"
+
+# Metadados obrigatórios para publicação no crates.io
+description = "Evidência criptográfica imutável para decisões de Agentes de IA. Fail-Secure por design, auditável por construção."
+repository = "https://github.com/danzeroum/BuildToValueGovernance"
+homepage = "https://github.com/danzeroum/BuildToValueGovernance"
+readme = "../../README.md"
+license = "MIT OR Apache-2.0"
+keywords = ["ai", "security", "governance", "cryptography", "audit"]
+categories = ["cryptography", "development-tools"]
+
+# Apenas src/, benches/ e tests/ são incluídos no crate publicado.
+# Exclui explicitamente red-team, ops/, docs/ e qualquer artefato
+# de desenvolvimento que não deve vazar para o registro público.
+include = [
+  "src/**/*",
+  "benches/**/*",
+  "tests/**/*",
+  "Cargo.toml",
+]
 
 [dependencies]
 btv-types = { path = "../btv-types" }
@@ -14,12 +33,12 @@ thiserror = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-# LogClient HTTP (Phase 2) — feature-gated to keep hot path free of async deps
+# LogClient HTTP (Phase 2) — feature-gated para manter hot path livre de deps async
 reqwest = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
 [features]
-# Enable LogClient (requires reqwest + tokio)
+# Habilita LogClient (requer reqwest + tokio)
 log-client = ["reqwest", "tokio"]
 
 [dev-dependencies]
