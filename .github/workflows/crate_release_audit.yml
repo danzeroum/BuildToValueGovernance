@@ -1,0 +1,77 @@
+name: BuildToValue Crate Audit (Path A)
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'rust/**'
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+  # O COMPILADOR É A LEI: transforma warnings em erro fatal.
+  # Previne regressões silenciosas no grafo de dependências.
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  workspace_integrity_and_dry_run:
+    name: Workspace Integrity & Crates.io Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Instalação da Toolchain Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache de Dependências Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: "1. Auditoria de Prevenção de Cascata (Workspace Check)"
+        working-directory: ./rust
+        # Aplica recomendação ADR-009: falha imediata se o grafo interno estiver quebrado.
+        # Nenhum crate pode ter dependência não resolvida antes de prosseguir.
+        run: cargo check --workspace --all-targets
+
+      - name: "2. Análise Estática Estrita (Clippy Fail-Secure)"
+        working-directory: ./rust
+        # Proíbe explicitamente anti-padrões que violam invariantes do BTV:
+        # - unwrap_used: sem .unwrap() no hot path (falha silenciosa = crime de auditoria)
+        # - expect_used: idem para .expect()
+        # - clone_on_ref_ptr: sem .clone() em Arc/Rc sem justificativa documentada
+        run: >
+          cargo clippy --workspace --all-targets --
+          -D clippy::unwrap_used
+          -D clippy::expect_used
+          -D clippy::clone_on_ref_ptr
+
+      - name: "3. Suíte de Provas Empíricas (Tests)"
+        working-directory: ./rust
+        # Executa testes unitários garantindo que a latência e os invariantes
+        # criptográficos (BLAKE3, HMAC-SHA256) permanecem no threshold documentado.
+        run: cargo test --workspace
+
+      - name: "4. Validação de Empacotamento btv-core (Núcleo Interno)"
+        working-directory: ./rust/btv-core
+        # Garante que o núcleo empacota corretamente mesmo não sendo
+        # publicado diretamente — evita surpresas em caso de necessidade futura.
+        run: cargo package --allow-dirty
+
+      - name: "5. Dry-Run de Publicação Comercial (Façade buildtovalue)"
+        working-directory: ./rust/buildtovalue
+        # Empacota o facade e verifica se tamanho, licença e README.md
+        # estão válidos para a vitrine pública do crates.io.
+        # --allow-dirty necessário em CI (arquivos não commitados no worktree).
+        run: cargo publish --dry-run --allow-dirty

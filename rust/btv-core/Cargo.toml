@@ -1,8 +1,28 @@
 [package]
+# Nome interno do workspace — preserva a taxonomia do monolito modular (ADR-009)
+# O nome comercial público (crates.io) é exposto via crate facade: rust/buildtovalue/
 name = "btv-core"
-version.workspace = true
+version = "3.0.0-alpha.1"
 edition.workspace = true
-description = "Legislative layer: linear resource types for AI accountability (Paper 1 + Paper 2)"
+authors = ["Daniel Lau Pereira Soares"]
+
+# Metadados internos (não publicado diretamente no crates.io)
+description = "Núcleo criptográfico interno do BTV. Exposto publicamente via crate buildtovalue."
+repository = "https://github.com/danzeroum/BuildToValueGovernance"
+license = "MIT OR Apache-2.0"
+
+# Apenas src/, benches/ e tests/ são incluídos se empacotado.
+# Exclui red-team, ops/, docs/ e artefatos de desenvolvimento.
+include = [
+  "src/**/*",
+  "benches/**/*",
+  "tests/**/*",
+  "Cargo.toml",
+]
+
+[lib]
+# Nome do artefato compilado (underscores por convenção Rust)
+name = "btv_core"
 
 [dependencies]
 btv-types = { path = "../btv-types" }
@@ -14,12 +34,12 @@ thiserror = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-# LogClient HTTP (Phase 2) — feature-gated to keep hot path free of async deps
+# LogClient HTTP (Phase 2) — feature-gated para manter hot path livre de deps async
 reqwest = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
 [features]
-# Enable LogClient (requires reqwest + tokio)
+# Habilita LogClient (requer reqwest + tokio)
 log-client = ["reqwest", "tokio"]
 
 [dev-dependencies]

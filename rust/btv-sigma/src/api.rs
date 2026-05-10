@@ -24,7 +24,7 @@ pub struct AppState {
     pub signer: LogSigner,
 }
 
-// ── POST /append ──────────────────────────────────────────────────────────────
+// ── POST /append ─────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct AppendRequest {
@@ -67,7 +67,7 @@ pub async fn append(
     })
 }
 
-// ── GET /root ─────────────────────────────────────────────────────────────────
+// ── GET /root ───────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct RootResponse {
@@ -84,7 +84,7 @@ pub async fn get_root(
     })
 }
 
-// ── GET /proof/{index} ────────────────────────────────────────────────────────
+// ── GET /proof/{index} ─────────────────────────────────────────────────────────────
 
 /// Proof response — btv-types compatible.
 ///
@@ -126,7 +126,7 @@ pub async fn get_proof(
     }))
 }
 
-// ── Router ────────────────────────────────────────────────────────────────────
+// ── Router ─────────────────────────────────────────────────────────────────────────
 
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -140,7 +140,6 @@ pub fn router(state: Arc<AppState>) -> Router {
 mod tests {
     use super::*;
     use crate::store::InMemoryStore;
-    use crate::signer::LogSigner;
 
     #[test]
     fn proof_response_is_btv_types_compatible() {

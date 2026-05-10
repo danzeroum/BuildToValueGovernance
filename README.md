@@ -1,182 +1,207 @@
 # BuildToValue (BTV)
 
-**Cryptographic Immutable Evidence for AI Agent Decisions. Compile-Time Guarantee.**
+**Evidência Criptográfica Imutável para Decisões de Agentes de IA.**
 
-Every AI decision your system makes is either **provably accountable** or a liability. BTV makes accountability structurally impossible to bypass — if your agent tries to issue a decision without cryptographic evidence, the compiler rejects it. Not a runtime check. Not a policy. A **type error**.
-
-```
-Your agent decides → BTV fuses evidence + decision atomically → Immutable receipt (BLAKE3 + HMAC-SHA256)
-                                        ↑
-                           Compiler rejects any bypass
-```
+Toda decisão que o seu agente de IA toma é ou **auditavelmente rastreável** ou um passivo regulatório. O BTV torna a ausência de evidência estruturalmente inevitável de detectar: sem chamar `finalize()`, o hash BLAKE3 permanece zerado, o Gatekeeper entra em `BLOCK` por padrão — e nenhum dado de auditoria é descartado silenciosamente.
 
 ---
 
-## The Problem BTV Solves
+## O Problema
 
-> *"Our AI denied a loan / rejected a candidate / blocked access. A regulator asked for the evidence trail. We had logs. The logs were incomplete."*
+> *"Nossa IA negou um empréstimo / rejeitou um candidato / bloqueou acesso. O regulador pediu a trilha de evidências. Tínhamos logs. Os logs estavam incompletos."*
 
-This is not a logging problem. It is a **structural accountability problem**. Runtime logs can be dropped under load, overwritten, or silently omitted. BTV eliminates this class of failure at compile time.
+Isso não é um problema de logging. É um **problema de accountability estrutural**. Logs de runtime podem ser descartados sob carga, sobrescritos ou omitidos silenciosamente. O BTV elimina essa classe de falha tornando o estado padrão do sistema o bloqueio, não a permissão.
 
-**Regulatory context:** GDPR Art. 22, EU AI Act Art. 86, LGPD Art. 18 — all require that AI decisions carry auditable evidence. BTV makes non-compliance a compiler error, not a runtime risk.
-
----
-
-## Quick Start (< 5 minutes)
-
-```bash
-# 1. Add BTV to your Rust project
-cargo add buildtovalue
-
-# 2. Wrap any AI decision
-use buildtovalue::{EvidenceToken, ComplianceToken, Verdict};
-
-let evidence = EvidenceToken::new(&context_bytes);      // BLAKE3 hash of what the AI saw
-let compliance = ComplianceToken::new("GDPR", "v1", 720); // jurisdiction + appeal window
-let verdict = Verdict::new(evidence, compliance, Decision::Deny, explanation);
-// ^ If you omit evidence or compliance, this line does NOT COMPILE.
-
-# 3. Inspect the immutable receipt
-println!("{}", verdict.receipt());
-// {"decision":"Deny","evidence_id":"a3f8...","hmac":"9b2c...","timestamp":"..."}
-```
-
-**Python / TypeScript / Java:** Use the HTTP sidecar — no Rust required.
-
-```bash
-docker run -p 3000:3000 buildtovalue/gateway:latest
-curl -X POST http://localhost:3000/v1/decide \
-  -d '{"context": "...", "decision": "deny", "explanation": "..."}'
-# Returns: signed receipt with BLAKE3 evidence hash
-```
+**Contexto regulatório:** GDPR Art. 22, EU AI Act Art. 86, LGPD Art. 18 — todos exigem que decisões de IA carreguem evidências auditáveis. O BTV torna a não-conformidade detectável em runtime com latência de microssegundos, antes de qualquer resposta ser emitida.
 
 ---
 
 ## Performance
 
-BTV adds **~1.67μs** per decision for a 4KB context payload — five orders of magnitude less than a typical LLM inference call.
+O BTV adiciona **~1,67μs** por decisão para um payload de contexto de 4KB — cinco ordens de magnitude menos do que uma chamada típica de inferência LLM.
 
-| Operation | Latency | Notes |
+| Operação | Latência | Notas |
 |---|---|---|
-| `Verdict::new` (4KB context) | 1.67 μs | BLAKE3 + HMAC-SHA256 |
-| `verify_integrity` | 327 ns | Retroactive audit |
-| Gateway HTTP (sidecar) | < 50ms p99 | Includes network round-trip |
+| `scan_for_evidence` (4KB) | 1,67 μs | BLAKE3 + pipeline de 15 módulos |
+| Verificação de integridade | 327 ns | Auditoria retroativa |
+| Gateway HTTP (sidecar) | < 50ms p99 | Inclui round-trip de rede |
 
-At 1 million decisions/year, total infrastructure cost is **~$5,000/year** — compared to median GDPR fines of **$10.8M** for evidential failures.
-
----
-
-## Architecture
-
-```
-┌────────────────────────────────────────────────────┐
-│               Axum HTTP Gateway                    │
-│   /v1/decide   /v1/verify   /v1/audit   /health   │
-├────────────────────┬───────────────────────────────┤
-│   Rust Kernel      │      Python Governance        │
-│   < 30ms p99       │      < 10ms p99               │
-│                    │                               │
-│  EvidenceToken     │  ComplianceEngine             │
-│  BLAKE3 hash       │  explain_decision()           │
-│  HMAC-SHA256       │  AppealEngine (24h SLA)       │
-│  Fail-secure       │  BiasDetector                 │
-│  Zero-heap hot path│                               │
-├────────────────────┴───────────────────────────────┤
-│              Immutable Ledger                      │
-│   WAL + BLAKE3 chain   HMAC-SHA256 per record      │
-└────────────────────────────────────────────────────┘
-```
-
-**Core invariants:**
-- `TechnicalEvidence`: 9632 bytes fixed, BLAKE3, compile-time verified
-- Zero-heap hot path: stack-only in evidence/gatekeeper
-- Fail-secure: any error → BLOCK (never bypass)
-- Every verdict signed: HMAC-SHA256
-- Contestability: `contestable: true` + 24h appeal SLA
+A 1 milhão de decisões/ano, o custo total de infraestrutura é **~$5.000/ano** — comparado à multa mediana do GDPR de **$10,8M** por falhas evidenciais.
 
 ---
 
-## Installation
+## Quickstart (< 5 minutos)
 
-### Rust (Open Core — MIT/Apache 2.0)
+### Path A — Rust (integração nativa)
 
 ```toml
+# Cargo.toml
 [dependencies]
-buildtovalue = "2.3"
+btv-kernel = { path = "rust/kernel" }
 ```
 
-### Python SDK
+```rust
+use btv_kernel::Gatekeeper;
+
+fn main() {
+    let mut gatekeeper = Gatekeeper::new();
+    let audit_id: u128 = 1;
+
+    // scan_for_evidence() sempre retorna TechnicalEvidence com hash BLAKE3 selado.
+    // O pipeline executa 15 módulos (deobfuscação, análise, validação de PII).
+    let evidence = gatekeeper.scan_for_evidence("Aprovar crédito para CPF 123.456.789-09", audit_id);
+
+    println!("Hash BLAKE3:    {:?}", &evidence.hash[..8]);
+    println!("Findings:       {}", evidence.finding_count);
+    println!("Critical:       {}", evidence.critical_count);
+    println!("Risco composto: {:.2}", evidence.composite_risk);
+    println!("Latência:       {}μs", evidence.processing_time_us);
+}
+```
+
+### Path B — HTTP Gateway / Sidecar (LangChain, Python, qualquer stack)
 
 ```bash
-pip install buildtovalue-sdk
+cd ops && docker compose up gateway
+```
+
+```bash
+curl -X POST http://localhost:3000/v1/scan \
+  -H "Content-Type: application/json" \
+  -d '{"input": "Aprovar crédito para CPF 123.456.789-09", "audit_trail_id": 1}'
+# Retorna: TechnicalEvidence serializada com hash BLAKE3 imutável
+```
+
+### Path C — Python SDK
+
+```bash
+pip install -e python/
 ```
 
 ```python
 from buildtovalue import BTVClient
 
 client = BTVClient("http://localhost:3000")
-receipt = client.decide(
-    context=my_agent_context,
-    decision="deny",
-    explanation="Credit score below threshold"
+evidence = client.scan(
+    input_text="Aprovar crédito para CPF 123.456.789-09",
+    audit_trail_id=1
 )
-print(receipt.evidence_hash)  # BLAKE3 hash — immutable proof
-```
-
-### Docker Sidecar
-
-```bash
-docker run -p 3000:3000 \
-  -e BTV_HMAC_KEY=your-key \
-  buildtovalue/gateway:latest
+print(evidence["hash"])          # hash BLAKE3 — prova imutável
+print(evidence["critical_count"])  # > 0 = BLOCK recomendado
 ```
 
 ---
 
-## Kernel — 15 Validation Modules
+## Verificabilidade Matemática, não apenas Log
 
-| Stage | Modules |
+### Por que é impossível tomar uma decisão silenciosa?
+
+O design Fail-Secure do BTV parte de uma invariante simples: **o estado inicial de qualquer evidência é inválido**.
+
+```rust
+// Estado inicial: hash = [0u8; 32] — evidência inválida por construção
+let mut evidence = TechnicalEvidence::new(audit_trail_id);
+
+// Sem chamar finalize(), o hash permanece zerado.
+// Qualquer consumidor que verificar validate_hash() receberá false.
+assert!(!evidence.validate_hash()); // ← sempre verdadeiro sem finalize()
+
+// O único caminho para uma evidência válida é selar o hash BLAKE3:
+evidence.finalize().expect("falha ao finalizar evidência");
+assert!(evidence.validate_hash()); // ← agora verdadeiro
+
+// O Gatekeeper chama finalize() internamente via scan_for_evidence().
+// Se o pipeline falhar em qualquer ponto, o fallback é evidence com
+// critical_count > 0 — sinalização de BLOCK para o camada de decisão.
+```
+
+**Papel do compilador:** O tipo `TechnicalEvidence` é anotado com `#[must_use]`:
+
+```rust
+#[must_use = "TechnicalEvidence must be used or logged — do not discard audit data"]
+pub struct TechnicalEvidence { ... }
+```
+
+Em desenvolvimento, o compilador emite um **warning** se o resultado de `scan_for_evidence()` for descartado. Em ambientes de CI/CD com `#![deny(warnings)]` — que é o padrão recomendado para produção — esse warning se torna um **erro de compilação**, tornando o descarte de dados de auditoria detectável antes do deploy.
+
+A combinação é: **descarte acidental → erro de build em CI; evidência não-finalizada → BLOCK em runtime**. Os dois mecanismos são complementares e verificáveis independentemente.
+
+---
+
+## Arquitetura
+
+```
+┌────────────────────────────────────────────────────┐
+│               Axum HTTP Gateway                    │
+│   /v1/scan    /v1/verify   /v1/audit   /health    │
+├────────────────────┬───────────────────────────────┤
+│   Rust Kernel      │      Python Governance        │
+│   < 30ms p99       │      < 10ms p99               │
+│                    │                               │
+│  Gatekeeper        │  ComplianceEngine             │
+│  BLAKE3 hash       │  explain_decision()           │
+│  15 módulos        │  AppealEngine (SLA 24h)       │
+│  Fail-secure       │  BiasDetector                 │
+│  Zero-heap hot path│                               │
+├────────────────────┴───────────────────────────────┤
+│              Ledger Imutável                       │
+│   WAL + cadeia BLAKE3   HMAC-SHA256 por registro   │
+└────────────────────────────────────────────────────┘
+```
+
+**Invariantes do kernel:**
+- `TechnicalEvidence`: 9632 bytes fixos, `repr(C, align(8))`, BLAKE3
+- Zero-heap no hot path: stack-only em evidence/gatekeeper
+- Fail-secure: qualquer erro → evidência com `critical_count > 0`
+- `#[must_use]` em `TechnicalEvidence`: descarte acidental é detectável
+- Contestabilidade: campo `contestable` + SLA de 24h via AppealEngine
+
+---
+
+## Módulos do Kernel — 15 Validadores
+
+| Estágio | Módulos |
 |---|---|
-| Deobfuscate | Base64, Hex, Leetspeak |
-| Analyze | Entropy, ZScore, CharRatio, LanguageDetector |
-| Validate | CPF, CNPJ, Email, CreditCard, Phone, PromptInjection, SSN |
-| Multi-jurisdiction | NHS (UK), EU VAT, IBAN (jurisdiction-gated) |
+| Deobfuscate | Normalizer, Base64Detector, HexDecoder, LeetspeakDetector |
+| Analyze | EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, LanguageDetector |
+| Validate | CPF, CNPJ, Email, CreditCard, Phone, PromptInjectionDetector, SSN |
+| Multi-jurisdição | NHS (UK), EU VAT, IBAN (ativados por jurisdição) |
 
 ---
 
-## Use Cases
+## Casos de Uso
 
-**Financial services** — Loan/credit decisions with immutable evidence trail for GDPR Art. 22 audits.
+**Serviços financeiros** — Decisões de crédito/empréstimo com trilha de evidências imutável para auditorias GDPR Art. 22.
 
-**HR / Hiring systems** — Automated screening verdicts with compile-time accountability under EU AI Act Art. 86.
+**RH / Hiring** — Triagem automatizada com accountability sob EU AI Act Art. 86.
 
-**Healthcare triage** — AI-assisted allocation decisions with cryptographic audit for liability protection.
+**Saúde** — Decisões de triagem assistidas por IA com auditoria criptográfica para proteção de responsabilidade.
 
-**Multi-agent pipelines** — Governance layer for LangChain, AutoGen, CrewAI — wrap any agent decision in < 10 lines.
-
----
-
-## Known Limitations
-
-- False positive rate ~15% on adversarial inputs (70 samples, not externally validated)
-- Leetspeak FNR ~12% (Unicode homoglyphs not covered)
-- No TLS on gateway (plain HTTP — add a reverse proxy for production)
-- Ledger rotation not yet implemented (grows indefinitely)
-- Rust BLAKE3 weights verification (full ADR-005 integration) pending v2.3
-- SLM latency on CPU-only: 500ms–5s (supplementary module, never blocks pipeline)
+**Pipelines multi-agente** — Camada de governança para LangChain, AutoGen, CrewAI — envolva qualquer decisão de agente em < 10 linhas.
 
 ---
 
-## Development
+## Limitações Conhecidas
+
+- Taxa de falso positivo ~15% em inputs adversariais (70 amostras, não validadas externamente)
+- FNR de Leetspeak ~12% (homóglifos Unicode não cobertos)
+- Sem TLS no gateway (HTTP simples — adicione reverse proxy para produção)
+- Rotação de ledger não implementada (cresce indefinidamente)
+- Verificação de pesos BLAKE3 em Rust (integração completa ADR-005) pendente v2.3
+- `cargo add buildtovalue` não disponível ainda — publicação no crates.io prevista para v3.0
+
+---
+
+## Desenvolvimento
 
 ```bash
-# Rust kernel
+# Kernel Rust
 cd rust && cargo build --workspace && cargo test --workspace
 
-# Python governance
+# Governança Python
 cd python && pip install -e ".[dev]" && pytest tests/ -v
 
-# Full stack
+# Stack completo
 cd ops && docker compose up
 # Gateway: http://localhost:3000  |  Governance: http://localhost:8000
 ```
@@ -189,31 +214,31 @@ cd ops && docker compose up
 cd benchmarks && cargo bench --bench kernel_benchmark
 ```
 
-See `benchmarks/` for comparative results against Guardrails AI and NeMo Guardrails.
+Veja `benchmarks/` para resultados comparativos contra Guardrails AI e NeMo Guardrails.
 
 ---
 
 ## Roadmap
 
-| Version | Status | Scope |
+| Versão | Status | Escopo |
 |---|---|---|
-| v2.2 | ✅ Complete | PolicyEngine, AbliterationDetector v1.2.0, ManifestHashVerifier, IntegrityVerifier |
-| v2.3 | 🚧 Current | Rust BLAKE3 weights verification, pipeline wiring, SDK stabilization |
-| v3.0 | Planned | MCP server (Model Context Protocol), crates.io publish, Python SDK GA |
+| v2.2 | ✅ Completo | PolicyEngine, AbliterationDetector v1.2.0, ManifestHashVerifier, IntegrityVerifier |
+| v2.3 | 🚧 Atual | Verificação de pesos BLAKE3 em Rust, wiring de pipeline, estabilização do SDK |
+| v3.0 | Planejado | Servidor MCP (Model Context Protocol), publicação no crates.io, Python SDK GA |
 
 ---
 
-## License
+## Licença
 
-Apache 2.0 — see [LICENSE-MIT](LICENSE-MIT).
+Apache 2.0 — veja [LICENSE-MIT](LICENSE-MIT).
 
 ---
 
-## Contributing
+## Contribuição
 
-- Multi-jurisdiction validators (new PII patterns)
-- Benchmark scripts against Guardrails AI / NeMo
-- Python SDK integrations (LangChain, AutoGen, CrewAI)
-- Documentation improvements
+- Validadores multi-jurisdição (novos padrões de PII)
+- Scripts de benchmark contra Guardrails AI / NeMo
+- Integrações do Python SDK (LangChain, AutoGen, CrewAI)
+- Melhorias de documentação
 
-See [docs/quickstart.md](docs/quickstart.md) to get started.
+Veja [docs/quickstart.md](docs/quickstart.md) para começar.

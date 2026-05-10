@@ -1,15 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use axum::http::StatusCode;
-    use serde_json::json;
-
-    // Helper: simula POST /v1/guard
-    // (requer test harness com axum::test ou reqwest)
+    // fix(unused-imports): StatusCode e json removidos.
+    // Estes imports eram resíduos de um test harness axum/reqwest
+    // que não foi implementado neste arquivo. Os testes atuais
+    // usam diretamente buildtovalue_kernel:: sem HTTP layer.
 
     #[test]
     fn test_guard_clean_text_passes_through() {
         let input = "A clínica funciona das 8h às 18h.";
-        // Expect: text unchanged, modified=false, pii_masked=0
         let sanitizer = buildtovalue_kernel::output_guard::OutputSanitizer::new();
         let result = sanitizer.sanitize(input);
         assert_eq!(result.masks_applied, 0);
