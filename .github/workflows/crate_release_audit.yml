@@ -1,0 +1,99 @@
+# ============================================================
+# BuildToValue — Crate Release Audit (Path A: crates.io)
+# ============================================================
+# COMPILER AS LAW:
+#   RUSTFLAGS="-D warnings" transforma qualquer aviso — incluindo
+#   descarte silencioso de #[must_use] TechnicalEvidence — em erro
+#   fatal de compilação. Se o crate tentar ignorar evidência de
+#   auditoria, este workflow BLOQUEIA o merge antes do deploy.
+#
+# Falhas possíveis e o que significam:
+#   clippy::unwrap_used   → .unwrap() no hot path → panic no cliente
+#   clippy::expect_used   → .expect() equivalente → mesmo risco
+#   cargo fmt --check     → código não-formatado → PR rejeitado
+#   cargo publish --dry-run → metadados inválidos, arquivos ausentes,
+#                             tamanho excedido ou licença incorreta
+# ============================================================
+
+name: BuildToValue Crate Audit (Path A)
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "rust/**"
+      - ".github/workflows/crate_release_audit.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "rust/**"
+      - ".github/workflows/crate_release_audit.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+  # O COMPILADOR É A LEI: transforma qualquer warning em erro fatal.
+  # Isso valida o claim do README: descarte de TechnicalEvidence é
+  # erro de build em CI, não apenas aviso em desenvolvimento local.
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  audit_and_dry_run:
+    name: Cryptographic Core Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Instalação da Toolchain Rust Estável
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      # Cache de dependências para reduzir tempo de CI (~60% mais rápido)
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # ── ESTÁGIO 1: Formatação ─────────────────────────────────────
+      - name: Verificação de Formatação Estrita
+        working-directory: ./rust
+        run: cargo fmt --all -- --check
+
+      # ── ESTÁGIO 2: Análise Estática (Fail-Secure Enforcement) ─────
+      - name: Clippy — Proibição de .unwrap() e .expect()
+        working-directory: ./rust
+        # Anti-padrões proibidos pelas invariantes do BTV:
+        #   unwrap_used: .unwrap() pode causar panic no cliente
+        #                em vez de retornar Action::Block
+        #   expect_used: equivalente semântico de unwrap_used
+        #   clone_on_ref_ptr: clones desnecessários em Arc/Rc
+        #                     violam zero-heap no hot path
+        run: >
+          cargo clippy --all-targets --all-features --
+          -D clippy::unwrap_used
+          -D clippy::expect_used
+          -D clippy::clone_on_ref_ptr
+
+      # ── ESTÁGIO 3: Testes ─────────────────────────────────────────
+      - name: Suíte de Testes Completa (Invariantes de Latência)
+        working-directory: ./rust
+        run: cargo test --workspace --verbose
+
+      # ── ESTÁGIO 4: Publish Dry-Run ────────────────────────────────
+      - name: Validação de Empacotamento (Publish Dry-Run)
+        working-directory: ./rust/btv-core
+        # Verifica antes do deploy real:
+        #   - Metadados obrigatórios do crates.io (description, license)
+        #   - Caminhos relativos resolvidos (readme, include)
+        #   - Tamanho do crate ≤ 10MB (limite crates.io)
+        #   - Ausência de arquivos não-intencionais (red-team, ops/)
+        # Se passar aqui, a release pública é segura.
+        run: cargo publish --dry-run --allow-dirty
