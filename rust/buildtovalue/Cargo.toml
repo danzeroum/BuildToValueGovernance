@@ -1,0 +1,23 @@
+[package]
+# Nome comercial final no crates.io
+# Facade de custo zero sobre btv-core — nenhuma lógica aqui.
+name = "buildtovalue"
+version = "3.0.0-alpha.1"
+edition = "2021"
+authors = ["Daniel Lau Pereira Soares"]
+description = "Evidência criptográfica imutável para decisões de Agentes de IA. Garantia em tempo de compilação."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/danzeroum/BuildToValueGovernance"
+homepage = "https://github.com/danzeroum/BuildToValueGovernance"
+readme = "../../README.md"
+keywords = ["ai", "security", "governance", "cryptography", "audit"]
+categories = ["cryptography", "development-tools"]
+
+include = [
+  "src/**/*",
+  "Cargo.toml",
+]
+
+[dependencies]
+# Depende estritamente da versão local do núcleo criptográfico
+btv-core = { path = "../btv-core", version = "3.0.0-alpha.1" }
