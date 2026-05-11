@@ -1,7 +1,7 @@
-//! Testes PROP-031 -- Skill Provenance Ledger
+//! Testes PROP-031 — Skill Provenance Ledger
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use buildtovalue_kernel::evidence::TechnicalEvidence;
     use buildtovalue_kernel::core::types::EVIDENCE_SIZE;
@@ -32,9 +32,9 @@ mod tests {
         let mut ev = TechnicalEvidence::new(3);
         let sentinel = [0xFFu8; 32];
         ev.set_skill_hash(&sentinel);
-        // [0..8] pattern_epoch (ADR-033) nao tocado
+        // [0..8] pattern_epoch (ADR-033) não tocado
         assert_eq!(&ev._reserved_metadata[0..8], &[0u8; 8]);
-        // [40..] nao tocado
+        // [40..] não tocado
         assert_eq!(ev._reserved_metadata[40], 0u8);
     }
 
@@ -43,7 +43,6 @@ mod tests {
         let mut ev = TechnicalEvidence::new(4);
         let hash = [0x42u8; 32];
         ev.set_skill_hash(&hash);
-        // finalize() so falha por regressao de invariante -- panic intencional em teste
         ev.finalize().unwrap();
         assert_eq!(ev.get_skill_hash(), &hash);
         assert!(ev.validate_hash());
