@@ -369,6 +369,7 @@ fn hex_short(bytes: &[u8; 32]) -> String {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -414,8 +415,8 @@ mod tests {
     #[test]
     fn test_entry_is_copy() {
         let e = make_entry();
-        let _e2 = e; // copia sem mover
-        let _e3 = e; // segunda copia — prova que é Copy
+        let _e2 = e;
+        let _e3 = e;
     }
 
     #[test]
@@ -486,20 +487,18 @@ mod tests {
         let mut wal = MockWal { fail: true, ..Default::default() };
         let r = log.record_immediate(make_entry(), &mut wal);
         assert_eq!(r, EffectResult::Abort { reason: AbortReason::WalWriteFailed });
-        assert_eq!(log.len(), 0); // nada gravado no ring
+        assert_eq!(log.len(), 0);
     }
 
     #[test]
     fn test_record_immediate_ring_full() {
         let mut log = EffectLog::new();
         let mut wal = MockWal::default();
-        // Preenche o ring via record_immediate
         for i in 0..EFFECT_RING_CAPACITY {
             let e = make_entry_with(format!("a{}", i).as_bytes(), b"r");
             let r = log.record_immediate(e, &mut wal);
             assert_eq!(r, EffectResult::Committed);
         }
-        // 65ª entrada deve ser RingFull
         let extra = make_entry_with(b"overflow", b"r");
         let r = log.record_immediate(extra, &mut wal);
         assert_eq!(r, EffectResult::Abort { reason: AbortReason::RingFull });
@@ -510,12 +509,11 @@ mod tests {
     fn test_buffer_timeout_abort() {
         let mut log = EffectLog::new();
         let mut wal = MockWal::default();
-        // timeout=1µs: expira antes da frontier ser confirmada
         let r = log.buffer_and_await_frontier(
             make_entry(), &mut wal, Duration::from_micros(1),
         );
         assert_eq!(r, EffectResult::Abort { reason: AbortReason::FrontierTimeout });
-        assert_eq!(wal.calls, 1); // WAL gravado antes do timeout
+        assert_eq!(wal.calls, 1);
     }
 
     #[test]
@@ -523,7 +521,6 @@ mod tests {
         let mut log = EffectLog::new();
         let mut wal = MockWal::default();
         let entry = make_entry();
-        // Pré-confirma a frontier antes da chamada
         let idx = log.frontiers.get_or_create(&entry.resource_id, 1).unwrap();
         log.frontiers.confirm(idx);
         let r = log.buffer_and_await_frontier(entry, &mut wal, Duration::from_millis(40));
@@ -538,7 +535,7 @@ mod tests {
             make_entry(), &mut wal, Duration::from_millis(40),
         );
         assert_eq!(r, EffectResult::Abort { reason: AbortReason::WalWriteFailed });
-        assert_eq!(log.len(), 0); // nada no ring — WAL-first respeitado
+        assert_eq!(log.len(), 0);
     }
 
     // ── FrontierSet ──────────────────────────────────────────────────────────
@@ -550,7 +547,6 @@ mod tests {
             let rid = EffectEntry::resource_id_from(format!("r{}", i).as_bytes());
             assert!(fs.get_or_create(&rid, i as u64).is_some());
         }
-        // 4ª frontier deve retornar None
         let rid4 = EffectEntry::resource_id_from(b"r_overflow");
         assert!(fs.get_or_create(&rid4, 99).is_none());
     }
@@ -570,35 +566,31 @@ mod tests {
     fn test_encode_decode_reserved_metadata() {
         let mut log = EffectLog::new();
         let mut wal = MockWal::default();
-        // Grava duas entradas
         let e1 = make_entry_with(b"act1", b"res1");
         let e2 = make_entry_with(b"act2", b"res2");
         let _ = log.record_immediate(e1, &mut wal);
         let _ = log.record_immediate(e2, &mut wal);
-        // Confirma frontier de e1
         let idx = log.frontiers.get_or_create(&e1.resource_id, 1).unwrap();
         log.frontiers.confirm(idx);
-        // Serializa para metadados
         let mut meta = [0u8; 200];
         log.encode_frontiers_to(&mut meta);
-        // Deserializa e verifica offsets preservados
         let decoded = FrontierSet::decode_from(&meta);
         assert_eq!(decoded.len(), MAX_FRONTIERS);
-        // Primeiro slot = e1 (confirmado)
         assert_eq!(decoded[0].0, e1.resource_id);
-        assert!(decoded[0].2); // confirmed
+        assert!(decoded[0].2);
     }
 
     #[test]
     fn test_reserved_metadata_offsets_do_not_overlap_skill_hash() {
         // skill_hash em [8..40], policy_drift_flag em [40]
         // fronteiras em [41..164] — sem sobreposição
-        assert!(FRONTIER_REGION_START >= 41);
-        assert!(FRONTIER_REGION_END   <= 200);
-        // [0..40] intocados após encode
+        const { assert!(FRONTIER_REGION_START >= 41); }
+        const { assert!(FRONTIER_REGION_END   <= 200); }
         let log = EffectLog::new();
         let mut meta = [0xABu8; 200];
         log.encode_frontiers_to(&mut meta);
-        for i in 0..41 { assert_eq!(meta[i], 0xAB, "byte {i} corrompido"); }
+        for (i, byte) in meta.iter().enumerate().take(41) {
+            assert_eq!(*byte, 0xAB, "byte {i} corrompido");
+        }
     }
 }
