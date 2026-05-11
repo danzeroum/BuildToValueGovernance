@@ -1,5 +1,7 @@
 //! Integration test: SunsetPolicy — automatic expiry and bounded renewals.
 
+#![allow(clippy::expect_used, clippy::unwrap_used)] // testes de integração: pânico = asserção
+
 use btv_governance::{
     error::GovernanceError,
     sunset::SunsetPolicy,
