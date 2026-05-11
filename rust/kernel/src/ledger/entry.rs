@@ -167,24 +167,48 @@ impl LedgerEntry {
     }
 }
 
+impl Default for LedgerEntry {
+    fn default() -> Self {
+        Self {
+            entry_id: 0,
+            _align_padding: 0,
+            audit_trail_id: 0,
+            timestamp: 0,
+            risk_level: RiskLevel::Safe,
+            action: ActionType::Allow,
+            ethical_verdict: EthicalVerdict::Pending,
+            verdict_id: [0; 32],
+            _padding_verdict: [0; 5],
+            previous_hash: [0; 32],
+            entry_hash: [0; 32],
+            merkle_root: [0; 32],
+            protocol_version: 1,
+            schema_version: 1,
+            producer_id: [0; 32],
+            _reserved: [0; 164],
+        }
+    }
+}
+
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
 
     #[test]
     fn finalize_produces_nonzero_verdict_id() {
-        let mut entry = LedgerEntry::default();
-        entry.ethical_verdict = EthicalVerdict::Block;
+        let mut entry = LedgerEntry {
+            ethical_verdict: EthicalVerdict::Block,
+            ..LedgerEntry::default()
+        };
         entry.finalize();
         assert_ne!(entry.verdict_id, [0u8; 32]);
     }
 
     #[test]
     fn verdict_id_deterministic() {
-        let mut a = LedgerEntry::default();
-        let mut b = LedgerEntry::default();
-        a.ethical_verdict = EthicalVerdict::Report;
-        b.ethical_verdict = EthicalVerdict::Report;
+        let mut a = LedgerEntry { ethical_verdict: EthicalVerdict::Report, ..LedgerEntry::default() };
+        let mut b = LedgerEntry { ethical_verdict: EthicalVerdict::Report, ..LedgerEntry::default() };
         a.finalize();
         b.finalize();
         assert_eq!(a.verdict_id, b.verdict_id);
@@ -192,10 +216,8 @@ mod tests {
 
     #[test]
     fn verdict_id_differs_by_verdict_type() {
-        let mut allow = LedgerEntry::default();
-        let mut block = LedgerEntry::default();
-        allow.ethical_verdict = EthicalVerdict::Allow;
-        block.ethical_verdict = EthicalVerdict::Block;
+        let mut allow = LedgerEntry { ethical_verdict: EthicalVerdict::Allow, ..LedgerEntry::default() };
+        let mut block = LedgerEntry { ethical_verdict: EthicalVerdict::Block, ..LedgerEntry::default() };
         allow.finalize();
         block.finalize();
         assert_ne!(allow.verdict_id, block.verdict_id);
@@ -203,8 +225,10 @@ mod tests {
 
     #[test]
     fn validate_passes_after_finalize() {
-        let mut entry = LedgerEntry::default();
-        entry.ethical_verdict = EthicalVerdict::Allow;
+        let mut entry = LedgerEntry {
+            ethical_verdict: EthicalVerdict::Allow,
+            ..LedgerEntry::default()
+        };
         entry.finalize();
         assert!(entry.validate());
     }
@@ -229,28 +253,5 @@ mod tests {
     #[test]
     fn size_is_384_bytes() {
         assert_eq!(size_of::<LedgerEntry>(), 384);
-    }
-}
-
-impl Default for LedgerEntry {
-    fn default() -> Self {
-        Self {
-            entry_id: 0,
-            _align_padding: 0,
-            audit_trail_id: 0,
-            timestamp: 0,
-            risk_level: RiskLevel::Safe,
-            action: ActionType::Allow,
-            ethical_verdict: EthicalVerdict::Pending,
-            verdict_id: [0; 32],
-            _padding_verdict: [0; 5],
-            previous_hash: [0; 32],
-            entry_hash: [0; 32],
-            merkle_root: [0; 32],
-            protocol_version: 1,
-            schema_version: 1,
-            producer_id: [0; 32],
-            _reserved: [0; 164],
-        }
     }
 }
