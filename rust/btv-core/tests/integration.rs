@@ -1,12 +1,15 @@
-/// Integration tests for btv-core happy paths.
-///
-/// Run with: BTV_HMAC_KEY=test-key cargo test -p btv-core
+//! Integration tests for btv-core happy paths.
+//!
+//! Run with: BTV_HMAC_KEY=test-key cargo test -p btv-core
+
+#![allow(clippy::expect_used, clippy::unwrap_used)] // testes de integração: pânico = asserção
+
 use btv_core::{
     ComplianceAuthority, ComplianceError, ComplianceRegistry,
     Decision, EvidenceToken, OperatorToken, EscalatedVerdict, Verdict,
 };
 
-// ── Test registry ─────────────────────────────────────────────────────────────
+// ── Test registry ──────────────────────────────────────────────────────
 
 struct TestRegistry;
 
@@ -24,7 +27,7 @@ fn make_authority() -> ComplianceAuthority {
     ComplianceAuthority::new(Box::new(TestRegistry))
 }
 
-// ── Happy path ────────────────────────────────────────────────────────────────
+// ── Happy path ─────────────────────────────────────────────────────────
 
 #[test]
 fn verdict_new_produces_valid_record() {

@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)] // bench harness: pânico = falha de configuração
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use btv_core::{
     ComplianceAuthority, ComplianceError, ComplianceRegistry,
