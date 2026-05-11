@@ -10,7 +10,8 @@ use regex::Regex;
 
 lazy_static! {
     static ref NHS_PATTERN: Regex =
-        Regex::new(r"\b(\d{3})[\s\-]*(\d{3})[\s\-]*(\d{4})\b").unwrap();
+        Regex::new(r"\b(\d{3})[\s\-]*(\d{3})[\s\-]*(\d{4})\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in NHS_PATTERN: {e}"));
 }
 
 pub struct NhsValidator;

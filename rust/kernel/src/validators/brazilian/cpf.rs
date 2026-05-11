@@ -4,7 +4,13 @@ use crate::core::module::{Module, ScanContext};
 use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
 use crate::evidence::Finding;
 use crate::validators::Validator;
+use lazy_static::lazy_static;
 use regex::Regex;
+
+lazy_static! {
+    static ref CPF_PATTERN: Regex = Regex::new(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
+        .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in CPF_PATTERN: {e}"));
+}
 
 pub struct CpfValidator;
 
@@ -16,9 +22,17 @@ impl CpfValidator {
     fn validate_cpf(&self, cpf: &str) -> bool {
         let digits: String = cpf.chars().filter(|c| c.is_ascii_digit()).collect();
         if digits.len() != 11 { return false; }
-        if digits.chars().all(|c| c == digits.chars().next().unwrap()) { return false; }
+        let first = match digits.chars().next() {
+            Some(c) => c,
+            None => return false,
+        };
+        if digits.chars().all(|c| c == first) { return false; }
 
-        let nums: Vec<u32> = digits.chars().map(|c| c.to_digit(10).unwrap()).collect();
+        let nums: Vec<u32> = digits
+            .chars()
+            .filter_map(|c| c.to_digit(10))
+            .collect();
+        if nums.len() != 11 { return false; }
 
         // Primeiro dígito verificador
         let mut sum = 0;
@@ -52,9 +66,7 @@ impl CpfValidator {
 
     fn validate_impl(&self, input: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
-        let pattern = Regex::new(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b").unwrap();
-
-        for mat in pattern.find_iter(input) {
+        for mat in CPF_PATTERN.find_iter(input) {
             let candidate = mat.as_str();
             if !self.validate_cpf(candidate) {
                 findings.push(

@@ -12,7 +12,7 @@ lazy_static! {
     // Cobre DE, FR, IT, ES, PT, NL, BE, PL, SE, AT
     static ref VAT_PATTERN: Regex = Regex::new(
         r"\b(DE\d{9}|FR\s?[0-9A-Z]{2}\s?\d{9}|IT\d{11}|ES[0-9A-Z]\d{7}[0-9A-Z]|PT\d{9}|NL\d{9}B\d{2}|BE0\d{9}|PL\d{10}|SE\d{12}|AT U\d{8})\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in VAT_PATTERN: {e}"));
 }
 
 pub struct VatValidator;
