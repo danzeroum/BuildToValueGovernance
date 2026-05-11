@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use buildtovalue_kernel::deobfuscator::chain::DeobfuscatorChain;
 use buildtovalue_kernel::gatekeeper::Gatekeeper;
 

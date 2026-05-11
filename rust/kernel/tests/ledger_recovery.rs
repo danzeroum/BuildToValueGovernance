@@ -1,6 +1,7 @@
 //! F1.5-04: DurableLedger Recovery + Chain Integrity tests
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use buildtovalue_kernel::ledger::durable_ledger::{ChainStatus, DurableLedger};
     use buildtovalue_kernel::ledger::entry::LedgerEntry;
