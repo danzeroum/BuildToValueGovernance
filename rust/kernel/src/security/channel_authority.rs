@@ -174,12 +174,18 @@ mod tests {
     fn test_insufficient_trust_blocked() {
         let err = assert_sufficient(ChannelTrustLevel::Low, ChannelTrustLevel::High);
         assert!(err.is_err());
-        match err.unwrap_err() {
-            ChannelViolation::InsufficientTrust { actual, required } => {
-                assert_eq!(actual, ChannelTrustLevel::Low);
-                assert_eq!(required, ChannelTrustLevel::High);
-            }
+        let violation = err.unwrap_or_else(|_| panic!("BTV invariant violation: assert_sufficient deve retornar Err para Low < High"));
+        // unwrap_err substituído: extraímos o Err via unwrap_or_else no Ok (inversão semântica)
+        // A lógica correta: err é Err(_), então usamos if let
+        if let Err(ChannelViolation::InsufficientTrust { actual, required }) =
+            assert_sufficient(ChannelTrustLevel::Low, ChannelTrustLevel::High)
+        {
+            assert_eq!(actual, ChannelTrustLevel::Low);
+            assert_eq!(required, ChannelTrustLevel::High);
+        } else {
+            panic!("BTV invariant violation: esperado InsufficientTrust");
         }
+        let _ = violation;
     }
 
     #[test]
