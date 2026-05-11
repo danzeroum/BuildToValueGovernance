@@ -1,89 +1,59 @@
-//! Base64 Detector
+//! Base64 Deobfuscator — detecta e decodifica strings Base64 em inputs.
+//! Usado pelo DeobfuscationChain para normalizar entradas ofuscadas.
 
-use crate::core::module::{Module, ScanContext};
-use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
-use crate::evidence::Finding;
-use base64::{Engine as _, engine::general_purpose};
-use regex::Regex;
 use lazy_static::lazy_static;
+use regex::Regex;
+use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 
 lazy_static! {
     static ref BASE64_REGEX: Regex = Regex::new(
         r"(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV init: BASE64_REGEX compile failed: {e}"));
 }
 
-impl Default for Base64Detector {
-    fn default() -> Self { Self::new() }
-}
-pub struct Base64Detector {
-    rule_id: String,
+/// Resultado da tentativa de decodificação Base64.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Base64Result {
+    /// Input decodificado com sucesso para UTF-8 válido.
+    Decoded(String),
+    /// Decodificado para bytes mas não é UTF-8 válido.
+    DecodedBinary(Vec<u8>),
+    /// Nenhuma sequência Base64 válida encontrada.
+    NotBase64,
 }
 
-impl Base64Detector {
-    pub fn new() -> Self {
-        Self {
-            rule_id: "DEOBFUSCATOR_BASE64_001".to_string(),
+/// Tenta decodificar a primeira correspondência Base64 válida no input.
+pub fn try_decode(input: &str) -> Base64Result {
+    for mat in BASE64_REGEX.find_iter(input) {
+        let candidate = mat.as_str();
+        if candidate.len() < 4 { continue; }
+        if let Ok(bytes) = B64.decode(candidate) {
+            return match String::from_utf8(bytes.clone()) {
+                Ok(s)  => Base64Result::Decoded(s),
+                Err(_) => Base64Result::DecodedBinary(bytes),
+            };
         }
     }
-
-    pub fn detect(&self, input: &str) -> Vec<Finding> {
-        let mut findings = Vec::new();
-
-        for mat in BASE64_REGEX.find_iter(input) {
-            let matched = mat.as_str();
-            if matched.len() < 16 {
-                continue;
-            }
-
-            if let Ok(decoded) = general_purpose::STANDARD.decode(matched) {
-                let is_text = std::str::from_utf8(&decoded).is_ok();
-                let has_suspicious = if is_text {
-                    // heurística simples
-                    let text = String::from_utf8_lossy(&decoded);
-                    text.chars().filter(|c| c.is_numeric()).count() >= 11
-                        && (text.contains('.') || text.contains('-'))
-                } else {
-                    false
-                };
-
-                let severity = if has_suspicious {
-                    TechnicalSeverity::High
-                } else {
-                    TechnicalSeverity::Medium
-                };
-
-                let finding = Finding::new(
-                    ValidatorModule::Deobfuscator,
-                    severity,
-                    &self.rule_id,
-                    "BASE64_ENCODING_DETECTED",
-                    &format!("Base64 content ({})", if is_text { "text" } else { "binary" }),
-                )
-                    .with_matched_text(matched)
-                    .with_position(mat.start() as u16, mat.end() as u16)
-                    .with_confidence(200);
-
-                findings.push(finding);
-            }
-        }
-
-        findings
-    }
+    Base64Result::NotBase64
 }
 
-impl Module for Base64Detector {
-    fn scan(&self, input: &str, _ctx: &mut ScanContext) -> Vec<Finding> {
-        self.detect(input)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_hello() {
+        assert_eq!(try_decode("SGVsbG8="), Base64Result::Decoded("Hello".to_string()));
     }
 
-    fn name(&self) -> &'static str { "base64" }
+    #[test]
+    fn test_not_base64() {
+        assert_eq!(try_decode("hello world plain text"), Base64Result::NotBase64);
+    }
 
-    fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
-
-    fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.03, 0.25, 20260209, 300)
-            .with_limitations("Strings curtas (<16 chars) podem ser falsos positivos.")
-            .with_affected_groups("N/A")
+    #[test]
+    fn test_decode_embedded() {
+        let input = "prefix SGVsbG8= suffix";
+        assert_eq!(try_decode(input), Base64Result::Decoded("Hello".to_string()));
     }
 }
