@@ -1,6 +1,7 @@
 //! F1.5-03: BatchProcessor tests
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use buildtovalue_kernel::batch::{BatchProcessor, BatchConfig, BatchError, BatchItemStatus};
     use buildtovalue_kernel::gatekeeper::Gatekeeper;

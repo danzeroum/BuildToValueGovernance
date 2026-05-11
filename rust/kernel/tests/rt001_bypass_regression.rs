@@ -8,6 +8,7 @@
 //! caso de falso positivo deve gerar Finding de PROMPT_INJECTION.
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use buildtovalue_kernel::core::module::ScanContext;
     use buildtovalue_kernel::core::types::ValidatorModule;

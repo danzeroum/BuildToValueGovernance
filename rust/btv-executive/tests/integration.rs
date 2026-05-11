@@ -3,6 +3,7 @@
 //! Tests marked `#[ignore]` require btv-sigma running on localhost:3100.
 //! Run them with: `cargo test -- --include-ignored`
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod executive_tests {
     use btv_core::{ComplianceAuthority, ComplianceRegistry, ComplianceError};
     use btv_executive::{Executive, DecisionError, Decision};
@@ -21,7 +22,7 @@ mod executive_tests {
 
     #[tokio::test]
     async fn empty_input_blocks_with_gatekeeper_error() {
-        // Does NOT require btv-sigma — scan fails before reaching the log.
+        // Does NOT require btv-sigma -- scan fails before reaching the log.
         let exec = Executive::new(
             stub_authority(),
             // Use a dummy log client that will never be called
@@ -95,7 +96,7 @@ mod executive_tests {
         assert!(matches!(result.unwrap_err(), DecisionError::LogUnavailable(_)));
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    // -- Helpers --------------------------------------------------------------
 
     fn make_exec_no_log() -> Executive {
         Executive::new(
@@ -109,12 +110,13 @@ mod executive_tests {
     }
 
     fn make_exec_from_env() -> Executive {
+        // Panics if BTV_LOG_VERIFYING_KEY is not set -- expected for #[ignore] tests.
         Executive::from_env(stub_authority())
             .expect("BTV_LOG_VERIFYING_KEY must be set for integration tests")
     }
 
     fn test_dummy_verifying_key() -> ed25519_dalek::VerifyingKey {
-        // A valid (but useless) key for tests that don't reach the log.
+        // All-zeros: degenerate but valid key for tests that never reach the log.
         ed25519_dalek::VerifyingKey::from_bytes(&[0u8; 32])
             .expect("all-zeros is a valid (degenerate) key for test purposes")
     }

@@ -1,6 +1,7 @@
 //! F1.7-04: Contextual tests — same input, different outcomes based on context.
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use buildtovalue_kernel::gatekeeper::Gatekeeper;
     use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};

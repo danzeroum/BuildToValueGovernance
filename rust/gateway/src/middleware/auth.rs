@@ -1,4 +1,4 @@
-//! API Key Authentication Middleware — Gap #6
+//! API Key Authentication Middleware -- Gap #6
 //! Validates X-API-Key header against env-configured keys.
 //! /health and /metrics are exempt (public).
 
@@ -34,7 +34,7 @@ impl ApiKeyLayer {
             if env == "production" {
                 panic!("BTV_API_KEYS must be set in production");
             }
-            tracing::warn!("⚠️  BTV_API_KEYS not set — auth disabled (dev mode)");
+            tracing::warn!("BTV_API_KEYS not set -- auth disabled (dev mode)");
         } else {
             tracing::info!("API key auth enabled: {} keys loaded", keys.len());
         }
@@ -51,7 +51,8 @@ impl<S> Layer<S> for ApiKeyLayer {
     fn layer(&self, inner: S) -> Self::Service {
         ApiKeyService {
             inner,
-            valid_keys: self.valid_keys.clone(),
+            // Arc::clone is explicit per clippy::clone_on_ref_ptr
+            valid_keys: Arc::clone(&self.valid_keys),
         }
     }
 }
@@ -77,7 +78,8 @@ where
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let path = req.uri().path().to_string();
-        let valid_keys = self.valid_keys.clone();
+        // Arc::clone is explicit per clippy::clone_on_ref_ptr
+        let valid_keys = Arc::clone(&self.valid_keys);
         let mut inner = self.inner.clone();
 
         Box::pin(async move {
@@ -87,27 +89,35 @@ where
             }
 
             // Static assets (React dashboard) bypass auth
-            if path == "/" || STATIC_EXTENSIONS.iter().any(|ext| path.ends_with(ext)) || path.starts_with("/assets/") {
+            if path == "/"
+                || STATIC_EXTENSIONS.iter().any(|ext| path.ends_with(ext))
+                || path.starts_with("/assets/")
+            {
                 return inner.call(req).await;
             }
 
             // JWT Bearer token auth (dashboard sessions)
-            if let Some(auth_header) = req.headers().get("authorization").and_then(|v| v.to_str().ok()) {
+            if let Some(auth_header) = req
+                .headers()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+            {
                 if auth_header.starts_with("Bearer ") {
-                    // JWT validation — accept token if present (full validation in future)
+                    // JWT validation -- accept token if present (full validation in future)
                     // TODO: decode and validate JWT with BTV_JWT_SECRET
                     let _token = auth_header.strip_prefix("Bearer ").unwrap_or("");
                     return inner.call(req).await;
                 }
             }
 
-            // Dev mode: no keys configured → allow all
+            // Dev mode: no keys configured -> allow all
             if valid_keys.is_empty() {
                 return inner.call(req).await;
             }
 
             // Check X-API-Key header
-            let key = req.headers()
+            let key = req
+                .headers()
                 .get("x-api-key")
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("");
@@ -116,7 +126,7 @@ where
                 return inner.call(req).await;
             }
 
-            // Reject
+            // Reject -- Response::builder() with literal status + header never returns Err
             crate::state::AUTH_REJECTED_TOTAL.inc();
 
             let body = serde_json::json!({
@@ -124,6 +134,7 @@ where
                 "message": "Invalid or missing API key. Provide X-API-Key header.",
             });
 
+            #[allow(clippy::unwrap_used)]
             let response = Response::builder()
                 .status(axum::http::StatusCode::UNAUTHORIZED)
                 .header("Content-Type", "application/json")
