@@ -141,6 +141,7 @@ mod tests {
         assert!(assert_sufficient(ChannelTrustLevel::Sovereign, ChannelTrustLevel::High).is_ok());
     }
 
+   // VERSÃO FINAL — zero lints, zero código morto
     #[test]
     fn test_insufficient_trust_blocked() {
         if let Err(ChannelViolation::InsufficientTrust { actual, required }) =
