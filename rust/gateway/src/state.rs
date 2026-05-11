@@ -5,6 +5,9 @@ use std::sync::Mutex;
 use prometheus::{IntCounterVec, IntCounter, Histogram, HistogramOpts, opts, register_int_counter_vec, register_int_counter, register_histogram};
 use lazy_static::lazy_static;
 
+// Boot-time registration: register_*! macros return Err only on duplicate metric
+// names, which is a programmer error caught at startup — panic is intentional.
+#[allow(clippy::unwrap_used)]
 lazy_static! {
     pub static ref DECISIONS_TOTAL: IntCounterVec = register_int_counter_vec!(
         opts!("btv_decisions_total", "Total decisions by action"),
@@ -124,6 +127,9 @@ impl AppState {
             ip_classifier: IpClassifier::new(),
             jurisdiction_mapper: JurisdictionMapper::new(),
             session_tracker: Mutex::new(SessionTracker::new()),
+            // reqwest::Client::builder().build() only fails on invalid TLS config;
+            // default builder has no custom TLS — panic here is a boot-time invariant.
+            #[allow(clippy::expect_used)]
             http_client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
                 .build()
