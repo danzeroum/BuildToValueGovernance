@@ -156,9 +156,13 @@ jobs:
 
   # =====================================================================
   # JOB 4: Critérios 2, 3, 4, 5 — Pipeline com btv-sigma service container
+  # DESATIVADO: imagem ghcr.io/danzeroum/buildtovalue/btv-sigma:latest não
+  # publicada. Este job NÃO está no phase3-gate needs[] — não bloqueia merge.
+  # Reativar após criar Dockerfile + workflow publish-btv-sigma.yml.
   # =====================================================================
   pipeline-with-sigma:
     name: "C2 C3 C4 C5 — Pipeline integration (btv-sigma service)"
+    if: false  # TODO: reativar quando btv-sigma image estiver publicada no GHCR
     runs-on: ubuntu-latest
     services:
       btv-sigma:
