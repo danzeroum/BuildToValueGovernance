@@ -4,19 +4,20 @@ use crate::core::module::{Module, ScanContext};
 use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
 use crate::evidence::Finding;
 use crate::validators::Validator;
+use lazy_static::lazy_static;
 use regex::Regex;
 
-pub struct EmailValidator {
-    pattern: Regex,
+lazy_static! {
+    static ref EMAIL_PATTERN: Regex = Regex::new(
+        r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"
+    ).unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in EMAIL_PATTERN: {e}"));
 }
+
+pub struct EmailValidator;
 
 impl EmailValidator {
     pub fn new() -> Self {
-        Self {
-            pattern: Regex::new(
-                r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"
-            ).unwrap(),
-        }
+        Self
     }
 
     fn mask_email(email: &str) -> String {
@@ -35,7 +36,7 @@ impl EmailValidator {
 
     fn validate_impl(&self, input: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
-        for mat in self.pattern.find_iter(input) {
+        for mat in EMAIL_PATTERN.find_iter(input) {
             let email = mat.as_str();
             findings.push(
                 Finding::new(

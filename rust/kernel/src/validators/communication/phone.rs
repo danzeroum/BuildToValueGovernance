@@ -4,19 +4,20 @@ use crate::core::module::{Module, ScanContext};
 use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
 use crate::evidence::Finding;
 use crate::validators::Validator;
+use lazy_static::lazy_static;
 use regex::Regex;
 
-pub struct PhoneValidator {
-    pattern: Regex,
+lazy_static! {
+    static ref PHONE_PATTERN: Regex = Regex::new(
+        r"\b(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?\d{4,5}-?\d{4}\b"
+    ).unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in PHONE_PATTERN: {e}"));
 }
+
+pub struct PhoneValidator;
 
 impl PhoneValidator {
     pub fn new() -> Self {
-        Self {
-            pattern: Regex::new(
-                r"\b(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?\d{4,5}-?\d{4}\b"
-            ).unwrap(),
-        }
+        Self
     }
 
     fn mask_phone(phone: &str) -> String {
@@ -30,7 +31,7 @@ impl PhoneValidator {
 
     fn validate_impl(&self, input: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
-        for mat in self.pattern.find_iter(input) {
+        for mat in PHONE_PATTERN.find_iter(input) {
             let phone = mat.as_str();
             findings.push(
                 Finding::new(
