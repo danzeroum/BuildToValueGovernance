@@ -84,7 +84,7 @@ impl WriteAheadLog {
 
     pub fn append(&self, evidence: &TechnicalEvidence) -> Result<u64> {
         let mut seq_guard = self.current_seq.lock()
-            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            .unwrap_or_else(|e| panic!("BTV invariant violation: WAL seq lock poisoned: {e}"));
         *seq_guard += 1;
         let seq = *seq_guard;
 
@@ -92,7 +92,7 @@ impl WriteAheadLog {
         let bytes = bincode::serialize(&entry).context("Failed to serialize WAL entry")?;
 
         let mut file_guard = self.file.lock()
-            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            .unwrap_or_else(|e| panic!("BTV invariant violation: WAL file lock poisoned: {e}"));
         file_guard.write_all(&(bytes.len() as u32).to_le_bytes())?;
         file_guard.write_all(&bytes)?;
 
@@ -105,7 +105,7 @@ impl WriteAheadLog {
 
     pub fn flush(&self) -> Result<()> {
         let mut file_guard = self.file.lock()
-            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            .unwrap_or_else(|e| panic!("BTV invariant violation: WAL flush lock poisoned: {e}"));
         file_guard.flush()?;
         file_guard.get_ref().sync_all()?;
         Ok(())
@@ -113,6 +113,7 @@ impl WriteAheadLog {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use tempfile::NamedTempFile;
     use super::*;

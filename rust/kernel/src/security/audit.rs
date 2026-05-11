@@ -67,8 +67,10 @@ impl ProbingDetector {
         }
 
         // 2. Detecção por baixa variância (timing analysis)
+        // NaN filter: inputs não-finitos (overflow de micros, NaN) não devem cegar o detector.
         let timings: Vec<f64> = history.iter()
             .map(|(_, dur)| dur.as_micros() as f64)
+            .filter(|v| v.is_finite())
             .collect();
 
         let variance = self.calculate_variance(&timings);
@@ -96,8 +98,10 @@ impl ProbingDetector {
         }
     }
 
-    /// Calcula variância de uma série temporal
+    /// Calcula variância de uma série temporal.
+    /// NaN filter: entradas não-finitas são excluídas antes do cálculo.
     fn calculate_variance(&self, values: &[f64]) -> f64 {
+        let values: Vec<f64> = values.iter().copied().filter(|v| v.is_finite()).collect();
         if values.len() < 2 {
             return 0.0;
         }
@@ -133,6 +137,7 @@ impl ProbingDetector {
         self.request_history.get(ip).map(|history| {
             let timings: Vec<f64> = history.iter()
                 .map(|(_, dur)| dur.as_micros() as f64)
+                .filter(|v| v.is_finite())
                 .collect();
 
             let count = history.len();
@@ -171,6 +176,7 @@ pub struct ProbingStats {
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use std::net::Ipv4Addr;
