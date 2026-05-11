@@ -12,7 +12,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn main() {
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let manifest_dir = PathBuf::from(
+        env::var("CARGO_MANIFEST_DIR")
+            .unwrap_or_else(|_| panic!("build.rs: CARGO_MANIFEST_DIR nao definido — ambiente Cargo corrompido")),
+    );
     // Caminho relativo ao workspace root (dois niveis acima de rust/kernel/)
     let data_dir = manifest_dir.join("..").join("..").join("data").join("policies");
 
@@ -30,7 +33,10 @@ fn main() {
         println!("cargo:warning=SkillRegistry: allowed list vazia — fail-open ativo (dev mode)");
     }
 
-    let out_dir   = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_dir = PathBuf::from(
+        env::var("OUT_DIR")
+            .unwrap_or_else(|_| panic!("build.rs: OUT_DIR nao definido — ambiente Cargo corrompido")),
+    );
     let out_file  = out_dir.join("skill_registry_generated.rs");
 
     let content = format!(
