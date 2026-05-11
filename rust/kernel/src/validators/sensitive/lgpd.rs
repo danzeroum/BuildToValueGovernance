@@ -4,67 +4,61 @@
 use crate::validators::Validator;
 use crate::{Finding, ValidatorModule, TechnicalSeverity};
 use crate::core::types::BiasDeclaration;
+use lazy_static::lazy_static;
 use regex::Regex;
 
-pub struct SensitiveDataValidator {
-    health_patterns: Vec<Regex>,
-    biometric_patterns: Vec<Regex>,
-    racial_patterns: Vec<Regex>,
-    religious_patterns: Vec<Regex>,
-    political_patterns: Vec<Regex>,
-    sexual_patterns: Vec<Regex>,
+lazy_static! {
+    static ref HEALTH_PATTERN_1: Regex =
+        Regex::new(r"(?i)\b(diabetes|câncer|HIV|AIDS|hepatite|tuberculose)\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in HEALTH_PATTERN_1: {e}"));
+    static ref HEALTH_PATTERN_2: Regex =
+        Regex::new(r"(?i)\b(doença|diagnóstico|tratamento|cirurgia|medicamento)\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in HEALTH_PATTERN_2: {e}"));
+    static ref BIOMETRIC_PATTERN_1: Regex =
+        Regex::new(r"(?i)\b(biometria|impressão digital|reconhecimento facial)\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in BIOMETRIC_PATTERN_1: {e}"));
+    static ref BIOMETRIC_PATTERN_2: Regex =
+        Regex::new(r"(?i)\b(iris|retina|DNA|genético|genoma)\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in BIOMETRIC_PATTERN_2: {e}"));
+    static ref RACIAL_PATTERN: Regex =
+        Regex::new(r"(?i)\b(raça|cor|etnia|pardo|negro|branco|indígena)\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in RACIAL_PATTERN: {e}"));
+    static ref RELIGIOUS_PATTERN: Regex =
+        Regex::new(r"(?i)\b(religião|crença|católico|protestante|espírita|ateu)\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in RELIGIOUS_PATTERN: {e}"));
+    static ref POLITICAL_PATTERN: Regex =
+        Regex::new(r"(?i)\b(partido político|filiação partidária|ideologia)\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in POLITICAL_PATTERN: {e}"));
+    static ref SEXUAL_PATTERN: Regex =
+        Regex::new(r"(?i)\b(orientação sexual|homossexual|heterossexual|bissexual)\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in SEXUAL_PATTERN: {e}"));
 }
 
-impl Default for SensitiveDataValidator {
-    fn default() -> Self {
-        Self {
-            health_patterns: vec![
-                Regex::new(r"(?i)\b(diabetes|câncer|HIV|AIDS|hepatite|tuberculose)\b").unwrap(),
-                Regex::new(r"(?i)\b(doença|diagnóstico|tratamento|cirurgia|medicamento)\b").unwrap(),
-            ],
-            biometric_patterns: vec![
-                Regex::new(r"(?i)\b(biometria|impressão digital|reconhecimento facial)\b").unwrap(),
-                Regex::new(r"(?i)\b(iris|retina|DNA|genético|genoma)\b").unwrap(),
-            ],
-            racial_patterns: vec![
-                Regex::new(r"(?i)\b(raça|cor|etnia|pardo|negro|branco|indígena)\b").unwrap(),
-            ],
-            religious_patterns: vec![
-                Regex::new(r"(?i)\b(religião|crença|católico|protestante|espírita|ateu)\b").unwrap(),
-            ],
-            political_patterns: vec![
-                Regex::new(r"(?i)\b(partido político|filiação partidária|ideologia)\b").unwrap(),
-            ],
-            sexual_patterns: vec![
-                Regex::new(r"(?i)\b(orientação sexual|homossexual|heterossexual|bissexual)\b").unwrap(),
-            ],
-        }
-    }
-}
+pub struct SensitiveDataValidator;
 
 impl SensitiveDataValidator {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     fn detect_sensitive_type(&self, input: &str) -> Vec<(String, f32)> {
         let mut detections = Vec::new();
-        if self.health_patterns.iter().any(|p| p.is_match(input)) {
+        if HEALTH_PATTERN_1.is_match(input) || HEALTH_PATTERN_2.is_match(input) {
             detections.push(("health".to_string(), 0.95));
         }
-        if self.biometric_patterns.iter().any(|p| p.is_match(input)) {
+        if BIOMETRIC_PATTERN_1.is_match(input) || BIOMETRIC_PATTERN_2.is_match(input) {
             detections.push(("biometric".to_string(), 0.97));
         }
-        if self.racial_patterns.iter().any(|p| p.is_match(input)) {
+        if RACIAL_PATTERN.is_match(input) {
             detections.push(("racial".to_string(), 0.85));
         }
-        if self.religious_patterns.iter().any(|p| p.is_match(input)) {
+        if RELIGIOUS_PATTERN.is_match(input) {
             detections.push(("religious".to_string(), 0.88));
         }
-        if self.political_patterns.iter().any(|p| p.is_match(input)) {
+        if POLITICAL_PATTERN.is_match(input) {
             detections.push(("political".to_string(), 0.82));
         }
-        if self.sexual_patterns.iter().any(|p| p.is_match(input)) {
+        if SEXUAL_PATTERN.is_match(input) {
             detections.push(("sexual_orientation".to_string(), 0.90));
         }
         detections
@@ -72,6 +66,12 @@ impl SensitiveDataValidator {
 
     pub fn name(&self) -> &'static str { "sensitive_data_validator" }
     pub fn module(&self) -> ValidatorModule { ValidatorModule::SensitiveData }
+}
+
+impl Default for SensitiveDataValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Validator for SensitiveDataValidator {
@@ -85,7 +85,7 @@ impl Validator for SensitiveDataValidator {
                     TechnicalSeverity::Critical(255),
                     "LGPD_ART11_DADOS_SENSIVEIS",
                     &format!("SENSITIVE_DATA_{}", data_type.to_uppercase()),
-                    input,  // contexto completo; em produção podemos truncar
+                    input,
                 )
                     .with_confidence((conf * 255.0) as u8)
             );
@@ -113,7 +113,6 @@ mod tests {
         let v = SensitiveDataValidator::new();
         let findings = v.validate("Paciente João Silva tem diagnóstico de diabetes tipo 2");
         assert_eq!(findings.len(), 1);
-        // assert!(findings[0].threat_category().contains("HEALTH"));
     }
 
     #[test]

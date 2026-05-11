@@ -4,6 +4,13 @@
 use crate::validators::Validator;
 use crate::{Finding, ValidatorModule, TechnicalSeverity};
 use crate::core::types::BiasDeclaration;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref CC_PATTERN: regex::Regex =
+        regex::Regex::new(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in CC_PATTERN: {e}"));
+}
 
 pub struct CreditCardValidator;
 
@@ -16,7 +23,7 @@ impl CreditCardValidator {
         let digits: Vec<u32> = number
             .chars()
             .filter(|c| c.is_ascii_digit())
-            .map(|c| c.to_digit(10).unwrap())
+            .filter_map(|c| c.to_digit(10))
             .collect();
 
         if digits.len() < 13 || digits.len() > 19 {
@@ -47,7 +54,6 @@ impl CreditCardValidator {
             "****".to_string()
         }
     }
-
 }
 
 impl Default for CreditCardValidator {
@@ -59,9 +65,7 @@ impl Default for CreditCardValidator {
 impl Validator for CreditCardValidator {
     fn validate(&self, input: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
-        let pattern = regex::Regex::new(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap();
-
-        for mat in pattern.find_iter(input) {
+        for mat in CC_PATTERN.find_iter(input) {
             let candidate = mat.as_str();
             if self.luhn_check(candidate) {
                 findings.push(
@@ -112,7 +116,6 @@ impl Module for CreditCardValidator {
 
 #[cfg(test)]
 mod tests {
-    
     use super::*;
 
     #[test]
