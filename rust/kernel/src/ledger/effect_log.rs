@@ -462,7 +462,7 @@ mod tests {
 
     #[test]
     fn test_log_starts_empty() {
-        let mut log = EffectLog::new();
+        let log = EffectLog::new();
         assert!(log.is_empty());
         assert_eq!(log.len(), 0);
     }
@@ -596,7 +596,7 @@ mod tests {
         assert!(FRONTIER_REGION_START >= 41);
         assert!(FRONTIER_REGION_END   <= 200);
         // [0..40] intocados após encode
-        let mut log = EffectLog::new();
+        let log = EffectLog::new();
         let mut meta = [0xABu8; 200];
         log.encode_frontiers_to(&mut meta);
         for i in 0..41 { assert_eq!(meta[i], 0xAB, "byte {i} corrompido"); }
