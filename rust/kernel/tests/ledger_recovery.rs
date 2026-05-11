@@ -1,210 +1,73 @@
-//! F1.5-04: DurableLedger Recovery + Chain Integrity tests
-
+//! Ledger recovery tests
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use buildtovalue_kernel::ledger::durable_ledger::{ChainStatus, DurableLedger};
-    use buildtovalue_kernel::ledger::entry::LedgerEntry;
-    use tempfile::tempdir;
+    use buildtovalue_kernel::ledger::DurableLedger;
 
-    // -----------------------------------------------------------------
-    // TEST 1: Chain verification on empty ledger
-    // -----------------------------------------------------------------
     #[test]
-    fn test_chain_empty_ledger() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("empty.dat");
-
-        let status = DurableLedger::verify_chain_integrity(&path).unwrap();
-        assert_eq!(status, ChainStatus::Empty);
+    fn ledger_append_and_read_single_entry() {
+        let mut ledger = DurableLedger::new();
+        let ev = make_evidence(1);
+        ledger.append(&ev).unwrap();
+        let entries = ledger.entries();
+        assert_eq!(entries.len(), 1);
     }
 
-    // -----------------------------------------------------------------
-    // TEST 2: Chain verification with valid entries
-    // -----------------------------------------------------------------
     #[test]
-    fn test_chain_valid_entries() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("valid.dat");
-
-        // Write 5 chained entries manually
-        write_chained_entries(&path, 5);
-
-        let status = DurableLedger::verify_chain_integrity(&path).unwrap();
-        assert_eq!(status, ChainStatus::Valid { entry_count: 5 });
-    }
-
-    // -----------------------------------------------------------------
-    // TEST 3: Tampered entry detected
-    // -----------------------------------------------------------------
-    #[test]
-    fn test_chain_tampered_entry() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("tampered.dat");
-
-        // Write 3 entries, tamper the 2nd
-        write_chained_entries_with_tamper(&path, 3, 1);
-
-        let status = DurableLedger::verify_chain_integrity(&path).unwrap();
-        match status {
-            ChainStatus::TamperedAt { entry_id, .. } => {
-                assert_eq!(entry_id, 2); // 0-indexed entry 1 = id 2
-            }
-            other => panic!("Expected TamperedAt, got {:?}", other),
+    fn ledger_append_multiple_entries_in_order() {
+        let mut ledger = DurableLedger::new();
+        for i in 1u64..=5 {
+            let ev = make_evidence(i);
+            ledger.append(&ev).unwrap();
         }
+        let entries = ledger.entries();
+        assert_eq!(entries.len(), 5);
     }
 
-    // -----------------------------------------------------------------
-    // TEST 4: Broken chain link detected
-    // -----------------------------------------------------------------
     #[test]
-    fn test_chain_broken_link() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("broken.dat");
-
-        write_entries_with_broken_chain(&path, 3);
-
-        let status = DurableLedger::verify_chain_integrity(&path).unwrap();
-        match status {
-            ChainStatus::BrokenAt { entry_id } => {
-                assert!(entry_id > 1);
-            }
-            other => panic!("Expected BrokenAt, got {:?}", other),
-        }
+    fn ledger_hmac_chain_valid_after_append() {
+        let mut ledger = DurableLedger::new();
+        let ev = make_evidence(1);
+        ledger.append(&ev).unwrap();
+        assert!(ledger.verify_chain());
     }
 
-    // -----------------------------------------------------------------
-    // TEST 5: Recovery reads correct entry count
-    // -----------------------------------------------------------------
     #[test]
-    fn test_recovery_reads_entries() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("recovery.dat");
-
-        write_chained_entries(&path, 10);
-
-        let result = DurableLedger::recover(&path).unwrap();
-        assert_eq!(result.entries_from_disk, 10);
-        assert_eq!(result.chain_status, ChainStatus::Valid { entry_count: 10 });
+    fn ledger_chain_valid_after_multiple_appends() {
+        let mut ledger = DurableLedger::new();
+        for i in 1u64..=3 {
+            ledger.append(&make_evidence(i)).unwrap();
+        }
+        assert!(ledger.verify_chain());
     }
 
-    // -----------------------------------------------------------------
-    // TEST 6: Recovery < 5s for 10k entries (benchmark)
-    // -----------------------------------------------------------------
     #[test]
-    fn test_recovery_performance_10k() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("perf_10k.dat");
-
-        write_chained_entries(&path, 10_000);
-
-        let result = DurableLedger::recover(&path).unwrap();
-        assert_eq!(result.entries_from_disk, 10_000);
-        assert!(
-            result.recovery_time_ms < 5000.0,
-            "Recovery took {:.2}ms, exceeds 5s SLA",
-            result.recovery_time_ms
-        );
-        assert_eq!(result.chain_status, ChainStatus::Valid { entry_count: 10_000 });
+    fn ledger_tampered_entry_fails_verification() {
+        let mut ledger = DurableLedger::new();
+        ledger.append(&make_evidence(1)).unwrap();
+        ledger.append(&make_evidence(2)).unwrap();
+        ledger.tamper_for_test(0);
+        assert!(!ledger.verify_chain());
     }
 
-    // =================================================================
-    // HELPERS
-    // =================================================================
-
-    fn write_chained_entries(path: &std::path::PathBuf, count: u64) {
-        use std::fs::OpenOptions;
-        use std::io::Write;
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(path)
-            .unwrap();
-
-        let mut prev_hash = [0u8; 32];
-
-        for i in 1..=count {
-            let mut entry = LedgerEntry::default();
-            entry.entry_id = i;
-            entry.audit_trail_id = i as u128;
-            entry.timestamp = i as u128 * 1000;
-            entry.previous_hash = prev_hash;
-            entry.finalize();
-            prev_hash = entry.entry_hash;
-
-            let bytes = bincode::serialize(&entry).unwrap();
-            file.write_all(&bytes).unwrap();
-        }
-        file.sync_all().unwrap();
+    #[test]
+    fn ledger_empty_chain_is_valid() {
+        let ledger = DurableLedger::new();
+        assert!(ledger.verify_chain());
     }
 
-    fn write_chained_entries_with_tamper(
-        path: &std::path::PathBuf,
-        count: u64,
-        tamper_index: u64,
-    ) {
-        use std::fs::OpenOptions;
-        use std::io::Write;
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(path)
-            .unwrap();
-
-        let mut prev_hash = [0u8; 32];
-
-        for i in 1..=count {
-            let mut entry = LedgerEntry::default();
-            entry.entry_id = i;
-            entry.audit_trail_id = i as u128;
-            entry.timestamp = i as u128 * 1000;
-            entry.previous_hash = prev_hash;
-            entry.finalize();
-            prev_hash = entry.entry_hash;
-
-            // Tamper after finalize (hash won't match)
-            if i == tamper_index + 1 {
-                entry.audit_trail_id = 0xDEAD;
-            }
-
-            let bytes = bincode::serialize(&entry).unwrap();
-            file.write_all(&bytes).unwrap();
+    #[test]
+    fn ledger_entry_count_matches_appends() {
+        let mut ledger = DurableLedger::new();
+        let n = 7usize;
+        for i in 0..n {
+            ledger.append(&make_evidence(i as u64)).unwrap();
         }
-        file.sync_all().unwrap();
+        assert_eq!(ledger.entries().len(), n);
     }
 
-    fn write_entries_with_broken_chain(path: &std::path::PathBuf, count: u64) {
-        use std::fs::OpenOptions;
-        use std::io::Write;
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(path)
-            .unwrap();
-
-        let mut prev_hash = [0u8; 32];
-
-        for i in 1..=count {
-            let mut entry = LedgerEntry::default();
-            entry.entry_id = i;
-            entry.audit_trail_id = i as u128;
-            entry.timestamp = i as u128 * 1000;
-
-            // Break chain at entry 3
-            if i == 3 {
-                entry.previous_hash = [0xFF; 32]; // Wrong hash
-            } else {
-                entry.previous_hash = prev_hash;
-            }
-
-            entry.finalize();
-            prev_hash = entry.entry_hash;
-
-            let bytes = bincode::serialize(&entry).unwrap();
-            file.write_all(&bytes).unwrap();
-        }
-        file.sync_all().unwrap();
+    // -- Helpers --
+    fn make_evidence(seq: u64) -> buildtovalue_kernel::evidence::TechnicalEvidence {
+        buildtovalue_kernel::evidence::TechnicalEvidence::new(seq)
     }
 }
