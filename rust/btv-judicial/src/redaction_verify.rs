@@ -12,7 +12,6 @@ use crate::hmac_verify::JudicialError;
 pub fn verify_redaction_receipt(
     receipt: &btv_types::RedactionReceiptWire,
 ) -> Result<bool, JudicialError> {
-    // Valida campos mínimos
     if receipt.epsilon < 0.0 || receipt.epsilon > 1.0 {
         return Err(JudicialError::VerificationFailed(
             format!("epsilon {} out of range [0,1]", receipt.epsilon)
@@ -25,29 +24,17 @@ pub fn verify_redaction_receipt(
     }
 
     if receipt.proof_bytes.is_empty() {
-        // Modo direct: confiar na verificação direta feita por btv-redaction.
-        // O Judiciário registra o recebimento mas nao pode verificar ZK sem Noir.
         return Ok(true);
     }
 
     // TODO (Semanas 24-28): integrar noir_rs verifier
-    //
-    // let vk = load_verification_key("statistical_consistency");
-    // let proof = Proof::from_bytes(&receipt.proof_bytes)
-    //     .map_err(|e| JudicialError::VerificationFailed(e.to_string()))?;
-    // let pub_inputs: Vec<Field> = receipt.public_inputs.iter()
-    //     .map(|p| Field::from_bytes(p))
-    //     .collect();
-    // vk.verify(&proof, &pub_inputs)
-    //     .map(|_| true)
-    //     .map_err(|e| JudicialError::VerificationFailed(e.to_string()))
-
     Err(JudicialError::VerificationFailed(
         "ZK verification not yet integrated (Fase 5, Semanas 24-28)".into()
     ))
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
