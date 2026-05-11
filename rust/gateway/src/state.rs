@@ -2,109 +2,168 @@ use buildtovalue_kernel::gatekeeper::Gatekeeper;
 use buildtovalue_kernel::network::{IpClassifier, JurisdictionMapper};
 use buildtovalue_kernel::session_guard::SessionTracker;
 use std::sync::Mutex;
-use prometheus::{IntCounterVec, IntCounter, Histogram, HistogramOpts, opts, register_int_counter_vec, register_int_counter, register_histogram};
+use prometheus::{
+    opts, register_histogram, register_int_counter, register_int_counter_vec,
+    Histogram, HistogramOpts, IntCounter, IntCounterVec,
+};
 use lazy_static::lazy_static;
 
-// Boot-time registration: register_*! macros return Err only on duplicate metric
-// names, which is a programmer error caught at startup — panic is intentional.
-#[allow(clippy::unwrap_used)]
+// Boot-time metric registration.
+// register_*! macros return Err only on duplicate metric names (programmer error
+// caught at startup -- panic is the correct response).
+//
+// NOTE: #[allow] cannot be placed on a macro invocation site (lazy_static!);
+// the compiler ignores it and emits unused_attribute with -D warnings.
+// Pattern: each static initializer is wrapped in { #[allow(...)] { expr } }.
 lazy_static! {
-    pub static ref DECISIONS_TOTAL: IntCounterVec = register_int_counter_vec!(
-        opts!("btv_decisions_total", "Total decisions by action"),
-        &["action"]
-    ).unwrap();
+    pub static ref DECISIONS_TOTAL: IntCounterVec = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter_vec!(
+            opts!("btv_decisions_total", "Total decisions by action"),
+            &["action"]
+        ).unwrap() }
+    };
 
-    pub static ref MERCY_APPLIED_TOTAL: IntCounter = register_int_counter!(
-        "btv_mercy_applied_total", "Total mercy applications (Gilligan)"
-    ).unwrap();
+    pub static ref MERCY_APPLIED_TOTAL: IntCounter = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter!(
+            "btv_mercy_applied_total", "Total mercy applications (Gilligan)"
+        ).unwrap() }
+    };
 
-    pub static ref HARD_BLOCKS_TOTAL: IntCounter = register_int_counter!(
-        "btv_hard_blocks_total", "Total hard blocks"
-    ).unwrap();
+    pub static ref HARD_BLOCKS_TOTAL: IntCounter = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter!(
+            "btv_hard_blocks_total", "Total hard blocks"
+        ).unwrap() }
+    };
 
-    pub static ref LATENCY_MS: Histogram = register_histogram!(
-        HistogramOpts::new("btv_latency_ms", "Request latency in milliseconds")
-            .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0])
-    ).unwrap();
+    pub static ref LATENCY_MS: Histogram = {
+        #[allow(clippy::unwrap_used)]
+        { register_histogram!(
+            HistogramOpts::new("btv_latency_ms", "Request latency in milliseconds")
+                .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0])
+        ).unwrap() }
+    };
 
-    pub static ref FINDINGS_TOTAL: IntCounterVec = register_int_counter_vec!(
-        opts!("btv_findings_total", "Total findings by type"),
-        &["type"]
-    ).unwrap();
+    pub static ref FINDINGS_TOTAL: IntCounterVec = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter_vec!(
+            opts!("btv_findings_total", "Total findings by type"),
+            &["type"]
+        ).unwrap() }
+    };
 
-    pub static ref SANITIZE_TOTAL: IntCounter = register_int_counter!(
-        "btv_sanitize_total", "Total sanitize requests"
-    ).unwrap();
+    pub static ref SANITIZE_TOTAL: IntCounter = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter!(
+            "btv_sanitize_total", "Total sanitize requests"
+        ).unwrap() }
+    };
 
-    pub static ref SANITIZE_MASKED_TOTAL: IntCounterVec = register_int_counter_vec!(
-        opts!("btv_sanitize_masked_total", "Total PII masked by type"),
-        &["type"]
-    ).unwrap();
+    pub static ref SANITIZE_MASKED_TOTAL: IntCounterVec = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter_vec!(
+            opts!("btv_sanitize_masked_total", "Total PII masked by type"),
+            &["type"]
+        ).unwrap() }
+    };
 
-    pub static ref RATE_LIMITED_TOTAL: IntCounter = register_int_counter!(
-        "btv_rate_limited_total", "Total rate-limited requests"
-    ).unwrap();
+    pub static ref RATE_LIMITED_TOTAL: IntCounter = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter!(
+            "btv_rate_limited_total", "Total rate-limited requests"
+        ).unwrap() }
+    };
 
-    pub static ref AUTH_REJECTED_TOTAL: IntCounter = register_int_counter!(
-        "btv_auth_rejected_total", "Total rejected auth attempts"
-    ).unwrap();
+    pub static ref AUTH_REJECTED_TOTAL: IntCounter = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter!(
+            "btv_auth_rejected_total", "Total rejected auth attempts"
+        ).unwrap() }
+    };
 
-    pub static ref DECIDE_TOTAL: IntCounterVec = register_int_counter_vec!(
-        opts!("btv_decide_total", "Total /v1/decide requests by action (ADR-040)"),
-        &["action"]
-    ).unwrap();
+    pub static ref DECIDE_TOTAL: IntCounterVec = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter_vec!(
+            opts!("btv_decide_total", "Total /v1/decide requests by action (ADR-040)"),
+            &["action"]
+        ).unwrap() }
+    };
 
-    pub static ref DECIDE_LATENCY_MS: Histogram = register_histogram!(
-        HistogramOpts::new("btv_decide_latency_ms", "/v1/decide latency in milliseconds")
-            .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0])
-    ).unwrap();
+    pub static ref DECIDE_LATENCY_MS: Histogram = {
+        #[allow(clippy::unwrap_used)]
+        { register_histogram!(
+            HistogramOpts::new("btv_decide_latency_ms", "/v1/decide latency in milliseconds")
+                .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0])
+        ).unwrap() }
+    };
 
-    pub static ref APPEALS_SUBMITTED_TOTAL: IntCounter = register_int_counter!(
-        "btv_appeals_submitted_total", "Total appeals submitted (ADR-037)"
-    ).unwrap();
+    pub static ref APPEALS_SUBMITTED_TOTAL: IntCounter = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter!(
+            "btv_appeals_submitted_total", "Total appeals submitted (ADR-037)"
+        ).unwrap() }
+    };
 
-    pub static ref APPEALS_RESOLVED_TOTAL: IntCounter = register_int_counter!(
-        "btv_appeals_resolved_total", "Total appeals resolved (ADR-037)"
-    ).unwrap();
+    pub static ref APPEALS_RESOLVED_TOTAL: IntCounter = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter!(
+            "btv_appeals_resolved_total", "Total appeals resolved (ADR-037)"
+        ).unwrap() }
+    };
 
-    pub static ref PIPELINE_RAWLS_DURATION: Histogram = register_histogram!(
-        HistogramOpts::new("btv_gateway_rawls_duration_ms", "Rawls stage proxy latency ms")
-            .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0])
-    ).unwrap();
+    pub static ref PIPELINE_RAWLS_DURATION: Histogram = {
+        #[allow(clippy::unwrap_used)]
+        { register_histogram!(
+            HistogramOpts::new("btv_gateway_rawls_duration_ms", "Rawls stage proxy latency ms")
+                .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0])
+        ).unwrap() }
+    };
 
-    pub static ref PIPELINE_GILLIGAN_DURATION: Histogram = register_histogram!(
-        HistogramOpts::new("btv_gateway_gilligan_duration_ms", "Gilligan stage proxy latency ms")
-            .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0])
-    ).unwrap();
+    pub static ref PIPELINE_GILLIGAN_DURATION: Histogram = {
+        #[allow(clippy::unwrap_used)]
+        { register_histogram!(
+            HistogramOpts::new("btv_gateway_gilligan_duration_ms", "Gilligan stage proxy latency ms")
+                .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0])
+        ).unwrap() }
+    };
 
-    pub static ref TRUST_ADJUSTMENTS_TOTAL: IntCounterVec = register_int_counter_vec!(
-        opts!("btv_gateway_trust_adjustments_total", "Trust adjustments via gateway"),
-        &["direction"]
-    ).unwrap();
+    pub static ref TRUST_ADJUSTMENTS_TOTAL: IntCounterVec = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter_vec!(
+            opts!("btv_gateway_trust_adjustments_total", "Trust adjustments via gateway"),
+            &["direction"]
+        ).unwrap() }
+    };
 
-    pub static ref BIAS_GATE_VIOLATIONS_TOTAL: IntCounter = register_int_counter!(
-        "btv_gateway_bias_gate_violations_total",
-        "BiasGuardian gate violations detected via /health/bias"
-    ).unwrap();
-
+    pub static ref BIAS_GATE_VIOLATIONS_TOTAL: IntCounter = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter!(
+            "btv_gateway_bias_gate_violations_total",
+            "BiasGuardian gate violations detected via /health/bias"
+        ).unwrap() }
+    };
 }
 
-
-impl Default for AppState {
-    fn default() -> Self { Self::new() }
-}
 pub struct AppState {
     pub gatekeeper: Mutex<Gatekeeper>,
-    pub ip_classifier: IpClassifier,           // ADR-044: stateless, sem Mutex
-    pub jurisdiction_mapper: JurisdictionMapper,  // ADR-044: IP→jurisdição
-    pub session_tracker: Mutex<SessionTracker>, // ADR-044: stateful, por sessão
+    pub ip_classifier: IpClassifier,           // ADR-044: stateless
+    pub jurisdiction_mapper: JurisdictionMapper, // ADR-044: IP->jurisdicao
+    pub session_tracker: Mutex<SessionTracker>, // ADR-044: stateful, por sessao
     pub http_client: reqwest::Client,
     pub start_time: std::time::Instant,
 }
 
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppState {
     pub fn new() -> Self {
-        // Force lazy_static init
+        // Force lazy_static init at startup
         lazy_static::initialize(&DECISIONS_TOTAL);
         lazy_static::initialize(&MERCY_APPLIED_TOTAL);
         lazy_static::initialize(&HARD_BLOCKS_TOTAL);
@@ -122,18 +181,19 @@ impl AppState {
         lazy_static::initialize(&PIPELINE_GILLIGAN_DURATION);
         lazy_static::initialize(&TRUST_ADJUSTMENTS_TOTAL);
         lazy_static::initialize(&BIAS_GATE_VIOLATIONS_TOTAL);
+
         Self {
             gatekeeper: Mutex::new(Gatekeeper::new()),
             ip_classifier: IpClassifier::new(),
             jurisdiction_mapper: JurisdictionMapper::new(),
             session_tracker: Mutex::new(SessionTracker::new()),
             // reqwest::Client::builder().build() only fails on invalid TLS config;
-            // default builder has no custom TLS — panic here is a boot-time invariant.
+            // default builder has no custom TLS -- boot-time invariant.
             #[allow(clippy::expect_used)]
             http_client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
                 .build()
-                .expect("Failed to create HTTP client"),
+                .expect("BTV boot invariant: reqwest default builder must succeed"),
             start_time: std::time::Instant::now(),
         }
     }

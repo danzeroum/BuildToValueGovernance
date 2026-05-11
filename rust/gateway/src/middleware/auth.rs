@@ -1,4 +1,4 @@
-//! API Key Authentication Middleware — Gap #6
+//! API Key Authentication Middleware -- Gap #6
 //! Validates X-API-Key header against env-configured keys.
 //! /health and /metrics are exempt (public).
 
@@ -34,7 +34,7 @@ impl ApiKeyLayer {
             if env == "production" {
                 panic!("BTV_API_KEYS must be set in production");
             }
-            tracing::warn!("\u26a0\ufe0f  BTV_API_KEYS not set — auth disabled (dev mode)");
+            tracing::warn!("BTV_API_KEYS not set -- auth disabled (dev mode)");
         } else {
             tracing::info!("API key auth enabled: {} keys loaded", keys.len());
         }
@@ -89,27 +89,35 @@ where
             }
 
             // Static assets (React dashboard) bypass auth
-            if path == "/" || STATIC_EXTENSIONS.iter().any(|ext| path.ends_with(ext)) || path.starts_with("/assets/") {
+            if path == "/"
+                || STATIC_EXTENSIONS.iter().any(|ext| path.ends_with(ext))
+                || path.starts_with("/assets/")
+            {
                 return inner.call(req).await;
             }
 
             // JWT Bearer token auth (dashboard sessions)
-            if let Some(auth_header) = req.headers().get("authorization").and_then(|v| v.to_str().ok()) {
+            if let Some(auth_header) = req
+                .headers()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+            {
                 if auth_header.starts_with("Bearer ") {
-                    // JWT validation — accept token if present (full validation in future)
+                    // JWT validation -- accept token if present (full validation in future)
                     // TODO: decode and validate JWT with BTV_JWT_SECRET
                     let _token = auth_header.strip_prefix("Bearer ").unwrap_or("");
                     return inner.call(req).await;
                 }
             }
 
-            // Dev mode: no keys configured → allow all
+            // Dev mode: no keys configured -> allow all
             if valid_keys.is_empty() {
                 return inner.call(req).await;
             }
 
             // Check X-API-Key header
-            let key = req.headers()
+            let key = req
+                .headers()
                 .get("x-api-key")
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("");
@@ -118,7 +126,7 @@ where
                 return inner.call(req).await;
             }
 
-            // Reject — Response::builder() with literal status + header never returns Err
+            // Reject -- Response::builder() with literal status + header never returns Err
             crate::state::AUTH_REJECTED_TOTAL.inc();
 
             let body = serde_json::json!({
