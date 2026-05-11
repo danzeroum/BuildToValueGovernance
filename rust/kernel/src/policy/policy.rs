@@ -253,6 +253,8 @@ impl PolicyEngine {
     }
 
     /// Engine fail-secure: bloqueia tudo.
+    /// BTV invariant: o YAML hardcoded é válido por construção.
+    /// Regressão de parse → bug no código, não em input de usuário → panic rastreável.
     fn block_all_engine() -> Self {
         let yaml = r#"
 version: "failsafe"
@@ -273,7 +275,9 @@ policies:
       min_confidence: 0.0
     action: BLOCK
 "#;
-        Self::from_yaml_str(yaml).expect("failsafe yaml is always valid")
+        Self::from_yaml_str(yaml).unwrap_or_else(|e| {
+            panic!("BTV invariant violation: failsafe YAML is always valid — {e}")
+        })
     }
 
     // ─── HARD BLOCKS ────────────────────────────────────────────────────────
@@ -339,8 +343,6 @@ policies:
                 relevant.push(&self.policy_set.policies[i]);
             }
         }
-        // fix(clippy::unnecessary_sort_by): sort_by_key com Reverse é idiomático
-        // e evita criar closure que captura campo externo para comparação invertida.
         relevant.sort_by_key(|p| std::cmp::Reverse(p.priority));
 
         for policy in relevant {
@@ -450,6 +452,7 @@ policies:
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
