@@ -62,13 +62,12 @@ impl HmacVerifier {
 }
 
 /// Constant-time comparison — v2.3.1: delegates to btv-types::crypto_utils.
-/// The Judicial uses the same BTV_HMAC_KEY as the Executive but verifies
-/// independently — constitutional separation is preserved.
 fn constant_time_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
     btv_types::crypto_utils::constant_time_eq(a, b)
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use btv_types::{Blake3Hash, Decision, VerdictRecord};
@@ -85,9 +84,9 @@ mod tests {
 
     fn correct_hmac(key: &[u8]) -> [u8; 32] {
         let mut mac = HmacSha256::new_from_slice(key).unwrap();
-        mac.update(&[0x01; 32]); // evidence_hash
-        mac.update(&[0u8]);       // Decision::Allow
-        mac.update(&[0x02; 32]); // explanation_hash
+        mac.update(&[0x01; 32]);
+        mac.update(&[0u8]);
+        mac.update(&[0x02; 32]);
         mac.finalize().into_bytes().into()
     }
 
