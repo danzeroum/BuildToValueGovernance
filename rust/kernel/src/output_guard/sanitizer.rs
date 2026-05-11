@@ -11,27 +11,27 @@ use crate::core::types::BiasDeclaration;
 lazy_static! {
     static ref CPF_RE: Regex = Regex::new(
         r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV init: CPF_RE regex compile failed: {e}"));
 
     static ref CNPJ_RE: Regex = Regex::new(
         r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV init: CNPJ_RE regex compile failed: {e}"));
 
     static ref EMAIL_RE: Regex = Regex::new(
         r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV init: EMAIL_RE regex compile failed: {e}"));
 
     static ref PHONE_RE: Regex = Regex::new(
         r"\b(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?\d{4,5}-?\d{4}\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV init: PHONE_RE regex compile failed: {e}"));
 
     static ref CREDIT_CARD_RE: Regex = Regex::new(
         r"\b(?:\d{4}[- ]?){3}\d{4}\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV init: CREDIT_CARD_RE regex compile failed: {e}"));
 
     static ref SSN_RE: Regex = Regex::new(
         r"\b\d{3}[-\s]\d{2}[-\s]\d{4}\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV init: SSN_RE regex compile failed: {e}"));
 }
 
 // ---------------------------------------------------------------------
@@ -111,7 +111,6 @@ impl OutputSanitizer {
             result = s; masks_applied += n; details.extend(d);
         }
 
-        // Re-scan: verify no PII remains
         let rescan_clean = if self.rescan_enabled {
             Self::rescan_is_clean(&result)
         } else {
@@ -153,10 +152,6 @@ impl OutputSanitizer {
             && !CREDIT_CARD_RE.is_match(output)
             && !SSN_RE.is_match(output)
     }
-
-    // -----------------------------------------------------------------
-    // MASK FUNCTIONS
-    // -----------------------------------------------------------------
 
     fn mask_cpf_value(cpf: &str) -> String {
         let digits: String = cpf.chars().filter(|c| c.is_ascii_digit()).collect();
@@ -334,5 +329,4 @@ mod tests {
         assert!(!r.output.contains("123-45"));
         assert!(r.rescan_clean);
     }
-
 }
