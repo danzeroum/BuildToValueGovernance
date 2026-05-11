@@ -78,7 +78,6 @@ pub struct DecideResponse {
     pub explain: ExplainDecision,
     pub jurisdiction_bitmask: u32,
     pub latency_ms: f64,
-    // campos adicionados para X-Ray
     pub trust_score: f32,
     pub mercy_score: f32,
     pub mercy_scenario: String,
@@ -127,19 +126,16 @@ struct GovernanceDecideRequest {
     ip_risk: String,
     ip_jurisdiction: String,
     drift_level: String,
-    /// Forwarded from DecideRequest — input modality (ADR policy-activation)
     #[serde(skip_serializing_if = "Option::is_none")]
     source: Option<String>,
-    /// Forwarded from DecideRequest — channel identifier (ADR policy-activation)
     #[serde(skip_serializing_if = "Option::is_none")]
     channel: Option<String>,
-    /// Forwarded from DecideRequest — agent YAML policy names to activate
     #[serde(skip_serializing_if = "Option::is_none")]
     agent_policies: Option<Vec<String>>,
 }
 
 #[derive(serde::Deserialize, Default)]
-#[allow(dead_code)] // Fields populated from Python governance response
+#[allow(dead_code)]
 struct GovernanceDecideVerdict {
     #[serde(default)] verdict_id: String,
     #[serde(default)] action: String,
@@ -198,13 +194,22 @@ pub async fn decide_handler(
             .as_deref()
             .map(|s| {
                 let hash = blake3::hash(s.as_bytes());
-                u128::from_le_bytes(hash.as_bytes()[..16].try_into().unwrap())
+                // [u8;32][..16].try_into() é invariante de tamanho fixo —
+                // falha indica regressão de compilador, não erro de runtime.
+                u128::from_le_bytes(
+                    hash.as_bytes()[..16]
+                        .try_into()
+                        .unwrap_or_else(|_| panic!("BTV invariant violation: blake3 slice [..16] into [u8;16]"))
+                )
             })
             .unwrap_or(0);
 
         let evidence = gk.scan_for_evidence(&req.input, session_id);
         let findings = evidence.get_all_findings();
 
+        // FALLBACK_POLICY é const &str compilado; from_yaml_str nunca retorna Err
+        // neste path — allow pontual conforme ADR invariante boot-time.
+        #[allow(clippy::unwrap_used)]
         let mut engine = PolicyEngine::from_yaml_str(DEFAULT_POLICY)
             .unwrap_or_else(|_| PolicyEngine::from_yaml_str(FALLBACK_POLICY).unwrap());
         let eval = engine.evaluate_full(&req.input, &findings);
