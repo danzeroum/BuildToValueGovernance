@@ -1,6 +1,8 @@
 //! Testes ADR-032: ScanContextFlags
 //! Valida invariantes de tamanho, bitmask ops e não-regressão do pipeline.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use buildtovalue_kernel::core::module::{ScanContext, ScanContextFlags};
 use buildtovalue_kernel::core::types::InputStatistics;
 use buildtovalue_kernel::Gatekeeper;

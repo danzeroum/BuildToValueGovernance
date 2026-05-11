@@ -3,6 +3,8 @@
 //! Verifica que os validadores UK/EU são acionados via JURISDICTION_ALL
 //! (default no Gatekeeper) e que isolamento jurisdicional funciona corretamente.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use buildtovalue_kernel::Gatekeeper;
 use buildtovalue_kernel::core::types::ValidatorModule;
 

@@ -98,7 +98,10 @@ where
         let window = self.window;
 
         let allowed = {
-            let mut buckets = self.buckets.lock().unwrap();
+            // Envenenamento de Mutex é estado irrecuperável — pânico imediato
+            // conforme ADR fail-secure (Jonas: responsabilidade sistêmica).
+            let mut buckets = self.buckets.lock()
+                .unwrap_or_else(|e| panic!("BTV invariant violation: rate_limit lock poisoned: {e}"));
             let now = Instant::now();
             let entry = buckets.entry(key.clone()).or_insert((0, now));
 

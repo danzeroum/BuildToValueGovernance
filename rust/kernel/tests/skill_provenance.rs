@@ -1,6 +1,7 @@
 //! Testes PROP-031 — Skill Provenance Ledger
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use buildtovalue_kernel::evidence::TechnicalEvidence;
     use buildtovalue_kernel::core::types::EVIDENCE_SIZE;

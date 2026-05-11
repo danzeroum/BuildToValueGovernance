@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use buildtovalue_kernel::core::types::BiasDeclaration;
     use buildtovalue_kernel::core::module::Module;

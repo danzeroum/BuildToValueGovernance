@@ -3,6 +3,7 @@
 //! Pipeline: 3 deob + 4 analyze + 8 validate = 15 módulos, 4 stages (Validate splitado)
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use buildtovalue_kernel::Gatekeeper;
     use buildtovalue_kernel::gatekeeper::PipelineStage;
