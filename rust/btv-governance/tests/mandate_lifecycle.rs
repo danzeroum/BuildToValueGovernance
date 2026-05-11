@@ -1,5 +1,7 @@
 //! Integration test: full MandateToken lifecycle — create, wire, version bump.
 
+#![allow(clippy::expect_used, clippy::unwrap_used)] // testes de integração: pânico = asserção
+
 use btv_governance::{
     amendment::{Amendment, AmendmentKind, PolicyDelta},
     constitutional_state::{ConstitutionalState, SystemState},
