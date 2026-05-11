@@ -1,6 +1,7 @@
 //! Base64 Deobfuscator — detecta e decodifica strings Base64 em inputs.
 //! Usado pelo DeobfuscationChain para normalizar entradas ofuscadas.
 
+
 use lazy_static::lazy_static;
 use regex::Regex;
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
@@ -8,6 +9,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use crate::core::module::{Module, ScanContext};
 use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
 use crate::evidence::Finding;
+
 
 lazy_static! {
     static ref BASE64_REGEX: Regex = Regex::new(
@@ -40,6 +42,7 @@ pub fn try_decode(input: &str) -> Base64Result {
     }
     Base64Result::NotBase64
 }
+
 
 // ---------------------------------------------------------------------------
 // Module wrapper — implementa o trait Module para uso no pipeline do Gatekeeper.
