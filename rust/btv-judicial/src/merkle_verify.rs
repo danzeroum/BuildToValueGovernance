@@ -23,7 +23,7 @@ pub fn verify_root_consistency(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use btv_types::{InclusionReceiptWire, MerkleProof};
+    use btv_types::InclusionReceiptWire;
 
     #[test]
     fn root_consistency_pass() {

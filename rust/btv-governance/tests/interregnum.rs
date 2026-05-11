@@ -1,7 +1,7 @@
 //! Integration test: expired or absent MandateToken → Interregnum.
 
 use btv_governance::{
-    constitutional_state::{ConstitutionalState, SystemState},
+    constitutional_state::ConstitutionalState,
     error::GovernanceError,
     mandate::{AmendmentId, MandateToken, RatificationProof},
 };
