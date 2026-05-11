@@ -34,7 +34,7 @@ impl ApiKeyLayer {
             if env == "production" {
                 panic!("BTV_API_KEYS must be set in production");
             }
-            tracing::warn!("⚠️  BTV_API_KEYS not set — auth disabled (dev mode)");
+            tracing::warn!("\u26a0\ufe0f  BTV_API_KEYS not set — auth disabled (dev mode)");
         } else {
             tracing::info!("API key auth enabled: {} keys loaded", keys.len());
         }
@@ -51,7 +51,8 @@ impl<S> Layer<S> for ApiKeyLayer {
     fn layer(&self, inner: S) -> Self::Service {
         ApiKeyService {
             inner,
-            valid_keys: self.valid_keys.clone(),
+            // Arc::clone is explicit per clippy::clone_on_ref_ptr
+            valid_keys: Arc::clone(&self.valid_keys),
         }
     }
 }
@@ -77,7 +78,8 @@ where
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let path = req.uri().path().to_string();
-        let valid_keys = self.valid_keys.clone();
+        // Arc::clone is explicit per clippy::clone_on_ref_ptr
+        let valid_keys = Arc::clone(&self.valid_keys);
         let mut inner = self.inner.clone();
 
         Box::pin(async move {
@@ -116,7 +118,7 @@ where
                 return inner.call(req).await;
             }
 
-            // Reject
+            // Reject — Response::builder() with literal status + header never returns Err
             crate::state::AUTH_REJECTED_TOTAL.inc();
 
             let body = serde_json::json!({
@@ -124,6 +126,7 @@ where
                 "message": "Invalid or missing API key. Provide X-API-Key header.",
             });
 
+            #[allow(clippy::unwrap_used)]
             let response = Response::builder()
                 .status(axum::http::StatusCode::UNAUTHORIZED)
                 .header("Content-Type", "application/json")

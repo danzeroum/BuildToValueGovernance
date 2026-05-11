@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Critérios 2, 3, 4, 5: testes de integração do pipeline completo.
 //!
 //! Testes sem btv-sigma: verificam o pipeline até o ponto de log submission.
