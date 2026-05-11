@@ -1,10 +1,15 @@
-//! Session Guard v2.3.1
+//! Session Guard v2.3.2
 //!
 //! Proteção contra hijacking de sessão e ataques de replay.
 //! Implementa validação de tokens de sessão com expiração e nonce.
 //!
 //! Princípio: Cada sessão deve ser única e ter tempo de vida limitado
 //! para prevenir ataques de replay e sequestro de sessão.
+//!
+//! INVARIANTE: Nenhum .unwrap() alcançável por input de usuário no hot-path.
+//! duration_since(UNIX_EPOCH) usa .unwrap_or(Duration::ZERO):
+//! skew de NTP ou anomalia de clock do SO → token ainda gerado com
+//! unicidade garantida por nonce (u64) + salt ([u8; 16]).
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -72,7 +77,6 @@ impl SessionGuard {
             expires_at: now + self.session_timeout,
             user_id: user_id.to_string(),
             nonce: rand::random(),
-
         };
 
         // Armazena sessão
@@ -151,13 +155,19 @@ impl SessionGuard {
         count
     }
 
-    /// Gera token seguro usando BLAKE3
+    /// Gera token seguro usando BLAKE3.
+    ///
+    /// Hot-path invariant: duration_since(UNIX_EPOCH) usa .unwrap_or(Duration::ZERO).
+    /// Skew de NTP ou clock regressivo → timestamp = 0, mas nonce (u64) + salt ([u8; 16])
+    /// garantem unicidade criptográfica sem panic.
     fn generate_token(&self, user_id: &str) -> String {
         let mut hasher = Hasher::new();
-        let nonce: u64 =  rand::random();
+        let nonce: u64 = rand::random();
+
+        // Fail-secure: clock anomaly → Duration::ZERO; nonce+salt mantêm unicidade.
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or(Duration::ZERO)
             .as_nanos();
 
         hasher.update(user_id.as_bytes());
@@ -165,7 +175,7 @@ impl SessionGuard {
         hasher.update(&timestamp.to_le_bytes());
 
         // Adiciona sal aleatório
-        let salt: [u8; 16] =  rand::random();
+        let salt: [u8; 16] = rand::random();
         hasher.update(&salt);
 
         hex::encode(hasher.finalize().as_bytes())
@@ -354,5 +364,15 @@ mod tests {
         // Deve ser hexadecimal válido
         assert!(hex::decode(&token1).is_ok());
         assert!(hex::decode(&token2).is_ok());
+    }
+
+    #[test]
+    fn test_token_generation_resilient_to_clock_skew() {
+        // Verifica que generate_token não entra em panic mesmo com Duration::ZERO
+        // (simulado indiretamente — o método usa unwrap_or(Duration::ZERO)).
+        let guard = SessionGuard::new();
+        let token = guard.generate_token("clock_skew_user");
+        assert!(!token.is_empty());
+        assert!(hex::decode(&token).is_ok());
     }
 }
