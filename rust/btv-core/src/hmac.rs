@@ -14,7 +14,7 @@ static HMAC_KEY: OnceLock<Vec<u8>> = OnceLock::new();
 fn get_key() -> &'static [u8] {
     HMAC_KEY.get_or_init(|| {
         std::env::var("BTV_HMAC_KEY")
-            .expect("BTV_HMAC_KEY environment variable must be set before using btv-core")
+            .unwrap_or_else(|e| panic!("BTV init: BTV_HMAC_KEY must be set before using btv-core: {e}"))
             .into_bytes()
     })
 }
@@ -26,7 +26,7 @@ pub(crate) fn compute_seal(
     explanation: &[u8],
 ) -> [u8; 32] {
     let mut mac = HmacSha256::new_from_slice(get_key())
-        .expect("HMAC accepts any key length");
+        .unwrap_or_else(|e| panic!("BTV init: HMAC key slice invalid: {e}"));
     mac.update(evidence_hash);
     mac.update(&[*decision as u8]);
     mac.update(explanation);

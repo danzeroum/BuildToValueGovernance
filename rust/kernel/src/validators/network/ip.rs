@@ -5,7 +5,7 @@
 use crate::evidence::finding::Finding;
 use crate::core::types::{ValidatorModule, TechnicalSeverity};
 use regex::Regex;
-use lazy_static::lazy_static; // Alterado de once_cell para manter consistência com outros arquivos
+use lazy_static::lazy_static;
 use std::net::Ipv4Addr;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -15,16 +15,15 @@ use std::net::Ipv4Addr;
 lazy_static! {
     static ref IPV4_REGEX: Regex = Regex::new(
         r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV init: IPV4_REGEX compile failed: {e}"));
 
-    // ✅ CORREÇÃO: Usando r#""# para permitir aspas duplas literais sem erro de token
     static ref URL_REGEX: Regex = Regex::new(
         r#"https?://[^\s<>"{}\||\\^`\[\]]+"#
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV init: URL_REGEX compile failed: {e}"));
 
     static ref DOMAIN_REGEX: Regex = Regex::new(
         r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV init: DOMAIN_REGEX compile failed: {e}"));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -127,10 +126,6 @@ impl UrlValidator {
         findings
     }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TESTS
-// ═══════════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
 mod tests {

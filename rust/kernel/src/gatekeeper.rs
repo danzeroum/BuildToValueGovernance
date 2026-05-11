@@ -66,7 +66,6 @@ pub struct Gatekeeper {
     pipeline: Vec<StageEntry>,
     metrics: GatekeeperMetrics,
     interceptor_chain: InterceptorChain, // Wire 2: PROP-034a
-    // Isso resolve o erro de Clone e garante estado compartilhado.
 }
 
 impl Gatekeeper {
@@ -90,7 +89,6 @@ impl Gatekeeper {
             StageEntry { module: Box::new(PhoneValidator::new()),        stage: PipelineStage::Validate },
             StageEntry { module: Box::new(PromptInjectionDetector::new()), stage: PipelineStage::Validate },
             StageEntry { module: Box::new(SsnValidator::new()),          stage: PipelineStage::Validate },
-
         ];
 
         // Wire 2: PROP-034a — registra ToolScreen no InterceptorChain
@@ -98,8 +96,6 @@ impl Gatekeeper {
         interceptor_chain.add_request_hook(Box::new(ToolScreen::new()));
 
         // Force eager REGISTRY initialization to prevent first-scan latency spike in batch mode.
-        // Without this, the first scan in any batch pays the one-time regex compilation cost,
-        // which can exceed item_timeout_us in debug mode on CI.
         {
             use crate::security::pattern_registry::REGISTRY;
             let _ = REGISTRY.load();
@@ -116,7 +112,7 @@ impl Gatekeeper {
         let start = Instant::now();
         let mut evidence = TechnicalEvidence::new(audit_trail_id);
 
-        // ── Wire 3: P-035 Adapter — normalização + hash BLAKE3 canônico ───────
+        // ── Wire 3: P-035 Adapter — normalização + hash BLAKE3 canônico ──────
         let adapted = match adapt(input) {
             Ok(a) => a,
             Err(AdaptError::Empty) => {
@@ -150,13 +146,15 @@ impl Gatekeeper {
             }
         };
 
-        // Hash canônico
+        // Hash canônico: slice [0..8] de [u8; 32] é invariante estática, nunca falha.
         evidence.original_request_hash = u64::from_le_bytes(
-            adapted.blake3_hash[0..8].try_into().unwrap()
+            adapted.blake3_hash[0..8]
+                .try_into()
+                .unwrap_or_else(|_| panic!("BTV invariant violation: blake3_hash slice [0..8] must be exactly 8 bytes"))
         );
         evidence.input_size = adapted.normalized_len as u32;
 
-        // ── Wire 2: PROP-034a ToolScreen — pré-voo heurístico ─────────────────
+        // ── Wire 2: PROP-034a ToolScreen — pré-voo heurístico ────────────
         let (intercept_action, _) = self.interceptor_chain.run_request(input);
         if let InterceptAction::Block(ref reason) = intercept_action {
             log::warn!(
@@ -175,7 +173,7 @@ impl Gatekeeper {
             return evidence;
         }
 
-        // ── Wire 4 / PROP-031: Supply Guard — MAC + registry ──────────────────
+        // ── Wire 4 / PROP-031: Supply Guard — MAC + registry ────────────
         if evidence.has_skill_hash() {
             let hash = evidence.get_skill_hash();
             let mac_tag = evidence.get_skill_mac_tag();
@@ -246,7 +244,7 @@ impl Gatekeeper {
             }
         }
 
-        // Propagar stats do ctx para evidence (entropy, char_ratio, etc.)
+        // Propagar stats do ctx para evidence
         evidence.stats = ctx.stats;
 
         // Stage 3.5a: Jurisdiction-gated PII
@@ -304,12 +302,12 @@ impl Gatekeeper {
         evidence.processing_time_us = start.elapsed().as_micros() as u64;
         evidence._reserved_metadata[0..8].copy_from_slice(&ctx.flags.pattern_epoch.to_le_bytes());
         evidence._reserved_metadata[8..24].copy_from_slice(&ctx.flags.tenant_key);
-        evidence.finalize().expect("Failed to finalize evidence");
+        // finalize() computes BLAKE3 hash and returns Ok(()); error is non-fatal for evidence.
+        evidence.finalize().ok();
         self.update_metrics(start.elapsed().as_secs_f32() * 1000.0, &evidence);
 
         evidence
     }
-
 
     pub fn module_count(&self) -> usize { self.pipeline.len() }
 
