@@ -112,8 +112,6 @@ impl DurableLedger {
             remote_tx,
             last_entry_id: Arc::new(RwLock::new(last_id)),
             last_entry_hash: Arc::new(RwLock::new(last_hash)),
-            // Wire 5: ring buffer pré-alocado, session_id=0 (global ledger)
-            // Zero heap após new(): [Option<SessionEvent>; 256] stack-allocated.
             session_agg: Mutex::new(SessionAggregator::new(0)),
         })
     }
@@ -142,10 +140,8 @@ impl DurableLedger {
             .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
         *last_hash_write = entry.entry_hash;
 
-        // ── Wire 5: PROP-005 Session Aggregator — Fourth Estate ─────────────────
-        // Executado após persistência bem-sucedida (WAL + disk).
+        // ── Wire 5: PROP-005 Session Aggregator — Fourth Estate ────────────
         // Fail-safe: lock poison → skip (append já foi persistido com sucesso).
-        // Zero heap: SessionEvent é Copy; ring buffer pré-alocado em new().
         let risk_level = match evidence.composite_risk as u32 {
             0..=29  => RiskLevel::Safe,
             30..=59 => RiskLevel::Low,
@@ -172,8 +168,6 @@ impl DurableLedger {
     // SESSION AGGREGATE (PROP-005 / Fourth Estate)
     // -----------------------------------------------------------------
 
-    /// Retorna métricas agregadas da sessão para leitura pelo Fourth Estate.
-    /// Retorna None se o lock estiver envenenado (não deve ocorrer em operação normal).
     pub fn get_session_aggregate(&self) -> Option<SessionAggregate> {
         self.session_agg.lock().ok().map(|agg| agg.aggregate())
     }
@@ -352,6 +346,7 @@ impl DurableLedger {
     }
 
     pub fn get_last_entry_id(&self) -> u64 {
-        *self.last_entry_id.read().unwrap_or(RwLock::new(0).read().unwrap())
+        *self.last_entry_id.read()
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Ledger lock poisoned: {e}"))
     }
 }

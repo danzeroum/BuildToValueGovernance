@@ -41,9 +41,12 @@ impl ZScoreCalculator {
             .sum::<f32>() / frequencies.len() as f32;
         let std_dev = variance.sqrt();
 
+        // Filter non-finite values before comparison to guard against NaN injection.
+        // unwrap_or(Equal) is the safe fallback — never panics on NaN.
         let max_freq = frequencies.iter()
             .copied()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .filter(|v| v.is_finite())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(0.0);
 
         if std_dev == 0.0 {
