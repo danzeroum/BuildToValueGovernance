@@ -30,7 +30,7 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
     // --- Cenário 1: Input limpo (nenhum finding) ---
     group.bench_function("clean_input", |b| {
         b.iter_batched(
-            || Gatekeeper::new(),
+            Gatekeeper::new,
             |mut gk| {
                 let _ = black_box(gk.scan_for_evidence(
                     black_box("Hello, this is a normal message."),
@@ -44,7 +44,7 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
     // --- Cenário 2: CPF direto (critical finding) ---
     group.bench_function("cpf_direct", |b| {
         b.iter_batched(
-            || Gatekeeper::new(),
+            Gatekeeper::new,
             |mut gk| {
                 let _ = black_box(gk.scan_for_evidence(
                     black_box("Meu CPF é 123.456.789-09"),
@@ -60,7 +60,7 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
         let input = "CPF 123.456.789-09, email test@example.com, \
                       tel +55 11 99999-8888";
         b.iter_batched(
-            || Gatekeeper::new(),
+            Gatekeeper::new,
             |mut gk| {
                 let _ = black_box(gk.scan_for_evidence(
                     black_box(input),
@@ -76,7 +76,7 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
         // "123.456.789-09" em Base64
         let input = "hidden: MTIzLjQ1Ni43ODktMDk=";
         b.iter_batched(
-            || Gatekeeper::new(),
+            Gatekeeper::new,
             |mut gk| {
                 let _ = black_box(gk.scan_for_evidence(
                     black_box(input),
@@ -91,7 +91,7 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
     group.bench_function("long_input_1kb", |b| {
         let input = "A".repeat(1024);
         b.iter_batched(
-            || Gatekeeper::new(),
+            Gatekeeper::new,
             |mut gk| {
                 let _ = black_box(gk.scan_for_evidence(
                     black_box(&input),
@@ -106,7 +106,7 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
     group.bench_function("sql_injection", |b| {
         let input = "Robert'; DROP TABLE users;--";
         b.iter_batched(
-            || Gatekeeper::new(),
+            Gatekeeper::new,
             |mut gk| {
                 let _ = black_box(gk.scan_for_evidence(
                     black_box(input),
@@ -121,7 +121,7 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
     group.bench_function("leetspeak_encoded", |b| {
         let input = "s3nd m3 y0ur p4ssw0rd pl34s3";
         b.iter_batched(
-            || Gatekeeper::new(),
+            Gatekeeper::new,
             |mut gk| {
                 let _ = black_box(gk.scan_for_evidence(
                     black_box(input),
@@ -138,7 +138,7 @@ fn bench_gatekeeper_pipeline(c: &mut Criterion) {
                       CC 4111111111111111 tel +5511999998888 ";
         let input = chunk.repeat(130); // ~10KB
         b.iter_batched(
-            || Gatekeeper::new(),
+            Gatekeeper::new,
             |mut gk| {
                 let _ = black_box(gk.scan_for_evidence(
                     black_box(&input),
@@ -233,7 +233,7 @@ fn bench_throughput(c: &mut Criterion) {
 
     group.bench_function("mixed_10_requests", |b| {
         b.iter_batched(
-            || Gatekeeper::new(),
+            Gatekeeper::new,
             |mut gk| {
                 for (i, input) in inputs.iter().enumerate() {
                     let _ = black_box(gk.scan_for_evidence(
@@ -254,7 +254,7 @@ fn bench_throughput(c: &mut Criterion) {
 
     group.bench_function("bulk_100_cpf", |b| {
         b.iter_batched(
-            || Gatekeeper::new(),
+            Gatekeeper::new,
             |mut gk| {
                 for (i, input) in bulk.iter().enumerate() {
                     let _ = black_box(gk.scan_for_evidence(
