@@ -106,8 +106,8 @@ mod tests {
         // ProofSide::Left → hash(sibling || leaf)
         let expected_root: [u8; 32] = {
             let mut h = Sha256::new();
-            h.update(&sibling);
-            h.update(&leaf);
+            h.update(sibling);
+            h.update(leaf);
             h.finalize().into()
         };
         let proof = [(sibling, ProofSide::Left)];
@@ -121,8 +121,8 @@ mod tests {
         // ProofSide::Right → hash(leaf || sibling)
         let expected_root: [u8; 32] = {
             let mut h = Sha256::new();
-            h.update(&leaf);
-            h.update(&sibling);
+            h.update(leaf);
+            h.update(sibling);
             h.finalize().into()
         };
         let proof = [(sibling, ProofSide::Right)];

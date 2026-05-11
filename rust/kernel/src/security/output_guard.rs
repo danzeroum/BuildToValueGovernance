@@ -1,23 +1,98 @@
-//! Output Guard v2.4.0
+//! Output Guard v2.4.1
 //! Sanitização de output (XSS, SQL, command injection) + PII masking.
+//!
+//! INVARIANTE: Nenhum Regex::new() dentro de funções de hot path.
+//! Todas as expressões regulares são compiladas uma única vez no boot (lazy_static!).
+//! Falhas de compilação causam panic! imediato na inicialização (Fail-Secure).
 
 use std::borrow::Cow;
 use regex::Regex;
 use lazy_static::lazy_static;
 
 lazy_static! {
+    // ── XSS / Injection patterns (boot-time compilation) ─────
     static ref XSS_PATTERNS: Vec<(Regex, &'static str)> = vec![
-        (Regex::new(r"(?i)<script.*?>.*?</script>").unwrap(), "SCRIPT_TAG"),
-        (Regex::new(r"(?i)javascript:").unwrap(), "JAVASCRIPT_PROTOCOL"),
-        (Regex::new(r"(?i)on\w+\s*=").unwrap(), "EVENT_HANDLER"),
-        (Regex::new(r"(?i)<iframe.*?>").unwrap(), "IFRAME_TAG"),
-        (Regex::new(r"(?i)<object.*?>").unwrap(), "OBJECT_TAG"),
-        (Regex::new(r"(?i)<embed.*?>").unwrap(), "EMBED_TAG"),
-        (Regex::new(r"(?i)expression\s*\(").unwrap(), "CSS_EXPRESSION"),
-        (Regex::new(r"(?i)data:text/html").unwrap(), "DATA_HTML"),
-        (Regex::new(r"(?i)(union\s+select|select\s+.+\s+from|insert\s+into|delete\s+from|update\s+.+\s+set|drop\s+table)").unwrap(), "SQL_INJECTION"),
-        (Regex::new(r"(?i)(\|\s*sh|\|\s*bash|\|\s*cmd|;\s*sh|;\s*bash|;\s*cmd)").unwrap(), "COMMAND_INJECTION"),
+        (
+            Regex::new(r"(?i)<script.*?>.*?</script>")
+                .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [SCRIPT_TAG]: {e}")),
+            "SCRIPT_TAG",
+        ),
+        (
+            Regex::new(r"(?i)javascript:")
+                .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [JAVASCRIPT_PROTOCOL]: {e}")),
+            "JAVASCRIPT_PROTOCOL",
+        ),
+        (
+            Regex::new(r"(?i)on\w+\s*=")
+                .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [EVENT_HANDLER]: {e}")),
+            "EVENT_HANDLER",
+        ),
+        (
+            Regex::new(r"(?i)<iframe.*?>")
+                .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [IFRAME_TAG]: {e}")),
+            "IFRAME_TAG",
+        ),
+        (
+            Regex::new(r"(?i)<object.*?>")
+                .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [OBJECT_TAG]: {e}")),
+            "OBJECT_TAG",
+        ),
+        (
+            Regex::new(r"(?i)<embed.*?>")
+                .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [EMBED_TAG]: {e}")),
+            "EMBED_TAG",
+        ),
+        (
+            Regex::new(r"(?i)expression\s*\(")
+                .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [CSS_EXPRESSION]: {e}")),
+            "CSS_EXPRESSION",
+        ),
+        (
+            Regex::new(r"(?i)data:text/html")
+                .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [DATA_HTML]: {e}")),
+            "DATA_HTML",
+        ),
+        (
+            Regex::new(r"(?i)(union\s+select|select\s+.+\s+from|insert\s+into|delete\s+from|update\s+.+\s+set|drop\s+table)")
+                .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [SQL_INJECTION]: {e}")),
+            "SQL_INJECTION",
+        ),
+        (
+            Regex::new(r"(?i)(\|\s*sh|\|\s*bash|\|\s*cmd|;\s*sh|;\s*bash|;\s*cmd)")
+                .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [COMMAND_INJECTION]: {e}")),
+            "COMMAND_INJECTION",
+        ),
     ];
+
+    // ── Dangerous tag removal (previously compiled at hot-path) ──
+    static ref REMOVE_SCRIPT_TAG: Regex =
+        Regex::new(r"(?i)<script.*?>.*?</script>")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [REMOVE_SCRIPT_TAG]: {e}"));
+    static ref REMOVE_IFRAME_TAG: Regex =
+        Regex::new(r"(?i)<iframe.*?>.*?</iframe>")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [REMOVE_IFRAME_TAG]: {e}"));
+    static ref REMOVE_OBJECT_TAG: Regex =
+        Regex::new(r"(?i)<object.*?>.*?</object>")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [REMOVE_OBJECT_TAG]: {e}"));
+    static ref REMOVE_EMBED_TAG: Regex =
+        Regex::new(r"(?i)<embed.*?>.*?</embed>")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [REMOVE_EMBED_TAG]: {e}"));
+    static ref REMOVE_APPLET_TAG: Regex =
+        Regex::new(r"(?i)<applet.*?>.*?</applet>")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [REMOVE_APPLET_TAG]: {e}"));
+    static ref REMOVE_EVENT_ATTRS: Regex =
+        Regex::new(r#"(?i)\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)"#)
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [REMOVE_EVENT_ATTRS]: {e}"));
+
+    // ── Dangerous content removal ─────────────────────────────
+    static ref DANGEROUS_CONTENT: Regex =
+        Regex::new(r#"(?i)<[^>]*(javascript:|data:|vbscript:|expression\(|on\w+\s*=)[^>]*>"#)
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [DANGEROUS_CONTENT]: {e}"));
+
+    // ── HTML tag detection (for analyze_content) ──────────────
+    static ref HTML_TAG_DETECT: Regex =
+        Regex::new(r"<[^>]+>")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [HTML_TAG_DETECT]: {e}"));
 
     static ref HTML_SPECIAL_CHARS: [(char, &'static str); 5] = [
         ('&', "&amp;"),
@@ -27,16 +102,25 @@ lazy_static! {
         ('\'', "&#x27;"),
     ];
 
-    static ref PII_SSN: Regex = Regex::new(
-        r"\b(\d{3})[-\s](\d{2})[-\s](\d{4})\b"
-    ).unwrap();
-
-    // PII patterns for masking
-    static ref PII_CPF: Regex = Regex::new(r"\b(\d{3})\.?(\d{3})\.?(\d{3})-?(\d{2})\b").unwrap();
-    static ref PII_CNPJ: Regex = Regex::new(r"\b(\d{2})\.?(\d{3})\.?(\d{3})/?(\d{4})-?(\d{2})\b").unwrap();
-    static ref PII_EMAIL: Regex = Regex::new(r"\b([a-zA-Z0-9._%+-])([a-zA-Z0-9._%+-]*)@([a-zA-Z0-9])([a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\b").unwrap();
-    static ref PII_PHONE: Regex = Regex::new(r"\b(\d{2})\s?9?\d{4}-?\d{4}\b").unwrap();
-    static ref PII_CC: Regex = Regex::new(r"\b(\d{4})\s?\d{4}\s?\d{4}\s?(\d{4})\b").unwrap();
+    // ── PII patterns ──────────────────────────────────────────
+    static ref PII_SSN: Regex =
+        Regex::new(r"\b(\d{3})[-\s](\d{2})[-\s](\d{4})\b")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [PII_SSN]: {e}"));
+    static ref PII_CPF: Regex =
+        Regex::new(r"\b(\d{3})\.?(\d{3})\.?(\d{3})-?(\d{2})\b")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [PII_CPF]: {e}"));
+    static ref PII_CNPJ: Regex =
+        Regex::new(r"\b(\d{2})\.?(\d{3})\.?(\d{3})/?(\d{4})-?(\d{2})\b")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [PII_CNPJ]: {e}"));
+    static ref PII_EMAIL: Regex =
+        Regex::new(r"\b([a-zA-Z0-9._%+-])([a-zA-Z0-9._%+-]*)@([a-zA-Z0-9])([a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\b")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [PII_EMAIL]: {e}"));
+    static ref PII_PHONE: Regex =
+        Regex::new(r"\b(\d{2})\s?9?\d{4}-?\d{4}\b")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [PII_PHONE]: {e}"));
+    static ref PII_CC: Regex =
+        Regex::new(r"\b(\d{4})\s?\d{4}\s?\d{4}\s?(\d{4})\b")
+            .unwrap_or_else(|e| panic!("BTV invariant violation: Invalid regex literal in OutputGuard [PII_CC]: {e}"));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -124,35 +208,30 @@ impl OutputGuard {
         let mut masked_count: u32 = 0;
         let mut masked_types: Vec<String> = Vec::new();
 
-        // CPF: 123.456.789-09 -> ***.***.***-09
         if PII_CPF.is_match(&result) {
             result = PII_CPF.replace_all(&result, "***.***.***-$4").to_string();
             masked_count += 1;
             masked_types.push("cpf".to_string());
         }
 
-        // CNPJ: 11.222.333/0001-81 -> **.***.***/**01-81
         if PII_CNPJ.is_match(&result) {
             result = PII_CNPJ.replace_all(&result, "**.***.***/$4-$5").to_string();
             masked_count += 1;
             masked_types.push("cnpj".to_string());
         }
 
-        // Email: joao@empresa.com -> j***@e***.com
         if PII_EMAIL.is_match(&result) {
             result = PII_EMAIL.replace_all(&result, "${1}***@${3}***").to_string();
             masked_count += 1;
             masked_types.push("email".to_string());
         }
 
-        // Phone: 11 98765-4321 -> 11 ****-****
         if PII_PHONE.is_match(&result) {
             result = PII_PHONE.replace_all(&result, "$1 ****-****").to_string();
             masked_count += 1;
             masked_types.push("phone".to_string());
         }
 
-        // Credit card: 4532 0151 1283 0366 -> 4532 **** **** 0366
         if PII_CC.is_match(&result) {
             result = PII_CC.replace_all(&result, "$1 **** **** $2").to_string();
             masked_count += 1;
@@ -180,31 +259,21 @@ impl OutputGuard {
         XSS_PATTERNS.iter().any(|(re, _)| re.is_match(text))
     }
 
+    /// Hot path: zero Regex compilation — references pre-compiled lazy_static! statics.
     fn remove_dangerous_tags(&self, text: &str) -> Cow<'_, str> {
         let mut result = text.to_string();
-        let dangerous = [
-            r"(?i)<script.*?>.*?</script>",
-            r"(?i)<iframe.*?>.*?</iframe>",
-            r"(?i)<object.*?>.*?</object>",
-            r"(?i)<embed.*?>.*?</embed>",
-            r"(?i)<applet.*?>.*?</applet>",
-        ];
-        for pattern in &dangerous {
-            let re = Regex::new(pattern).unwrap();
-            result = re.replace_all(&result, "[REMOVED]").into_owned();
-        }
-        let event_re = Regex::new(r#"(?i)\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)"#).unwrap();
-        result = event_re.replace_all(&result, "").into_owned();
+        result = REMOVE_SCRIPT_TAG.replace_all(&result, "[REMOVED]").into_owned();
+        result = REMOVE_IFRAME_TAG.replace_all(&result, "[REMOVED]").into_owned();
+        result = REMOVE_OBJECT_TAG.replace_all(&result, "[REMOVED]").into_owned();
+        result = REMOVE_EMBED_TAG.replace_all(&result, "[REMOVED]").into_owned();
+        result = REMOVE_APPLET_TAG.replace_all(&result, "[REMOVED]").into_owned();
+        result = REMOVE_EVENT_ATTRS.replace_all(&result, "").into_owned();
         Cow::Owned(result)
     }
 
+    /// Hot path: zero Regex compilation — references pre-compiled lazy_static! statics.
     fn remove_dangerous_content(&self, text: &str) -> Cow<'_, str> {
-        let mut result = text.to_string();
-        let suspicious = Regex::new(
-            r#"(?i)<[^>]*(javascript:|data:|vbscript:|expression\(|on\w+\s*=)[^>]*>"#
-        ).unwrap();
-        result = suspicious.replace_all(&result, "").into_owned();
-        Cow::Owned(result)
+        Cow::Owned(DANGEROUS_CONTENT.replace_all(text, "").into_owned())
     }
 
     fn escape_html_special_chars<'a>(&self, text: &'a str) -> Cow<'a, str> {
@@ -243,6 +312,7 @@ impl OutputGuard {
             && !lower.contains("%3cscript")
     }
 
+    /// Hot path: zero Regex compilation — references pre-compiled lazy_static! statics.
     pub fn analyze_content(&self, text: &str) -> ContentAnalysis {
         let mut analysis = ContentAnalysis {
             length: text.len(),
@@ -251,8 +321,7 @@ impl OutputGuard {
             dangerous_patterns_found: Vec::new(),
             requires_sanitization: false,
         };
-        let html_tag = Regex::new(r"<[^>]+>").unwrap();
-        analysis.has_html_tags = html_tag.is_match(text);
+        analysis.has_html_tags = HTML_TAG_DETECT.is_match(text);
         for (re, name) in XSS_PATTERNS.iter() {
             if re.is_match(text) {
                 analysis.has_dangerous_patterns = true;
