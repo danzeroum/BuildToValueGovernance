@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use criterion::{criterion_group, criterion_main, Criterion, black_box};
 use btv_judicial::HmacVerifier;
 use btv_types::{Blake3Hash, Decision, VerdictRecord};
