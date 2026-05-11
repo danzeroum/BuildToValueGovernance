@@ -36,23 +36,39 @@ impl Default for InMemoryStore {
 
 impl LogStore for InMemoryStore {
     fn append(&self, leaf_hash: [u8; 32]) -> u64 {
-        self.tree.lock().expect("store lock poisoned").append(leaf_hash)
+        self.tree
+            .lock()
+            .unwrap_or_else(|e| panic!("BTV invariant: store lock poisoned: {e}"))
+            .append(leaf_hash)
     }
 
     fn root(&self) -> [u8; 32] {
-        self.tree.lock().expect("store lock poisoned").root()
+        self.tree
+            .lock()
+            .unwrap_or_else(|e| panic!("BTV invariant: store lock poisoned: {e}"))
+            .root()
     }
 
     fn size(&self) -> u64 {
-        self.tree.lock().expect("store lock poisoned").size()
+        self.tree
+            .lock()
+            .unwrap_or_else(|e| panic!("BTV invariant: store lock poisoned: {e}"))
+            .size()
     }
 
     fn leaf_at(&self, index: u64) -> Option<[u8; 32]> {
-        self.tree.lock().expect("store lock poisoned")
-            .leaves.get(index as usize).copied()
+        self.tree
+            .lock()
+            .unwrap_or_else(|e| panic!("BTV invariant: store lock poisoned: {e}"))
+            .leaves
+            .get(index as usize)
+            .copied()
     }
 
     fn proof(&self, index: u64) -> Option<Vec<[u8; 32]>> {
-        self.tree.lock().expect("store lock poisoned").proof(index)
+        self.tree
+            .lock()
+            .unwrap_or_else(|e| panic!("BTV invariant: store lock poisoned: {e}"))
+            .proof(index)
     }
 }
