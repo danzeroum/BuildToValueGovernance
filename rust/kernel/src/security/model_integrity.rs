@@ -311,7 +311,7 @@ mod tests {
             1_000_000,
             TEST_MODEL,
             &TEST_KEY,
-        ).expect("HMAC deve funcionar");
+        ).unwrap_or_else(|| panic!("BTV invariant violation: HMAC deve funcionar"));
         assert!(verify_finding(&finding, TEST_MODEL, &TEST_KEY));
     }
 
@@ -322,8 +322,8 @@ mod tests {
             1_000_000,
             TEST_MODEL,
             &TEST_KEY,
-        ).unwrap();
-        finding.hmac_signature[0] ^= 0xFF;  // adulteração
+        ).unwrap_or_else(|| panic!("BTV invariant violation: HMAC deve funcionar"));
+        finding.hmac_signature[0] ^= 0xFF;
         assert!(!verify_finding(&finding, TEST_MODEL, &TEST_KEY));
     }
 
@@ -334,16 +334,15 @@ mod tests {
             42,
             TEST_MODEL,
             &TEST_KEY,
-        ).unwrap();
+        ).unwrap_or_else(|| panic!("BTV invariant violation: HMAC deve funcionar"));
         assert!(!verify_finding(&finding, "outro-modelo", &TEST_KEY));
     }
 
     #[test]
     fn ring_buffer_records_violations() {
-        // Gera violações conhecidas
         let v = verifier_for(b"ref");
-        let _ = v.verify(b"");          // InvalidInput
-        let _ = v.verify(b"tampered");  // HashMismatch
+        let _ = v.verify(b"");
+        let _ = v.verify(b"tampered");
         let events = ModelIntegrityVerifier::recent_violations(5);
         assert!(!events.is_empty());
     }
