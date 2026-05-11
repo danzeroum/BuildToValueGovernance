@@ -4,6 +4,13 @@
 use crate::validators::Validator;
 use crate::{Finding, ValidatorModule, TechnicalSeverity};
 use crate::core::types::BiasDeclaration;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref CNPJ_PATTERN: regex::Regex =
+        regex::Regex::new(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in CNPJ_PATTERN: {e}"));
+}
 
 pub struct CnpjValidator;
 
@@ -15,9 +22,17 @@ impl CnpjValidator {
     fn validate_cnpj(&self, cnpj: &str) -> bool {
         let digits: String = cnpj.chars().filter(|c| c.is_ascii_digit()).collect();
         if digits.len() != 14 { return false; }
-        if digits.chars().all(|c| c == digits.chars().next().unwrap()) { return false; }
+        let first = match digits.chars().next() {
+            Some(c) => c,
+            None => return false,
+        };
+        if digits.chars().all(|c| c == first) { return false; }
 
-        let nums: Vec<u32> = digits.chars().map(|c| c.to_digit(10).unwrap()).collect();
+        let nums: Vec<u32> = digits
+            .chars()
+            .filter_map(|c| c.to_digit(10))
+            .collect();
+        if nums.len() != 14 { return false; }
 
         // Primeiro dígito
         let w1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
@@ -42,7 +57,6 @@ impl CnpjValidator {
             "***".to_string()
         }
     }
-
 }
 
 impl Default for CnpjValidator {
@@ -51,13 +65,10 @@ impl Default for CnpjValidator {
     }
 }
 
-
 impl Validator for CnpjValidator {
     fn validate(&self, input: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
-        let pattern = regex::Regex::new(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b").unwrap();
-
-        for mat in pattern.find_iter(input) {
+        for mat in CNPJ_PATTERN.find_iter(input) {
             let candidate = mat.as_str();
             if !self.validate_cnpj(candidate) {
                 findings.push(

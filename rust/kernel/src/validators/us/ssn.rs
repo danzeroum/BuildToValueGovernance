@@ -1,4 +1,4 @@
-//! US SSN Validator v1.0.0
+//! US SSN Validator v1.0.1
 //!
 //! Detecta Social Security Numbers (XXX-XX-XXXX).
 //! Validação por Area Number rules (post-2011 randomization).
@@ -7,6 +7,10 @@
 //! - Levinas: SSN é dado hipersensível — fail-secure, BLOCK por padrão
 //! - Jonas: BiasDeclaration calibrada, limitações declaradas
 //! - Rawls: Mesmo tratamento independente do contexto de origem
+//!
+//! INVARIANTE: Nenhum .unwrap() alcançável por input de usuário no hot-path.
+//! caps.get(0) usa if-let: entrada malformada → retorna falha segura (false),
+//! nunca derruba a thread.
 
 use crate::core::module::{Module, ScanContext};
 use crate::core::types::{BiasDeclaration, TechnicalSeverity, ValidatorModule};
@@ -19,12 +23,12 @@ lazy_static! {
     /// Excludes common false positives: phone-like patterns, dates
     static ref SSN_FORMATTED: Regex = Regex::new(
         r"\b(\d{3})[-\s](\d{2})[-\s](\d{4})\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in SSN_FORMATTED: {e}"));
 
     /// Bare 9-digit sequences (higher FP risk — lower confidence)
     static ref SSN_BARE: Regex = Regex::new(
         r"\b(\d{9})\b"
-    ).unwrap();
+    ).unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in SSN_BARE: {e}"));
 }
 
 pub struct SsnValidator;
@@ -71,7 +75,13 @@ impl SsnValidator {
         let mut findings = Vec::new();
 
         for caps in SSN_FORMATTED.captures_iter(input) {
-            let full_match = caps.get(0).unwrap();
+            // Hot-path: if-let instead of .unwrap() — malformed capture → skip safely.
+            let full_match = if let Some(m) = caps.get(0) {
+                m
+            } else {
+                continue;
+            };
+
             let area: u16 = caps[1].parse().unwrap_or(0);
             let group: u16 = caps[2].parse().unwrap_or(0);
             let serial: u16 = caps[3].parse().unwrap_or(0);
@@ -85,11 +95,11 @@ impl SsnValidator {
                         "PII_LEAKAGE",
                         &Self::mask_ssn(area, group, serial),
                     )
-                        .with_position(
-                            full_match.start() as u16,
-                            full_match.end() as u16,
-                        )
-                        .with_confidence(95),
+                    .with_position(
+                        full_match.start() as u16,
+                        full_match.end() as u16,
+                    )
+                    .with_confidence(95),
                 );
             } else {
                 findings.push(
@@ -100,11 +110,11 @@ impl SsnValidator {
                         "SSN_LIKE_PATTERN",
                         &format!("{}XX-XX-XXXX", area / 100),
                     )
-                        .with_position(
-                            full_match.start() as u16,
-                            full_match.end() as u16,
-                        )
-                        .with_confidence(40),
+                    .with_position(
+                        full_match.start() as u16,
+                        full_match.end() as u16,
+                    )
+                    .with_confidence(40),
                 );
             }
         }
@@ -116,7 +126,13 @@ impl SsnValidator {
         let mut findings = Vec::new();
 
         for caps in SSN_BARE.captures_iter(input) {
-            let full_match = caps.get(0).unwrap();
+            // Hot-path: if-let instead of .unwrap() — malformed capture → skip safely.
+            let full_match = if let Some(m) = caps.get(0) {
+                m
+            } else {
+                continue;
+            };
+
             let digits = &caps[1];
 
             // Skip if already matched by formatted regex
@@ -143,11 +159,11 @@ impl SsnValidator {
                     "PII_LEAKAGE_POSSIBLE",
                     &Self::mask_ssn(area, group, serial),
                 )
-                    .with_position(
-                        full_match.start() as u16,
-                        full_match.end() as u16,
-                    )
-                    .with_confidence(60),
+                .with_position(
+                    full_match.start() as u16,
+                    full_match.end() as u16,
+                )
+                .with_confidence(60),
             );
         }
 
@@ -171,7 +187,7 @@ impl Module for SsnValidator {
             let overlaps = findings.iter().any(|f| {
                 f.position_start == b.position_start
                     || (b.position_start >= f.position_start
-                    && b.position_start < f.position_end)
+                        && b.position_start < f.position_end)
             });
             if !overlaps {
                 findings.push(b);
