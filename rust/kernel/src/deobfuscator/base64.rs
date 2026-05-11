@@ -1,9 +1,15 @@
 //! Base64 Deobfuscator — detecta e decodifica strings Base64 em inputs.
 //! Usado pelo DeobfuscationChain para normalizar entradas ofuscadas.
 
+
 use lazy_static::lazy_static;
 use regex::Regex;
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+
+use crate::core::module::{Module, ScanContext};
+use crate::core::types::{BiasDeclaration, ValidatorModule, TechnicalSeverity};
+use crate::evidence::Finding;
+
 
 lazy_static! {
     static ref BASE64_REGEX: Regex = Regex::new(
@@ -35,6 +41,57 @@ pub fn try_decode(input: &str) -> Base64Result {
         }
     }
     Base64Result::NotBase64
+}
+
+
+// ---------------------------------------------------------------------------
+// Module wrapper — implementa o trait Module para uso no pipeline do Gatekeeper.
+// ---------------------------------------------------------------------------
+
+pub struct Base64Detector;
+
+impl Base64Detector {
+    pub fn new() -> Self { Self }
+}
+
+impl Default for Base64Detector {
+    fn default() -> Self { Self::new() }
+}
+
+impl Module for Base64Detector {
+    fn scan(&self, input: &str, _ctx: &mut ScanContext) -> Vec<Finding> {
+        match try_decode(input) {
+            Base64Result::Decoded(decoded) => vec![
+                Finding::new(
+                    ValidatorModule::Deobfuscator,
+                    TechnicalSeverity::Low,
+                    "DEOBFUSCATOR_BASE64_001",
+                    "BASE64_ENCODED_CONTENT",
+                    &format!("decoded: {}", &decoded[..decoded.len().min(64)]),
+                )
+            ],
+            Base64Result::DecodedBinary(_) => vec![
+                Finding::new(
+                    ValidatorModule::Deobfuscator,
+                    TechnicalSeverity::Low,
+                    "DEOBFUSCATOR_BASE64_001",
+                    "BASE64_ENCODED_BINARY",
+                    "non-utf8 binary payload detected",
+                )
+            ],
+            Base64Result::NotBase64 => vec![],
+        }
+    }
+
+    fn name(&self) -> &'static str { "base64_detector" }
+
+    fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
+
+    fn bias_declaration(&self) -> BiasDeclaration {
+        BiasDeclaration::new(0.15, 0.05, 20260101, 200)
+            .with_limitations("Regex-based; curta sequências (<4 chars) ignoradas.")
+            .with_affected_groups("N/A")
+    }
 }
 
 #[cfg(test)]

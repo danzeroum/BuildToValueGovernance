@@ -2,6 +2,7 @@
 //!
 //! Testes de rede requerem btv-sigma rodando em localhost:3100.
 //! Testes unitários (HMAC, Merkle) rodam sem rede.
+#![allow(clippy::unwrap_used)]
 use btv_judicial::{HmacVerifier, JudicialAuditor};
 // fix(unused-imports): removido alias duplicado de JudicialAuditor.
 // btv_judicial::JudicialAuditor já está no escopo via use acima.
