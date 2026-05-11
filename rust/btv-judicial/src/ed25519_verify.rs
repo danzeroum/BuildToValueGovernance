@@ -53,6 +53,7 @@ impl ReceiptVerifier {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use ed25519_dalek::{SigningKey, Signer};
@@ -75,11 +76,10 @@ mod tests {
         let receipt = btv_types::InclusionReceiptWire {
             log_index:   0,
             merkle_root: [0u8; 32],
-            signature:   [0u8; 64], // will be replaced
+            signature:   [0u8; 64],
             timestamp:   0,
         };
 
-        // Build the message the same way verify() does
         let mut msg = Vec::with_capacity(80);
         msg.extend_from_slice(&receipt.log_index.to_le_bytes());
         msg.extend_from_slice(&receipt.merkle_root);
@@ -103,7 +103,6 @@ mod tests {
             log_index: 0, merkle_root: [0u8; 32],
             signature: [0u8; 64], timestamp: 0,
         };
-        // All-zero signature is invalid
         let result = verifier.verify(&receipt, &[0u8; 32]);
         assert!(result.is_err() || !result.unwrap());
     }
