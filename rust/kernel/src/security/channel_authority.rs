@@ -57,10 +57,6 @@ impl std::fmt::Display for ChannelViolation {
     }
 }
 
-/// Tabela estática de canais conhecidos e seus níveis de confiança.
-///
-/// Mapeamento: nome do canal (minúsculo) → `ChannelTrustLevel`.
-/// Canais ausentes → `Untrusted` (fail-secure).
 static CHANNEL_TABLE: &[(&str, ChannelTrustLevel)] = &[
     ("sms",                     ChannelTrustLevel::Low),
     ("email",                   ChannelTrustLevel::Low),
