@@ -2,6 +2,9 @@
 //!
 //! Executa o protocolo em modo direct (zk_enabled = false) para CI.
 //! Os testes ZK reais requerem toolchain Noir (Semanas 18-30).
+
+#![allow(clippy::unwrap_used, clippy::expect_used)] // testes de integração: pânico = asserção
+
 use btv_redaction::{
     AccountableRedaction, RedactionConfig, RedactionError, RedactionVerifier,
     GroupStats, LedgerStatistics, RedactionEntry,
