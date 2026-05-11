@@ -9,7 +9,8 @@ use regex::Regex;
 
 lazy_static! {
     static ref IBAN_PATTERN: Regex =
-        Regex::new(r"\b([A-Z]{2}\d{2}[A-Z0-9]{4,30})\b").unwrap();
+        Regex::new(r"\b([A-Z]{2}\d{2}[A-Z0-9]{4,30})\b")
+            .unwrap_or_else(|e| panic!("BTV initialization failed: Invalid regex in IBAN_PATTERN: {e}"));
 }
 
 pub struct IbanValidator;
