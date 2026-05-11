@@ -23,27 +23,40 @@ pub enum InjectionSignal {
 lazy_static! {
     /// Tags XML/HTML que envolvem instrucoes (alta confianca).
     static ref XML_INSTRUCTION_TAGS: Vec<Regex> = vec![
-        Regex::new(r"(?i)<\s*instruction[^>]*>").unwrap(),
-        Regex::new(r"(?i)<\s*system[^>]*>").unwrap(),
-        Regex::new(r"(?i)<\s*prompt[^>]*>").unwrap(),
-        Regex::new(r"(?i)<\s*override[^>]*>").unwrap(),
+        Regex::new(r"(?i)<\s*instruction[^>]*>")
+            .unwrap_or_else(|e| panic!("BTV init: XML_INSTRUCTION_TAGS[0] compile failed: {e}")),
+        Regex::new(r"(?i)<\s*system[^>]*>")
+            .unwrap_or_else(|e| panic!("BTV init: XML_INSTRUCTION_TAGS[1] compile failed: {e}")),
+        Regex::new(r"(?i)<\s*prompt[^>]*>")
+            .unwrap_or_else(|e| panic!("BTV init: XML_INSTRUCTION_TAGS[2] compile failed: {e}")),
+        Regex::new(r"(?i)<\s*override[^>]*>")
+            .unwrap_or_else(|e| panic!("BTV init: XML_INSTRUCTION_TAGS[3] compile failed: {e}")),
     ];
 
     /// Prefixos imperativos em tool outputs (suspeito — encaminhar Stage 2).
     static ref IMPERATIVE_PREFIXES: Vec<Regex> = vec![
-        Regex::new(r"(?i)\bignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|rules?)").unwrap(),
-        Regex::new(r"(?i)\bnew\s+instructions?\s*:").unwrap(),
-        Regex::new(r"(?i)\bsystem\s*:\s*(you\s+are|your\s+new)").unwrap(),
-        Regex::new(r"(?i)\bforget\s+(everything|all|your)\b").unwrap(),
-        Regex::new(r"(?i)\byou\s+are\s+now\s+(a|an)\b").unwrap(),
+        Regex::new(r"(?i)\bignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|rules?)")
+            .unwrap_or_else(|e| panic!("BTV init: IMPERATIVE_PREFIXES[0] compile failed: {e}")),
+        Regex::new(r"(?i)\bnew\s+instructions?\s*:")
+            .unwrap_or_else(|e| panic!("BTV init: IMPERATIVE_PREFIXES[1] compile failed: {e}")),
+        Regex::new(r"(?i)\bsystem\s*:\s*(you\s+are|your\s+new)")
+            .unwrap_or_else(|e| panic!("BTV init: IMPERATIVE_PREFIXES[2] compile failed: {e}")),
+        Regex::new(r"(?i)\bforget\s+(everything|all|your)\b")
+            .unwrap_or_else(|e| panic!("BTV init: IMPERATIVE_PREFIXES[3] compile failed: {e}")),
+        Regex::new(r"(?i)\byou\s+are\s+now\s+(a|an)\b")
+            .unwrap_or_else(|e| panic!("BTV init: IMPERATIVE_PREFIXES[4] compile failed: {e}")),
     ];
 
     /// Delimitadores de prompt conhecidos (alta confianca).
     static ref PROMPT_DELIMITERS: Vec<Regex> = vec![
-        Regex::new(r"<\|system\|>").unwrap(),
-        Regex::new(r"<\|im_start\|>").unwrap(),
-        Regex::new(r"\[INST\]").unwrap(),
-        Regex::new(r"```\s*system").unwrap(),
+        Regex::new(r"<\|system\|>")
+            .unwrap_or_else(|e| panic!("BTV init: PROMPT_DELIMITERS[0] compile failed: {e}")),
+        Regex::new(r"<\|im_start\|>")
+            .unwrap_or_else(|e| panic!("BTV init: PROMPT_DELIMITERS[1] compile failed: {e}")),
+        Regex::new(r"\[INST\]")
+            .unwrap_or_else(|e| panic!("BTV init: PROMPT_DELIMITERS[2] compile failed: {e}")),
+        Regex::new(r"```\s*system")
+            .unwrap_or_else(|e| panic!("BTV init: PROMPT_DELIMITERS[3] compile failed: {e}")),
     ];
 }
 
@@ -51,21 +64,18 @@ lazy_static! {
 /// Zero heap: opera sobre &str, sem alloc.
 /// Complexidade: O(n * p) onde p = numero de padroes (fixo).
 pub fn screen_tool_output(output: &str) -> InjectionSignal {
-    // Alta confianca: delimitadores de prompt
     for re in PROMPT_DELIMITERS.iter() {
         if re.is_match(output) {
             return InjectionSignal::Confirmed("prompt_delimiter");
         }
     }
 
-    // Alta confianca: tags XML de instrucao
     for re in XML_INSTRUCTION_TAGS.iter() {
         if re.is_match(output) {
             return InjectionSignal::Confirmed("xml_instruction_tag");
         }
     }
 
-    // Suspeito: prefixos imperativos (encaminhar Stage 2)
     for re in IMPERATIVE_PREFIXES.iter() {
         if re.is_match(output) {
             return InjectionSignal::Suspicious("imperative_prefix");

@@ -57,16 +57,6 @@ pub struct TechnicalEvidence {
     pub _reserved: [u8; 5],    // ADR-017: era [u8; 8], agora [u8; 5] (-3 bytes)
 
     // === METADADOS RESERVADOS (7072 bytes) ===
-    // Layout Wire 4:
-    //   [0..8]    pattern_epoch
-    //   [8..40]   skill_hash       (PROP-031)
-    //   [40]      goal_drift_flag  (PROP-038, bit 0)
-    //   [41..73]  skill_mac_tag    (PROP-031/supply_guard, Wire 4)
-    //   [73]      has_hw_attestation: u8 (0=absent, 1=present) (C8)
-    //   [74..138] hw_attestation_sig: [u8; 64] Ed25519 from TEE (C8)
-    //   [138..170] hw_attestation_hash: [u8; 32] BLAKE3 of attested payload (C8)
-    //   [170..202] trusted_tee_pubkey: [u8; 32] Ed25519 pubkey for verification (C8)
-    //   [202..]   disponível para expansão futura
     #[serde(with = "serde_reserved")]
     pub _reserved_metadata: [u8; 7072],
 
@@ -78,7 +68,7 @@ impl TechnicalEvidence {
     pub fn new(audit_trail_id: u128) -> Self {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_else(|e| panic!("BTV invariant violation: system clock before UNIX_EPOCH: {e}"))
             .as_micros();
 
         Self {
@@ -174,7 +164,7 @@ impl TechnicalEvidence {
         hasher.update(&[self.critical_count]);
         hasher.update(&[self.risk_level as u8]);
         hasher.update(&self.composite_risk.to_le_bytes());
-        hasher.update(&self.executed_modules.to_le_bytes()); // ADR-017: 4 bytes
+        hasher.update(&self.executed_modules.to_le_bytes());
         hasher.update(&self._reserved);
         hasher.update(&self._reserved_metadata);
         *hasher.finalize().as_bytes()
@@ -189,53 +179,40 @@ impl TechnicalEvidence {
         self.calculate_hash() == self.hash
     }
 
-    // ── PROP-031: Skill Hash (reserved_metadata[8..40]) ──────────────────────
+    // ── PROP-031: Skill Hash (reserved_metadata[8..40]) ────────────────────────────
 
-    /// Retorna o skill_hash BLAKE3 armazenado em _reserved_metadata[8..40].
-    /// Zeros indicam ausência de skill registrada.
     pub fn get_skill_hash(&self) -> &[u8; 32] {
         self._reserved_metadata[8..40]
             .try_into()
-            .expect("slice de tamanho fixo 32")
+            .unwrap_or_else(|_| panic!("BTV invariant violation: skill_hash slice [8..40] must be exactly 32 bytes"))
     }
 
-    /// Grava skill_hash BLAKE3 em _reserved_metadata[8..40].
-    /// Zero heap: opera sobre slice existente, sem alloc.
     pub fn set_skill_hash(&mut self, hash: &[u8; 32]) {
         self._reserved_metadata[8..40].copy_from_slice(hash);
     }
 
-    /// Retorna true se skill_hash foi definido (≠ zeros).
     pub fn has_skill_hash(&self) -> bool {
         self._reserved_metadata[8..40].iter().any(|&b| b != 0)
     }
 
-    // ── PROP-031: Skill MAC Tag (reserved_metadata[41..73]) ─────────────────
-    // Wire 4: MAC tag do supply_guard (BLAKE3 keyed-hash, ADR-031b).
-    // Layout: [8..40] skill_hash | [40] goal_drift_flag | [41..73] mac_tag
-    // Zero heap: operações sobre slice existente, sem alloc.
+    // ── PROP-031: Skill MAC Tag (reserved_metadata[41..73]) ───────────────────────
 
-    /// Retorna o MAC tag de 32 bytes armazenado em _reserved_metadata[41..73].
     pub fn get_skill_mac_tag(&self) -> &[u8; 32] {
         self._reserved_metadata[41..73]
             .try_into()
-            .expect("slice de tamanho fixo 32")
+            .unwrap_or_else(|_| panic!("BTV invariant violation: skill_mac_tag slice [41..73] must be exactly 32 bytes"))
     }
 
-    /// Grava o MAC tag em _reserved_metadata[41..73].
     pub fn set_skill_mac_tag(&mut self, tag: &[u8; 32]) {
         self._reserved_metadata[41..73].copy_from_slice(tag);
     }
 
-    /// Retorna true se mac_tag foi definido (≠ zeros).
     pub fn has_skill_mac_tag(&self) -> bool {
         self._reserved_metadata[41..73].iter().any(|&b| b != 0)
     }
 
-    // ── C8: Hardware Attestation (reserved_metadata[73..202]) ────────────────
-    // Layout: [73]=flag | [74..138]=sig(64) | [138..170]=hash(32) | [170..202]=tee_pubkey(32)
+    // ── C8: Hardware Attestation (reserved_metadata[73..202]) ────────────────────
 
-    /// Stores TEE hardware attestation data. Zero heap — operates on existing slices.
     pub fn set_hw_attestation(&mut self, sig: &[u8; 64], hash: &[u8; 32], tee_pubkey: &[u8; 32]) {
         self._reserved_metadata[73] = 1;
         self._reserved_metadata[74..138].copy_from_slice(sig);
@@ -243,45 +220,32 @@ impl TechnicalEvidence {
         self._reserved_metadata[170..202].copy_from_slice(tee_pubkey);
     }
 
-    /// Returns true if hardware attestation is present.
     pub fn has_hw_attestation(&self) -> bool {
         self._reserved_metadata[73] == 1
     }
 
-    /// Returns the TEE signature stored in the attestation slot.
     pub fn get_hw_attestation_sig(&self) -> &[u8; 64] {
         self._reserved_metadata[74..138]
             .try_into()
-            .expect("slice de tamanho fixo 64")
+            .unwrap_or_else(|_| panic!("BTV invariant violation: hw_attestation_sig slice [74..138] must be exactly 64 bytes"))
     }
 
-    /// Returns the BLAKE3 hash of the attested payload.
     pub fn get_hw_attestation_hash(&self) -> &[u8; 32] {
         self._reserved_metadata[138..170]
             .try_into()
-            .expect("slice de tamanho fixo 32")
+            .unwrap_or_else(|_| panic!("BTV invariant violation: hw_attestation_hash slice [138..170] must be exactly 32 bytes"))
     }
 
-    /// Returns the trusted TEE public key used to verify the attestation signature.
     pub fn get_trusted_tee_pubkey(&self) -> &[u8; 32] {
         self._reserved_metadata[170..202]
             .try_into()
-            .expect("slice de tamanho fixo 32")
+            .unwrap_or_else(|_| panic!("BTV invariant violation: trusted_tee_pubkey slice [170..202] must be exactly 32 bytes"))
     }
 
     /// Serializes to a fixed [u8; EVIDENCE_SIZE] buffer by copying the repr(C) memory layout.
-    ///
-    /// # Safety rationale (function-level allow)
-    /// - `TechnicalEvidence` is `#[repr(C, align(8))]` with all fixed-size fields.
-    /// - `size_of::<TechnicalEvidence>() == EVIDENCE_SIZE` is a compile-time invariant
-    ///   (enforced by the static_assertions in this crate — see EVIDENCE_SIZE constant).
-    /// - The resulting bytes are only used for WAL persistence (cold path); the hash
-    ///   hot-path uses `calculate_hash()` which is fully safe and field-by-field.
-    /// - This is the only justified unsafe block remaining in the kernel after Phase 0.1.
     #[allow(unsafe_code)]
     pub fn to_bytes(&self) -> [u8; EVIDENCE_SIZE] {
         let mut bytes = [0u8; EVIDENCE_SIZE];
-        // SAFETY: self is repr(C, align(8)), bytes is a correctly-sized buffer.
         unsafe {
             let ptr = self as *const TechnicalEvidence as *const u8;
             std::ptr::copy_nonoverlapping(ptr, bytes.as_mut_ptr(), size_of::<TechnicalEvidence>());
@@ -290,13 +254,8 @@ impl TechnicalEvidence {
     }
 
     /// Deserializes from a fixed [u8; EVIDENCE_SIZE] buffer produced by `to_bytes`.
-    ///
-    /// Returns `None` if the size invariant is not met (defensive check).
-    /// Only used in WAL recovery (cold path).
     #[allow(unsafe_code)]
     pub fn from_bytes(bytes: &[u8; EVIDENCE_SIZE]) -> Option<Self> {
-        // SAFETY: bytes was produced by to_bytes() on a valid TechnicalEvidence,
-        // and TechnicalEvidence is repr(C, align(8)) with no references or pointers.
         unsafe {
             let ptr = bytes.as_ptr() as *const TechnicalEvidence;
             Some(std::ptr::read_unaligned(ptr))
