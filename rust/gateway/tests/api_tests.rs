@@ -1,6 +1,7 @@
 //! F1.9-04: Gateway API integration tests + benchmarks.
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use axum_test::TestServer;
     use serde_json::json;
@@ -16,7 +17,7 @@ mod tests {
         TestServer::new(app).unwrap()
     }
 
-    // ─── HEALTH ─────────────────────────────────────────────────
+    // ─── HEALTH ─────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_health_endpoint() {
@@ -28,7 +29,7 @@ mod tests {
         assert!(body["uptime_seconds"].as_u64().is_some());
     }
 
-    // ─── VALIDATE ───────────────────────────────────────────────
+    // ─── VALIDATE ───────────────────────────────────────────
 
     #[tokio::test]
     async fn test_validate_clean_input() {
@@ -65,7 +66,7 @@ mod tests {
         assert_eq!(body["action"], "ALLOW");
     }
 
-    // ─── METRICS ────────────────────────────────────────────────
+    // ─── METRICS ────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_metrics_endpoint() {
@@ -119,7 +120,7 @@ policies:
         assert!(body["summary"]["blocked"].as_u64().unwrap() >= 1);
     }
 
-    // ─── LATENCY BENCHMARK ──────────────────────────────────────
+    // ─── LATENCY BENCHMARK ─────────────────────────────────────
 
     #[tokio::test]
     async fn test_validate_latency_under_50ms() {
