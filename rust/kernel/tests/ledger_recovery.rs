@@ -119,17 +119,20 @@ mod tests {
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
+            .truncate(true)
             .open(path)
             .unwrap();
 
         let mut prev_hash = [0u8; 32];
 
         for i in 1..=count {
-            let mut entry = LedgerEntry::default();
-            entry.entry_id = i;
-            entry.audit_trail_id = i as u128;
-            entry.timestamp = i as u128 * 1000;
-            entry.previous_hash = prev_hash;
+            let mut entry = LedgerEntry {
+                entry_id: i,
+                audit_trail_id: i as u128,
+                timestamp: i as u128 * 1000,
+                previous_hash: prev_hash,
+                ..Default::default()
+            };
             entry.finalize();
             prev_hash = entry.entry_hash;
 
@@ -150,17 +153,20 @@ mod tests {
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
+            .truncate(true)
             .open(path)
             .unwrap();
 
         let mut prev_hash = [0u8; 32];
 
         for i in 1..=count {
-            let mut entry = LedgerEntry::default();
-            entry.entry_id = i;
-            entry.audit_trail_id = i as u128;
-            entry.timestamp = i as u128 * 1000;
-            entry.previous_hash = prev_hash;
+            let mut entry = LedgerEntry {
+                entry_id: i,
+                audit_trail_id: i as u128,
+                timestamp: i as u128 * 1000,
+                previous_hash: prev_hash,
+                ..Default::default()
+            };
             entry.finalize();
             prev_hash = entry.entry_hash;
 
@@ -182,24 +188,26 @@ mod tests {
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
+            .truncate(true)
             .open(path)
             .unwrap();
 
         let mut prev_hash = [0u8; 32];
 
         for i in 1..=count {
-            let mut entry = LedgerEntry::default();
-            entry.entry_id = i;
-            entry.audit_trail_id = i as u128;
-            entry.timestamp = i as u128 * 1000;
-
-            // Break chain at entry 3
-            if i == 3 {
-                entry.previous_hash = [0xFF; 32]; // Wrong hash
+            let previous_hash = if i == 3 {
+                [0xFF; 32] // Break chain at entry 3
             } else {
-                entry.previous_hash = prev_hash;
-            }
+                prev_hash
+            };
 
+            let mut entry = LedgerEntry {
+                entry_id: i,
+                audit_trail_id: i as u128,
+                timestamp: i as u128 * 1000,
+                previous_hash,
+                ..Default::default()
+            };
             entry.finalize();
             prev_hash = entry.entry_hash;
 
