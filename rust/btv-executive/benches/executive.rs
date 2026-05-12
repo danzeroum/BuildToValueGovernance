@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Criterion benchmarks for the Executive pipeline.
 //!
 //! Run with: `cargo bench -p btv-executive`
