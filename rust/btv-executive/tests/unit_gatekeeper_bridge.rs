@@ -5,10 +5,11 @@
 //! Não precisa de btv-sigma.
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod gatekeeper_unit {
     use btv_executive::__testhelpers::GatekeeperBridgeHandle;
 
-    // ── Critério 4: inputs inválidos → fail-secure ────────────────────────────
+    // ── Critério 4: inputs inválidos → fail-secure ──────────────────────────────────────────
 
     #[test]
     fn empty_input_returns_size_violation() {
