@@ -9,6 +9,7 @@ use btv_core::{
     Decision, EvidenceToken, OperatorToken, EscalatedVerdict, Verdict,
 };
 
+
 // ── Test registry ──────────────────────────────────────────────────────────────────
 
 struct TestRegistry;
@@ -27,7 +28,9 @@ fn make_authority() -> ComplianceAuthority {
     ComplianceAuthority::new(Box::new(TestRegistry))
 }
 
-// ── Happy path ─────────────────────────────────────────────────────────────────
+
+// ── Happy path ─────────────────────────────────────────────────────────
+
 
 #[test]
 fn verdict_new_produces_valid_record() {
