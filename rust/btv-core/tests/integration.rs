@@ -9,7 +9,7 @@ use btv_core::{
     Decision, EvidenceToken, OperatorToken, EscalatedVerdict, Verdict,
 };
 
-// ── Test registry ──────────────────────────────────────────────────────
+// ── Test registry ──────────────────────────────────────────────────────────────────
 
 struct TestRegistry;
 
@@ -27,7 +27,7 @@ fn make_authority() -> ComplianceAuthority {
     ComplianceAuthority::new(Box::new(TestRegistry))
 }
 
-// ── Happy path ─────────────────────────────────────────────────────────
+// ── Happy path ─────────────────────────────────────────────────────────────────
 
 #[test]
 fn verdict_new_produces_valid_record() {
@@ -76,6 +76,11 @@ fn compliance_authority_rejects_unknown_jurisdiction() {
 
 #[test]
 fn escalated_verdict_consumes_operator_token() {
+    // BTV_HMAC_KEY must be set before any btv-core code runs in this process.
+    // OnceLock is global: if this test executes before others that call set_var,
+    // the key initialisation panics. Setting it here makes the test order-independent.
+    std::env::set_var("BTV_HMAC_KEY", "integration-test-key");
+
     let token = OperatorToken::new("operator@example.com".to_string());
     let verdict = EscalatedVerdict::new(token, "Input blocked — operator review required".to_string());
 
