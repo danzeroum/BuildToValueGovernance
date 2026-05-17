@@ -1,15 +1,18 @@
 # E2E-only docker compose — usa Dockerfile.rust-ci (binário pré-compilado pelo runner CI).
 # Não inclui o dashboard (não é testado pelo E2E).
-# Contexto relativo ao repo root (rodado de lá pelo workflow).
 #
-# Uso:
+# Caminhos relativos ao diretório ops/ (onde o compose está).
+# Use .. para referenciar o repo root, como em docker-compose.quickstart.yml.
+#
+# Uso (do repo root):
 #   cargo build --release -p btv-gateway  # compila no runner com cache
+#   mkdir -p bin && cp rust/target/release/btv-gateway bin/btv-gateway
 #   docker compose -f ops/docker-compose.e2e.yml up -d --build
 
 services:
   governance:
     build:
-      context: .
+      context: ..
       dockerfile: ops/Dockerfile.python-quickstart
     ports:
       - "8000:8000"
@@ -21,7 +24,7 @@ services:
       BTV_APPEALS_DB: "/app/data/runtime/appeals.db"
       BTV_THREATS_DB: "/app/data/runtime/threats.db"
     volumes:
-      - ./data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
+      - ../data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
       - ledger_data:/app/data/ledger
       - runtime_data:/app/data/runtime
     healthcheck:
@@ -42,7 +45,7 @@ services:
 
   gateway:
     build:
-      context: .
+      context: ..
       dockerfile: ops/Dockerfile.rust-ci
     ports:
       - "8080:8080"
@@ -54,7 +57,7 @@ services:
       BTV_POLICY_DIR: "/app/data/policies"
       RUST_LOG: "btv_gateway=info"
     volumes:
-      - ./data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
+      - ../data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
       - ledger_data:/app/data/ledger
     depends_on:
       governance:
