@@ -1,0 +1,65 @@
+id: hipaa_phi_audit
+name: "HIPAA — PHI Audit"
+description: >
+  Bundle para sistemas sujeitos à HIPAA: protege Protected Health Information (PHI),
+  registra todo acesso em ledger imutável, bloqueia transmissão não autorizada.
+parent_id: baseline_trust
+
+version: "1.0.0"
+created_at: "2026-05-17"
+updated_at: "2026-05-17"
+
+rules:
+  - id: "HIPAA_BLOCK_PHI_UNAUTHORIZED"
+    name: "Block Unauthorized PHI Transmission"
+    description: >
+      HIPAA § 164.502: transmissão de PHI sem autorização do paciente
+      ou sem enquadramento em exceção permitida é bloqueada.
+    action: BLOCK
+    priority: 500
+    categories: ["health", "phi", "medical_record"]
+    min_severity: 0.5
+    min_confidence: 0.65
+    explain_template: >
+      Bloqueado por HIPAA § 164.502: transmissão de PHI requer
+      autorização do paciente ou base legal explícita.
+
+  - id: "HIPAA_REDACT_IDENTIFIERS"
+    name: "Redact HIPAA Safe Harbor Identifiers"
+    description: >
+      HIPAA Safe Harbor (§ 164.514(b)): redige os 18 identificadores
+      que tornam informação de saúde individualmente identificável.
+      Inclui: nome, data de nascimento, CPF, endereço, número de prontuário.
+    action: REDACT
+    priority: 450
+    validators: ["cpf", "date_of_birth", "medical_record_number"]
+    categories: ["phi", "pii", "health"]
+    min_severity: 0.4
+    min_confidence: 0.7
+
+  - id: "HIPAA_LOG_PHI_ACCESS"
+    name: "Log All PHI Access"
+    description: "HIPAA § 164.312(b): todo acesso a PHI deve ser registrado no audit log"
+    action: LOG
+    priority: 300
+    categories: ["health", "phi", "medical_record"]
+    min_severity: 0.1
+    min_confidence: 0.4
+
+  - id: "HIPAA_EDUCATE_MINIMUM_NECESSARY"
+    name: "Educate on Minimum Necessary (§ 164.502(b))"
+    description: "Solicitar somente o mínimo necessário de PHI para a finalidade declarada"
+    action: EDUCATE
+    priority: 200
+    categories: ["health", "phi"]
+    min_severity: 0.3
+    min_confidence: 0.5
+
+domain_config:
+  healthcare:
+    risk_multiplier: 1.5
+    contestability_enabled: false
+    education_message: >
+      HIPAA se aplica a este sistema. Todo acesso a PHI é registrado
+      em ledger imutável com assinatura HMAC-SHA256. Paciente tem
+      direito de acesso e retificação (§ 164.524).

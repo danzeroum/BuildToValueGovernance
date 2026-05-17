@@ -2,6 +2,7 @@
 import click
 
 from buildtovalue.cli.commands.arena_demo import arena_demo_cmd
+from buildtovalue.cli.commands.quickstart import demo_cmd
 
 
 @click.group()
@@ -17,6 +18,7 @@ def version():
 
 
 cli.add_command(arena_demo_cmd)
+cli.add_command(demo_cmd)
 
 
 if __name__ == "__main__":
