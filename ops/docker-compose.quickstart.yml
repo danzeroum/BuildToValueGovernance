@@ -17,7 +17,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      BTV_HMAC_KEY: "demo-key-not-for-production"
+      BTV_HMAC_KEY: "demo-key-NOT-for-production-!!!!!"
       BTV_ENV: "development"
       BTV_POLICY_DIR: "/app/data/policies"
       BTV_DB_PATH: "/app/data/runtime/trust.db"
@@ -55,7 +55,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      BTV_HMAC_KEY: "demo-key-not-for-production"
+      BTV_HMAC_KEY: "demo-key-NOT-for-production-!!!!!"
       BTV_ENV: "development"
       BTV_GOVERNANCE_URL: "http://governance:8000"
       BTV_PROXY_UPSTREAM_URL: "http://upstream-mock:80"
