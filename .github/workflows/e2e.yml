@@ -1,0 +1,138 @@
+# =============================================================================
+# BTV E2E CI — Proxy HTTP Transparente
+# =============================================================================
+# Porta de CI para o fluxo crítico: Agente → Gateway (Rust/Axum) → Governance
+# (Python) → Ledger. Executa em todo pull_request para main.
+#
+# Jobs:
+#   e2e-proxy  — sobe docker-compose quickstart, aguarda health checks,
+#                executa tests/e2e/test_proxy_flow.py
+#
+# Triggers:
+#   pull_request para main (paths: gateway, governance, E2E, compose, Dockerfiles)
+#   push para main
+#   manual dispatch
+# =============================================================================
+
+name: E2E — Proxy HTTP Transparente
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "rust/gateway/**"
+      - "python/buildtovalue/**"
+      - "tests/e2e/**"
+      - "ops/docker-compose.quickstart.yml"
+      - "ops/Dockerfile.rust"
+      - "ops/Dockerfile.python"
+      - "data/policies/quickstart/**"
+      - ".github/workflows/e2e.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "rust/gateway/**"
+      - "python/buildtovalue/**"
+      - "tests/e2e/**"
+      - "ops/docker-compose.quickstart.yml"
+      - "ops/Dockerfile.rust"
+      - "ops/Dockerfile.python"
+      - "data/policies/quickstart/**"
+      - ".github/workflows/e2e.yml"
+  workflow_dispatch:
+    inputs:
+      bundle:
+        description: "Policy bundle a ativar"
+        required: false
+        default: "baseline_trust"
+        type: choice
+        options: ["baseline_trust", "gdpr_art22_chatbot", "hipaa_phi_audit"]
+
+env:
+  PYTHON_VERSION: "3.11"
+  BTV_POLICY_BUNDLE: ${{ github.event.inputs.bundle || 'baseline_trust' }}
+
+jobs:
+  e2e-proxy:
+    name: "E2E — Agente → Gateway → Governance"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Rust toolchain (para build do gateway no compose) ──────────────────
+      - name: "Install Rust toolchain"
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: "Cache Rust build artifacts"
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "rust -> target"
+
+      # ── Python (para pytest) ───────────────────────────────────────────────
+      - name: "Setup Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: "Install pytest"
+        run: pip install pytest
+
+      # ── Docker Compose — sobe stack completo ──────────────────────────────
+      - name: "Build e subir serviços (docker compose)"
+        run: |
+          docker compose -f ops/docker-compose.quickstart.yml up -d --build
+        env:
+          BTV_POLICY_BUNDLE: ${{ env.BTV_POLICY_BUNDLE }}
+
+      # ── Aguardar health checks ─────────────────────────────────────────────
+      - name: "Aguardar gateway /health"
+        run: |
+          echo "Aguardando gateway..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+              echo "  ✅ Gateway respondeu em ${i}×5s"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "  ❌ Gateway não respondeu após 150s"
+              docker compose -f ops/docker-compose.quickstart.yml logs gateway
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: "Aguardar upstream-mock"
+        run: |
+          echo "Aguardando upstream-mock..."
+          for i in $(seq 1 12); do
+            if curl -sf http://localhost:8082/status/200 > /dev/null 2>&1; then
+              echo "  ✅ upstream-mock ok"
+              break
+            fi
+            sleep 5
+          done
+
+      # ── E2E tests ─────────────────────────────────────────────────────────
+      - name: "Executar testes E2E"
+        run: |
+          pytest tests/e2e/test_proxy_flow.py -v --tb=short
+        env:
+          BTV_GATEWAY_URL: "http://localhost:8080"
+          BTV_UPSTREAM_MOCK: "http://localhost:8082"
+
+      # ── Diagnóstico em caso de falha ───────────────────────────────────────
+      - name: "Logs dos serviços (somente em falha)"
+        if: failure()
+        run: |
+          echo "::group::gateway logs"
+          docker compose -f ops/docker-compose.quickstart.yml logs gateway --tail=50
+          echo "::endgroup::"
+          echo "::group::governance logs"
+          docker compose -f ops/docker-compose.quickstart.yml logs governance --tail=50
+          echo "::endgroup::"
+
+      - name: "Parar serviços"
+        if: always()
+        run: docker compose -f ops/docker-compose.quickstart.yml down -v
