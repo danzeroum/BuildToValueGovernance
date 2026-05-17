@@ -1,0 +1,28 @@
+# ═══════════════════════════════════════════════════════════════
+# BuildToValue — Python Governance (quickstart, sem CUDA)
+# Usado pelo docker-compose.quickstart.yml e pelo CI E2E.
+# Para produção com GPU/LLM local: ops/Dockerfile.python
+# ═══════════════════════════════════════════════════════════════
+FROM python:3.11-slim
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY python/ ./python/
+RUN pip install --no-cache-dir ./python/
+
+COPY data/ ./data/
+
+RUN groupadd -r btv && useradd -r -g btv -d /app btv \
+    && mkdir -p /app/data/ledger /app/data/runtime /app/data/autogen-policies \
+    && chown -R btv:btv /app
+USER btv
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=30s \
+    CMD curl -sf http://localhost:8000/health || exit 1
+
+CMD ["python3.11", "-m", "uvicorn", "buildtovalue.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

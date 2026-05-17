@@ -13,7 +13,7 @@ services:
   governance:
     build:
       context: ..
-      dockerfile: ops/Dockerfile.python
+      dockerfile: ops/Dockerfile.python-quickstart
     ports:
       - "8000:8000"
     environment:
