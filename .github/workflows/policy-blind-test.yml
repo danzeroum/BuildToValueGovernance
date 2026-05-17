@@ -36,7 +36,7 @@ jobs:
 
       - name: Start governance service
         run: |
-          BTV_HMAC_KEY="${BTV_HMAC_KEY:-ci-test-key}" \
+          BTV_HMAC_KEY="${BTV_HMAC_KEY:-ci-blind-test-key-padded-to-32bytes}" \
           BTV_POLICY_DIR="data/policies" \
           BTV_DB_PATH="/tmp/ci-trust.db" \
           BTV_APPEALS_DB="/tmp/ci-appeals.db" \
@@ -53,7 +53,7 @@ jobs:
             sleep 1
           done
         env:
-          BTV_HMAC_KEY: ${{ secrets.BTV_HMAC_KEY || 'ci-test-key' }}
+          BTV_HMAC_KEY: ${{ secrets.BTV_HMAC_KEY || 'ci-blind-test-key-padded-to-32bytes' }}
 
       - name: Fetch current PatternRegistry epoch
         id: epoch
@@ -88,7 +88,7 @@ jobs:
           fi
         env:
           BTV_PATTERN_EPOCH: ${{ steps.epoch.outputs.epoch }}
-          BTV_HMAC_KEY:      ${{ secrets.BTV_HMAC_KEY || 'ci-test-key' }}
+          BTV_HMAC_KEY:      ${{ secrets.BTV_HMAC_KEY || 'ci-blind-test-key-padded-to-32bytes' }}
 
       - name: Upload relatórios como artefatos
         if: always()
