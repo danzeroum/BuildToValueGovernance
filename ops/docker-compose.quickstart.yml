@@ -3,6 +3,11 @@
 # Dashboard:     http://localhost:8501
 # Gateway:       http://localhost:8080
 # Upstream mock: http://localhost:8082  (httpbin — ecoa requests para testes E2E)
+#
+# Selecionar bundle de política:
+#   BTV_POLICY_BUNDLE=gdpr_art22_chatbot docker compose -f ops/docker-compose.quickstart.yml up -d
+#   BTV_POLICY_BUNDLE=hipaa_phi_audit    docker compose -f ops/docker-compose.quickstart.yml up -d
+# Bundles disponíveis: baseline_trust (padrão), gdpr_art22_chatbot, hipaa_phi_audit
 
 services:
   governance:
@@ -19,7 +24,7 @@ services:
       BTV_APPEALS_DB: "/app/data/runtime/appeals.db"
       BTV_THREATS_DB: "/app/data/runtime/threats.db"
     volumes:
-      - ../data/policies/quickstart:/app/data/policies:ro
+      - ../data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
       - ledger_data:/app/data/ledger
       - runtime_data:/app/data/runtime
     healthcheck:
@@ -57,7 +62,7 @@ services:
       BTV_POLICY_DIR: "/app/data/policies"
       RUST_LOG: "btv_gateway=info"
     volumes:
-      - ../data/policies/quickstart:/app/data/policies:ro
+      - ../data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
       - ledger_data:/app/data/ledger
     depends_on:
       governance:
