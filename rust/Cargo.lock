@@ -888,6 +888,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "buildtovalue"
+version = "3.0.0-alpha.1"
+dependencies = [
+ "btv-core",
+]
+
+[[package]]
 name = "buildtovalue-bindings"
 version = "1.0.0"
 dependencies = [

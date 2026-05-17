@@ -1,0 +1,71 @@
+# E2E-only docker compose — usa Dockerfile.rust-ci (binário pré-compilado pelo runner CI).
+# Não inclui o dashboard (não é testado pelo E2E).
+# Contexto relativo ao repo root (rodado de lá pelo workflow).
+#
+# Uso:
+#   cargo build --release -p btv-gateway  # compila no runner com cache
+#   docker compose -f ops/docker-compose.e2e.yml up -d --build
+
+services:
+  governance:
+    build:
+      context: .
+      dockerfile: ops/Dockerfile.python-quickstart
+    ports:
+      - "8000:8000"
+    environment:
+      BTV_HMAC_KEY: "demo-key-NOT-for-production-!!!!!"
+      BTV_ENV: "development"
+      BTV_POLICY_DIR: "/app/data/policies"
+      BTV_DB_PATH: "/app/data/runtime/trust.db"
+      BTV_APPEALS_DB: "/app/data/runtime/appeals.db"
+      BTV_THREATS_DB: "/app/data/runtime/threats.db"
+    volumes:
+      - ./data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
+      - ledger_data:/app/data/ledger
+      - runtime_data:/app/data/runtime
+    healthcheck:
+      test:
+        - "CMD"
+        - "python3.11"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  upstream-mock:
+    image: kennethreitz/httpbin
+    ports:
+      - "8082:80"
+
+  gateway:
+    build:
+      context: .
+      dockerfile: ops/Dockerfile.rust-ci
+    ports:
+      - "8080:8080"
+    environment:
+      BTV_HMAC_KEY: "demo-key-NOT-for-production-!!!!!"
+      BTV_ENV: "development"
+      BTV_GOVERNANCE_URL: "http://governance:8000"
+      BTV_PROXY_UPSTREAM_URL: "http://upstream-mock:80"
+      BTV_POLICY_DIR: "/app/data/policies"
+      RUST_LOG: "btv_gateway=info"
+    volumes:
+      - ./data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
+      - ledger_data:/app/data/ledger
+    depends_on:
+      governance:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  ledger_data:
+  runtime_data:

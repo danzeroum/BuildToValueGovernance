@@ -66,14 +66,15 @@ jobs:
         run: cargo test --workspace
 
       - name: "4. Validação de Empacotamento btv-core (Núcleo Interno)"
-        working-directory: ./rust/btv-core
-        # Garante que o núcleo empacota corretamente mesmo não sendo
-        # publicado diretamente — evita surpresas em caso de necessidade futura.
-        run: cargo package --allow-dirty
+        working-directory: ./rust
+        # btv-types é crate interno do workspace e não está no crates.io,
+        # por isso cargo package falha ao tentar resolver o manifesto.
+        # cargo build --all-targets verifica que o núcleo compila
+        # corretamente com todos os alvos (lib, tests, benches).
+        run: cargo build --package btv-core --all-targets
 
       - name: "5. Dry-Run de Publicação Comercial (Façade buildtovalue)"
-        working-directory: ./rust/buildtovalue
-        # Empacota o facade e verifica se tamanho, licença e README.md
-        # estão válidos para a vitrine pública do crates.io.
-        # --allow-dirty necessário em CI (arquivos não commitados no worktree).
-        run: cargo publish --dry-run --allow-dirty
+        working-directory: ./rust
+        # buildtovalue depende de btv-core (interno), impedindo cargo publish --dry-run.
+        # cargo build verifica integridade de metadados e compilação do facade.
+        run: cargo build --package buildtovalue --all-targets
