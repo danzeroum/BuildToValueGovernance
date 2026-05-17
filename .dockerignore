@@ -1,5 +1,4 @@
 rust/target/
-!rust/target/release/btv-gateway
 **/.git
 **/*.log
 data/ledger/*.jsonl

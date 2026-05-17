@@ -78,6 +78,11 @@ jobs:
           BTV_HMAC_KEY: "ci-workspace-test-key-padded-for-hmac"
         run: cargo build --release -p btv-gateway
 
+      - name: "Exportar binário para contexto Docker"
+        run: |
+          mkdir -p bin
+          cp rust/target/release/btv-gateway bin/btv-gateway
+
       # ── Python (para pytest) ───────────────────────────────────────────────
       - name: "Setup Python"
         uses: actions/setup-python@v5
