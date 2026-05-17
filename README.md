@@ -1,8 +1,42 @@
 # BuildToValue (BTV)
 
-**Evidência Criptográfica Imutável para Decisões de Agentes de IA.**
+**Governança de Agentes de IA com Evidência Criptográfica Imutável.**
 
-Toda decisão que o seu agente de IA toma é ou **auditavelmente rastreável** ou um passivo regulatório. O BTV torna a ausência de evidência estruturalmente inevitável de detectar: sem chamar `finalize()`, o hash BLAKE3 permanece zerado, o Gatekeeper entra em `BLOCK` por padrão — e nenhum dado de auditoria é descartado silenciosamente.
+---
+
+## O que você ganha em 10 minutos
+
+```bash
+git clone https://github.com/danzeroum/BuildToValueGovernance
+cd BuildToValueGovernance
+docker compose -f ops/docker-compose.quickstart.yml up -d
+# Abra http://localhost:8501
+```
+
+Seu agente existente passa a ter **toda chamada LLM interceptada, validada contra LGPD/GDPR/EU AI Act e auditada com evidência criptográfica** — zero modificação no código do agente:
+
+```bash
+# Antes: agente chama OpenAI diretamente
+OPENAI_BASE_URL=https://api.openai.com
+
+# Depois: BTV intercepta, valida e encaminha (ou bloqueia)
+OPENAI_BASE_URL=http://localhost:8080/v1/proxy
+OPENAI_API_KEY=sk-...   # encaminhado transparentemente ao upstream
+```
+
+Decisões em violação retornam HTTP 451 com evidência criptográfica linkada. Decisões conformes são encaminhadas sem latência perceptível (<50ms P99).
+
+---
+
+## Como isso se traduz em conformidade real
+
+| Bundle | Artigo coberto | O que bloqueia |
+|--------|---------------|----------------|
+| `gdpr_art22_chatbot` | GDPR Art. 22 | Decisões automatizadas de crédito/emprego sem revisão humana |
+| `hipaa_phi_audit` | HIPAA §164.312 | PHI em output de LLM sem sanitização ou consentimento |
+| `baseline_trust` | LGPD Art. 46 | Dados sensíveis (CPF, cartão) sem base legal |
+
+Cada bloqueio gera um recibo de evidência com HMAC-SHA256, armazenado em ledger imutável e contestável em 24h (LGPD Art. 20 / EU AI Act Art. 14).
 
 ---
 
@@ -31,6 +65,15 @@ A 1 milhão de decisões/ano, o custo total de infraestrutura é **~$5.000/ano**
 ---
 
 ## Quickstart (< 5 minutos)
+
+### Path 0 — Docker (zero instalação)
+
+```bash
+docker compose -f ops/docker-compose.quickstart.yml up -d
+# Dashboard: http://localhost:8501
+# Gateway:   http://localhost:8080
+# Mock upstream (httpbin): http://localhost:8082
+```
 
 ### Path A — Rust (integração nativa)
 
