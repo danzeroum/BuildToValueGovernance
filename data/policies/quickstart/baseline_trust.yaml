@@ -47,4 +47,5 @@ rules:
 domain_config:
   general:
     risk_multiplier: 1.0
+    contestability_enabled: false
     education_message: "Bundle de demo. Para produção, use um bundle específico ao seu setor."
