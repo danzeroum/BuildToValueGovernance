@@ -110,7 +110,7 @@ if page == "Overview":
     blocked_today = int(decisions_block + proxy_blocked)
     blocked_pct   = (blocked_today / total_decisions) if total_decisions > 0 else 0.0
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric(
         "Trust Score médio",
         f"{trust_pct:.0%}" if trust_pct is not None else "—",
@@ -132,6 +132,11 @@ if page == "Overview":
         "SLA contestação",
         "24h",
         help="LGPD Art. 20 / EU AI Act Art. 14 — prazo máximo para revisão humana de qualquer bloqueio.",
+    )
+    c5.metric(
+        "Decisões (total)",
+        f"{int(total_decisions):,}" if total_decisions > 0 else "—",
+        help="Total acumulado desde o último restart. Tier Professional inclui 500.000 decisões/mês.",
     )
 
     if total_decisions == 0:

@@ -1,0 +1,48 @@
+# BTV Gateway — Fly.io deployment config (ADR-0060)
+#
+# Deploy:
+#   fly launch --dockerfile ops/Dockerfile.rust --no-deploy
+#   fly secrets set BTV_HMAC_KEY=<prod-key> BTV_API_KEYS=<keys>
+#   fly secrets set BTV_PROXY_UPSTREAM_URL=https://api.openai.com
+#   fly deploy
+#
+# Dashboard: https://buildtovalue-gateway.fly.dev/
+# Proxy endpoint: OPENAI_BASE_URL=https://buildtovalue-gateway.fly.dev/v1/proxy
+
+app = "buildtovalue-gateway"
+primary_region = "gru"  # São Paulo — residência de dados LGPD
+
+[build]
+  dockerfile = "ops/Dockerfile.rust"
+
+[env]
+  BTV_ENV = "production"
+  RUST_LOG = "btv_gateway=warn"
+  BTV_GOVERNANCE_URL = "https://governance.buildtovalue.io"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 200
+    soft_limit = 150
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[checks]
+  [checks.health]
+    grace_period = "10s"
+    interval = "15s"
+    method = "GET"
+    path = "/health"
+    port = 8080
+    timeout = "5s"
+    type = "http"

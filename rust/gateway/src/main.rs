@@ -21,7 +21,11 @@ async fn main() {
     let state = Arc::new(AppState::new());
     let app = routes::create_router(state);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8080);
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("BTV Gateway listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
