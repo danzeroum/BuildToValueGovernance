@@ -171,6 +171,17 @@ Este catálogo documenta todas as decisões arquiteturais significativas (ADRs) 
 
 ***
 
+## 🚀 Grupo L: v3.0 — SaaS Deployment (ADR-0059, ADR-0060)
+
+*Gateway como serviço gerenciado. Zero instalação para o cliente: `OPENAI_BASE_URL=https://buildtovalue-gateway.fly.dev/v1/proxy`. ADR-0059 formaliza a fronteira Rust/Python; ADR-0060 documenta a escolha Fly.io sobre Cloudflare Workers e K8s gerenciado.*
+
+| ID | Título | Status | Versão | Link | Resumo |
+|:---|:---|:---:|:---:|:---|:---|
+| **0059** | **Rust/Python Boundary** | ✅ Ativo | v3.0 | [Ver Detalhes](./0059-rust-python-boundary.md) | Formaliza plano de controle Rust (crypto, routing, proxy, tipos afins) vs plano analítico Python (LLMs, ML, contestability). `common.rs` como ponto DRY. Dual auth: BTV `x-api-key` (gateway) + LLM provider `Authorization` (forwarded). |
+| **0060** | **SaaS Deployment — Fly.io** | ✅ Ativo | v3.0 | [Ver Detalhes](./0060-saas-deployment.md) | Fly.io sobre Cloudflare Workers (WASM incompatível com binário Rust standalone) e K8s gerenciado (overhead operacional). `primary_region = "gru"` (São Paulo) — LGPD Art. 44. `PORT` env var configurável. `force_https = true`. `fly.toml` na raiz do repo. |
+
+***
+
 ## 📐 Mapa de Dependências entre ADRs
 
 ```
@@ -216,6 +227,12 @@ ADR-0042 (PolicyEngine Model Integrity)     ← Policy-as-Code (ADR-0006)
   └─► ADR-0051 (AbliterationDetector Fase 2)
         └─► probe_timeout_ms (threading + queue, cross-platform)
         └─► ADR-0010 (BiasDeclaration — refusal calibration)
+
+ADR-0018 (Axum Gateway)
+  └─► ADR-0059 (Rust/Python Boundary — common.rs DRY)
+        └─► ADR-0060 (SaaS Deployment — Fly.io)
+              └─► fly.toml (primary_region=gru, force_https, PORT env var)
+              └─► ops/k8s/ (Enterprise on-premise path preservado)
 ```
 
 ***
@@ -267,15 +284,15 @@ Os ADRs do Grupo I possuem documentos de referência de implementação em `docs
 
 | Métrica | Valor |
 |:---|:---:|
-| Total de ADRs | 44 |
-| ✅ Ativos | 21 |
+| Total de ADRs | 46 |
+| ✅ Ativos | 23 |
 | 🚧 Em Implementação | 2 |
 | 🔒 Planejados / Propostos | 13 |
 | ⛔ Obsoletos | 1 |
 | 🔮 Visão (sem ADR formal) | 2 |
 | Testes (governance Python) | 39 |
-| Última entrada | ADR-0051 |
-| Próximo disponível | ADR-0052 |
+| Última entrada | ADR-0060 |
+| Próximo disponível | ADR-0061 |
 
 ***
 
@@ -288,4 +305,6 @@ Os ADRs do Grupo I possuem documentos de referência de implementação em `docs
 | **Nota de lacuna** | Reserva intencional ADR-043–048 e ADR-050 documentada |
 | **Mapa de dependências** | Adicionada cadeia `ADR-0042 → ADR-0049 → ADR-0051 → Rust BLAKE3` |
 | **Políticas YAML** | Adicionado `data/policies/security/model_integrity.yaml` (ADR-0042) |
-| **Estatísticas** | Total 44 (+3), Ativos 21 (+3), Última entrada ADR-0051, Próximo ADR-0052 |
+| **Grupo L** | ✨ **Novo** — SaaS Deployment: ADR-0059 (Rust/Python Boundary), ADR-0060 (Fly.io) (✅ Ativo v3.0) |
+| **Mapa de dependências** | Adicionada cadeia `ADR-0018 → ADR-0059 → ADR-0060 → fly.toml` |
+| **Estatísticas** | Total 46 (+2), Ativos 23 (+2), Última entrada ADR-0060, Próximo ADR-0061 |
