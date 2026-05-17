@@ -34,13 +34,6 @@ def _check_docker() -> bool:
         return False
 
 
-def _compose_up(compose_file: pathlib.Path) -> bool:
-    result = subprocess.run(
-        ["docker", "compose", "-f", str(compose_file), "up", "-d", "--build"],
-        capture_output=False,
-    )
-    return result.returncode == 0
-
 
 def _wait_healthy(url: str, label: str, timeout: int = 90) -> bool:
     deadline = time.time() + timeout
@@ -59,9 +52,13 @@ def _wait_healthy(url: str, label: str, timeout: int = 90) -> bool:
     return False
 
 
-def _run_agent_mock() -> None:
+BUNDLES = ("baseline_trust", "gdpr_art22_chatbot", "hipaa_phi_audit")
+
+
+def _run_agent_mock(bundle: str) -> None:
     env = os.environ.copy()
     env["BTV_GATEWAY_URL"] = GATEWAY_URL
+    env["BTV_POLICY_BUNDLE"] = bundle
     subprocess.run([sys.executable, str(AGENT_MOCK)], env=env)
 
 
@@ -78,10 +75,23 @@ def _run_agent_mock() -> None:
     default=False,
     help="Não executa o agent_mock.py automaticamente após subir.",
 )
-def demo_cmd(skip_build: bool, no_mock: bool) -> None:
-    """Lança o Trust OS localmente em modo demo (< 15 minutos)."""
+@click.option(
+    "--bundle",
+    default="baseline_trust",
+    show_default=True,
+    type=click.Choice(list(BUNDLES)),
+    help="Policy bundle a ativar. Seleciona o conjunto de regras de conformidade.",
+)
+def demo_cmd(skip_build: bool, no_mock: bool, bundle: str) -> None:
+    """Lança o Trust OS localmente em modo demo (< 15 minutos).
+
+    Exemplo — ativar bundle GDPR Art. 22:
+
+        btv demo --bundle gdpr_art22_chatbot
+    """
     click.echo(f"\n{BOLD}BTV Trust OS — Quickstart{RESET}")
-    click.echo(f"Compose: {COMPOSE_FILE.relative_to(REPO_ROOT)}\n")
+    click.echo(f"Compose: {COMPOSE_FILE.relative_to(REPO_ROOT)}")
+    click.echo(f"Bundle : {YELLOW}{bundle}{RESET}\n")
 
     if not _check_docker():
         click.echo(
@@ -94,14 +104,23 @@ def demo_cmd(skip_build: bool, no_mock: bool) -> None:
         click.echo(f"{RED}Arquivo não encontrado: {COMPOSE_FILE}{RESET}")
         sys.exit(1)
 
+    env = os.environ.copy()
+    env["BTV_POLICY_BUNDLE"] = bundle
+
     click.echo("Subindo serviços...")
     if skip_build:
         ok = subprocess.run(
             ["docker", "compose", "-f", str(COMPOSE_FILE), "up", "-d"],
             capture_output=False,
+            env=env,
         ).returncode == 0
     else:
-        ok = _compose_up(COMPOSE_FILE)
+        result = subprocess.run(
+            ["docker", "compose", "-f", str(COMPOSE_FILE), "up", "-d", "--build"],
+            capture_output=False,
+            env=env,
+        )
+        ok = result.returncode == 0
 
     if not ok:
         click.echo(f"{RED}Falha ao subir os containers. Verifique os logs acima.{RESET}")
@@ -113,7 +132,7 @@ def demo_cmd(skip_build: bool, no_mock: bool) -> None:
 
     if not no_mock:
         click.echo("\nExecutando cenário de demo...")
-        _run_agent_mock()
+        _run_agent_mock(bundle)
 
     click.echo(
         f"\n{GREEN}{BOLD}Tudo pronto!{RESET}\n"

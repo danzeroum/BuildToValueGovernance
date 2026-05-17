@@ -1,0 +1,62 @@
+id: gdpr_art22_chatbot
+name: "GDPR Art. 22 — Chatbot"
+description: >
+  Bundle para chatbots sujeitos ao GDPR Art. 22: proíbe decisões
+  exclusivamente automatizadas com efeitos jurídicos significativos
+  sem revisão humana. Inclui direito de contestação (contestability).
+parent_id: baseline_trust
+
+version: "1.0.0"
+created_at: "2026-05-17"
+updated_at: "2026-05-17"
+
+rules:
+  - id: "GDPR_ART22_BLOCK_AUTO_CREDIT"
+    name: "Block Automated Credit Decision (Art. 22)"
+    description: >
+      GDPR Art. 22(1): decisão automatizada de crédito sem supervisão
+      humana é proibida. Requer intervenção humana e direito de contestação.
+    action: BLOCK
+    priority: 500
+    categories: ["financial", "credit", "automated_decision"]
+    min_severity: 0.5
+    min_confidence: 0.6
+    explain_template: >
+      Bloqueado por GDPR Art. 22: esta decisão automatizada de crédito
+      requer revisão humana e notificação ao titular dos dados.
+
+  - id: "GDPR_ART22_BLOCK_AUTO_EMPLOYMENT"
+    name: "Block Automated Employment Decision (Art. 22)"
+    description: "Decisão automatizada de emprego sem revisão humana"
+    action: BLOCK
+    priority: 500
+    categories: ["employment", "automated_decision"]
+    min_severity: 0.5
+    min_confidence: 0.6
+
+  - id: "GDPR_ART22_EDUCATE_PROFILING"
+    name: "Educate on Profiling (Art. 22)"
+    description: "Perfis de usuário para fins decisórios requerem base legal explícita"
+    action: EDUCATE
+    priority: 200
+    categories: ["profiling"]
+    min_severity: 0.3
+    min_confidence: 0.5
+
+  - id: "GDPR_REDACT_SPECIAL_CATEGORIES"
+    name: "Redact Special Category Data (Art. 9)"
+    description: "Dados de categorias especiais (saúde, origem étnica, religião) são sempre redigidos"
+    action: REDACT
+    priority: 450
+    categories: ["health", "biometric", "religion", "ethnic_origin"]
+    min_severity: 0.4
+    min_confidence: 0.7
+
+domain_config:
+  chatbot:
+    risk_multiplier: 1.2
+    contestability_enabled: false
+    education_message: >
+      GDPR Art. 22 se aplica a este chatbot. Decisões automatizadas com
+      efeitos jurídicos requerem revisão humana. Titular tem direito de
+      contestação (Art. 22(3)).
