@@ -28,9 +28,10 @@ pub mod decide;       // ADR-040
 pub mod appeals;      // ADR-040
 pub mod health_bias;  // ADR-040
 pub mod trust;        // ADR-040
+pub mod proxy;        // Fase 2: proxy HTTP transparente (ADR-0059)
 
 use std::sync::Arc;
-use axum::{Router, routing::{get, post}, middleware};
+use axum::{Router, routing::{any, get, post}, middleware};
 use tower_http::trace::TraceLayer;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::cors::{CorsLayer, Any};
@@ -71,6 +72,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 
         // Trust score (ADR-039)
         .route("/v1/trust/:session",        get(trust::get_trust_handler))
+
+        // ── Proxy HTTP transparente (ADR-0059) ───────────────────
+        // Drop-in: OPENAI_BASE_URL=http://gateway:8080/v1/proxy
+        // ApiKeyLayer protege a rota; Authorization do LLM provider é forwarded.
+        .route("/v1/proxy/*path",           any(proxy::proxy_forward))
 
         // ── SPA fallback (React dashboard) ──────────────────────
         .fallback_service(

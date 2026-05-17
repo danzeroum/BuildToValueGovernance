@@ -1,7 +1,8 @@
 # BTV Quickstart — demo leve sem GPU, sem nginx, sem observabilidade
 # Uso: docker compose -f ops/docker-compose.quickstart.yml up -d
-# Dashboard: http://localhost:8501
-# Gateway:   http://localhost:8080
+# Dashboard:     http://localhost:8501
+# Gateway:       http://localhost:8080
+# Upstream mock: http://localhost:8082  (httpbin — ecoa requests para testes E2E)
 
 services:
   governance:
@@ -32,6 +33,16 @@ services:
       retries: 12
       start_period: 10s
 
+  upstream-mock:
+    image: kennethreitz/httpbin
+    ports:
+      - "8082:80"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/status/200"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   gateway:
     build:
       context: ..
@@ -42,6 +53,7 @@ services:
       BTV_HMAC_KEY: "demo-key-not-for-production"
       BTV_ENV: "development"
       BTV_GOVERNANCE_URL: "http://governance:8000"
+      BTV_PROXY_UPSTREAM_URL: "http://upstream-mock:80"
       BTV_POLICY_DIR: "/app/data/policies"
       RUST_LOG: "btv_gateway=info"
     volumes:
