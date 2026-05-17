@@ -22,6 +22,7 @@ st.sidebar.title("BuildToValue")
 st.sidebar.caption("Sovereign Trust OS v2.0")
 
 page = st.sidebar.radio("Navigation", [
+    "Overview",
     "Validate",
     "Sanitize",
     "Trust Score",
@@ -38,7 +39,192 @@ page = st.sidebar.radio("Navigation", [
 # VALIDATE
 # ═══════════════════════════════════════════════════════════════
 
-if page == "Validate":
+# ═══════════════════════════════════════════════════════════════
+# OVERVIEW  — visão de negócio (primeira da nav)
+# ═══════════════════════════════════════════════════════════════
+
+def _parse_prometheus(text: str, metric: str) -> float:
+    """Extrai valor de um counter/gauge do texto Prometheus."""
+    for line in text.splitlines():
+        if line.startswith(metric) and not line.startswith("#"):
+            try:
+                return float(line.split()[-1])
+            except (ValueError, IndexError):
+                pass
+    return 0.0
+
+def _fetch_metrics_text() -> str:
+    try:
+        r = requests.get(f"{GATEWAY_URL}/metrics", timeout=3)
+        return r.text if r.ok else ""
+    except Exception:
+        return ""
+
+def _fetch_compliance_score(framework: str) -> float | None:
+    """Retorna % de conformidade (0–1) ou None se endpoint indisponível."""
+    try:
+        r = requests.get(
+            f"{GOVERNANCE_URL}/v1/compliance/report/{framework}",
+            timeout=3,
+        )
+        if r.ok:
+            data = r.json()
+            return data.get("compliance_score") or data.get("score")
+    except Exception:
+        pass
+    return None
+
+def _compliance_color(score: float | None) -> str:
+    if score is None:
+        return "gray"
+    if score >= 0.9:
+        return "green"
+    if score >= 0.7:
+        return "orange"
+    return "red"
+
+def _compliance_label(score: float | None) -> str:
+    if score is None:
+        return "—"
+    if score >= 0.9:
+        return f"✅ {score:.0%}"
+    if score >= 0.7:
+        return f"⚠️ {score:.0%}"
+    return f"🔴 {score:.0%}"
+
+if page == "Overview":
+    st.title("Trust OS — Visão Geral")
+    st.caption("Decisões em conformidade comprovável · atualiza a cada 30s")
+
+    metrics_text = _fetch_metrics_text()
+
+    # ── Zona 1: KPI Hero ────────────────────────────────────────
+    st.markdown("### Indicadores de Negócio")
+
+    decisions_allow  = _parse_prometheus(metrics_text, 'btv_decisions_total{action="ALLOW"}')
+    decisions_block  = _parse_prometheus(metrics_text, 'btv_decisions_total{action="BLOCK"}')
+    proxy_blocked    = _parse_prometheus(metrics_text, "btv_proxy_blocked_total")
+    total_decisions  = decisions_allow + decisions_block + proxy_blocked
+
+    trust_pct = (decisions_allow / total_decisions) if total_decisions > 0 else None
+    blocked_today = int(decisions_block + proxy_blocked)
+    blocked_pct   = (blocked_today / total_decisions) if total_decisions > 0 else 0.0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(
+        "Trust Score médio",
+        f"{trust_pct:.0%}" if trust_pct is not None else "—",
+        help="Proporção de decisões em conformidade comprovável sobre o total.",
+    )
+    c2.metric(
+        "Decisões governadas",
+        f"{int(total_decisions):,}" if total_decisions > 0 else "—",
+        help="Total de decisões interceptadas e validadas pelo Trust OS.",
+    )
+    c3.metric(
+        "Bloqueios (risco evitado)",
+        f"{blocked_today:,}" if total_decisions > 0 else "—",
+        delta=f"↓ {blocked_pct:.0%} do total" if total_decisions > 0 else None,
+        delta_color="inverse",
+        help="Decisões bloqueadas por violação de política — cada bloqueio é risco regulatório evitado.",
+    )
+    c4.metric(
+        "SLA contestação",
+        "24h",
+        help="LGPD Art. 20 / EU AI Act Art. 14 — prazo máximo para revisão humana de qualquer bloqueio.",
+    )
+
+    if total_decisions == 0:
+        st.info(
+            "Nenhuma decisão registrada ainda. "
+            "Execute `btv demo` ou envie uma requisição via `/v1/proxy` para ver os dados.",
+            icon="ℹ️",
+        )
+
+    st.divider()
+
+    # ── Zona 2: Feed de decisões recentes ───────────────────────
+    st.markdown("### Últimas Decisões")
+
+    try:
+        resp = requests.get(f"{GOVERNANCE_URL}/v1/ledger/recent?limit=10", timeout=3)
+        entries = resp.json() if resp.ok else []
+    except Exception:
+        entries = []
+
+    if entries:
+        rows = []
+        for e in entries:
+            verdict   = e.get("action", e.get("verdict", "?"))
+            timestamp = e.get("timestamp", e.get("created_at", ""))[:16].replace("T", " ")
+            article   = e.get("triggered_rule", e.get("policy_id", "—"))
+            evidence  = e.get("evidence_hash", e.get("hmac_tag", ""))[:8] or "—"
+            rows.append({
+                "Hora": timestamp,
+                "Decisão": verdict,
+                "Artigo violado": article,
+                "Evidência": evidence,
+            })
+        import pandas as pd
+        df = pd.DataFrame(rows)
+
+        def _color_verdict(val: str) -> str:
+            colors = {
+                "BLOCK": "background-color:#3a1b30;color:#d163a7",
+                "ALLOW": "background-color:#1e3012;color:#6daa45",
+                "REDACT": "background-color:#3d2318;color:#bb653b",
+                "EDUCATE": "background-color:#3d3010;color:#e8af34",
+            }
+            return colors.get(val, "")
+
+        st.dataframe(
+            df.style.map(_color_verdict, subset=["Decisão"]),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.caption("Nenhuma decisão no ledger ainda.")
+
+    st.divider()
+
+    # ── Zona 3: Mapa de conformidade ────────────────────────────
+    st.markdown("### Conformidade Regulatória")
+
+    frameworks = [
+        ("LGPD",       "lgpd",    "Lei Geral de Proteção de Dados (Brasil)"),
+        ("GDPR",       "gdpr",    "General Data Protection Regulation (EU)"),
+        ("EU AI Act",  "eu_ai_act", "European Union Artificial Intelligence Act"),
+    ]
+
+    cols = st.columns(3)
+    for col, (label, key, desc) in zip(cols, frameworks):
+        score = _fetch_compliance_score(key)
+        color = _compliance_color(score)
+        badge = _compliance_label(score)
+        col.markdown(
+            f"""
+            <div style="border:1px solid #333;border-radius:8px;padding:1rem;
+                        border-left:4px solid {'#6daa45' if color=='green'
+                            else '#bb653b' if color=='red' else '#e8af34' if color=='orange'
+                            else '#4a4947'}">
+                <div style="font-size:0.7rem;color:#7a7874;text-transform:uppercase;
+                            letter-spacing:0.08em;margin-bottom:0.4rem">{label}</div>
+                <div style="font-size:1.4rem;font-weight:700;margin-bottom:0.4rem">{badge}</div>
+                <div style="font-size:0.7rem;color:#7a7874">{desc}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.caption(
+        "Scores calculados pelo motor de conformidade Python. "
+        "Percentual de decisões com evidência comprovável sobre o framework selecionado."
+    )
+
+    if st.button("↻ Atualizar", key="overview_refresh"):
+        st.rerun()
+
+elif page == "Validate":
     st.title("Validate Input")
     st.caption("Scan + Policy + Governance (Republica Algoritmica)")
 
