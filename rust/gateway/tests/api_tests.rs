@@ -1,6 +1,7 @@
 //! F1.9-04: Gateway API integration tests + benchmarks.
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use axum_test::TestServer;
     use serde_json::json;
