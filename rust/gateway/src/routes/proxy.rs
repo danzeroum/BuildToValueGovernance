@@ -128,9 +128,12 @@ pub async fn proxy_forward(
         let evidence = gk.scan_for_evidence(&input_text, 0u128);
         let findings = evidence.get_all_findings();
 
-        #[allow(clippy::unwrap_used)]
-        let mut engine = PolicyEngine::from_yaml_str(DEFAULT_POLICY)
-            .unwrap_or_else(|_| PolicyEngine::from_yaml_str(FALLBACK_POLICY).unwrap());
+        let engine_result = PolicyEngine::from_yaml_str(DEFAULT_POLICY)
+            .or_else(|_| PolicyEngine::from_yaml_str(FALLBACK_POLICY));
+        let mut engine = match engine_result {
+            Ok(e) => e,
+            Err(_) => return block_response("Policy engine init failed — fail-secure block"),
+        };
         let eval = engine.evaluate_full(&input_text, &findings);
 
         let policy_action = match eval.action {
@@ -200,8 +203,8 @@ pub async fn proxy_forward(
                 .unwrap_or_default()
                 .action
         }
-        // Governance unavailable → fail-secure: use kernel decision
-        _ => policy_action.clone(),
+        // Governance unavailable → fail-secure: always block
+        _ => "BLOCK".to_string(),
     };
 
     if final_action != "ALLOW" {
