@@ -86,7 +86,7 @@ impl Module for CharRatioAnalyzer {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Statistics }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.08, 0.15, 20260209, 300)
+        BiasDeclaration::new(0.08, 0.15, 20260517, 300)
             .with_limitations("Idiomas CJK alteram proporções naturais.")
             .with_affected_groups("N/A")
     }

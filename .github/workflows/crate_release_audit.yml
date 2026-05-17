@@ -61,6 +61,8 @@ jobs:
         working-directory: ./rust
         # Executa testes unitários garantindo que a latência e os invariantes
         # criptográficos (BLAKE3, HMAC-SHA256) permanecem no threshold documentado.
+        env:
+          BTV_HMAC_KEY: ${{ secrets.BTV_HMAC_KEY || 'ci-workspace-test-key-padded-for-hmac' }}
         run: cargo test --workspace
 
       - name: "4. Validação de Empacotamento btv-core (Núcleo Interno)"
