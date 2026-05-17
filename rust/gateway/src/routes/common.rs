@@ -34,6 +34,13 @@ pub fn ip_risk_to_str(risk: IpRisk) -> &'static str {
     }
 }
 
+/// Upstream governance service URL (Python FastAPI on :8000).
+/// Extracted here so every route proxy reads from a single location.
+pub fn governance_url() -> String {
+    std::env::var("BTV_GOVERNANCE_URL")
+        .unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
+
 /// Minimal fallback policy used when the compiled-in default.yaml fails to parse.
 /// Should NEVER be reached in production — indicates a build or packaging issue.
 pub const FALLBACK_POLICY: &str = r#"

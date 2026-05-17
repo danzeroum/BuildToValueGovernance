@@ -15,11 +15,7 @@ use serde_json::Value;
 use std::sync::Arc;
 
 use crate::state::AppState;
-
-fn governance_url() -> String {
-    std::env::var("BTV_GOVERNANCE_URL")
-        .unwrap_or_else(|_| "http://localhost:8000".to_string())
-}
+use super::common::governance_url;
 
 /// POST /v1/appeals — Submeter appeal.
 pub async fn submit_appeal(
