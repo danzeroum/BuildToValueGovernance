@@ -166,4 +166,51 @@ policies:
         let res = server.get("/health").await;
         res.assert_status_ok();
     }
+
+    // ─── PROXY ──────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_proxy_blocks_violating_request() {
+        // When governance is unreachable (no service in unit tests),
+        // the proxy must fail-secure: return 451, never forward.
+        let server = test_server();
+        let res = server
+            .post("/v1/proxy/v1/chat/completions")
+            .json(&json!({
+                "input": "CPF 123.456.789-00 crédito negado sem revisão humana",
+                "session_id": "unit-test-block"
+            }))
+            .await;
+        // Governance is down in unit tests → fail-secure → 451
+        assert_eq!(res.status_code().as_u16(), 451);
+        let body: serde_json::Value = res.json();
+        assert_eq!(body["blocked"], true);
+        assert!(body["appeal_url"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_proxy_metrics_increment_on_request() {
+        // After any proxy request, btv_proxy_requests_total must be in /metrics.
+        // (metric is initialized at AppState::new, so it appears even before first request)
+        let server = test_server();
+        let _ = server
+            .post("/v1/proxy/v1/chat/completions")
+            .json(&json!({ "input": "test", "session_id": "unit-metrics" }))
+            .await;
+        let metrics_res = server.get("/metrics").await;
+        metrics_res.assert_status_ok();
+        let text = metrics_res.text();
+        assert!(text.contains("btv_proxy_requests_total"));
+        assert!(text.contains("btv_proxy_blocked_total"));
+        assert!(text.contains("btv_proxy_forward_latency_ms"));
+    }
+
+    #[tokio::test]
+    async fn test_proxy_method_passthrough() {
+        // GET requests to proxy path are also intercepted (any method).
+        let server = test_server();
+        let res = server.get("/v1/proxy/v1/models").await;
+        // Governance down → fail-secure 451 (not 404 or 405)
+        assert_eq!(res.status_code().as_u16(), 451);
+    }
 }

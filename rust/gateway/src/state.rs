@@ -144,6 +144,29 @@ lazy_static! {
             "BiasGuardian gate violations detected via /health/bias"
         ).unwrap() }
     };
+
+    // ── Proxy forward metrics (Fase 2 — proxy HTTP transparente) ──
+    pub static ref PROXY_REQUESTS_TOTAL: IntCounter = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter!(
+            "btv_proxy_requests_total", "Total requests intercepted by proxy"
+        ).unwrap() }
+    };
+
+    pub static ref PROXY_BLOCKED_TOTAL: IntCounter = {
+        #[allow(clippy::unwrap_used)]
+        { register_int_counter!(
+            "btv_proxy_blocked_total", "Total proxy requests blocked by policy (HTTP 451)"
+        ).unwrap() }
+    };
+
+    pub static ref PROXY_FORWARD_LATENCY_MS: Histogram = {
+        #[allow(clippy::unwrap_used)]
+        { register_histogram!(
+            HistogramOpts::new("btv_proxy_forward_latency_ms", "Proxy forward round-trip latency ms")
+                .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0])
+        ).unwrap() }
+    };
 }
 
 pub struct AppState {
@@ -181,6 +204,9 @@ impl AppState {
         lazy_static::initialize(&PIPELINE_GILLIGAN_DURATION);
         lazy_static::initialize(&TRUST_ADJUSTMENTS_TOTAL);
         lazy_static::initialize(&BIAS_GATE_VIOLATIONS_TOTAL);
+        lazy_static::initialize(&PROXY_REQUESTS_TOTAL);
+        lazy_static::initialize(&PROXY_BLOCKED_TOTAL);
+        lazy_static::initialize(&PROXY_FORWARD_LATENCY_MS);
 
         Self {
             gatekeeper: Mutex::new(Gatekeeper::new()),
