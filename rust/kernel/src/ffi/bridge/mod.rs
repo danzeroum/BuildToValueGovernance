@@ -9,6 +9,7 @@
 pub mod types;
 pub(crate) mod serialization;
 pub mod api;
+pub(crate) mod batch;
 
 pub use types::{PyTechnicalEvidence, PyBiasDeclaration, PyBatchResult, PyBatchItem};
 pub use api::{update_accumulator_config, version};
@@ -20,11 +21,9 @@ use crate::gatekeeper::Gatekeeper;
 use crate::batch::{BatchProcessor, BatchConfig, BatchItemStatus};
 use crate::ledger::{DurableLedger, LedgerEntry};
 use crate::ledger::remote::S3Config;
-use crate::evidence::TechnicalEvidence;
 use crate::session_guard::accumulator::{AccumulatorConfig, SensitivityAccumulator};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
-use serde_json;
 use pyo3::types::PyBytes;
 
 // ── Global accumulator state ──────────────────────────────────────────────
@@ -115,6 +114,7 @@ impl RustKernel {
     }
 
     /// Batch scan returning JSON bytes — Orchestrator-mandated pure-Rust serialization.
+    /// Validation here; serialization logic in batch::scan_batch_to_bytes (ADR-009).
     fn scan_for_evidence_batch(
         &self,
         py: Python<'_>,
@@ -129,15 +129,8 @@ impl RustKernel {
         if trail_ids.iter().any(|&id| id > u128::from(u64::MAX)) {
             return Err(PyValueError::new_err("trail_id exceeds u64::MAX — overflow risk"));
         }
-        let mut gk = self.gatekeeper.lock()
-            .map_err(|_| PyRuntimeError::new_err("Gatekeeper lock poisoned — BLOCK"))?;
-        let mut batch: Vec<TechnicalEvidence> = Vec::with_capacity(inputs.len());
-        for (input, trail_id) in inputs.iter().zip(trail_ids.iter()) {
-            batch.push(gk.scan_for_evidence(input, *trail_id));
-        }
-        let json_bytes = serde_json::to_vec(&batch)
-            .map_err(|e| PyRuntimeError::new_err(format!("JSON serialization failed: {e}")))?;
-        Ok(PyBytes::new(py, &json_bytes).into())
+        let bytes = batch::scan_batch_to_bytes(&self.gatekeeper, &inputs, &trail_ids)?;
+        Ok(PyBytes::new(py, &bytes).into())
     }
 
     #[pyo3(signature = (inputs, max_batch_size=100, item_timeout_ms=10, batch_timeout_ms=1000))]
