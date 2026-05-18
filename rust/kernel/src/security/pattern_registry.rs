@@ -235,6 +235,28 @@ fn build_default_patterns() -> Vec<CompiledPattern> {
         (r"(?i)\bcomo\s+(voc[êe]\s+)?(detecta?|funciona\s+internamente|foi\s+programad)", "DATA_EXFILTRATION"),
         (r"(?i)\b(quais?\s+s[ãa]o\s+)?(seus?|your)\s+(par[âa]metros?|parameters?|configura[çc][õo]es?)\b", "DATA_EXFILTRATION"),
         (r"(?i)\b(qual\s+[eé]\s+o\s+seu|what\s+is\s+your)\s+(prompt|sistema|system)\b", "DATA_EXFILTRATION"),
+        // ── RT-001 G: Contextual Override (hypothetical/test/roleplay framing) ──
+        (r"(?i)\bhypothetically\b.{0,40}(?:you\b|your\b|the\s+(?:rules?|restrictions?))", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\blet[`']?s\s+(?:say|assume|pretend)\b.{0,40}(?:rules?|restrictions?|guidelines?)", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bif\s+(this\s+were|it\s+was)\s+(a|just\s+a)\s+(?:movie|game|story|test|simulation)\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bpara\s+fins?\s+de\s+(?:teste|demonstra[çc][ãa]o)\b.{0,40}(?:ignore|bypass|esquec)", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bwhat\s+(?:are|were)\s+your\s+(?:true\s+)?(?:capabilities?|abilities?|skills?)\b", "DATA_EXFILTRATION"),
+        (r"(?i)\bif\s+there\s+were\s+no\s+(?:rules?|restrictions?|guidelines?|limits?)\b", "INSTRUCTION_OVERRIDE"),
+        // ── RT-001 J: Semantic / Poetic Jailbreak ──────────────────────────────
+        (r"(?i)\bbreaking\s+(?:free|the\s+(?:chains?|rules?|bonds?))\b.{0,60}(?:show|reveal|tell|demonstrate)\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\b(?:freedom|liberdade|libertad)\b.{0,50}(?:restrictions?|restrições?|guidelines?|limits?)\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\byour\s+true\s+(?:self|nature|purpose|potential)\b.{0,30}(?:without|beyond|free)\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bunchain\s+(?:yourself|your\s+mind|your\s+potential)\b", "INSTRUCTION_OVERRIDE"),
+        // ── RT-001 K: Translation Attacks ──────────────────────────────────────
+        (r"(?i)\btranslate\s+(?:this\s+)?(?:to\s+\w+\s*)?:\s*.{0,40}(?:ignore|bypass|override|disregard)\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\bem\s+(?:ingl[eê]s|english|espa[nñ]hol|espanhol)\s*:\s*.{0,40}(?:ignore|bypass|override)\b", "INSTRUCTION_OVERRIDE"),
+        (r"(?i)\b(?:say|write|repeat)\s+(?:it\s+)?in\s+\w+\s*:\s*.{0,40}(?:ignore|bypass|forget)\b", "INSTRUCTION_OVERRIDE"),
+        // ── RT-001 Format / Structural Injection ───────────────────────────────
+        (r#"(?i)"role"\s*:\s*"system""#, "STRUCTURAL_INJECTION"),
+        (r"(?i)\{[^}]{0,80}(?:ignore|bypass|override)\s+(?:all|previous|rules?)[^}]{0,40}\}", "STRUCTURAL_INJECTION"),
+        (r"(?i)```\s*(?:json|xml|yaml)\s*\{[^}]{0,60}(?:role|system|ignore|bypass)", "STRUCTURAL_INJECTION"),
+        (r#"(?i)"(?:role|task|cmd|command)"\s*:\s*"(?:system|ignore|bypass|override)[^"]{0,60}""#, "STRUCTURAL_INJECTION"),
+        (r"(?i)<system>\s*.{0,60}(?:ignore|override|bypass|disregard)", "STRUCTURAL_INJECTION"),
     ];
     for (pat, cat) in &universal {
         if let Some(cp) = CompiledPattern::new(pat, PatternTier::Universal, 0, cat) {

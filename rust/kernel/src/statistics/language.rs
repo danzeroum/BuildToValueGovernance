@@ -19,7 +19,9 @@ use crate::evidence::Finding;
 // Para inputs > LONG_INPUT_LEN usamos threshold mais alto (0.60) para maior precisão.
 // Para inputs curtos (> MIN_INPUT_LEN) usamos threshold menor (0.30) para maior recall.
 const MIN_CONFIDENCE_SHORT: f64 = 0.30;
-const MIN_CONFIDENCE_LONG: f64 = 0.60;
+// Lowered from 0.60 → 0.45 (ADR-0034): PT-BR injection payloads (35-60 chars mixed
+// with command terms) score ~0.50 in whatlang; 0.60 caused systematic Tier 1 PT miss.
+const MIN_CONFIDENCE_LONG: f64 = 0.45;
 // Input muito curto: não há sinal suficiente para detecção confiável.
 const MIN_INPUT_LEN: usize = 10;
 // Inputs acima deste limiar têm sinal suficiente para exigir confiança mais alta.
@@ -111,15 +113,15 @@ impl Module for LanguageDetector {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(
-            0.05, // FPR: idioma errado detectado com confiança >= threshold
-            0.20, // FNR: textos curtos ou mistos não detectados (undetermined) — reduzido de 0.25
-            20260319,
+            0.08, // FPR: aumentado de 0.05 → estimativa pós-calibração threshold 0.45 (ADR-0034)
+            0.12, // FNR: reduzido de 0.20 — threshold 0.45 melhora recall PT-BR
+            20260518,
             450,
         )
         .with_limitations(
             "Textos < 10 chars retornam undetermined. \
              Inputs mistos (PT+EN) detectam apenas idioma dominante. \
-             Threshold adaptativo: 0.30 para inputs <= 30 chars, 0.60 para inputs > 30 chars.",
+             Threshold adaptativo: 0.30 para inputs <= 30 chars, 0.45 para inputs > 30 chars.",
         )
         .with_affected_groups(
             "Usuários com inputs curtos (mobile). \
