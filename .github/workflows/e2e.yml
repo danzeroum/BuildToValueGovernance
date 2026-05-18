@@ -99,9 +99,20 @@ jobs:
       # ── Docker Compose — governance + gateway (pré-compilado) + upstream ──
       # Usa Dockerfile.rust-ci: copia o binário pré-compilado em vez de
       # recompilar o Rust dentro do Docker (~10 min → ~10 s).
+      - name: "Verificar pré-requisitos Docker"
+        run: |
+          echo "=== docker compose version ==="
+          docker compose version
+          echo "=== binário gateway ==="
+          ls -la bin/btv-gateway
+          echo "=== compose config resolving ==="
+          docker compose -f ops/docker-compose.e2e.yml config --quiet && echo "config OK"
+        env:
+          BTV_POLICY_BUNDLE: ${{ env.BTV_POLICY_BUNDLE }}
+
       - name: "Build e subir serviços (docker compose)"
         run: |
-          docker compose -f ops/docker-compose.e2e.yml up -d --build
+          docker compose -f ops/docker-compose.e2e.yml up -d --build --progress=plain
         env:
           BTV_POLICY_BUNDLE: ${{ env.BTV_POLICY_BUNDLE }}
 
