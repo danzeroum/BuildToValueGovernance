@@ -11,7 +11,6 @@ RUN groupadd -r btv && useradd -r -g btv -d /app btv \
     && chown -R btv:btv /app
 
 COPY bin/btv-gateway /usr/local/bin/btv-gateway
-COPY data/ /app/data/
 RUN chown -R btv:btv /app
 
 USER btv
