@@ -91,6 +91,16 @@ impl RustKernel {
         entry.audit_trail_id = evidence.inner.audit_trail_id;
         entry.timestamp = evidence.inner.timestamp;
         entry.risk_level = evidence.inner.risk_level;
+        // ADR-060: bias declaration packed into _reserved
+        entry.set_bias(
+            evidence.inner.bias.false_positive_rate,
+            evidence.inner.bias.false_negative_rate,
+            evidence.inner.bias.calibration_date,
+        );
+        // ADR-062: regime_hash = 0 until ADR-064 PolicyWatcher is live (documented debt)
+        entry.set_regime_hash_partial(0u64);
+        // ADR-062: explanation_hash from evidence hash (full explanation in appeals.db)
+        entry.set_explanation_hash(&evidence.inner.hash);
         let ledger = self.ledger.lock()
             .map_err(|_| PyRuntimeError::new_err("Ledger lock poisoned — BLOCK"))?;
         let seq = ledger.append(entry, &evidence.inner)
