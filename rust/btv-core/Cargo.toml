@@ -37,10 +37,15 @@ serde_json = { workspace = true }
 # LogClient HTTP (Phase 2) — feature-gated para manter hot path livre de deps async
 reqwest = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
+# AppealWriter (ADR-062) — feature-gated; keeps hot path free of SQLite + async deps
+rusqlite = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
 
 [features]
 # Habilita LogClient (requer reqwest + tokio)
 log-client = ["reqwest", "tokio"]
+# Habilita AppealWriter (requer tokio + rusqlite)
+appeal-writer = ["tokio", "rusqlite", "tracing"]
 
 [dev-dependencies]
 trybuild = "1"
