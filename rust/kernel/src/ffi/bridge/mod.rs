@@ -42,9 +42,11 @@ fn buildtovalue_kernel(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RustKernel>()?;
     m.add_class::<types::PyTechnicalEvidence>()?;
     m.add_class::<types::PyBiasDeclaration>()?;
-    m.add_class::<PyBatchResult>()?;
+    m.add_class::<types::PyBatchResult>()?;
+    m.add_class::<api::PySessionAccumulator>()?;
     m.add_function(wrap_pyfunction!(api::update_accumulator_config, m)?)?;
     m.add_function(wrap_pyfunction!(api::version, m)?)?;
+    m.add_function(wrap_pyfunction!(api::create_session_accumulator, m)?)?;
     m.add("VERSION", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
