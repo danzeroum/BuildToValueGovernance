@@ -3,7 +3,7 @@
 //! Estágios ordenados:
 //! 1. Deobfuscate: normaliza input (Base64, Hex, Leetspeak)
 //! 2. Analyze: preenche statistics (Entropy, ZScore, CharRatio)
-//! 3. Validate: detecta PII/violações (CPF, CNPJ, Email, Phone, CC)
+//! 3. Validate: detecta PII/violações (CPF, CNPJ, Email, Phone, CC, LGPD Art.11)
 //!    3.5. Re-scan: deobfuscator chaining + re-validate decoded text
 //! 5. Finalize: bias aggregation, hash, métricas
 //!
@@ -22,6 +22,7 @@ use crate::validators::us::SsnValidator;
 use crate::validators::brazilian::{CpfValidator, CnpjValidator};
 use crate::validators::communication::{EmailValidator, PhoneValidator};
 use crate::validators::financial::CreditCardValidator;
+use crate::validators::SensitiveDataValidator;
 use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, LanguageDetector};
 use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector, Normalizer};
 use crate::interceptor::{InterceptorChain, InterceptAction, ToolScreen}; // Wire 2: PROP-034a
@@ -89,6 +90,7 @@ impl Gatekeeper {
             StageEntry { module: Box::new(PhoneValidator::new()),        stage: PipelineStage::Validate },
             StageEntry { module: Box::new(PromptInjectionDetector::new()), stage: PipelineStage::Validate },
             StageEntry { module: Box::new(SsnValidator::new()),          stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(SensitiveDataValidator::new()), stage: PipelineStage::Validate },
         ];
 
         // Wire 2: PROP-034a — registra ToolScreen no InterceptorChain
