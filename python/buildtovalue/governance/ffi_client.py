@@ -117,9 +117,15 @@ class FFIClient:
 
     def _init_bridge(self) -> None:
         try:
-            import buildtovalue_governance  # noqa: F401 — just verify import
+            import buildtovalue_kernel as btv  # noqa: F401
+            kernel = btv.RustKernel()
+            if not hasattr(kernel, "scan_for_evidence_batch"):
+                raise BridgeNotAvailableError(
+                    "scan_for_evidence_batch missing on RustKernel — run `maturin develop` [BLOCK]"
+                )
+            self._btv_kernel = kernel
             self.bridge_mode = "pyo3"
-            logger.info("FFI bridge: PyO3 (buildtovalue_governance)")
+            logger.info("FFI bridge: PyO3 (buildtovalue_kernel)")
             return
         except ImportError:
             logger.debug("PyO3 bridge unavailable, trying ctypes")
@@ -177,11 +183,9 @@ class FFIClient:
         return ev
 
     def _scan_pyo3(self, input_text: str) -> TechnicalEvidence:
-        import buildtovalue_governance as btv
-
-        trail_id = uuid.uuid4().int
+        trail_id = uuid.uuid4().int & 0xFFFF_FFFF_FFFF_FFFF  # clamp to u64 max
         try:
-            result_bytes = btv.scan_for_evidence_batch([input_text], [trail_id])
+            result_bytes = self._btv_kernel.scan_for_evidence_batch([input_text], [trail_id])
         except Exception as exc:
             raise FFIError(f"PyO3 scan_for_evidence_batch failed: {exc}") from exc
 
