@@ -1,0 +1,24 @@
+# CI-only Dockerfile: expects a pre-built btv-gateway binary in context.
+# Used by ops/docker-compose.e2e.yml to skip the 10-minute Rust compilation
+# by using the binary already built on the CI runner with cargo cache.
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r btv && useradd -r -g btv -d /app btv \
+    && mkdir -p /app/data/ledger \
+    && chown -R btv:btv /app
+
+COPY bin/btv-gateway /usr/local/bin/btv-gateway
+COPY data/ /app/data/
+RUN chown -R btv:btv /app
+
+USER btv
+WORKDIR /app
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=5s \
+    CMD curl -sf http://localhost:8080/health || exit 1
+
+CMD ["btv-gateway"]

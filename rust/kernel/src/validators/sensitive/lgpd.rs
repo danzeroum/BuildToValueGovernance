@@ -94,7 +94,7 @@ impl Validator for SensitiveDataValidator {
     }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.18, 0.12, 20260209, 200)
+        BiasDeclaration::new(0.18, 0.12, 20260517, 200)
             .with_limitations(
                 "Keyword-based detection (no semantics); Brazilian Portuguese only; high FPR for medical terms."
             )

@@ -27,7 +27,7 @@ impl Module for ConsentRevocationValidator {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::ConsentRevocation }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.01, 0.00, 20260209, 80)
+        BiasDeclaration::new(0.01, 0.00, 20260517, 80)
             .with_limitations(
                 "Race condition between revocation timestamp and async processing jobs."
             )
@@ -50,6 +50,6 @@ mod tests {
     #[test]
     fn test_bias_declaration_non_default() {
         let bias = ConsentRevocationValidator::new().bias_declaration();
-        assert!(bias.calibration_date >= 20260101);
+        assert!(bias.calibration_date >= 20260517);
     }
 }

@@ -111,6 +111,7 @@ fn process_evidence_real(input: &str) -> Result<TechnicalEvidence, String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

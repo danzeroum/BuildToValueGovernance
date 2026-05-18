@@ -38,6 +38,7 @@ pub struct FFIFinding {
 }
 
 impl FFIFinding {
+    #[allow(clippy::unwrap_used)]
     fn from_finding(finding: &Finding) -> Self {
         let severity_value = finding.severity.to_u8();
 
@@ -203,6 +204,7 @@ pub unsafe extern "C" fn free_validation_result(result: FFIValidationResult) {
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
+#[allow(clippy::unwrap_used)]
 fn ffi_error(msg: &str) -> FFIValidationResult {
     FFIValidationResult {
         findings:       std::ptr::null_mut(),
@@ -238,6 +240,7 @@ fn convert_findings_to_ffi(findings: Vec<Finding>) -> FFIValidationResult {
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use std::ffi::CString;
