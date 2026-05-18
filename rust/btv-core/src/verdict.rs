@@ -108,6 +108,40 @@ impl Verdict {
         (verdict_record, appeal_record)
     }
 
+    /// Produce the constitutional wire format (ADR-063).
+    ///
+    /// Converts heap-allocated `BiasDeclaration` fields to BLAKE3 hashes for
+    /// zero-heap `BiasDeclarationFixed`. The resulting `TechnicalEvidence` is
+    /// exactly 9596 bytes (enforced by compile-time assert in btv-types).
+    pub fn to_technical_evidence(&self) -> btv_types::TechnicalEvidence {
+        use btv_types::{BiasDeclarationFixed, BiasDeclaration, TechnicalEvidence};
+
+        let bootstrap = BiasDeclaration::bootstrap_unvalidated();
+        let groups_json = serde_json::to_string(&bootstrap.validated_groups)
+            .unwrap_or_default();
+        let disparities_json = serde_json::to_string(&bootstrap.known_disparities)
+            .unwrap_or_default();
+
+        let bias_fixed = BiasDeclarationFixed {
+            tool_version_hash:      *blake3::hash(bootstrap.measurement_tool_version.as_bytes()).as_bytes(),
+            false_positive_rate:    bootstrap.false_positive_rate,
+            false_negative_rate:    bootstrap.false_negative_rate,
+            validated_groups_hash:  *blake3::hash(groups_json.as_bytes()).as_bytes(),
+            known_disparities_hash: *blake3::hash(disparities_json.as_bytes()).as_bytes(),
+        };
+
+        TechnicalEvidence {
+            evidence_hash:       *self.evidence_hash.as_bytes(),
+            decision:            self.decision as u8,
+            _pad:                [0u8; 3],
+            explanation_hash:    *blake3::hash(self.explanation.as_bytes()).as_bytes(),
+            hmac_tag:            self.hmac_seal,
+            legislative_version: 0u64.to_le_bytes(),
+            bias_declaration:    bias_fixed,
+            _reserved:           [0u8; 9384],
+        }
+    }
+
     /// Verify the integrity of this verdict's HMAC seal.
     ///
     /// Returns `true` iff the seal matches the current key and content.

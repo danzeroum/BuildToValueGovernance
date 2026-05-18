@@ -313,6 +313,77 @@ pub struct RedactionReceiptWire {
     pub authority_pubkey: [u8; 32],
 }
 
+// ── Constitutional Wire Format (ADR-063) ─────────────────────────────────────────────────
+
+/// Fixed-size bias declaration for the `TechnicalEvidence` hot-path (ADR-063).
+///
+/// All string fields are replaced by pre-computed BLAKE3 hashes to eliminate heap
+/// allocation. Full text lives in `AppealRecord` (off-chain). Closes the placeholder
+/// documented in `BiasDeclaration`: "ADR-063 will define BiasDeclarationFixed".
+///
+/// Layout with repr(C): 32 + 4 + 4 + 32 + 32 = 104 bytes. No padding (f32 aligns
+/// to 4; preceding [u8;32] ends at offset divisible by 4).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[repr(C)]
+pub struct BiasDeclarationFixed {
+    /// BLAKE3(measurement_tool_version bytes)
+    pub tool_version_hash: [u8; 32],
+    pub false_positive_rate: f32,
+    pub false_negative_rate: f32,
+    /// BLAKE3(serde_json canonical of validated_groups)
+    pub validated_groups_hash: [u8; 32],
+    /// BLAKE3(serde_json canonical of known_disparities)
+    pub known_disparities_hash: [u8; 32],
+}
+
+/// Constitutional wire format for AI-governance decisions (ADR-063).
+///
+/// Fixed-size, zero-heap, with a compile-time size invariant enforced below.
+/// This type is distinct from `buildtovalue_kernel::TechnicalEvidence` (9632 bytes,
+/// the scanner's operational type). This one is the constitutional record produced
+/// by `Verdict::to_technical_evidence()` in btv-core.
+///
+/// Layout (repr(C), all fields fixed-size — `legislative_version` is `[u8;8]` not
+/// `u64` to keep struct alignment ≤ 4, since 9596 % 8 ≠ 0):
+///
+/// ```text
+/// evidence_hash:        32 bytes  offset   0
+/// decision:              1 byte   offset  32
+/// _pad:                  3 bytes  offset  33
+/// explanation_hash:     32 bytes  offset  36
+/// hmac_tag:             32 bytes  offset  68
+/// legislative_version:   8 bytes  offset 100  ([u8;8] LE of u64)
+/// bias_declaration:    104 bytes  offset 108  (BiasDeclarationFixed, align=4, 108%4==0)
+/// _reserved:          9384 bytes  offset 212
+/// TOTAL:              9596 bytes
+/// ```
+///
+/// When Fase 6 activates MandateWire, propagate the real value as
+/// `legislative_version: version_u64.to_le_bytes()` in `to_technical_evidence()`.
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct TechnicalEvidence {
+    pub evidence_hash:       [u8; 32],
+    pub decision:            u8,
+    pub _pad:                [u8; 3],
+    pub explanation_hash:    [u8; 32],
+    pub hmac_tag:            [u8; 32],
+    /// Little-endian bytes of legislative_version u64. Using [u8;8] (align=1) instead
+    /// of u64 (align=8) keeps struct alignment at 4, making 9596 achievable (9596%4==0).
+    pub legislative_version: [u8; 8],
+    pub bias_declaration:    BiasDeclarationFixed,
+    pub _reserved:           [u8; 9384],
+}
+
+/// The compiler is the constitutional guardian (ADR-063).
+/// Any field addition, removal, or type change that alters the size will be caught
+/// at compile time before it can corrupt persisted records.
+const _: () = assert!(
+    std::mem::size_of::<TechnicalEvidence>() == 9596,
+    "ADR-063 VIOLATION: TechnicalEvidence constitutional size invariant broken. \
+     See docs/adr/0063-technical-evidence-size-invariant.md"
+);
+
 // ── Governance / mandate types ─────────────────────────────────────────────────────────
 
 /// Branch roles participating in MandateToken ratification.
