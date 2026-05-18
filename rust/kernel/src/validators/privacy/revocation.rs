@@ -29,7 +29,7 @@ impl Validator for ConsentRevocationValidator {
     }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.01, 0.00, 20260209, 80)
+        BiasDeclaration::new(0.01, 0.00, 20260517, 80)
             .with_limitations(
                 "Race condition between revocation timestamp and processing; delayed async jobs."
             )

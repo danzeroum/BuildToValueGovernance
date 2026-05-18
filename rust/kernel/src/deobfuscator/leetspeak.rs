@@ -86,7 +86,7 @@ impl Module for LeetspeakDetector {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.15, 0.30, 20260209, 250)
+        BiasDeclaration::new(0.15, 0.30, 20260517, 250)
             .with_limitations("Variantes regionais de leetspeak não cobertas.")
             .with_affected_groups("N/A")
     }

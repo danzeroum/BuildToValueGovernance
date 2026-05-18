@@ -28,7 +28,7 @@ impl Module for ConsentValidator {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Consent }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.05, 0.02, 20260209, 120)
+        BiasDeclaration::new(0.05, 0.02, 20260517, 120)
             .with_limitations(
                 "Consent validation requires external context; placeholder."
             )
@@ -52,6 +52,6 @@ mod tests {
     fn test_bias_declaration_non_default() {
         let bias = ConsentValidator::new().bias_declaration();
         assert!(bias.false_positive_rate > 0.0);
-        assert!(bias.calibration_date >= 20260101);
+        assert!(bias.calibration_date >= 20260517);
     }
 }   

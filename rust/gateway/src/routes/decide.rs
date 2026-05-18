@@ -207,11 +207,12 @@ pub async fn decide_handler(
         let evidence = gk.scan_for_evidence(&req.input, session_id);
         let findings = evidence.get_all_findings();
 
-        // FALLBACK_POLICY é const &str compilado; from_yaml_str nunca retorna Err
-        // neste path — allow pontual conforme ADR invariante boot-time.
-        #[allow(clippy::unwrap_used)]
-        let mut engine = PolicyEngine::from_yaml_str(DEFAULT_POLICY)
-            .unwrap_or_else(|_| PolicyEngine::from_yaml_str(FALLBACK_POLICY).unwrap());
+        let engine_result = PolicyEngine::from_yaml_str(DEFAULT_POLICY)
+            .or_else(|_| PolicyEngine::from_yaml_str(FALLBACK_POLICY));
+        let mut engine = match engine_result {
+            Ok(e) => e,
+            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        };
         let eval = engine.evaluate_full(&req.input, &findings);
 
         let action = match eval.action {

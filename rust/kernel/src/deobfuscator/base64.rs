@@ -32,7 +32,10 @@ pub enum Base64Result {
 pub fn try_decode(input: &str) -> Base64Result {
     for mat in BASE64_REGEX.find_iter(input) {
         let candidate = mat.as_str();
-        if candidate.len() < 4 { continue; }
+        // 4-char matches are too short to be real base64 payload and produce
+        // false positives on common English words (e.g. "Hell", "hell").
+        // Require at least 8 chars (2 full 4-char groups = 6 decoded bytes).
+        if candidate.len() < 8 { continue; }
         if let Ok(bytes) = B64.decode(candidate) {
             return match String::from_utf8(bytes.clone()) {
                 Ok(s)  => Base64Result::Decoded(s),
@@ -88,8 +91,8 @@ impl Module for Base64Detector {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.15, 0.05, 20260101, 200)
-            .with_limitations("Regex-based; curta sequências (<4 chars) ignoradas.")
+        BiasDeclaration::new(0.15, 0.05, 20260517, 200)
+            .with_limitations("Regex-based; sequências < 8 chars ignoradas para evitar falsos positivos.")
             .with_affected_groups("N/A")
     }
 }

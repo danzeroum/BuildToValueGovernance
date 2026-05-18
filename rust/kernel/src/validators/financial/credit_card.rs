@@ -84,7 +84,7 @@ impl Validator for CreditCardValidator {
     }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.05, 0.01, 20260209, 300)
+        BiasDeclaration::new(0.05, 0.01, 20260517, 300)
             .with_limitations(
                 "Luhn algorithm only; does not verify BIN or expiry date."
             )
