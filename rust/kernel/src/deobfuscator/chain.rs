@@ -19,14 +19,16 @@ use std::time::Instant;
 // base64 chars followed by optional padding. Short minimum avoids matching
 // plain hex-only digit sequences.
 static B64_TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"[A-Za-z0-9+/]{16,}={0,2}").expect("B64_TOKEN_RE must be valid")
+    Regex::new(r"[A-Za-z0-9+/]{16,}={0,2}")
+        .unwrap_or_else(|e| panic!("BTV initialization failed: B64_TOKEN_RE invalid: {e}"))
 });
 
 // Matches hex token candidates: ≥20 consecutive hex digits (10+ decoded bytes).
 // Requires even length (enforced in try_decode_hex). No 0x prefix required for
 // embedded tokens (the 0x prefix path is kept for whole-string decoding).
 static HEX_TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b[0-9a-fA-F]{20,}\b").expect("HEX_TOKEN_RE must be valid")
+    Regex::new(r"\b[0-9a-fA-F]{20,}\b")
+        .unwrap_or_else(|e| panic!("BTV initialization failed: HEX_TOKEN_RE invalid: {e}"))
 });
 
 const MAX_CHAIN_DEPTH: usize = 3;
