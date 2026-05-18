@@ -10,7 +10,26 @@ use crate::deobfuscator::base64::Base64Detector;
 use crate::deobfuscator::hex::HexDecoder;
 use crate::deobfuscator::leetspeak::LeetspeakDetector;
 use base64::{Engine as _, engine::general_purpose};
+use regex::Regex;
+use std::sync::LazyLock;
 use std::time::Instant;
+
+// Compiled once at init — not in the hot path (ADR-0013-v2).
+// Matches base64 token candidates embedded within larger text: ≥16 consecutive
+// base64 chars followed by optional padding. Short minimum avoids matching
+// plain hex-only digit sequences.
+static B64_TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"[A-Za-z0-9+/]{16,}={0,2}")
+        .unwrap_or_else(|e| panic!("BTV initialization failed: B64_TOKEN_RE invalid: {e}"))
+});
+
+// Matches hex token candidates: ≥20 consecutive hex digits (10+ decoded bytes).
+// Requires even length (enforced in try_decode_hex). No 0x prefix required for
+// embedded tokens (the 0x prefix path is kept for whole-string decoding).
+static HEX_TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b[0-9a-fA-F]{20,}\b")
+        .unwrap_or_else(|e| panic!("BTV initialization failed: HEX_TOKEN_RE invalid: {e}"))
+});
 
 const MAX_CHAIN_DEPTH: usize = 3;
 const CHAIN_OVERHEAD_LIMIT_US: u64 = 5_000; // 5ms
@@ -50,8 +69,23 @@ impl DeobfuscatorChain {
     pub fn deobfuscate(&self, input: &str) -> ChainResult {
         let start = Instant::now();
         let mut layers: Vec<ChainLayer> = Vec::new();
-        let (normalized, _) = Normalizer::new().normalize(input);
+
+        // ADR-0013-v2: normalization counts as a layer so Stage 3.5 gate
+        // (!layers.is_empty() && final_text != input) triggers for Unicode/spaced PII.
+        let (normalized, norm_changed) = Normalizer::new().normalize(input);
+        if norm_changed {
+            layers.push(ChainLayer {
+                depth: 0,
+                decoder: "normalize",
+                input_len: input.len(),
+                output_len: normalized.len(),
+            });
+        }
         let mut current = normalized;
+        // Track whether normalization ran — if so, skip leet decode at depth 0.
+        // Normalized PII (e.g. "123.456.789-09") triggers false-positive leet detection
+        // because CPF/phone digits overlap with the leet charset (0,1,3,4,5,7,8,9).
+        let norm_layer_added = norm_changed;
 
         for depth in 0..MAX_CHAIN_DEPTH {
             if start.elapsed().as_micros() as u64 > CHAIN_OVERHEAD_LIMIT_US {
@@ -78,14 +112,33 @@ impl DeobfuscatorChain {
                 continue;
             }
 
-            // Only try leetspeak on original input (depth 0), never on decoded text
             if depth == 0 {
-                if let Some(decoded) = self.try_decode_leet(&current) {
+                // Only try leetspeak when normalization did NOT run.
+                // Normalized PII digits (CPF/phone) overlap with the leet charset
+                // (0,1,3,4,5,7,8,9) and would produce false leet substitutions.
+                if !norm_layer_added {
+                    if let Some(decoded) = self.try_decode_leet(&current) {
+                        layers.push(ChainLayer {
+                            depth, decoder: "leetspeak",
+                            input_len: before_len, output_len: decoded.len(),
+                        });
+                        current = decoded;
+                        continue;
+                    }
+                }
+
+                // ADR-0013-v2: token-level decode — extracts encoded sub-strings
+                // from within a larger text (e.g. "My CPF is <base64>").
+                // Whole-string decoders above handle pure-encoded inputs.
+                // Runs regardless of normalization (handles hybrid evasion attempts).
+                if let Some(substituted) = self.try_decode_embedded_tokens(&current) {
                     layers.push(ChainLayer {
-                        depth, decoder: "leetspeak",
-                        input_len: before_len, output_len: decoded.len(),
+                        depth,
+                        decoder: "embedded_token",
+                        input_len: before_len,
+                        output_len: substituted.len(),
                     });
-                    current = decoded;
+                    current = substituted;
                     continue;
                 }
             }
@@ -97,6 +150,45 @@ impl DeobfuscatorChain {
         let elapsed_us = start.elapsed().as_micros() as u64;
 
         ChainResult { final_text: current, layers, is_evasion, elapsed_us }
+    }
+
+    /// Scans the input for base64 or hex tokens embedded within larger text and
+    /// replaces them with their decoded equivalents. Returns None if nothing changed.
+    /// Uses LazyLock regexes — no allocation in the common path (no encoded tokens).
+    fn try_decode_embedded_tokens(&self, input: &str) -> Option<String> {
+        let mut result = input.to_string();
+        let mut found = false;
+
+        // Try base64 tokens first (higher specificity: requires valid b64 charset)
+        for m in B64_TOKEN_RE.find_iter(input) {
+            let token = m.as_str();
+            // Skip tokens that are all-hex (likely hex, not base64)
+            if token.chars().all(|c| c.is_ascii_hexdigit()) {
+                continue;
+            }
+            if let Some(decoded) = self.try_decode_base64(token) {
+                result = result.replacen(token, &decoded, 1);
+                found = true;
+                break; // one substitution per call; caller can chain via depth loop
+            }
+        }
+
+        // Try hex tokens only if no base64 was found
+        if !found {
+            for m in HEX_TOKEN_RE.find_iter(input) {
+                let token = m.as_str();
+                if token.len() % 2 != 0 {
+                    continue;
+                }
+                if let Some(decoded) = self.try_decode_hex(token) {
+                    result = result.replacen(token, &decoded, 1);
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        if found && result != input { Some(result) } else { None }
     }
     fn try_decode_base64(&self, input: &str) -> Option<String> {
         // Find longest base64-like substring
