@@ -12,7 +12,7 @@ use crate::evidence_token::EvidenceToken;
 use crate::compliance_token::ComplianceToken;
 use crate::hash::Blake3Hash;
 use crate::hmac::{compute_seal, constant_time_eq};
-use btv_types::{Decision, VerdictRecord};
+use btv_types::{Decision, VerdictRecord, BiasDeclaration, NegotiationDeadlockReason, AppealRecord};
 
 /// A materialized verdict — the product of consuming `E ⊗ C`.
 ///
@@ -59,6 +59,9 @@ impl Verdict {
     ///
     /// `legislative_version: 0` is a placeholder — will carry the `MandateToken`
     /// version in Phase 6.
+    ///
+    /// `bias_declaration` uses `bootstrap_unvalidated()` until real measurements are
+    /// provided. The bootstrap string in `validated_groups` triggers Dashboard alerts.
     pub fn to_record(&self) -> VerdictRecord {
         VerdictRecord {
             evidence_hash: self.evidence_hash.to_wire(),
@@ -68,7 +71,41 @@ impl Verdict {
             ),
             hmac_tag: self.hmac_seal,
             legislative_version: 0,
+            bias_declaration: BiasDeclaration::bootstrap_unvalidated(),
         }
+    }
+
+    /// Export to wire format AND produce an off-chain AppealRecord for contestation.
+    ///
+    /// The caller must enqueue the AppealRecord via AppealWriter — it must NOT be
+    /// returned directly to the end-user (only the `appeal_token` is client-visible).
+    ///
+    /// `appeal_key`: 32-byte server secret for keyed BLAKE3 token derivation.
+    /// `now_unix`: current Unix timestamp in seconds.
+    /// `deadlock_reason`: Some only when the Block originated from negotiation deadlock.
+    pub fn to_record_with_appeal(
+        &self,
+        appeal_key: &[u8; 32],
+        now_unix: u64,
+        deadlock_reason: Option<NegotiationDeadlockReason>,
+    ) -> (VerdictRecord, AppealRecord) {
+        let verdict_record = self.to_record();
+        let evidence_bytes = self.evidence_hash.as_bytes();
+        let appeal_token = hex::encode(
+            blake3::keyed_hash(appeal_key, evidence_bytes).as_bytes()
+        );
+
+        let appeal_record = AppealRecord {
+            evidence_hash: *evidence_bytes,
+            explanation_text: self.explanation.clone(),
+            bias_declaration: verdict_record.bias_declaration.clone(),
+            deadlock_reason,
+            appeal_token,
+            appeal_sla_deadline: now_unix + 86400,
+            created_at: now_unix,
+        };
+
+        (verdict_record, appeal_record)
     }
 
     /// Verify the integrity of this verdict's HMAC seal.
