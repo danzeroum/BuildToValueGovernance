@@ -10,7 +10,7 @@ pub mod goal_drift_ffi;
 
 pub use bridge::{
     RustKernel, PyTechnicalEvidence, PyBiasDeclaration, PyBatchResult,
-    update_accumulator_config, version,
+    version,
 };
 pub use validators_ffi::{
     validate_consent, validate_consent_revocation,
