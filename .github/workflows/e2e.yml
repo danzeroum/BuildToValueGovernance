@@ -118,11 +118,34 @@ jobs:
 
       - name: "Subir serviços"
         run: |
-          docker compose -f ops/docker-compose.e2e.yml up -d
+          docker compose -f ops/docker-compose.e2e.yml up -d || {
+            echo "::group::governance logs (startup failure)"
+            docker compose -f ops/docker-compose.e2e.yml logs governance --tail=100
+            echo "::endgroup::"
+            exit 1
+          }
         env:
           BTV_POLICY_BUNDLE: ${{ env.BTV_POLICY_BUNDLE }}
 
       # ── Aguardar health checks ─────────────────────────────────────────────
+      - name: "Aguardar governance /health"
+        run: |
+          echo "Aguardando governance..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "  ✅ Governance respondeu em ${i}×5s"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "  ❌ Governance não respondeu após 150s"
+              echo "::group::governance logs"
+              docker compose -f ops/docker-compose.e2e.yml logs governance --tail=100
+              echo "::endgroup::"
+              exit 1
+            fi
+            sleep 5
+          done
+
       - name: "Aguardar gateway /health"
         run: |
           echo "Aguardando gateway..."

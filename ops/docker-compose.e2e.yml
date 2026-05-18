@@ -63,7 +63,7 @@ services:
       - ledger_data:/app/data/ledger
     depends_on:
       governance:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 5s
