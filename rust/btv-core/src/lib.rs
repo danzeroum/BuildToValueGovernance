@@ -62,4 +62,5 @@ pub use btv_types::{
     Decision, VerdictRecord, Blake3Hash as Blake3HashWire,
     BiasDeclaration, KnownDisparity,
     NegotiationDeadlockReason, AppealRecord,
+    BiasDeclarationFixed, TechnicalEvidence,
 };
