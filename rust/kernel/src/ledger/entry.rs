@@ -152,6 +152,32 @@ impl LedgerEntry {
         self.verdict_id == expected_vid
     }
 
+    // ── ADR-060/062: pack bias + regime + explanation into _reserved ─────────
+    // Layout within _reserved[164]:
+    //   [0..4]  — bias_fpr (f32 LE)
+    //   [4..8]  — bias_fnr (f32 LE)
+    //   [8..12] — bias_calibration_date (u32 LE)
+    //   [12..16] — padding
+    //   [16..24] — regime_hash partial (u64 LE; full 32B pending ADR-064)
+    //   [24..56] — explanation_hash ([u8;32] from evidence.hash)
+    //   [56..164] — zero
+
+    pub fn set_bias(&mut self, fpr: f32, fnr: f32, calibration: u32) {
+        self._reserved[0..4].copy_from_slice(&fpr.to_le_bytes());
+        self._reserved[4..8].copy_from_slice(&fnr.to_le_bytes());
+        self._reserved[8..12].copy_from_slice(&calibration.to_le_bytes());
+    }
+
+    /// `hash_u64` = first 8 bytes of BLAKE3 policy hash (full hash pending ADR-064).
+    pub fn set_regime_hash_partial(&mut self, hash_u64: u64) {
+        self._reserved[16..24].copy_from_slice(&hash_u64.to_le_bytes());
+    }
+
+    /// Store first 32 bytes of BLAKE3(explanation_text) for off-chain appeal lookup.
+    pub fn set_explanation_hash(&mut self, hash: &[u8; 32]) {
+        self._reserved[24..56].copy_from_slice(hash);
+    }
+
     /// Valida com chave de assinatura do operador.
     pub fn validate_with_key(&self, signing_key: &[u8]) -> bool {
         if self.entry_hash != self.calculate_hash() {

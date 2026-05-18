@@ -11,6 +11,7 @@ Changelog v2.3 (Sprint 5, Gaps 10/12/14/19):
   - Gap 10: GoalDriftSentinel integrado ao pipeline; cross-signal drift×sensitivity
 """
 
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -18,6 +19,7 @@ import os
 import sqlite3
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Optional
 
@@ -68,6 +70,7 @@ from buildtovalue.governance.visual_input_firewall import (
 )
 from buildtovalue.governance.oracle_trust_gate import OracleTrustGate
 from buildtovalue.governance.rag_integrity_verifier import RagIntegrityVerifier
+from buildtovalue.governance.ffi_client import get_ffi_client, BridgeNotAvailableError
 logger = logging.getLogger(__name__)
 
 
@@ -549,6 +552,25 @@ async def lifespan(application):
     global _contestability_loop, _profile_manager, _sector_loader
     global _slm, _ethical_engine, _trust_calculator, _goal_drift_sentinel
     global _cross_agent, _delegation_ledger
+    global _KERNEL_EXECUTOR
+
+    # PR-4: initialize dedicated kernel executor before anything touches Rust.
+    # run_in_executor() prevents block_on() in RustKernel::new() from blocking
+    # the event loop and violating the <50ms p99 latency invariant.
+    _KERNEL_EXECUTOR = ThreadPoolExecutor(
+        max_workers=int(os.environ.get("BTV_KERNEL_WORKERS", "4")),
+        thread_name_prefix="btv-kernel",
+    )
+    loop = asyncio.get_event_loop()
+    try:
+        application.state.ffi_client = await loop.run_in_executor(
+            _KERNEL_EXECUTOR, get_ffi_client
+        )
+        logger.info("FFI bridge initialized in executor (bridge_mode=%s)",
+                    application.state.ffi_client.bridge_mode)
+    except BridgeNotAvailableError as exc:
+        logger.warning("FFI bridge unavailable at startup: %s", exc)
+        application.state.ffi_client = None
 
     init_db()
 
@@ -640,6 +662,8 @@ async def lifespan(application):
 
     yield
 
+    if _KERNEL_EXECUTOR is not None:
+        _KERNEL_EXECUTOR.shutdown(wait=True)
     logger.info("Shutdown complete")
 
 
@@ -684,6 +708,8 @@ _goal_drift_sentinel: Optional[GoalDriftSentinel] = None
 # C6: multi-agent governance singletons
 _cross_agent: Optional[CrossAgentCorrelator] = None
 _delegation_ledger: Optional[DelegationLedger] = None
+# PR-4: kernel executor — isolates blocking Rust calls from the event loop
+_KERNEL_EXECUTOR: Optional[ThreadPoolExecutor] = None
 
 # ═══════════════════════════════════════════════════════════════
 # GOVERNANCE — /v1/decide (Judiciário da República Algorítmica)
