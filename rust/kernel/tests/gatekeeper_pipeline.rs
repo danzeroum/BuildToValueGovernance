@@ -1,6 +1,6 @@
 //! F1.5-05: Gatekeeper Pipeline tests
-//! Atualizado ADR-035: +2 módulos (NhsValidator, VatValidator, IbanValidator → +3 validate)
-//! Pipeline: 3 deob + 4 analyze + 8 validate = 15 módulos, 4 stages (Validate splitado)
+//! Atualizado ADR-035: +NHS+VAT+IBAN; +SensitiveDataValidator (LGPD Art.11)
+//! Pipeline: 4 deob + 4 analyze + 8 validate = 16 módulos, 4 stages (Validate splitado)
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
@@ -17,8 +17,8 @@ mod tests {
         let gk = Gatekeeper::new();
         assert_eq!(gk.stage_count(PipelineStage::Deobfuscate), 4);
         assert_eq!(gk.stage_count(PipelineStage::Analyze), 4);
-        assert_eq!(gk.stage_count(PipelineStage::Validate), 7);
-        assert_eq!(gk.module_count(), 15);
+        assert_eq!(gk.stage_count(PipelineStage::Validate), 8);
+        assert_eq!(gk.module_count(), 16);
     }
 
     // -----------------------------------------------------------------
@@ -48,7 +48,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // TEST 4: All 15 modules executed (ADR-035: 13 → 15)
+    // TEST 4: All 16 modules executed (ADR-035: 13→15; +SensitiveDataValidator: 15→16)
     // -----------------------------------------------------------------
     #[test]
     fn test_pipeline_all_modules_execute() {
@@ -59,7 +59,7 @@ mod tests {
                 evidence.executed_modules.count_ones(),
                 evidence.executed_modules
         );
-        assert_eq!(gk.module_count(), 15);
+        assert_eq!(gk.module_count(), 16);
     }
 
     // -----------------------------------------------------------------
