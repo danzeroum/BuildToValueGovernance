@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use criterion::{criterion_group, criterion_main, Criterion, black_box};
 use btv_judicial::HmacVerifier;
-use btv_types::{Blake3Hash, Decision, VerdictRecord};
+use btv_types::{BiasDeclaration, Blake3Hash, Decision, VerdictRecord};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
@@ -21,6 +21,7 @@ fn make_verdict() -> VerdictRecord {
         explanation_hash:    Blake3Hash([0x02; 32]),
         hmac_tag:            tag,
         legislative_version: 1,
+        bias_declaration:    BiasDeclaration::bootstrap_unvalidated(),
     }
 }
 
