@@ -156,10 +156,8 @@ impl DeobfuscatorChain {
     /// replaces them with their decoded equivalents. Returns None if nothing changed.
     /// Uses LazyLock regexes — no allocation in the common path (no encoded tokens).
     fn try_decode_embedded_tokens(&self, input: &str) -> Option<String> {
-        let mut result = input.to_string();
-        let mut found = false;
-
-        // Try base64 tokens first (higher specificity: requires valid b64 charset)
+        // Try base64 tokens first (higher specificity: requires valid b64 charset).
+        // Allocation deferred until a substitution is confirmed.
         for m in B64_TOKEN_RE.find_iter(input) {
             let token = m.as_str();
             // Skip tokens that are all-hex (likely hex, not base64)
@@ -167,28 +165,28 @@ impl DeobfuscatorChain {
                 continue;
             }
             if let Some(decoded) = self.try_decode_base64(token) {
-                result = result.replacen(token, &decoded, 1);
-                found = true;
-                break; // one substitution per call; caller can chain via depth loop
-            }
-        }
-
-        // Try hex tokens only if no base64 was found
-        if !found {
-            for m in HEX_TOKEN_RE.find_iter(input) {
-                let token = m.as_str();
-                if token.len() % 2 != 0 {
-                    continue;
-                }
-                if let Some(decoded) = self.try_decode_hex(token) {
-                    result = result.replacen(token, &decoded, 1);
-                    found = true;
-                    break;
+                let result = input.replacen(token, &decoded, 1);
+                if result != input {
+                    return Some(result); // one substitution per call; caller chains via depth loop
                 }
             }
         }
 
-        if found && result != input { Some(result) } else { None }
+        // Try hex tokens only if no base64 substitution was made.
+        for m in HEX_TOKEN_RE.find_iter(input) {
+            let token = m.as_str();
+            if token.len() % 2 != 0 {
+                continue;
+            }
+            if let Some(decoded) = self.try_decode_hex(token) {
+                let result = input.replacen(token, &decoded, 1);
+                if result != input {
+                    return Some(result);
+                }
+            }
+        }
+
+        None
     }
     fn try_decode_base64(&self, input: &str) -> Option<String> {
         // Find longest base64-like substring
