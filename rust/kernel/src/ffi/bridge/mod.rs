@@ -1,10 +1,11 @@
 #![cfg(feature = "ffi-bindings")]
-//! FFI Bridge v3.1 — modularized per ADR-009 (<200 lines/file).
+//! FFI Bridge v3.2 — modularized per ADR-009 (<200 lines/file).
+//! ADR-040: GLOBAL_ACCUMULATOR removed; session state via PySessionAccumulator.
 //!
 //! Sub-modules:
 //!   types.rs         — PyTechnicalEvidence, PyBiasDeclaration
 //!   serialization.rs — evidence_to_pydict with full findings[]
-//!   api.rs           — version, update_accumulator_config (+ PR-5: session accumulator)
+//!   api.rs           — version, create_session_accumulator (PR-5)
 
 pub mod types;
 pub(crate) mod serialization;
@@ -12,7 +13,7 @@ pub mod api;
 pub(crate) mod batch;
 
 pub use types::{PyTechnicalEvidence, PyBiasDeclaration, PyBatchResult, PyBatchItem};
-pub use api::{update_accumulator_config, version};
+pub use api::version;
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -21,18 +22,9 @@ use crate::gatekeeper::Gatekeeper;
 use crate::batch::{BatchProcessor, BatchConfig, BatchItemStatus};
 use crate::ledger::{DurableLedger, LedgerEntry};
 use crate::ledger::remote::S3Config;
-use crate::session_guard::accumulator::{AccumulatorConfig, SensitivityAccumulator};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use pyo3::types::PyBytes;
-
-// ── Global accumulator state ──────────────────────────────────────────────
-
-lazy_static::lazy_static! {
-    pub static ref GLOBAL_ACCUMULATOR: Mutex<SensitivityAccumulator> = Mutex::new(
-        SensitivityAccumulator::new(AccumulatorConfig::default())
-    );
-}
 
 // ── PyModule entry point ──────────────────────────────────────────────────
 
@@ -43,7 +35,6 @@ fn buildtovalue_kernel(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<types::PyBiasDeclaration>()?;
     m.add_class::<types::PyBatchResult>()?;
     m.add_class::<api::PySessionAccumulator>()?;
-    m.add_function(wrap_pyfunction!(api::update_accumulator_config, m)?)?;
     m.add_function(wrap_pyfunction!(api::version, m)?)?;
     m.add_function(wrap_pyfunction!(api::create_session_accumulator, m)?)?;
     m.add("VERSION", env!("CARGO_PKG_VERSION"))?;
@@ -96,8 +87,8 @@ impl RustKernel {
             evidence.inner.bias.false_negative_rate,
             evidence.inner.bias.calibration_date,
         );
-        // ADR-062: regime_hash = 0 until ADR-064 PolicyWatcher is live (documented debt)
-        entry.set_regime_hash_partial(0u64);
+        // ADR-064: full 32-byte BLAKE3 regime_hash — zero until PolicyWatcher is live
+        entry.set_regime_hash_full(&[0u8; 32]);
         // ADR-062: explanation_hash from evidence hash (full explanation in appeals.db)
         entry.set_explanation_hash(&evidence.inner.hash);
         let ledger = self.ledger.lock()

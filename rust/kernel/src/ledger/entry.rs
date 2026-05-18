@@ -152,15 +152,15 @@ impl LedgerEntry {
         self.verdict_id == expected_vid
     }
 
-    // ── ADR-060/062: pack bias + regime + explanation into _reserved ─────────
+    // ── ADR-060/062/064: pack bias + regime + explanation into _reserved ─────
     // Layout within _reserved[164]:
-    //   [0..4]  — bias_fpr (f32 LE)
-    //   [4..8]  — bias_fnr (f32 LE)
-    //   [8..12] — bias_calibration_date (u32 LE)
+    //   [0..4]   — bias_fpr (f32 LE)
+    //   [4..8]   — bias_fnr (f32 LE)
+    //   [8..12]  — bias_calibration_date (u32 LE)
     //   [12..16] — padding
-    //   [16..24] — regime_hash partial (u64 LE; full 32B pending ADR-064)
-    //   [24..56] — explanation_hash ([u8;32] from evidence.hash)
-    //   [56..164] — zero
+    //   [16..48] — regime_hash full BLAKE3 ([u8;32], ADR-064 — was 8B partial)
+    //   [48..80] — explanation_hash ([u8;32] from evidence.hash)
+    //   [80..164] — zero
 
     pub fn set_bias(&mut self, fpr: f32, fnr: f32, calibration: u32) {
         self._reserved[0..4].copy_from_slice(&fpr.to_le_bytes());
@@ -168,14 +168,20 @@ impl LedgerEntry {
         self._reserved[8..12].copy_from_slice(&calibration.to_le_bytes());
     }
 
-    /// `hash_u64` = first 8 bytes of BLAKE3 policy hash (full hash pending ADR-064).
+    /// Full 32-byte BLAKE3 policy hash (ADR-064). Zero until PolicyWatcher is live (ADR-064 debt).
+    pub fn set_regime_hash_full(&mut self, hash: &[u8; 32]) {
+        self._reserved[16..48].copy_from_slice(hash);
+    }
+
+    /// Deprecated: 8-byte partial regime_hash — birthday attack risk. Use set_regime_hash_full.
+    #[deprecated(since = "3.2.0", note = "birthday attack risk — use set_regime_hash_full (ADR-064)")]
     pub fn set_regime_hash_partial(&mut self, hash_u64: u64) {
         self._reserved[16..24].copy_from_slice(&hash_u64.to_le_bytes());
     }
 
-    /// Store first 32 bytes of BLAKE3(explanation_text) for off-chain appeal lookup.
+    /// Store BLAKE3(explanation_text) for off-chain appeal lookup.
     pub fn set_explanation_hash(&mut self, hash: &[u8; 32]) {
-        self._reserved[24..56].copy_from_slice(hash);
+        self._reserved[48..80].copy_from_slice(hash);
     }
 
     /// Valida com chave de assinatura do operador.
