@@ -127,6 +127,17 @@ jobs:
         env:
           BTV_POLICY_BUNDLE: ${{ env.BTV_POLICY_BUNDLE }}
 
+      # ── Diagnóstico imediato pós-start ────────────────────────────────────────
+      - name: "Status containers (t+5s)"
+        run: |
+          sleep 5
+          echo "=== container status ==="
+          docker compose -f ops/docker-compose.e2e.yml ps
+          echo "=== governance logs (primeiros 5s) ==="
+          docker compose -f ops/docker-compose.e2e.yml logs governance --tail=80
+        env:
+          BTV_POLICY_BUNDLE: ${{ env.BTV_POLICY_BUNDLE }}
+
       # ── Aguardar health checks ─────────────────────────────────────────────
       - name: "Aguardar governance /health"
         run: |
