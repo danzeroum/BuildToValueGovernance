@@ -34,6 +34,27 @@ jobs:
       - name: Install dependencies
         run: pip install -e "python/[dev]"
 
+      - name: Start governance service
+        run: |
+          BTV_HMAC_KEY="${BTV_HMAC_KEY:-ci-blind-test-key-padded-to-32bytes}" \
+          BTV_POLICY_DIR="data/policies" \
+          BTV_DB_PATH="/tmp/ci-trust.db" \
+          BTV_APPEALS_DB="/tmp/ci-appeals.db" \
+          BTV_THREATS_DB="/tmp/ci-threats.db" \
+            python -m uvicorn buildtovalue.api.app:app \
+              --host 127.0.0.1 --port 8000 --log-level warning &
+          echo "Aguardando governance /health..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "  ✅ Governance pronto (${i}s)"
+              break
+            fi
+            [ "$i" -eq 30 ] && { echo "  ❌ Timeout — governance não respondeu"; exit 1; }
+            sleep 1
+          done
+        env:
+          BTV_HMAC_KEY: ${{ secrets.BTV_HMAC_KEY || 'ci-blind-test-key-padded-to-32bytes' }}
+
       - name: Fetch current PatternRegistry epoch
         id: epoch
         run: |
@@ -43,24 +64,22 @@ jobs:
           ")
           echo "epoch=$EPOCH" >> $GITHUB_OUTPUT
           echo "Epoch atual: $EPOCH"
-
-      - name: Prepare epoch state file
-        run: |
-          echo '{"epoch": ${{ steps.epoch.outputs.epoch }}, "last_test_epoch": -1}' \
-            > /tmp/epoch_state.json
+        env:
+          BTV_PATTERN_EPOCH: "0"
 
       - name: Run Blind Policy Tests (Equity Gate >= 95% por grupo)
         run: |
           FAILED=0
           for policy in data/policies/**/*.yaml; do
             echo "--- Testando: $policy ---"
+            policy_id=$(basename "${policy%.yaml}")
             python -m buildtovalue.governance.policy_tester_runner \
               --policy "$policy" \
-              --epoch-file /tmp/epoch_state.json \
+              --epoch-file "/tmp/epoch_${policy_id}.json" \
               --fail-on-gate-fail \
               --cases 200 \
-              --gateway "${{ vars.BTV_GATEWAY_URL || 'http://localhost:8080' }}" \
-              --output "/tmp/report_$(basename $policy .yaml).json" \
+              --gateway "http://localhost:8000" \
+              --output "/tmp/report_${policy_id}.json" \
             || FAILED=$((FAILED + 1))
           done
           if [ $FAILED -gt 0 ]; then
@@ -69,7 +88,7 @@ jobs:
           fi
         env:
           BTV_PATTERN_EPOCH: ${{ steps.epoch.outputs.epoch }}
-          BTV_HMAC_KEY:      ${{ secrets.BTV_HMAC_KEY }}
+          BTV_HMAC_KEY:      ${{ secrets.BTV_HMAC_KEY || 'ci-blind-test-key-padded-to-32bytes' }}
 
       - name: Upload relatórios como artefatos
         if: always()

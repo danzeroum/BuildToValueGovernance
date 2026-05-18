@@ -743,7 +743,7 @@ dependencies = [
 
 [[package]]
 name = "btv-core"
-version = "1.0.0"
+version = "3.0.0-alpha.1"
 dependencies = [
  "blake3",
  "btv-types",
@@ -885,6 +885,13 @@ version = "1.0.0"
 dependencies = [
  "serde",
  "sha2",
+]
+
+[[package]]
+name = "buildtovalue"
+version = "3.0.0-alpha.1"
+dependencies = [
+ "btv-core",
 ]
 
 [[package]]

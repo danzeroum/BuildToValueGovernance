@@ -204,7 +204,7 @@ impl OutputSanitizer {
     }
 
     pub fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.02, 0.05, 20260215, 300)
+        BiasDeclaration::new(0.02, 0.05, 20260517, 300)
             .with_limitations(
                 "Regex-based masking; may miss obfuscated PII. Phone regex Brazilian only."
             )

@@ -24,8 +24,11 @@ on:
       - "python/buildtovalue/**"
       - "tests/e2e/**"
       - "ops/docker-compose.quickstart.yml"
+      - "ops/docker-compose.e2e.yml"
       - "ops/Dockerfile.rust"
+      - "ops/Dockerfile.rust-ci"
       - "ops/Dockerfile.python"
+      - "ops/Dockerfile.python-quickstart"
       - "data/policies/quickstart/**"
       - ".github/workflows/e2e.yml"
   pull_request:
@@ -35,8 +38,11 @@ on:
       - "python/buildtovalue/**"
       - "tests/e2e/**"
       - "ops/docker-compose.quickstart.yml"
+      - "ops/docker-compose.e2e.yml"
       - "ops/Dockerfile.rust"
+      - "ops/Dockerfile.rust-ci"
       - "ops/Dockerfile.python"
+      - "ops/Dockerfile.python-quickstart"
       - "data/policies/quickstart/**"
       - ".github/workflows/e2e.yml"
   workflow_dispatch:
@@ -61,7 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ── Rust toolchain (para build do gateway no compose) ──────────────────
+      # ── Rust toolchain + cache (compila o gateway no runner, não no Docker) ──
       - name: "Install Rust toolchain"
         uses: dtolnay/rust-toolchain@stable
 
@@ -69,6 +75,17 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "rust -> target"
+
+      - name: "Build gateway binary (usa cache do runner)"
+        working-directory: ./rust
+        env:
+          BTV_HMAC_KEY: "ci-workspace-test-key-padded-for-hmac"
+        run: cargo build --release -p btv-gateway
+
+      - name: "Exportar binário para contexto Docker"
+        run: |
+          mkdir -p bin
+          cp rust/target/release/btv-gateway bin/btv-gateway
 
       # ── Python (para pytest) ───────────────────────────────────────────────
       - name: "Setup Python"
@@ -79,10 +96,12 @@ jobs:
       - name: "Install pytest"
         run: pip install pytest
 
-      # ── Docker Compose — sobe stack completo ──────────────────────────────
+      # ── Docker Compose — governance + gateway (pré-compilado) + upstream ──
+      # Usa Dockerfile.rust-ci: copia o binário pré-compilado em vez de
+      # recompilar o Rust dentro do Docker (~10 min → ~10 s).
       - name: "Build e subir serviços (docker compose)"
         run: |
-          docker compose -f ops/docker-compose.quickstart.yml up -d --build
+          docker compose -f ops/docker-compose.e2e.yml up -d --build
         env:
           BTV_POLICY_BUNDLE: ${{ env.BTV_POLICY_BUNDLE }}
 
@@ -97,7 +116,7 @@ jobs:
             fi
             if [ "$i" -eq 30 ]; then
               echo "  ❌ Gateway não respondeu após 150s"
-              docker compose -f ops/docker-compose.quickstart.yml logs gateway
+              docker compose -f ops/docker-compose.e2e.yml logs gateway
               exit 1
             fi
             sleep 5
@@ -127,12 +146,12 @@ jobs:
         if: failure()
         run: |
           echo "::group::gateway logs"
-          docker compose -f ops/docker-compose.quickstart.yml logs gateway --tail=50
+          docker compose -f ops/docker-compose.e2e.yml logs gateway --tail=50
           echo "::endgroup::"
           echo "::group::governance logs"
-          docker compose -f ops/docker-compose.quickstart.yml logs governance --tail=50
+          docker compose -f ops/docker-compose.e2e.yml logs governance --tail=50
           echo "::endgroup::"
 
       - name: "Parar serviços"
         if: always()
-        run: docker compose -f ops/docker-compose.quickstart.yml down -v
+        run: docker compose -f ops/docker-compose.e2e.yml down -v

@@ -2,6 +2,7 @@
 //! Combina testes existentes + novos testes dos exemplos da documentação
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use blake3;

@@ -1,13 +1,13 @@
-# BTV Quickstart — demo leve sem GPU, sem nginx, sem observabilidade
-# Uso: docker compose -f ops/docker-compose.quickstart.yml up -d
-# Dashboard:     http://localhost:8501
-# Gateway:       http://localhost:8080
-# Upstream mock: http://localhost:8082  (httpbin — ecoa requests para testes E2E)
+# E2E-only docker compose — usa Dockerfile.rust-ci (binário pré-compilado pelo runner CI).
+# Não inclui o dashboard (não é testado pelo E2E).
 #
-# Selecionar bundle de política:
-#   BTV_POLICY_BUNDLE=gdpr_art22_chatbot docker compose -f ops/docker-compose.quickstart.yml up -d
-#   BTV_POLICY_BUNDLE=hipaa_phi_audit    docker compose -f ops/docker-compose.quickstart.yml up -d
-# Bundles disponíveis: baseline_trust (padrão), gdpr_art22_chatbot, hipaa_phi_audit
+# Caminhos relativos ao diretório ops/ (onde o compose está).
+# Use .. para referenciar o repo root, como em docker-compose.quickstart.yml.
+#
+# Uso (do repo root):
+#   cargo build --release -p btv-gateway  # compila no runner com cache
+#   mkdir -p bin && cp rust/target/release/btv-gateway bin/btv-gateway
+#   docker compose -f ops/docker-compose.e2e.yml up -d --build
 
 services:
   governance:
@@ -42,16 +42,11 @@ services:
     image: kennethreitz/httpbin
     ports:
       - "8082:80"
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost/status/200"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
 
   gateway:
     build:
       context: ..
-      dockerfile: ops/Dockerfile.rust
+      dockerfile: ops/Dockerfile.rust-ci
     ports:
       - "8080:8080"
     environment:
@@ -73,19 +68,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
-
-  dashboard:
-    build:
-      context: ..
-      dockerfile: ops/Dockerfile.streamlit-demo
-    ports:
-      - "8501:8501"
-    environment:
-      BTV_GATEWAY_URL: "http://gateway:8080"
-      BTV_GOVERNANCE_URL: "http://governance:8000"
-    depends_on:
-      gateway:
-        condition: service_healthy
 
 volumes:
   ledger_data:

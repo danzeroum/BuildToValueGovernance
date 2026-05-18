@@ -1,4 +1,5 @@
 /docs/tarefasRealizada/
+/bin/
 /rust/target/*
 
 /ops/models/qwen2.5-3b-instruct-q4_k_m.gguf

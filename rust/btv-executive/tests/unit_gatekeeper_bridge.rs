@@ -6,6 +6,7 @@
 
 #[cfg(test)]
 mod gatekeeper_unit {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use btv_executive::__testhelpers::GatekeeperBridgeHandle;
 
     // ── Critério 4: inputs inválidos → fail-secure ────────────────────────────

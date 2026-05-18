@@ -3,7 +3,7 @@ members = [
     "kernel", "bindings", "cli", "gateway",
     "btv-types", "btv-core", "btv-sigma",
     "btv-executive", "btv-judicial", "btv-redaction",
-    "btv-governance",
+    "btv-governance", "buildtovalue",
 ]
 resolver = "2"
 
