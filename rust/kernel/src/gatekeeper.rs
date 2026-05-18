@@ -274,13 +274,17 @@ impl Gatekeeper {
             }
         }
 
-        // Stage 3.5: Re-scan decoded content
+        // Stage 3.5: Re-scan decoded content (ADR-0013-v2)
         let deob_chain = crate::deobfuscator::chain::DeobfuscatorChain::new();
         let chain_result = deob_chain.deobfuscate(input);
         if !chain_result.layers.is_empty() && chain_result.final_text != input {
             for entry in &self.pipeline {
                 if entry.stage != PipelineStage::Validate { continue; }
+                // ADR-0034: inherit lang_bitmask so Tier 1 language patterns apply
+                // on decoded content (e.g. PT-BR injection encoded in base64).
                 let mut rescan_ctx = ScanContext::default();
+                rescan_ctx.flags.lang_bitmask = ctx.flags.lang_bitmask;
+                rescan_ctx.flags.jurisdiction_bitmask = ctx.flags.jurisdiction_bitmask;
                 let findings = entry.module.scan(&chain_result.final_text, &mut rescan_ctx);
                 for finding in findings { evidence.add_finding(finding); }
             }

@@ -1,6 +1,6 @@
 # ADR-0034: Language Detection Strategy
 
-**Status:** 🔒 Planejado
+**Status:** ✅ Implementado (v1.7.0 — threshold 0.60→0.45, lang_bitmask herdado no Stage 3.5)
 **Data:** 24 de fevereiro de 2026
 **Autores:** BuildToValue AI Squad (Arquiteta + Staff Engineer)
 **Versão Alvo:** v1.6.1
