@@ -7,6 +7,7 @@ mod tests {
     use buildtovalue_kernel::gatekeeper::Gatekeeper;
     use buildtovalue_kernel::validators::{
         CpfValidator, CnpjValidator, EmailValidator, PhoneValidator, CreditCardValidator,
+        SensitiveDataValidator,
     };
 
     fn all_modules() -> Vec<Box<dyn Module>> {
@@ -27,6 +28,8 @@ mod tests {
             Box::new(CreditCardValidator::new()),
             // Security
             Box::new(buildtovalue_kernel::security::PromptInjectionDetector::new()),
+            // Sensitive data (LGPD Art.11) — FPR=0.18, highest in pipeline
+            Box::new(SensitiveDataValidator::new()),
         ]
     }
 

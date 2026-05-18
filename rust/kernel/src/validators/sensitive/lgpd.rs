@@ -3,6 +3,7 @@
 
 use crate::validators::Validator;
 use crate::{Finding, ValidatorModule, TechnicalSeverity};
+use crate::core::module::{Module, ScanContext};
 use crate::core::types::BiasDeclaration;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -92,6 +93,26 @@ impl Validator for SensitiveDataValidator {
         }
         findings
     }
+
+    fn bias_declaration(&self) -> BiasDeclaration {
+        BiasDeclaration::new(0.18, 0.12, 20260517, 200)
+            .with_limitations(
+                "Keyword-based detection (no semantics); Brazilian Portuguese only; high FPR for medical terms."
+            )
+            .with_affected_groups(
+                "Medical research contexts; cultural ambiguity in racial terms."
+            )
+    }
+}
+
+impl Module for SensitiveDataValidator {
+    fn scan(&self, input: &str, _ctx: &mut ScanContext) -> Vec<Finding> {
+        self.validate(input)
+    }
+
+    fn name(&self) -> &'static str { "sensitivedata" }
+
+    fn module_id(&self) -> ValidatorModule { ValidatorModule::SensitiveData }
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.18, 0.12, 20260517, 200)
