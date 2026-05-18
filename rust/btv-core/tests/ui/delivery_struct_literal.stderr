@@ -7,6 +7,7 @@ warning: unreachable expression
   |                       ^^^^^^^ unreachable expression
   |
   = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+  = note: this warning originates in the macro `todo` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0451]: fields `verdict_record` and `receipt_wire` of struct `DeliveryToken` are private
  --> tests/ui/delivery_struct_literal.rs:5:9
