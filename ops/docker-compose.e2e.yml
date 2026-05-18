@@ -23,6 +23,7 @@ services:
       BTV_DB_PATH: "/tmp/trust.db"
       BTV_APPEALS_DB: "/tmp/appeals.db"
       BTV_THREATS_DB: "/tmp/threats.db"
+      BTV_AUTOGEN_DIR: "/tmp/autogen-policies"
     volumes:
       - ../data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
       - ledger_data:/app/data/ledger
