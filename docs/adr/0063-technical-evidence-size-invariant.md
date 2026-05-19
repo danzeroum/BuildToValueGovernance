@@ -1,6 +1,6 @@
 # ADR-063 — TechnicalEvidence Size Invariant
 
-**Status:** Partially active — BiasDeclaration assert active, TechnicalEvidence deferred  
+**Status:** Active — both BiasDeclaration and TechnicalEvidence invariants enforced at compile time  
 **Date:** 2026-05-19
 
 ## Context
@@ -28,19 +28,21 @@ const _: () = assert!(
 `BiasDeclaration` is fully fixed-size (`repr(C, align(8))`), so this assert is
 meaningful and catches layout regressions at compile time.
 
-### Deferred: TechnicalEvidence size invariant
+### Active: TechnicalEvidence size invariant (ADR-063 phase 2)
 
-The `TechnicalEvidence` assert is commented out in `core/types.rs`. Activation
-requires:
+All `Vec<u8>` fields have been replaced with fixed-size `[u8; N]` equivalents
+(notably `_reserved_metadata: [u8; 7072]`). The struct is fully `#[repr(C, align(8))]`.
 
-1. Replace `Vec<u8>` fields in `TechnicalEvidence` with fixed-size `[u8; N]`
-   equivalents.
-2. Update `EVIDENCE_SIZE` to match the new struct layout.
-3. Uncomment the `const assert`.
+The assert is active in both `core/types.rs` and `evidence/technical.rs` (via
+`static_assertions::const_assert_eq!`). The confirmed canonical size is **9632 bytes**.
 
-This is tracked as Phase 2 of ADR-063. The kernel's `TechnicalEvidence` and
-`btv-types::TechnicalEvidence` are distinct types serving different purposes
-(scanner operational record vs. constitutional wire format).
+`from_bytes` was updated to validate the `version` field (must be 1–3) before
+returning, preventing zero-filled or truncated buffers from propagating as live
+evidence. See S-05 in the Sprint 0 security ledger.
+
+The kernel's `TechnicalEvidence` and `btv-types::TechnicalEvidence` remain distinct
+types serving different purposes (scanner operational record vs. constitutional wire
+format).
 
 ## Consequences
 

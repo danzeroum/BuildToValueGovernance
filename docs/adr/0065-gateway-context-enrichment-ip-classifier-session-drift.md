@@ -1,4 +1,4 @@
-# ADR-044: Gateway Context Enrichment — IP Classifier + Session Drift
+# ADR-065: Gateway Context Enrichment — IP Classifier + Session Drift
 
 **Status:** 🚧 Em Implementação
 **Data:** 26 de fevereiro de 2026

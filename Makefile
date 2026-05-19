@@ -1,11 +1,11 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# BuildToValue v2.3.1 - Sovereign Orquestrator Makefile
+# BuildToValue v0.1.0-alpha.1 - Sovereign Orquestrator Makefile
 # ═══════════════════════════════════════════════════════════════════════════
 
 .PHONY: help build develop test e2e clean install quick dashboard benchmark
 
 help:
-	@echo "BuildToValue Governance v2.3.1 - Orquestração Soberana"
+	@echo "BuildToValue Governance v0.1.0-alpha.1 - Orquestração Soberana"
 	@echo ""
 	@echo "Comandos de Rust:"
 	@echo "  make build        - Compila o Workspace Rust (release)"

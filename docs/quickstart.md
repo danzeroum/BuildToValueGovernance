@@ -24,7 +24,7 @@ fn main() {
     let evidence = EvidenceToken::new(context);
 
     // 2. Declare compliance jurisdiction
-    let compliance = ComplianceToken::new("GDPR", "v1", 720); // 720h = 30-day appeal window
+    let compliance = ComplianceToken::new("GDPR", "v1", 720); // 720h = GDPR Art. 22 appeal window (30 days)
 
     // 3. Issue verdict — atomically consumes both tokens
     let verdict = Verdict::new(evidence, compliance, Decision::Deny, "Score below threshold".into());
@@ -52,13 +52,13 @@ cargo run
 For teams that do not write Rust. The sidecar wraps any agent decision.
 
 ```bash
-docker run -p 3000:3000 \
+docker run -p 8080:8080 \
   -e BTV_HMAC_KEY=dev-key-change-in-prod \
   buildtovalue/gateway:latest
 ```
 
 ```bash
-curl -s -X POST http://localhost:3000/v1/decide \
+curl -s -X POST http://localhost:8080/v1/decide \
   -H "Content-Type: application/json" \
   -d '{
     "context": "loan application: score=520, threshold=600",
@@ -75,7 +75,7 @@ curl -s -X POST http://localhost:3000/v1/decide \
   "evidence_id": "a3f8b2c1...",
   "hmac_seal": "9b2c3d4e...",
   "contestable": true,
-  "appeal_deadline_hours": 720,
+  "appeal_deadline_hours": 720,   // GDPR Art. 22: 30-day regulatory window; BTV SLA: 24h human review
   "latency_us": 1670
 }
 ```
@@ -89,7 +89,7 @@ pip install buildtovalue-sdk
 ```python
 from buildtovalue import BTVClient
 
-client = BTVClient("http://localhost:3000")
+client = BTVClient("http://localhost:8080")
 
 receipt = client.decide(
     context="loan application: score=520, threshold=600",
@@ -100,7 +100,7 @@ receipt = client.decide(
 
 print(receipt.evidence_id)   # BLAKE3 hash — your immutable proof
 print(receipt.hmac_seal)     # HMAC-SHA256 — tamper-evident seal
-print(receipt.contestable)   # True — user can appeal within 720h
+print(receipt.contestable)   # True — user can appeal within 720h (GDPR) / BTV resolves in 24h SLA
 ```
 
 ---
@@ -121,7 +121,7 @@ Add to your MCP config:
     "btv": {
       "command": "btv-mcp-server",
       "env": {
-        "BTV_GATEWAY_URL": "http://localhost:3000"
+        "BTV_GATEWAY_URL": "http://localhost:8080"
       }
     }
   }
@@ -141,7 +141,7 @@ Every BTV verdict contains:
 | `evidence_id` | BLAKE3 hash of exactly what the AI saw at decision time |
 | `hmac_seal` | HMAC-SHA256 over the full verdict — detects tampering |
 | `contestable` | Whether the affected party can file an appeal |
-| `appeal_deadline_hours` | Time window for appeal (GDPR: 720h / 30 days) |
+| `appeal_deadline_hours` | Regulatory appeal window (GDPR Art. 22: 720h / 30 days). BTV internal SLA for human review is 24h. See `docs/compliance.md`. |
 | `verdict_id` | Globally unique, immutable ID for audit trail |
 
 To verify any stored verdict:

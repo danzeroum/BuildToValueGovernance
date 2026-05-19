@@ -21,10 +21,13 @@ from __future__ import annotations
 import hashlib
 import hmac as _hmac
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 import uuid
+
+logger = logging.getLogger("btv.core.governance_gateway")
 
 from ..governance.context_engine import EthicalContextEngine, RustEvidence, RequestContext
 from ..governance.context_sanitizer import ContextSanitizer, SanitizationLevel, SanitizationReport
@@ -312,9 +315,9 @@ class GovernanceGateway:
                 "critical_count": critical_count,
                 "explain_decision": justification,
             })
-        except Exception:
-            # Fail-open: persistência falha silenciosamente — recusa prossegue
-            pass
+        except Exception as exc:
+            # Fail-open: persistence failure does not block the refusal verdict.
+            logger.warning("refusal_record_persist_failed verdict_id=%s error=%s", vid, exc)
 
     def _fail_secure(self, error: str) -> GatewayVerdict:
         now = datetime.now(timezone.utc).isoformat()

@@ -518,9 +518,10 @@ const _: () = assert!(
      Changing field layout requires updating ADR-063 and bumping EVIDENCE_SIZE."
 );
 
-// TechnicalEvidence assert is deferred until Vec<u8> fields are replaced
-// with fixed-size arrays (tracked in docs/status.md, ADR-063 phase 2).
-// const _: () = assert!(
-//     std::mem::size_of::<crate::evidence::TechnicalEvidence>() == 9632,
-//     "ADR-063 VIOLATION: TechnicalEvidence size invariant broken."
-// );
+// ADR-063 phase 2: TechnicalEvidence is fully fixed-size (all Vec<u8> fields
+// were replaced with [u8; N] equivalents). Enforced here and in technical.rs.
+const _: () = assert!(
+    std::mem::size_of::<crate::evidence::TechnicalEvidence>() == 9632,
+    "ADR-063 VIOLATION: TechnicalEvidence size invariant broken (expected 9632 bytes). \
+     Changing field layout requires updating EVIDENCE_SIZE and incrementing the ADR version."
+);

@@ -1,4 +1,4 @@
-# ADR-0057: Protocol Designer (ARIA Sub-Component 3a)
+# ADR-069: Protocol Designer (ARIA Sub-Component 3a)
 
 **Status**: ✅ ACCEPTED
 **Date**: 2026-03-22

@@ -1,4 +1,4 @@
-# ADR-044 — Hybrid Alignment: Session Sensitivity Accumulator
+# ADR-066 — Hybrid Alignment: Session Sensitivity Accumulator
 
 **Status:** PROPOSED  
 **Data:** 2026-03-04  

@@ -1,4 +1,4 @@
-# ADR-0048 — Transactional Effect Buffering (PROP-029)
+# ADR-068 — Transactional Effect Buffering (PROP-029)
 
 **Status:** APROVADO
 **Data:** 2026-03-04

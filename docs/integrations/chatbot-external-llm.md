@@ -1391,7 +1391,7 @@ services:
   chatbot-backend:
     build: .
     ports:
-      - "3000:3000"
+      - "8080:8080"
     environment:
       BTV_URL:                        "http://btv-sidecar:8080"
       BTV_API_KEY:                    "dev-api-key-chatbot-external"
