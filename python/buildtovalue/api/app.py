@@ -180,12 +180,6 @@ def _run_rag_guard(
 
 from buildtovalue.security import get_hmac_key, init_hmac_key, sqlite_connect_wal
 
-# Snapshot at import time. In Gunicorn pre-fork this runs in the master
-# before workers spawn, so each worker inherits the initialized _KeyHolder
-# via copy-on-write. For SIGHUP rotation, callers should switch to
-# get_hmac_key() — refactor tracked in docs/status.md.
-HMAC_KEY = get_hmac_key()
-
 
 _risk_classifier: Optional[RiskClassifier] = RiskClassifier()
 
@@ -474,8 +468,11 @@ def is_first_offense(session_id: Optional[str]) -> bool:
 
 
 def sign_verdict(verdict_id: str, action: str, risk: float) -> str:
+    # PR-4 (S-09): fetch the current key on every call so SIGHUP rotation
+    # via rotate_hmac_key() takes effect on the next /v1/decide hot-path
+    # request without a process restart.
     payload = f"{verdict_id}:{action}:{risk:.4f}"
-    return hmac.new(HMAC_KEY, payload.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(get_hmac_key(), payload.encode(), hashlib.sha256).hexdigest()
 
 
 def _appeal_to_response(appeal) -> AppealResponse:
@@ -545,10 +542,12 @@ async def lifespan(application):
     global _cross_agent, _delegation_ledger
     global _KERNEL_EXECUTOR
 
-    # S-01: ensure HMAC key holder is initialized before any worker starts
-    # serving. Idempotent — if module-level HMAC_KEY assignment already ran
-    # init_hmac_key() at import time, this is a no-op except that the env var
-    # is re-scrubbed defensively.
+    # S-01: initialize the HMAC key holder before any worker starts serving.
+    # In Gunicorn pre-fork this runs in the master so workers inherit the
+    # initialized _KeyHolder via copy-on-write. PR-4 removed the module-level
+    # HMAC_KEY snapshot — all callers now go through get_hmac_key() at use
+    # time, which means rotate_hmac_key() on SIGHUP propagates to the
+    # /v1/decide hot path without a process restart.
     init_hmac_key()
 
     # PR-4: initialize dedicated kernel executor before anything touches Rust.
@@ -578,7 +577,12 @@ async def lifespan(application):
         sla_hours=24,
         db_path=os.environ.get("BTV_APPEALS_DB"),
     )
-    _ethical_engine = EthicalContextEngine(signing_key=HMAC_KEY)
+    # PR-4 partial: get_hmac_key() returns the key bytes at init time. Full
+    # SIGHUP rotation for this singleton would require EthicalContextEngine
+    # to accept a callable (signing_key_provider) instead of bytes. Tracked
+    # in docs/status.md. The signing_key kwarg also predates ECE's current
+    # __init__ signature — see same status entry.
+    _ethical_engine = EthicalContextEngine(signing_key=get_hmac_key())
 
     _sensitivity_accumulator = SessionSensitivityAccumulator()
     app.state.sensitivity_accumulator = _sensitivity_accumulator
@@ -590,7 +594,8 @@ async def lifespan(application):
     logger.info("TrustScoreCalculator initialized as singleton (Gap 12/19)")
 
     # Gap 10: singleton — ring buffer acumula histórico de drift por sessão
-    _goal_drift_sentinel = GoalDriftSentinel(hmac_secret=HMAC_KEY)
+    # PR-4 partial: same snapshot-at-init caveat as EthicalContextEngine above.
+    _goal_drift_sentinel = GoalDriftSentinel(hmac_secret=get_hmac_key())
     app.state.goal_drift_sentinel = _goal_drift_sentinel
     logger.info("GoalDriftSentinel initialized as singleton (Gap 10)")
 
@@ -605,9 +610,10 @@ async def lifespan(application):
     logger.info("CrossAgentCorrelator initialized (C6)")
 
     _deleg_policy = policy_root / "agents" / "delegation_rules.yaml"
+    # PR-4 partial: same snapshot-at-init caveat as EthicalContextEngine above.
     _delegation_ledger = DelegationLedger(
         policy_path=_deleg_policy if _deleg_policy.exists() else None,
-        hmac_key=HMAC_KEY,
+        hmac_key=get_hmac_key(),
     )
     app.state.delegation_ledger = _delegation_ledger
     logger.info("DelegationLedger initialized (C6)")
