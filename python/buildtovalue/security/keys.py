@@ -164,7 +164,14 @@ def get_hmac_key() -> bytes:
         # Lazy init for legacy call sites (tests, single-shot scripts).
         # Production code should always call init_hmac_key() at startup.
         init_hmac_key()
-    assert _KEY_HOLDER is not None  # mypy / static checkers
+    if _KEY_HOLDER is None:
+        # init_hmac_key() failed to populate the global (would only happen
+        # under a patched-out init in tests). Raise explicitly so the
+        # error survives PYTHONOPTIMIZE=1, which strips `assert`.
+        raise HmacKeyNotInitializedError(
+            "get_hmac_key() called before init_hmac_key() succeeded. "
+            "Ensure init_hmac_key() runs in the FastAPI lifespan."
+        )
     return _KEY_HOLDER.borrow()
 
 

@@ -63,3 +63,6 @@ ops/nginx/*.crt
 # Misc binary artifacts
 *.bin
 ops/resp.bin
+
+# IntelliJ / PyCharm project metadata
+.idea/
