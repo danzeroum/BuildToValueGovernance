@@ -262,17 +262,19 @@ class ContestabilityLoop:
                     sla_deadline    INTEGER NOT NULL,
                     evidence_hash   TEXT,
                     grounds         TEXT,
-                    mediator_rec    TEXT
+                    mediator_rec    TEXT,
+                    hash_algorithm  TEXT DEFAULT 'blake3'
                 )
             """)
-            # Migração segura: adicionar colunas ADR-047 se db existente não as tiver
+            # Migração segura: adicionar colunas ADR-047/ADR-063 se db existente não as tiver
             existing = {
                 row[1] for row in conn.execute("PRAGMA table_info(appeals)")
             }
             for col, typedef in [
-                ("evidence_hash", "TEXT"),
-                ("grounds",       "TEXT"),
-                ("mediator_rec",  "TEXT"),
+                ("evidence_hash",  "TEXT"),
+                ("grounds",        "TEXT"),
+                ("mediator_rec",   "TEXT"),
+                ("hash_algorithm", "TEXT DEFAULT 'blake3'"),
             ]:
                 if col not in existing:
                     conn.execute(
