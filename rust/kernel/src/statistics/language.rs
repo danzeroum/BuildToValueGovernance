@@ -112,13 +112,13 @@ impl Module for LanguageDetector {
     }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(
+        BiasDeclaration::from_static(
             0.08, // FPR: aumentado de 0.05 → estimativa pós-calibração threshold 0.45 (ADR-0034)
             0.12, // FNR: reduzido de 0.20 — threshold 0.45 melhora recall PT-BR
             20260518,
             450,
         )
-        .with_limitations(
+            .with_limitations(
             "Textos < 10 chars retornam undetermined. \
              Inputs mistos (PT+EN) detectam apenas idioma dominante. \
              Threshold adaptativo: 0.30 para inputs <= 30 chars, 0.45 para inputs > 30 chars.",

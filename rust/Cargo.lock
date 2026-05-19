@@ -935,6 +935,7 @@ dependencies = [
  "blake3",
  "chrono",
  "criterion",
+ "ed25519-dalek",
  "hex",
  "hmac",
  "lazy_static",

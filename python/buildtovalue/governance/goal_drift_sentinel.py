@@ -34,7 +34,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Callable, Optional
 
 from ._normalize import normalize_drift_level, normalize_action
 from .session_manager import SessionManager
@@ -134,15 +134,22 @@ class GoalDriftSentinel:
 
     def __init__(
         self,
-        hmac_secret:     bytes,
+        hmac_secret:     Optional[bytes] = None,
         window_k:        int = DRIFT_WINDOW_K,
         threshold_pct:   int = DRIFT_THRESHOLD_PCT,
         max_sessions:    int = 10_000,
         ttl_s:           int = 1800,
+        hmac_secret_fn:  Optional[Callable[[], bytes]] = None,
     ) -> None:
-        if not hmac_secret:
-            raise ValueError("hmac_secret nao pode ser vazio")
-        self._secret       = hmac_secret
+        if hmac_secret_fn is not None:
+            self._secret_fn: Callable[[], bytes] = hmac_secret_fn
+        elif hmac_secret is not None:
+            if not hmac_secret:
+                raise ValueError("hmac_secret nao pode ser vazio")
+            _captured = hmac_secret
+            self._secret_fn = lambda: _captured
+        else:
+            raise ValueError("Provide hmac_secret or hmac_secret_fn")
         self._window_k     = window_k
         self._threshold    = threshold_pct
         self._sessions: dict[str, _SessionWindow] = {}
@@ -476,7 +483,7 @@ class GoalDriftSentinel:
              "detected": detected, "session_id": session_id},
             sort_keys=True, separators=(",", ":"),
         ).encode()
-        return _hmac.new(self._secret, payload, hashlib.sha256).hexdigest()
+        return _hmac.new(self._secret_fn(), payload, hashlib.sha256).hexdigest()
 
 
 # ───────────────────────────────────────────────────────────────────────────────

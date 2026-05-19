@@ -27,7 +27,7 @@ impl Module for ConsentRevocationValidator {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::ConsentRevocation }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.01, 0.00, 20260517, 80)
+        BiasDeclaration::from_static(0.01, 0.00, 20260517, 80)
             .with_limitations(
                 "Race condition between revocation timestamp and async processing jobs."
             )

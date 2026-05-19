@@ -56,8 +56,13 @@ pub struct GatekeeperMetrics {
     pub findings_total: u64,
     pub critical_findings: u64,
     pub avg_latency_ms: f32,
+    pub p50_latency_ms: f32,
+    pub p95_latency_ms: f32,
     pub p99_latency_ms: f32,
+    pub p999_latency_ms: f32,
 }
+
+const LATENCY_RING_SIZE: usize = 1000;
 
 // ---------------------------------------------------------------------
 // GATEKEEPER
@@ -66,6 +71,9 @@ pub struct Gatekeeper {
     pipeline: Vec<StageEntry>,
     metrics: GatekeeperMetrics,
     interceptor_chain: InterceptorChain, // Wire 2: PROP-034a
+    latency_ring: Box<[f32; LATENCY_RING_SIZE]>,
+    ring_pos: usize,
+    ring_len: usize,
 }
 
 impl Gatekeeper {
@@ -106,6 +114,9 @@ impl Gatekeeper {
             pipeline,
             metrics: GatekeeperMetrics::default(),
             interceptor_chain,
+            latency_ring: Box::new([0.0_f32; LATENCY_RING_SIZE]),
+            ring_pos: 0,
+            ring_len: 0,
         }
     }
 
@@ -147,12 +158,10 @@ impl Gatekeeper {
             }
         };
 
-        // Hash canônico: slice [0..8] de [u8; 32] é invariante estática, nunca falha.
-        evidence.original_request_hash = u64::from_le_bytes(
-            adapted.blake3_hash[0..8]
-                .try_into()
-                .unwrap_or_else(|_| panic!("BTV invariant violation: blake3_hash slice [0..8] must be exactly 8 bytes"))
-        );
+        // Hash canônico: blake3_hash é [u8;32], cópia dos primeiros 8 bytes é infallível.
+        let mut hash_bytes = [0u8; 8];
+        hash_bytes.copy_from_slice(&adapted.blake3_hash[..8]);
+        evidence.original_request_hash = u64::from_le_bytes(hash_bytes);
         evidence.input_size = adapted.normalized_len as u32;
 
         // ── Wire 2: PROP-034a ToolScreen — pré-voo heurístico ────────────
@@ -289,7 +298,7 @@ impl Gatekeeper {
             }
         }
 
-        evidence.bias = BiasDeclaration::new(
+        evidence.bias = BiasDeclaration::aggregate(
             max_fpr, max_fnr,
             if oldest_calibration == u32::MAX { 0 } else { oldest_calibration },
             total_test_size,
@@ -328,12 +337,25 @@ impl Gatekeeper {
         let alpha = 0.1;
         self.metrics.avg_latency_ms =
             (alpha * latency_ms) + ((1.0 - alpha) * self.metrics.avg_latency_ms);
-        if latency_ms > self.metrics.p99_latency_ms {
-            self.metrics.p99_latency_ms = latency_ms;
-        }
+
+        self.latency_ring[self.ring_pos] = latency_ms;
+        self.ring_pos = (self.ring_pos + 1) % LATENCY_RING_SIZE;
+        if self.ring_len < LATENCY_RING_SIZE { self.ring_len += 1; }
     }
 
-    pub fn get_metrics(&self) -> &GatekeeperMetrics { &self.metrics }
+    pub fn get_metrics(&mut self) -> &GatekeeperMetrics {
+        let n = self.ring_len;
+        if n > 0 {
+            let mut buf: Vec<f32> = self.latency_ring[..n].to_vec();
+            buf.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let pct = |p: f64| buf[((p / 100.0) * (n - 1) as f64).round() as usize];
+            self.metrics.p50_latency_ms  = pct(50.0);
+            self.metrics.p95_latency_ms  = pct(95.0);
+            self.metrics.p99_latency_ms  = pct(99.0);
+            self.metrics.p999_latency_ms = pct(99.9);
+        }
+        &self.metrics
+    }
 }
 
 impl Default for Gatekeeper {

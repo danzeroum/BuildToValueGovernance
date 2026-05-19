@@ -399,7 +399,7 @@ impl Module for Normalizer {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.02, 0.05, 20260226, 42)
+        BiasDeclaration::from_static(0.02, 0.05, 20260226, 42)
             .with_limitations(
                 "Homoglyph map cobre apenas blocos Mathematical Bold, Fullwidth e Cyrillic. \
                  Palavra 'at' só substituída com espaços para evitar FP em 'at' como preposição."
