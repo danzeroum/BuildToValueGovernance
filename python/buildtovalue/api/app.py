@@ -178,21 +178,9 @@ def _run_rag_guard(
 # HMAC KEY (Gap #10 — env var, fail-secure in production)
 # ═══════════════════════════════════════════════════════════════
 
-def _load_hmac_key() -> bytes:
-    key = os.environ.get("BTV_HMAC_KEY")
-    if key:
-        return key.encode("utf-8")
-    env = os.environ.get("BTV_ENV", "development")
-    if env == "production":
-        raise RuntimeError(
-            "BTV_HMAC_KEY must be set in production. "
-            "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
-        )
-    logger.warning("BTV_HMAC_KEY not set — using dev fallback.")
-    return b"btv-dev-key-NOT-FOR-PRODUCTION!!"
+from buildtovalue.security import get_hmac_key
 
-
-HMAC_KEY = _load_hmac_key()
+HMAC_KEY = get_hmac_key()
 
 
 _risk_classifier: Optional[RiskClassifier] = RiskClassifier()
@@ -207,6 +195,10 @@ DB_PATH = os.environ.get("BTV_DB_PATH", "data/trust.db")
 def init_db():
     os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
+    # WAL persists per-database after first PRAGMA; benefits concurrent reads
+    # under FastAPI/uvicorn multi-worker deployments (S-04).
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             session_id TEXT PRIMARY KEY,
@@ -669,11 +661,24 @@ async def lifespan(application):
 
 app = FastAPI(title="BuildToValue Governance", version="2.3.0", lifespan=lifespan)
 
+def _cors_origins() -> list[str]:
+    raw = os.environ.get("BTV_CORS_ORIGINS", "").strip()
+    if raw:
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    if os.environ.get("BTV_ENV", "development").lower() == "production":
+        raise RuntimeError(
+            "BTV_CORS_ORIGINS must be set in production. "
+            'Example: BTV_CORS_ORIGINS="https://app.example.com,https://admin.example.com"'
+        )
+    return ["http://localhost:8501", "http://localhost:3000", "http://localhost:8080"]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-BTV-Session", "X-BTV-Jurisdiction"],
 )
 
 from buildtovalue.api.routes.intelligence import router as intelligence_router

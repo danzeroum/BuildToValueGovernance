@@ -260,6 +260,8 @@ class TrustScoreCalculator:
     def _ensure_escrow_table(self) -> None:
         """Create escrow_ledger table if not exists."""
         conn = sqlite3.connect(ESCROW_DB_PATH)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS escrow_ledger (
                 escrow_id TEXT PRIMARY KEY,

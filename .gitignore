@@ -34,3 +34,32 @@ patch_consensus.py
 reports/
 ops/runtime/*.db
 check_branches.sh
+
+# Secrets and credentials (S-02) — never commit
+.env
+.env.*
+!.env.example
+ops/.env
+ops/.env.*
+!ops/.env.example
+
+# Database artifacts (S-02)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+data/*.db
+python/data/*.db
+
+# TLS material (S-02)
+*.key
+*.crt
+*.pem
+*.p12
+*.pfx
+ops/nginx/*.key
+ops/nginx/*.crt
+
+# Misc binary artifacts
+*.bin
+ops/resp.bin

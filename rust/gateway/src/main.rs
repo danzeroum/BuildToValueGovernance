@@ -11,7 +11,7 @@ mod state;
 use state::AppState;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .with(tracing_subscriber::EnvFilter::try_from_default_env()
@@ -28,8 +28,11 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("BTV Gateway listening on {}", addr);
 
-    #[allow(clippy::unwrap_used)]
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    #[allow(clippy::unwrap_used)]
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| format!("failed to bind {addr}: {e}"))?;
+    axum::serve(listener, app)
+        .await
+        .map_err(|e| format!("axum::serve terminated: {e}"))?;
+    Ok(())
 }

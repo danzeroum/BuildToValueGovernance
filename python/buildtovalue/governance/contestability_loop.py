@@ -59,13 +59,9 @@ VALID_MEDIATOR_RECOMMENDATIONS: frozenset = frozenset({
 # ETHICAL VERDICT (ADR-0028 + ADR-0005)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_HMAC_KEY: bytes = os.environb.get(b"BTV_HMAC_KEY", b"")
-if not _HMAC_KEY:
-    logger.warning(
-        "BTV_HMAC_KEY env var is not set; using insecure built-in fallback key. "
-        "Set BTV_HMAC_KEY in production (ADR-0005)."
-    )
-    _HMAC_KEY = b"btv-verdict-hmac-v1"
+from buildtovalue.security import get_hmac_key
+
+_HMAC_KEY: bytes = get_hmac_key()
 
 
 @dataclass
