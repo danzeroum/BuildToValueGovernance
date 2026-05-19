@@ -28,10 +28,9 @@ use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector, Normali
 use crate::interceptor::{InterceptorChain, InterceptAction, ToolScreen}; // Wire 2: PROP-034a
 use crate::security::prompt_injection::PromptInjectionDetector;
 
-/// Chave MAC do kernel para PROP-031 (ADR-031b).
-/// Em produção: substituir por variável de ambiente ou HSM.
-/// Zero heap: &[u8] literal estático.
-const KERNEL_MAC_KEY: &[u8] = b"btv-kernel-supply-guard-v1";
+// Kernel MAC key (PROP-031 / ADR-031b) is now resolved via
+// `crate::keys::kernel_mac_key()`, backed by a `Zeroizing<Vec<u8>>` singleton
+// initialized in `main()` from `BTV_HMAC_KEY`. See `rust/kernel/src/keys.rs`.
 
 // ---------------------------------------------------------------------
 // PIPELINE STAGE
@@ -179,7 +178,7 @@ impl Gatekeeper {
         if evidence.has_skill_hash() {
             let hash = evidence.get_skill_hash();
             let mac_tag = evidence.get_skill_mac_tag();
-            match verify_skill(hash, mac_tag, KERNEL_MAC_KEY) {
+            match verify_skill(hash, mac_tag, crate::keys::kernel_mac_key()) {
                 SupplyGuardResult::Allowed => {}
                 SupplyGuardResult::Blocked(ref reason) => {
                     log::warn!(

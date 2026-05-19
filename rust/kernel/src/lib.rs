@@ -10,6 +10,7 @@ pub mod deobfuscator;
 pub mod evidence;
 pub mod gatekeeper;
 pub mod interceptor;
+pub mod keys;
 pub mod ledger;
 pub mod network;
 pub mod output_guard;

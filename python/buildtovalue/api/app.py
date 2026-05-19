@@ -178,8 +178,12 @@ def _run_rag_guard(
 # HMAC KEY (Gap #10 — env var, fail-secure in production)
 # ═══════════════════════════════════════════════════════════════
 
-from buildtovalue.security import get_hmac_key
+from buildtovalue.security import get_hmac_key, init_hmac_key
 
+# Snapshot at import time. In Gunicorn pre-fork this runs in the master
+# before workers spawn, so each worker inherits the initialized _KeyHolder
+# via copy-on-write. For SIGHUP rotation, callers should switch to
+# get_hmac_key() — refactor tracked in docs/status.md.
 HMAC_KEY = get_hmac_key()
 
 
@@ -545,6 +549,12 @@ async def lifespan(application):
     global _slm, _ethical_engine, _trust_calculator, _goal_drift_sentinel
     global _cross_agent, _delegation_ledger
     global _KERNEL_EXECUTOR
+
+    # S-01: ensure HMAC key holder is initialized before any worker starts
+    # serving. Idempotent — if module-level HMAC_KEY assignment already ran
+    # init_hmac_key() at import time, this is a no-op except that the env var
+    # is re-scrubbed defensively.
+    init_hmac_key()
 
     # PR-4: initialize dedicated kernel executor before anything touches Rust.
     # run_in_executor() prevents block_on() in RustKernel::new() from blocking

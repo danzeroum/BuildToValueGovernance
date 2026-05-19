@@ -18,6 +18,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|_| "btv_gateway=info".into()))
         .init();
 
+    // S-01 / PROP-031: initialize the kernel MAC key from BTV_HMAC_KEY before
+    // any scan runs. Must happen before worker fork; we are still single-threaded
+    // here because tokio::main has just constructed the runtime.
+    buildtovalue_kernel::keys::init_kernel_mac_key()
+        .map_err(|e| format!("kernel MAC key init failed: {e}"))?;
+
     let state = Arc::new(AppState::new());
     let app = routes::create_router(state);
 
