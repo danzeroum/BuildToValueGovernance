@@ -28,7 +28,7 @@ on:
       - "docs/adr/ADR-043*"
       - "tests/**"
       - ".github/workflows/ci.yml"
-      - "scripts/ci/**"
+      - "scripts/ci/ci_week*.py"
       - "Makefile"
   pull_request:
     branches: [main]
@@ -38,7 +38,7 @@ on:
       - "docs/adr/ADR-043*"
       - "tests/**"
       - ".github/workflows/ci.yml"
-      - "scripts/ci/**"
+      - "scripts/ci/ci_week*.py"
   workflow_dispatch:
     inputs:
       week_filter:
