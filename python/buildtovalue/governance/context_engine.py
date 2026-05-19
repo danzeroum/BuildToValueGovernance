@@ -164,12 +164,31 @@ class EthicalContextEngine:
             trust_score=trust,
             explanation=explanation,
             hmac_signature=signature,
+            blake3_hash=evidence.blake3_hash,
             report_triggered=report_triggered,
         )
 
     def verify_signature(self, verdict: EthicalVerdict) -> bool:
-        """Verify HMAC-SHA256 signature (simplified — full impl needs stored hash)."""
-        return len(verdict.hmac_signature) == 64
+        """Recompute the signed payload and compare with constant-time HMAC.
+
+        The verdict carries blake3_hash (the original evidence binding) so that
+        verification needs only the ledger record and the current HMAC key.
+        A forged verdict (e.g. BLOCK → ALLOW) cannot match a real signature
+        without the signing key.
+        """
+        if len(verdict.hmac_signature) != 64:
+            return False
+        if not verdict.blake3_hash:
+            # Pre-binding verdicts cannot be verified — treat as unverifiable.
+            return False
+        sign_payload = (
+            f"{verdict.verdict_id}|{verdict.blake3_hash}|"
+            f"{verdict.final_action}|{verdict.timestamp}"
+        )
+        expected = hmac.new(
+            self._signing_key_fn(), sign_payload.encode(), hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, verdict.hmac_signature)
 
     def _apply_risk_overrides(self, action: str, ctx: RequestContext) -> str:
         """Escalate se ip_risk ou drift forem perigosos (nunca acima do original)."""
