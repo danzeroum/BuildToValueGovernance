@@ -273,7 +273,7 @@ Veja `benchmarks/` para resultados comparativos contra Guardrails AI e NeMo Guar
 
 ## Licença
 
-Apache 2.0 — veja [LICENSE-MIT](LICENSE-MIT).
+Apache 2.0 — veja [LICENSE](LICENSE).
 
 ---
 

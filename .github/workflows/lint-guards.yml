@@ -1,0 +1,38 @@
+name: Lint Guards
+
+on:
+  push:
+    branches: [main, develop, "claude/**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  guards:
+    name: Static security & architecture guards
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run lint guards
+        run: bash scripts/ci/lint_guards.sh
+
+      - name: Confirm sqlite_connect_wal coverage
+        run: |
+          set -e
+          # If the helper itself is missing, fail loudly. Migrations rely on it.
+          test -f python/buildtovalue/security/db.py
+          grep -q 'def sqlite_connect_wal' python/buildtovalue/security/db.py
+
+      - name: Confirm HMAC key indirection
+        run: |
+          set -e
+          test -f python/buildtovalue/security/keys.py
+          test -f rust/kernel/src/keys.rs
+          grep -q 'def get_hmac_key' python/buildtovalue/security/keys.py
+          grep -q 'fn kernel_mac_key' rust/kernel/src/keys.rs
+
+      - name: Confirm RELEASE_GATES present
+        run: test -f docs/RELEASE_GATES.md
