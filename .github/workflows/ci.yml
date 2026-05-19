@@ -49,7 +49,7 @@ on:
         options: ["1", "2", "3", "4", "all"]
 
 env:
-  PYTHON_VERSION: "3.11"
+  PYTHON_VERSION: "3.12"
   PROJECT_ROOT: ${{ github.workspace }}
   GRANT_ADAPTER_DIR: "sdk/integrations/grants/btv_grants"
   POLICY_DIR: "data/policies/sectors"
