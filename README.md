@@ -109,7 +109,7 @@ cd ops && docker compose up gateway
 ```
 
 ```bash
-curl -X POST http://localhost:3000/v1/scan \
+curl -X POST http://localhost:8080/v1/scan \
   -H "Content-Type: application/json" \
   -d '{"input": "Aprovar crédito para CPF 123.456.789-09", "audit_trail_id": 1}'
 # Retorna: TechnicalEvidence serializada com hash BLAKE3 imutável
@@ -124,7 +124,7 @@ pip install -e python/
 ```python
 from buildtovalue import BTVClient
 
-client = BTVClient("http://localhost:3000")
+client = BTVClient("http://localhost:8080")
 evidence = client.scan(
     input_text="Aprovar crédito para CPF 123.456.789-09",
     audit_trail_id=1
@@ -246,7 +246,7 @@ cd python && pip install -e ".[dev]" && pytest tests/ -v
 
 # Stack completo
 cd ops && docker compose up
-# Gateway: http://localhost:3000  |  Governance: http://localhost:8000
+# Gateway: http://localhost:8080  |  Governance: http://localhost:8000
 ```
 
 ---

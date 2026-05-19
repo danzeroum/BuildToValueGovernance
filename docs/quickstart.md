@@ -52,13 +52,13 @@ cargo run
 For teams that do not write Rust. The sidecar wraps any agent decision.
 
 ```bash
-docker run -p 3000:3000 \
+docker run -p 8080:8080 \
   -e BTV_HMAC_KEY=dev-key-change-in-prod \
   buildtovalue/gateway:latest
 ```
 
 ```bash
-curl -s -X POST http://localhost:3000/v1/decide \
+curl -s -X POST http://localhost:8080/v1/decide \
   -H "Content-Type: application/json" \
   -d '{
     "context": "loan application: score=520, threshold=600",
@@ -89,7 +89,7 @@ pip install buildtovalue-sdk
 ```python
 from buildtovalue import BTVClient
 
-client = BTVClient("http://localhost:3000")
+client = BTVClient("http://localhost:8080")
 
 receipt = client.decide(
     context="loan application: score=520, threshold=600",
@@ -121,7 +121,7 @@ Add to your MCP config:
     "btv": {
       "command": "btv-mcp-server",
       "env": {
-        "BTV_GATEWAY_URL": "http://localhost:3000"
+        "BTV_GATEWAY_URL": "http://localhost:8080"
       }
     }
   }
