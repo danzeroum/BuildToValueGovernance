@@ -70,8 +70,7 @@ impl Module for PhoneValidator {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Phone }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.10, 0.05, 20260517, 600)
-                .expect("static bias values are valid")
+        BiasDeclaration::from_static(0.10, 0.05, 20260517, 600)
             .with_limitations(
                 "Brazilian format only; does not validate carrier."
             )

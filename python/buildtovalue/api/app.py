@@ -577,9 +577,9 @@ async def lifespan(application):
         sla_hours=24,
         db_path=os.environ.get("BTV_APPEALS_DB"),
     )
-    # S-09: EthicalContextEngine does not use HMAC signing directly (delegates to
-    # PolicySigner). The stale signing_key kwarg from PR-4 is removed.
-    _ethical_engine = EthicalContextEngine()
+    # S-09: signing_key_fn receives the callable so SIGHUP rotation propagates
+    # to every verdict HMAC signing call without a process restart.
+    _ethical_engine = EthicalContextEngine(signing_key_fn=get_hmac_key)
 
     _sensitivity_accumulator = SessionSensitivityAccumulator()
     app.state.sensitivity_accumulator = _sensitivity_accumulator

@@ -75,8 +75,7 @@ impl Module for EmailValidator {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Email }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.03, 0.08, 20260517, 800)
-                .expect("static bias values are valid")
+        BiasDeclaration::from_static(0.03, 0.08, 20260517, 800)
             .with_limitations(
                 "Regex-based; does not verify DNS. May miss obfuscated emails."
             )

@@ -158,12 +158,10 @@ impl Gatekeeper {
             }
         };
 
-        // Hash canônico: slice [0..8] de [u8; 32] é invariante estática, nunca falha.
-        evidence.original_request_hash = u64::from_le_bytes(
-            adapted.blake3_hash[0..8]
-                .try_into()
-                .expect("blake3_hash is [u8;32] — slice [0..8] is infallible")
-        );
+        // Hash canônico: blake3_hash é [u8;32], cópia dos primeiros 8 bytes é infallível.
+        let mut hash_bytes = [0u8; 8];
+        hash_bytes.copy_from_slice(&adapted.blake3_hash[..8]);
+        evidence.original_request_hash = u64::from_le_bytes(hash_bytes);
         evidence.input_size = adapted.normalized_len as u32;
 
         // ── Wire 2: PROP-034a ToolScreen — pré-voo heurístico ────────────
@@ -348,7 +346,7 @@ impl Gatekeeper {
     pub fn get_metrics(&mut self) -> &GatekeeperMetrics {
         let n = self.ring_len;
         if n > 0 {
-            let mut buf: Vec<f32> = self.latency_ring[..n].iter().copied().collect();
+            let mut buf: Vec<f32> = self.latency_ring[..n].to_vec();
             buf.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let pct = |p: f64| buf[((p / 100.0) * (n - 1) as f64).round() as usize];
             self.metrics.p50_latency_ms  = pct(50.0);

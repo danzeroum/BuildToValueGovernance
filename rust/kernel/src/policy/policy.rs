@@ -413,8 +413,7 @@ policies:
     // ─── BIAS DECLARATION ─────────────────────────────────────────────────────
 
     pub fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.05, 0.03, 20260304, 1000)
-            .expect("static bias values are valid")
+        BiasDeclaration::from_static(0.05, 0.03, 20260304, 1000)
             .with_limitations(
                 "Policy accuracy depends on YAML author. \
                  Hard blocks are exact-match only. \

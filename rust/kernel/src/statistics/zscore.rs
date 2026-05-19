@@ -88,8 +88,7 @@ impl Module for ZScoreCalculator {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::ZScore }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.10, 0.18, 20260517, 400)
-                .expect("static bias values are valid")
+        BiasDeclaration::from_static(0.10, 0.18, 20260517, 400)
             .with_limitations("Assume distribuição normal; textos com repetições geram Z‑score alto.")
             .with_affected_groups("N/A")
     }

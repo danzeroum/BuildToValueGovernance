@@ -48,8 +48,7 @@ impl Module for VatValidator {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::EuVat }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.08, 0.10, 20260224, 150)
-                .expect("static bias values are valid")
+        BiasDeclaration::from_static(0.08, 0.10, 20260224, 150)
             .with_limitations("Sem checksum por país (v1.7). Apenas formato.")
             .with_affected_groups("Documentos fiscais EU.")
     }

@@ -298,6 +298,14 @@ impl BiasDeclaration {
         })
     }
 
+    /// For module-level static declarations with compile-time-known valid constants.
+    /// Panics at process startup if values are invalid; use `new()` for runtime values.
+    #[allow(clippy::expect_used)]
+    pub fn from_static(fpr: f32, fnr: f32, calibration: u32, dataset_size: u32) -> Self {
+        Self::new(fpr, fnr, calibration, dataset_size)
+            .expect("BiasDeclaration::from_static called with invalid compile-time constants")
+    }
+
     /// For gatekeeper aggregation across modules. Accepts 0-values explicitly;
     /// `is_calibration_valid()` will return false and trigger a dashboard warning.
     pub fn aggregate(fpr: f32, fnr: f32, oldest_calibration: u32, total_test_size: u32) -> Self {

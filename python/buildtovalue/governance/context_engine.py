@@ -25,7 +25,7 @@ import hmac
 import hashlib
 import logging
 import time
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
 from .mercy_algorithm import MercyCalculator
 from .mercy_scenarios import evaluate_scenarios, ACTION_SEVERITY, SEVERITY_ACTION
@@ -60,12 +60,19 @@ class EthicalContextEngine:
 
     def __init__(
         self,
-        signing_key: bytes,
+        signing_key: Optional[bytes] = None,
         policy_engine: "Optional[PolicyEngine]" = None,
+        signing_key_fn: Optional[Callable[[], bytes]] = None,
     ) -> None:
-        if len(signing_key) < 32:
-            raise ValueError("Signing key must be >= 32 bytes")
-        self._signing_key = signing_key
+        if signing_key_fn is not None:
+            self._signing_key_fn: Callable[[], bytes] = signing_key_fn
+        elif signing_key is not None:
+            if len(signing_key) < 32:
+                raise ValueError("Signing key must be >= 32 bytes")
+            _captured = signing_key
+            self._signing_key_fn = lambda: _captured
+        else:
+            raise ValueError("Provide signing_key or signing_key_fn")
         self._mercy_calc = MercyCalculator()
         self._trust_scores: Dict[str, float] = {}
         self._violation_counts: Dict[str, int] = {}
@@ -143,7 +150,7 @@ class EthicalContextEngine:
             f"{verdict_id}|{evidence.blake3_hash}|{final_action}|{now}"
         )
         signature = hmac.new(
-            self._signing_key, sign_payload.encode(), hashlib.sha256
+            self._signing_key_fn(), sign_payload.encode(), hashlib.sha256
         ).hexdigest()
 
         return EthicalVerdict(

@@ -84,8 +84,7 @@ impl Module for HexDecoder {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.08, 0.10, 20260517, 150)
-                .expect("static bias values are valid")
+        BiasDeclaration::from_static(0.08, 0.10, 20260517, 150)
             .with_limitations("Requer sequência par >=16 chars; ignora hex curto.")
             .with_affected_groups("N/A")
     }

@@ -301,8 +301,7 @@ impl Module for DeobfuscatorChain {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.05, 0.15, 20260517, 300)
-                .expect("static bias values are valid")
+        BiasDeclaration::from_static(0.05, 0.15, 20260517, 300)
             .with_limitations(
                 "Max 3 layers. 5ms timeout. Only base64/hex/leetspeak. Custom encodings not covered."
             )
