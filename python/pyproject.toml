@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "buildtovalue"
-version = "1.0.0"
+version = "0.1.0a1"
 description = "Sovereign Trust OS - Ethical AI Governance Infrastructure"
 authors = [
     {name = "BuildToValue Team", email = "team@buildtovalue.com"}

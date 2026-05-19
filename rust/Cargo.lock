@@ -743,7 +743,7 @@ dependencies = [
 
 [[package]]
 name = "btv-core"
-version = "3.0.0-alpha.1"
+version = "0.1.0-alpha.1"
 dependencies = [
  "blake3",
  "btv-types",
@@ -764,7 +764,7 @@ dependencies = [
 
 [[package]]
 name = "btv-executive"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bincode",
  "blake3",
@@ -784,7 +784,7 @@ dependencies = [
 
 [[package]]
 name = "btv-gateway"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "axum",
  "axum-test",
@@ -810,7 +810,7 @@ dependencies = [
 
 [[package]]
 name = "btv-governance"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "blake3",
  "btv-types",
@@ -829,7 +829,7 @@ dependencies = [
 
 [[package]]
 name = "btv-judicial"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "btv-types",
  "chrono",
@@ -849,7 +849,7 @@ dependencies = [
 
 [[package]]
 name = "btv-redaction"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "blake3",
  "btv-types",
@@ -865,7 +865,7 @@ dependencies = [
 
 [[package]]
 name = "btv-sigma"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "axum",
  "btv-types",
@@ -884,7 +884,7 @@ dependencies = [
 
 [[package]]
 name = "btv-types"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "sha2",
@@ -892,14 +892,14 @@ dependencies = [
 
 [[package]]
 name = "buildtovalue"
-version = "3.0.0-alpha.1"
+version = "0.1.0-alpha.1"
 dependencies = [
  "btv-core",
 ]
 
 [[package]]
 name = "buildtovalue-bindings"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "buildtovalue-kernel",
@@ -915,7 +915,7 @@ dependencies = [
 
 [[package]]
 name = "buildtovalue-cli"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "clap",
  "colored",
@@ -924,7 +924,7 @@ dependencies = [
 
 [[package]]
 name = "buildtovalue-kernel"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "arc-swap",

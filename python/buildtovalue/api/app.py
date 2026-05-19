@@ -668,7 +668,7 @@ async def lifespan(application):
     logger.info("Shutdown complete")
 
 
-app = FastAPI(title="BuildToValue Governance", version="2.3.0", lifespan=lifespan)
+app = FastAPI(title="BuildToValue Governance", version="0.1.0a1", lifespan=lifespan)
 
 def _cors_origins() -> list[str]:
     raw = os.environ.get("BTV_CORS_ORIGINS", "").strip()

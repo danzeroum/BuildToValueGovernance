@@ -2,7 +2,7 @@
 # Nome interno do workspace — preserva a taxonomia do monolito modular (ADR-009)
 # O nome comercial público (crates.io) é exposto via crate facade: rust/buildtovalue/
 name = "btv-core"
-version = "3.0.0-alpha.1"
+version = "0.1.0-alpha.1"
 edition.workspace = true
 authors = ["Daniel Lau Pereira Soares"]
 

@@ -1,4 +1,4 @@
-# ADR-047 — Contestability: Structured Mediation Protocol
+# ADR-067 — Contestability: Structured Mediation Protocol
 
 **Status:** ACCEPTED  
 **Data:** 2026-03-04  

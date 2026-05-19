@@ -1,4 +1,4 @@
-//! BTV Gateway v1.9.0 — Axum HTTP server (ADR-018)
+//! BTV Gateway v0.1.0-alpha.1 — Axum HTTP server (ADR-018)
 
 use std::net::SocketAddr;
 use std::sync::Arc;

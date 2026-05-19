@@ -9,7 +9,7 @@ info:
     All endpoints (except /health and /metrics) require an API key via
     `X-API-Key` header. Obtain yours by setting `BTV_API_KEYS` in the gateway
     environment.
-  version: "2.0.0"
+  version: "0.1.0-alpha.1"
   contact:
     name: BuildToValue
     url: https://buildtovalue.io
@@ -795,7 +795,7 @@ paths:
               example:
                 status: "ok"
                 uptime_seconds: 3600.5
-                version: "2.0.0"
+                version: "0.1.0-alpha.1"
 
   /health/bias:
     get:

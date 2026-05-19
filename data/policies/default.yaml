@@ -3,6 +3,7 @@
 # República Algorítmica: Legislativo (Policy-as-Code)
 
 version: "1.0"
+schema_type: "policy-rules"
 
 metadata:
   name: "BuildToValue Default Policies"

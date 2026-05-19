@@ -176,7 +176,7 @@ class PolicyEngine:
         "version", "id", "description", "metadata", "rules", "governance",
         "sector", "compliance", "actions", "identity", "rate_limiting",
         "bft", "escrow", "revocation", "behavioral_monitoring", "timing",
-        "mev_protection", "schema_version", "thresholds", "drift_detection",
+        "mev_protection", "schema_version", "schema_type", "thresholds", "drift_detection",
         "fail_secure", "gates", "hard_blocks", "policies",
         # agents/ schema keys
         "circuit_breaker", "conflict_rules", "defaults", "agents",
@@ -193,12 +193,34 @@ class PolicyEngine:
         "proof_of_work_min_difficulty", "min_reputation_age_days",
     })
 
+    # Recognised values of the `schema_type` discriminator field (H-05 / Sprint 2).
+    # Files with a different schema_type are skipped by PolicyEngine — they belong
+    # to ProfileManager (schema_type: profile) or guard modules (schema_type: agent-guard).
+    # Files without the field are accepted for backward compatibility.
+    _POLICY_RULES_SCHEMA_TYPES: frozenset = frozenset({
+        "policy-rules", "policy_rules",  # canonical + underscore alias
+    })
+    _NON_POLICY_SCHEMA_TYPES: frozenset = frozenset({
+        "profile", "agent-guard", "agent_guard",
+    })
+
     def _parse_policy_file(self, yaml_file: Path) -> None:
         """Parse atomico de um arquivo YAML. Regras malformadas sao descartadas."""
         raw = yaml_file.read_text(encoding="utf-8")
         data = yaml.safe_load(raw)
         if not isinstance(data, dict):
             return
+
+        # H-05: schema_type discriminator prevents cross-contamination between the
+        # three coexisting YAML schema families (policy-rules, profile, agent-guard).
+        schema_type = data.get("schema_type")
+        if schema_type in self._NON_POLICY_SCHEMA_TYPES:
+            logger.debug(
+                "policy_file_skipped path=%s schema_type=%s — not a policy-rules schema",
+                yaml_file.name, schema_type,
+            )
+            return
+
         # Warn on unrecognised top-level keys to prevent silent misconfiguration.
         # This does NOT prevent loading — agents/ YAMLs use their own module schemas.
         unknown = set(data.keys()) - self._KNOWN_TOP_LEVEL_KEYS
