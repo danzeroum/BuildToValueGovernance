@@ -165,8 +165,11 @@ class PolicyEngine:
         for yaml_file in sorted(policies_dir.rglob("*.yaml")):
             try:
                 self._parse_policy_file(yaml_file)
-            except Exception:
-                pass  # policy malformada nao impede operacao
+            except Exception as exc:
+                logger.warning(
+                    "policy_load_error path=%s error=%s — skipping malformed file",
+                    yaml_file.name, exc,
+                )
 
     # Top-level keys that PolicyEngine recognises in governance YAML files.
     # Keys outside this set are silently accepted by the loader but never evaluated
@@ -247,7 +250,11 @@ class PolicyEngine:
                 )
                 self._rules.append(rule)
                 self._policy_source = yaml_file.name
-            except (KeyError, ValueError):
+            except (KeyError, ValueError) as exc:
+                logger.warning(
+                    "policy_rule_skipped file=%s rule=%s error=%s",
+                    yaml_file.name, r.get("rule_id", "<unknown>"), exc,
+                )
                 continue
         # ADR-043 + ADR-042: ler configuracao de governanca (governance:) se presente
         if "governance" in data and isinstance(data["governance"], dict):

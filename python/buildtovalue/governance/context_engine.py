@@ -1,6 +1,12 @@
 """
 EthicalContextEngine v1.9.1 — Judiciary of the Algorithmic Republic.
 
+NOTE (H-06): The canonical public EthicalContextEngine is
+ethical_context_engine.py (v1.1.0 unified TechnicalLayer + GovernanceLayer).
+This module (v1.9.1) is the legacy judiciary used internally by governance_gateway.py.
+Do not import EthicalContextEngine from here in new code — use
+`from .ethical_context_engine import EthicalContextEngine` instead.
+
 Orchestrates: MercyCalculator → MercyScenarios → TrustScore → HMAC signing → explain_decision()
 
 Pipeline:
@@ -40,7 +46,9 @@ logger = logging.getLogger("btv.governance.context_engine")
 # Re-exports para backward compat: importadores que fazem
 # `from .context_engine import RequestContext` continuam funcionando.
 __all__ = [
-    "EthicalContextEngine",
+    # EthicalContextEngine intentionally NOT re-exported here (H-06).
+    # Canonical export lives in governance/__init__.py → ethical_context_engine.py.
+    # governance_gateway.py imports it directly from this module (legacy coupling).
     "RequestContext",
     "RustEvidence",
     "EthicalVerdict",
