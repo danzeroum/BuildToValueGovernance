@@ -321,7 +321,14 @@ class ExplanationStore:
         }
 
 
-def verify_appeal_text(explanation_text: str, stored_hash: bytes) -> bool:
+_SUPPORTED_ALGORITHMS = frozenset({'blake3', 'sha3-256'})
+
+
+def verify_appeal_text(
+    explanation_text: str,
+    stored_hash: bytes,
+    hash_algorithm: str = 'blake3',
+) -> bool:
     """Verify that explanation_text authenticates against stored_hash (ADR-062).
 
     LGPD Art. 20 compliance: the full explanation text in appeals.db must
@@ -332,17 +339,39 @@ def verify_appeal_text(explanation_text: str, stored_hash: bytes) -> bool:
 
     Args:
         explanation_text: Full explanation text retrieved from appeals.db.
-        stored_hash:      32-byte BLAKE3 digest from the Ledger VerdictRecord.
+        stored_hash:      32-byte digest from the Ledger VerdictRecord.
+        hash_algorithm:   Algorithm used when the hash was recorded. Must
+                          match the algorithm in use by the Ledger. Defaults
+                          to 'blake3'. Supported: 'blake3', 'sha3-256'.
+
+    Raises:
+        ValueError:  Unknown hash_algorithm or algorithm mismatch.
+        RuntimeError: 'blake3' requested but the `blake3` package is not
+                      installed. Install with: pip install blake3.
+                      Do NOT silently fall back to sha3-256 — the digests
+                      are incompatible with existing Ledger records.
 
     Returns:
-        True only when blake3(explanation_text.encode()) == stored_hash.
+        True only when hash_algorithm(explanation_text.encode()) == stored_hash.
     """
-    try:
-        import blake3 as _blake3  # optional dep — falls back to sha3-256 sentinel
+    if hash_algorithm not in _SUPPORTED_ALGORITHMS:
+        raise ValueError(
+            f"Unknown hash_algorithm {hash_algorithm!r}. "
+            f"Supported: {sorted(_SUPPORTED_ALGORITHMS)}"
+        )
+
+    if hash_algorithm == 'blake3':
+        try:
+            import blake3 as _blake3
+        except ImportError:
+            raise RuntimeError(
+                "The 'blake3' package is required to verify BLAKE3 hashes. "
+                "Install with: pip install blake3. "
+                "Do not fall back to sha3-256 — digests are incompatible with "
+                "existing Ledger records and will always fail verification."
+            ) from None
         computed = _blake3.blake3(explanation_text.encode()).digest()
-    except ImportError:
-        # Fallback: sha3-256 produces a 32-byte digest with similar properties.
-        # Production deployments MUST install the `blake3` package.
+    else:
         computed = hashlib.sha3_256(explanation_text.encode()).digest()
 
     return _hmac.compare_digest(computed, stored_hash)
