@@ -13,7 +13,9 @@ Changelog:
 from __future__ import annotations
 
 import math
-import sqlite3
+import sqlite3  # noqa: F401 — kept for sqlite3.Row / sqlite3.Connection type refs
+
+from buildtovalue.security import sqlite_connect_wal
 import time
 import uuid
 from collections import defaultdict, deque
@@ -259,7 +261,7 @@ class TrustScoreCalculator:
 
     def _ensure_escrow_table(self) -> None:
         """Create escrow_ledger table if not exists."""
-        conn = sqlite3.connect(ESCROW_DB_PATH)
+        conn = sqlite_connect_wal(ESCROW_DB_PATH)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS escrow_ledger (
                 escrow_id TEXT PRIMARY KEY,
@@ -277,7 +279,7 @@ class TrustScoreCalculator:
         """Freeze `amount` trust points linked to a delegation. Returns escrow_id."""
         self._ensure_escrow_table()
         escrow_id = str(uuid.uuid4())
-        conn = sqlite3.connect(ESCROW_DB_PATH)
+        conn = sqlite_connect_wal(ESCROW_DB_PATH)
         conn.execute(
             "INSERT INTO escrow_ledger (escrow_id, session_id, amount, delegation_id, status) "
             "VALUES (?, ?, ?, ?, 'frozen')",
@@ -290,7 +292,7 @@ class TrustScoreCalculator:
     def release_escrow(self, escrow_id: str) -> None:
         """Release frozen points (promise fulfilled)."""
         self._ensure_escrow_table()
-        conn = sqlite3.connect(ESCROW_DB_PATH)
+        conn = sqlite_connect_wal(ESCROW_DB_PATH)
         conn.execute(
             "UPDATE escrow_ledger SET status='released' WHERE escrow_id=? AND status='frozen'",
             (escrow_id,),
@@ -301,7 +303,7 @@ class TrustScoreCalculator:
     def forfeit_escrow(self, escrow_id: str) -> None:
         """Permanently deduct frozen points (promise violated)."""
         self._ensure_escrow_table()
-        conn = sqlite3.connect(ESCROW_DB_PATH)
+        conn = sqlite_connect_wal(ESCROW_DB_PATH)
         row = conn.execute(
             "SELECT session_id, amount FROM escrow_ledger WHERE escrow_id=? AND status='frozen'",
             (escrow_id,),

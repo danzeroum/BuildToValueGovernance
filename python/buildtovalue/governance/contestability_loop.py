@@ -21,7 +21,9 @@ Mudanças v3.1 (ADR-047):
 import hashlib
 import hmac
 import os
-import sqlite3
+import sqlite3  # noqa: F401 — kept for sqlite3.Row / sqlite3.Connection type refs
+
+from buildtovalue.security import sqlite_connect_wal
 import time
 import logging
 from enum import Enum
@@ -59,13 +61,9 @@ VALID_MEDIATOR_RECOMMENDATIONS: frozenset = frozenset({
 # ETHICAL VERDICT (ADR-0028 + ADR-0005)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_HMAC_KEY: bytes = os.environb.get(b"BTV_HMAC_KEY", b"")
-if not _HMAC_KEY:
-    logger.warning(
-        "BTV_HMAC_KEY env var is not set; using insecure built-in fallback key. "
-        "Set BTV_HMAC_KEY in production (ADR-0005)."
-    )
-    _HMAC_KEY = b"btv-verdict-hmac-v1"
+from buildtovalue.security import get_hmac_key
+
+_HMAC_KEY: bytes = get_hmac_key()
 
 
 @dataclass
@@ -246,9 +244,9 @@ class ContestabilityLoop:
     # ── INIT ──────────────────────────────────────────────────────────────────
 
     def _init_db(self) -> None:
-        os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("PRAGMA journal_mode=WAL")  # ADR-047: durability + concurrent reads
+        # sqlite_connect_wal applies journal_mode=WAL + synchronous=NORMAL +
+        # busy_timeout uniformly (PR-2 / S-04); preserves ADR-047 semantics.
+        with sqlite_connect_wal(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS appeals (
@@ -287,7 +285,7 @@ class ContestabilityLoop:
 
     def _load_from_db(self) -> None:
         """Recupera appeals do SQLite na inicialização (recovery após restart)."""
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect_wal(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             for row in conn.execute("SELECT * FROM appeals"):
                 appeal = self._row_to_appeal(row)
@@ -507,7 +505,7 @@ class ContestabilityLoop:
     def _save_appeal(self, appeal: Appeal) -> None:
         import json as _json
         grounds_json = _json.dumps(appeal.grounds) if appeal.grounds else None
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite_connect_wal(self.db_path) as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO appeals
                 (appeal_id, audit_trail_id, user_id, timestamp, reason,

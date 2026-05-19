@@ -22,12 +22,17 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from buildtovalue.security import get_hmac_key
+
+logger = logging.getLogger(__name__)
 
 import yaml
 
@@ -139,7 +144,9 @@ class PolicyEngine:
     Fail-secure (Jonas): excecao interna -> BLOCK, nunca silencio.
     """
 
-    _HMAC_KEY: bytes = b"btv-policy-engine-v1-adr011"
+    @property
+    def _HMAC_KEY(self) -> bytes:
+        return get_hmac_key()
 
     def __init__(self, policies_dir: Optional[Path] = None) -> None:
         self._rules: List[PolicyRule] = []
