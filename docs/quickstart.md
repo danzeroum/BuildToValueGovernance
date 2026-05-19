@@ -1,5 +1,45 @@
 # Quickstart — Under 5 Minutes
 
+## Caminho 0 — 3 comandos, sem instalação (aha moment imediato)
+
+```bash
+git clone https://github.com/danzeroum/BuildToValueGovernance
+cd BuildToValueGovernance
+docker compose -f ops/docker-compose.quickstart.yml up -d
+```
+
+Pronto. Agora envie uma decisão com PII:
+
+```bash
+curl -s -X POST http://localhost:8000/v1/decide \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: dev-key" \
+  -d '{"input_text": "Aprovar crédito para CPF 123.456.789-09", "action": "ALLOW", "composite_risk": 0.3}' | python3 -m json.tool
+```
+
+Resposta esperada (o BTV intercepta e escalona):
+
+```json
+{
+  "verdict_id": "VRD-...",
+  "action": "BLOCK",
+  "original_action": "ALLOW",
+  "rationale": "CPF detectado. Decisão de crédito automatizada requer revisão humana (LGPD Art. 20).",
+  "contestable": true,
+  "appeal_deadline_hours": 24,
+  "signature": "..."
+}
+```
+
+> **O aha moment:** você enviou `"action": "ALLOW"`, o BTV devolveu `"action": "BLOCK"` com evidência criptográfica e prazo de contestação. Isso é governança em runtime — sem modificar o agente.
+
+- Dashboard: [http://localhost:8501](http://localhost:8501)
+- Gateway API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
+## Caminhos Avançados
+
 Choose your path. **No Docker required** for the primary flow.
 
 ---
