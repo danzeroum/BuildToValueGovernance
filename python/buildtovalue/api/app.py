@@ -726,121 +726,129 @@ _delegation_ledger: Optional[DelegationLedger] = None
 _KERNEL_EXECUTOR: Optional[ThreadPoolExecutor] = None
 
 # ═══════════════════════════════════════════════════════════════
-# GOVERNANCE — /v1/decide (Judiciário da República Algorítmica)
+# GOVERNANCE — /v1/decide helpers
 # ═══════════════════════════════════════════════════════════════
 
-@app.post("/v1/decide", response_model=DecideResponse)
-def decide(req: DecideRequest, _=Depends(require_api_key)):
-    """
-    Pipeline v2.3:
-      0. Hard block → BLOCK imediato (sem mercy, sem ADR-046)
-      1. ADR-046: acumular findings da sessão → cumulative_risk
-      1.5. GoalDriftSentinel: rastrear drift da sessão (Gap 10)
-      2. SLM (ambiguity zone only — ADR-027)
-      3. Profile/sector risk adjustment
-      4. Aplicar cumulative_risk + cross-signal drift×sensitivity (Gap 10)
-      5. EthicalContextEngine.decide() → mercy + trust + HMAC
-      6. Update trust + persist adjust_post_penalty delta (Gap 14)
-    """
-    start = time.perf_counter()
-    session_id = req.session_id or "anonymous"
+class _AdjSignals:
+    """Mutable accumulator for risk-adjusted signals used across decide() stages."""
+    __slots__ = ("risk", "finding_count", "critical_count", "action")
 
-    # ── Step 0: Hard block — sem governance, sem mercy ──────────────────
-    if req.hard_blocked:
-        update_trust(session_id, "BLOCK")
-        sig = sign_verdict(
-            f"VRD-HB-{int(time.time())}", "BLOCK", req.composite_risk
-        )
-        return DecideResponse(
-            verdict_id=f"VRD-HB-{int(time.time())}",
-            action="BLOCK",
-            original_action="BLOCK",
-            mercy_applied=False,
-            mercy_scenario="HARD_BLOCK",
-            mercy_score=0.0,
-            trust_score=get_trust_score(session_id),
-            adjusted_risk=req.composite_risk,
-            rationale=(
-                f"Hard block triggered. Matched: {req.matched_policies}. "
-                "No mercy applicable. Contestable within 24h."
-            ),
-            contestable=True,
-            appeal_deadline_hours=24,
-            signature=sig,
-            latency_ms=(time.perf_counter() - start) * 1000,
-        )
+    def __init__(self, req: "DecideRequest") -> None:
+        self.risk: float = req.composite_risk
+        self.finding_count: int = req.finding_count
+        self.critical_count: int = req.critical_count
+        self.action: str = req.action
 
-    # ── Step 0.5: Guard activation (source / channel / agent_policies) ──
+
+class _SLMMeta:
+    __slots__ = ("used", "intent", "risk", "justifiability")
+
+    def __init__(self) -> None:
+        self.used: bool = False
+        self.intent: Optional[str] = None
+        self.risk: Optional[float] = None
+        self.justifiability: Optional[float] = None
+
+
+class _ComplianceMeta:
+    __slots__ = ("risk_class", "violations", "rate")
+
+    def __init__(self) -> None:
+        self.risk_class: Optional[str] = None
+        self.violations: Optional[list] = None
+        self.rate: Optional[float] = None
+
+
+def _decide_hard_block(
+    req: "DecideRequest",
+    session_id: str,
+    start: float,
+) -> "Optional[DecideResponse]":
+    if not req.hard_blocked:
+        return None
+    update_trust(session_id, "BLOCK")
+    sig = sign_verdict(f"VRD-HB-{int(time.time())}", "BLOCK", req.composite_risk)
+    return DecideResponse(
+        verdict_id=f"VRD-HB-{int(time.time())}",
+        action="BLOCK",
+        original_action="BLOCK",
+        mercy_applied=False,
+        mercy_scenario="HARD_BLOCK",
+        mercy_score=0.0,
+        trust_score=get_trust_score(session_id),
+        adjusted_risk=req.composite_risk,
+        rationale=(
+            f"Hard block triggered. Matched: {req.matched_policies}. "
+            "No mercy applicable. Contestable within 24h."
+        ),
+        contestable=True,
+        appeal_deadline_hours=24,
+        signature=sig,
+        latency_ms=(time.perf_counter() - start) * 1000,
+    )
+
+
+def _decide_run_guards(
+    req: "DecideRequest",
+    session_id: str,
+    start: float,
+) -> "Optional[DecideResponse]":
     # Guards run early to short-circuit the expensive pipeline on BLOCK.
-    # Layer 1 guards (source=visual, channel) are independent and run first.
-    # Layer 2 guards (rag_verifier) depend on channel trust level resolved above.
-    # SLA: <50ms for text-only; <100ms when guards are active (cold path).
-    _channel_trust_level: int = 1  # default LOW
-    if req.source or req.channel or req.agent_policies:
-        module_config = None
-        if _profile_manager and req.agent_policies:
-            module_config = _profile_manager.resolve_module_config(req.agent_policies)
+    # Layer 1 (source=visual, channel) run first; layer 2 (rag_verifier) after channel.
+    if not (req.source or req.channel or req.agent_policies):
+        return None
+    module_config = None
+    if _profile_manager and req.agent_policies:
+        module_config = _profile_manager.resolve_module_config(req.agent_policies)
 
-        # Guard: visual firewall (source == "visual" OR pa_identity_firewall policy)
-        _vf_yaml = (
-            module_config.visual_firewall
-            if module_config and module_config.visual_firewall
-            else None
-        )
-        if req.source == "visual" or (module_config and module_config.visual_firewall):
-            _vf_blocked, _vf_explain = _run_visual_guard(req.input_text, _vf_yaml)
-            if _vf_blocked:
-                return _block_guard_response(
-                    session_id,
-                    f"VRD-VF-{int(time.time())}",
-                    "visual_firewall",
-                    _vf_explain,
-                    req.composite_risk,
-                    start,
-                )
+    _channel_trust_level: int = 1
 
-        # Guard: channel authority (channel header present OR pa_channel_hierarchy policy)
-        _ch_yaml = (
-            module_config.channel_authority
-            if module_config and module_config.channel_authority
-            else None
-        )
-        if req.channel or (module_config and module_config.channel_authority):
-            _ch_blocked, _ch_explain, _channel_trust_level = _run_channel_guard(
-                req.channel or "", _ch_yaml
+    _vf_yaml = (
+        module_config.visual_firewall
+        if module_config and module_config.visual_firewall
+        else None
+    )
+    if req.source == "visual" or (module_config and module_config.visual_firewall):
+        _vf_blocked, _vf_explain = _run_visual_guard(req.input_text, _vf_yaml)
+        if _vf_blocked:
+            return _block_guard_response(
+                session_id, f"VRD-VF-{int(time.time())}", "visual_firewall",
+                _vf_explain, req.composite_risk, start,
             )
-            if _ch_blocked:
-                return _block_guard_response(
-                    session_id,
-                    f"VRD-CH-{int(time.time())}",
-                    "channel_authority",
-                    _ch_explain,
-                    req.composite_risk,
-                    start,
-                )
 
-        # Guard: RAG integrity (pa_p2p_oracle policy, runs after channel is resolved)
-        _rg_yaml = (
-            module_config.rag_verifier
-            if module_config and module_config.rag_verifier
-            else None
+    _ch_yaml = (
+        module_config.channel_authority
+        if module_config and module_config.channel_authority
+        else None
+    )
+    if req.channel or (module_config and module_config.channel_authority):
+        _ch_blocked, _ch_explain, _channel_trust_level = _run_channel_guard(
+            req.channel or "", _ch_yaml
         )
-        if module_config and module_config.rag_verifier:
-            _rg_blocked, _rg_explain = _run_rag_guard(
-                req.input_text, _channel_trust_level, _rg_yaml
+        if _ch_blocked:
+            return _block_guard_response(
+                session_id, f"VRD-CH-{int(time.time())}", "channel_authority",
+                _ch_explain, req.composite_risk, start,
             )
-            if _rg_blocked:
-                return _block_guard_response(
-                    session_id,
-                    f"VRD-RG-{int(time.time())}",
-                    "rag_verifier",
-                    _rg_explain,
-                    req.composite_risk,
-                    start,
-                )
 
-    # ── Step 1: ADR-046 — acumular sensitivity da sessão ────────────────
-    sensitivity_state = None
+    if module_config and module_config.rag_verifier:
+        _rg_yaml = module_config.rag_verifier
+        _rg_blocked, _rg_explain = _run_rag_guard(
+            req.input_text, _channel_trust_level, _rg_yaml
+        )
+        if _rg_blocked:
+            return _block_guard_response(
+                session_id, f"VRD-RG-{int(time.time())}", "rag_verifier",
+                _rg_explain, req.composite_risk, start,
+            )
+    return None
+
+
+def _decide_accumulate_signals(
+    req: "DecideRequest",
+    session_id: str,
+) -> "tuple[Optional[SensitivityState], Optional[DriftReport]]":
+    sensitivity_state: Optional[SensitivityState] = None
     if _sensitivity_accumulator is not None:
         findings_summary = [
             p.split("->")[0].lower()
@@ -852,9 +860,6 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             findings_summary=findings_summary,
         )
 
-    # ── Step 1.5: GoalDriftSentinel — rastrear drift da sessão (Gap 10) ──
-    # Ring buffer Python acumula histórico; drift do Rust alimenta o sentinela.
-    # Normalização de case (Gap 15) é feita internamente pelo sentinela.
     drift_report: Optional[DriftReport] = None
     if _goal_drift_sentinel is not None:
         drift_report = _goal_drift_sentinel.record_and_analyze(
@@ -869,62 +874,62 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                 drift_report.drift_action.value,
                 drift_report.trend_pct,
             )
+    return sensitivity_state, drift_report
 
-    # ── Step 2: SLM classification (ambiguity zone) ────────────────────
-    slm_used = False
-    slm_intent = None
-    slm_risk = None
-    adjusted_finding_count = req.finding_count
-    adjusted_critical_count = req.critical_count
-    adjusted_risk = req.composite_risk
-    adjusted_action = req.action
 
-    if _slm is not None:
-        # F2-01: use context-aware classification when kernel signals are available
-        _slm_ctx = SLMContext(
-            lang=getattr(req, "detected_language", None) or "unknown",
-            entropy=getattr(req, "entropy", 4.0),
-            instruction_density=getattr(req, "instruction_density", 0.0),
-            entropy_shift=bool(getattr(req, "entropy_shift", False)),
-            leet_ratio=float(getattr(req, "leet_ratio", 0.0)),
-            trust_score=get_trust_score(session_id),
-            domain=_resolve_domain(req.profile),
-            violation_count=db_get_session(session_id)["offenses"] if session_id else 0,
-        )
-        slm_result = _slm.classify_with_context(
-            text=req.input_text,
-            finding_count=req.finding_count,
-            critical_count=req.critical_count,
-            context=_slm_ctx,
-        ) or _slm.classify_if_ambiguous(
-            text=req.input_text,
-            finding_count=req.finding_count,
-            critical_count=req.critical_count,
-        )
-        if slm_result is not None:
-            slm_used = True
-            slm_intent = slm_result.intent.value
-            slm_risk = slm_result.risk
+def _decide_slm(
+    req: "DecideRequest",
+    session_id: str,
+    adj: _AdjSignals,
+) -> _SLMMeta:
+    meta = _SLMMeta()
+    if _slm is None:
+        return meta
 
-            if slm_result.is_malicious:
-                adjusted_finding_count += 1
-                if slm_result.risk >= 0.8:
-                    adjusted_critical_count += 1
-                adjusted_risk = min(1.0, adjusted_risk + slm_result.risk * 0.3)
+    # F2-01: use context-aware classification when kernel signals are available
+    _slm_ctx = SLMContext(
+        lang=getattr(req, "detected_language", None) or "unknown",
+        entropy=getattr(req, "entropy", 4.0),
+        instruction_density=getattr(req, "instruction_density", 0.0),
+        entropy_shift=bool(getattr(req, "entropy_shift", False)),
+        leet_ratio=float(getattr(req, "leet_ratio", 0.0)),
+        trust_score=get_trust_score(session_id),
+        domain=_resolve_domain(req.profile),
+        violation_count=db_get_session(session_id)["offenses"] if session_id else 0,
+    )
+    slm_result = _slm.classify_with_context(
+        text=req.input_text,
+        finding_count=req.finding_count,
+        critical_count=req.critical_count,
+        context=_slm_ctx,
+    ) or _slm.classify_if_ambiguous(
+        text=req.input_text,
+        finding_count=req.finding_count,
+        critical_count=req.critical_count,
+    )
+    if slm_result is not None:
+        meta.used = True
+        meta.intent = slm_result.intent.value
+        meta.risk = slm_result.risk
 
-                current_sev = ACTION_SEVERITY.get(adjusted_action, 0)
-                slm_sev = 2 if slm_result.risk < 0.7 else 3
-                if slm_sev > current_sev:
-                    adjusted_action = SEVERITY_ACTION.get(slm_sev, "EDUCATE")
+        if slm_result.is_malicious:
+            adj.finding_count += 1
+            if slm_result.risk >= 0.8:
+                adj.critical_count += 1
+            adj.risk = min(1.0, adj.risk + slm_result.risk * 0.3)
 
-                logger.info(
-                    "SLM escalation: %s→%s (intent=%s, risk=%.2f)",
-                    req.action, adjusted_action, slm_intent, slm_result.risk,
-                )
+            current_sev = ACTION_SEVERITY.get(adj.action, 0)
+            slm_sev = 2 if slm_result.risk < 0.7 else 3
+            if slm_sev > current_sev:
+                adj.action = SEVERITY_ACTION.get(slm_sev, "EDUCATE")
 
-    # ── Step 2.5: SLM Mercy Advisor (F2-02, fail-open) ───────────────
-    _slm_justifiability: Optional[float] = None
-    if _slm is not None and adjusted_action not in ("BLOCK",):
+            logger.info(
+                "SLM escalation: %s→%s (intent=%s, risk=%.2f)",
+                req.action, adj.action, meta.intent, slm_result.risk,
+            )
+
+    # SLM Mercy Advisor (F2-02, fail-open)
+    if adj.action not in ("BLOCK",):
         _slm_mercy = _slm.advise_mercy(
             text=req.input_text,
             finding_types=req.matched_policies if hasattr(req, "matched_policies") else [],
@@ -934,13 +939,25 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             trust_score=get_trust_score(session_id),
         )
         if _slm_mercy is not None:
-            _slm_justifiability = _slm_mercy.legitimate_probability
+            meta.justifiability = _slm_mercy.legitimate_probability
             logger.info(
                 "SLM mercy advisor: legitimate_probability=%.2f reasoning=%s",
                 _slm_mercy.legitimate_probability, _slm_mercy.reasoning[:80],
             )
+    return meta
 
-    # ── Step 3: Profile/sector risk adjustment ───────────────────────
+
+def _decide_adjust_risk(
+    req: "DecideRequest",
+    session_id: str,
+    adj: _AdjSignals,
+    sensitivity_state: "Optional[SensitivityState]",
+    drift_report: "Optional[DriftReport]",
+) -> "tuple[str, str, str]":
+    """Profile/sector + cumulative + cross-signal adjustments.
+
+    Mutates adj.risk. Returns (sector_note, cumulative_note, drift_cross_note).
+    """
     sector_note = ""
     if req.profile and _profile_manager and _sector_loader and req.input_text:
         try:
@@ -957,7 +974,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                     sector_id=sector_id,
                 )
                 if multiplier < 1.0:
-                    adjusted_risk *= multiplier
+                    adj.risk *= multiplier
                     sector_note = (
                         f" Sector context ({sector_id}) reduced risk "
                         f"by {(1 - multiplier) * 100:.0f}%."
@@ -965,10 +982,9 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         except ValueError:
             logger.warning("Profile not found: %s", req.profile)
 
-    # ── Step 4: cumulative_risk + cross-signal drift×sensitivity (Gap 10) ──
     cumulative_note = ""
     if sensitivity_state is not None and sensitivity_state.cumulative_risk > 0.0:
-        adjusted_risk = min(1.0, adjusted_risk + sensitivity_state.cumulative_risk)
+        adj.risk = min(1.0, adj.risk + sensitivity_state.cumulative_risk)
         cumulative_note = (
             f" Hybrid Alignment (ADR-046): acúmulo de sessão detectou "
             f"combinação perigosa ({', '.join(sensitivity_state.active_combinations)}). "
@@ -990,7 +1006,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         and sensitivity_state is not None
         and sensitivity_state.cumulative_risk > 0.3
     ):
-        adjusted_risk = min(1.0, adjusted_risk + 0.15)
+        adj.risk = min(1.0, adj.risk + 0.15)
         drift_cross_note = (
             " Cross-signal (ADR-046/PROP-038): drift de objetivo detectado + "
             f"risco cumulativo de sessão {sensitivity_state.cumulative_risk:.2f} > 0.30 "
@@ -1001,18 +1017,25 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             session_id,
             sensitivity_state.cumulative_risk,
         )
+    return sector_note, cumulative_note, drift_cross_note
 
-    # ── Step 5: EthicalContextEngine → EthicalVerdict ─────────────────
+
+def _decide_ethical_verdict(
+    req: "DecideRequest",
+    session_id: str,
+    adj: _AdjSignals,
+    slm_meta: _SLMMeta,
+    sensitivity_state: "Optional[SensitivityState]",
+) -> "tuple[EthicalVerdict, RequestContext]":
     evidence = RustEvidence(
-        composite_risk=adjusted_risk,
-        finding_count=adjusted_finding_count,
-        critical_count=adjusted_critical_count,
+        composite_risk=adj.risk,
+        finding_count=adj.finding_count,
+        critical_count=adj.critical_count,
         entropy=req.entropy,
         total_chars=req.total_chars,
-        policy_action=adjusted_action,
+        policy_action=adj.action,
         blake3_hash=req.blake3_hash,
     )
-
     context = RequestContext(
         agent_id=req.profile or "default",
         session_id=session_id,
@@ -1031,76 +1054,85 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             sensitivity_state.active_combinations if sensitivity_state else []
         ),
     )
-
     trust = get_trust_score(session_id)
     _ethical_engine.set_trust_score(session_id, trust)
-
     verdict = _ethical_engine.decide(
         evidence, context,
         external_verdict_id=req.verdict_id,
-        slm_justifiability=_slm_justifiability,
+        slm_justifiability=slm_meta.justifiability,
     )
+    return verdict, context
 
-    # ── Step 5.5: Runtime Compliance (EU AI Act) ────────────────────
-    risk_class = None
-    compliance_violations = None
-    compliance_rate = None
 
-    if _risk_classifier is not None:
-        sector_id = _resolve_domain(req.profile) or "general"
-        caps = []
-        if req.profile and _profile_manager:
-            try:
-                loaded = _profile_manager.load_profile(req.profile)
-                caps = loaded.domain_config.get("capabilities", [])
-            except ValueError:
-                pass
-
-        rc = _risk_classifier.classify(
-            agent_id=req.profile or "unknown",
-            sector=sector_id,
-            capabilities=caps,
-        )
-        risk_class = rc.risk_level.value
-
-        if rc.risk_level.value in ("HIGH_RISK", "PROHIBITED"):
-            from buildtovalue.compliance.compliance_evaluator import (
-                ComplianceEvaluator,
-            )
-            evaluator = ComplianceEvaluator()
-            agent_meta = {
-                "agent_id": req.profile or "unknown",
-                "sector": sector_id,
-                "risk_level": rc.risk_level.value,
-                "capabilities": caps,
-                "risk_score": adjusted_risk,
-                "use_case": sector_id,
-                "conformity_assessment_completed": False,
-                "transparency_score": 1.0 if verdict.explanation else 0.0,
-                "human_review": {"available": verdict.contestable},
+def _decide_compliance(
+    req: "DecideRequest",
+    adj: _AdjSignals,
+    verdict: "EthicalVerdict",
+) -> _ComplianceMeta:
+    meta = _ComplianceMeta()
+    if _risk_classifier is None:
+        return meta
+    sector_id = _resolve_domain(req.profile) or "general"
+    caps: list = []
+    if req.profile and _profile_manager:
+        try:
+            loaded = _profile_manager.load_profile(req.profile)
+            caps = loaded.domain_config.get("capabilities", [])
+        except ValueError:
+            pass
+    rc = _risk_classifier.classify(
+        agent_id=req.profile or "unknown",
+        sector=sector_id,
+        capabilities=caps,
+    )
+    meta.risk_class = rc.risk_level.value
+    if rc.risk_level.value in ("HIGH_RISK", "PROHIBITED"):
+        from buildtovalue.compliance.compliance_evaluator import ComplianceEvaluator
+        evaluator = ComplianceEvaluator()
+        agent_meta = {
+            "agent_id": req.profile or "unknown",
+            "sector": sector_id,
+            "risk_level": rc.risk_level.value,
+            "capabilities": caps,
+            "risk_score": adj.risk,
+            "use_case": sector_id,
+            "conformity_assessment_completed": False,
+            "transparency_score": 1.0 if verdict.explanation else 0.0,
+            "human_review": {"available": verdict.contestable},
+        }
+        eval_result = evaluator.evaluate(agent_meta)
+        meta.violations = [
+            {
+                "framework": v.framework,
+                "article": v.article,
+                "requirement": v.requirement,
+                "action": v.action,
             }
-            eval_result = evaluator.evaluate(agent_meta)
-            compliance_violations = [
-                {
-                    "framework": v.framework,
-                    "article": v.article,
-                    "requirement": v.requirement,
-                    "action": v.action,
-                }
-                for v in eval_result.violations
-            ]
-            compliance_rate = eval_result.compliance_rate
+            for v in eval_result.violations
+        ]
+        meta.rate = eval_result.compliance_rate
+    return meta
 
-    # ── Step 5.6: Output Schema Validation (Levinas) ─────────────────
+
+def _decide_output_pipeline(
+    req: "DecideRequest",
+    session_id: str,
+    adj: _AdjSignals,
+    context: "RequestContext",
+    verdict: "EthicalVerdict",
+    slm_meta: _SLMMeta,
+) -> "tuple[EthicalVerdict, Optional[list], Optional[str]]":
+    """Schema validation + SLM output analysis + SLM explanation.
+
+    Returns (possibly updated verdict, schema_violations, slm_explanation).
+    """
     schema_violations = None
     if req.llm_output and req.profile and _profile_manager:
         try:
             loaded = _profile_manager.load_profile(req.profile)
             output_schema = loaded.output_schema
             if output_schema and _output_validator:
-                schema_result = _output_validator.validate(
-                    req.llm_output, output_schema
-                )
+                schema_result = _output_validator.validate(req.llm_output, output_schema)
                 if not schema_result.valid:
                     schema_violations = [
                         {"path": v.path, "rule": v.rule, "message": v.message}
@@ -1109,9 +1141,9 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                     if ACTION_SEVERITY.get(verdict.final_action, 0) < ACTION_SEVERITY.get("REDACT", 0):
                         verdict = _ethical_engine.decide(
                             RustEvidence(
-                                composite_risk=max(adjusted_risk, 0.6),
-                                finding_count=adjusted_finding_count + 1,
-                                critical_count=adjusted_critical_count,
+                                composite_risk=max(adj.risk, 0.6),
+                                finding_count=adj.finding_count + 1,
+                                critical_count=adj.critical_count,
                                 entropy=req.entropy,
                                 total_chars=req.total_chars,
                                 policy_action="REDACT",
@@ -1121,13 +1153,11 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                         )
                         logger.info(
                             "Output schema violation → REDACT (session=%s, violations=%d)",
-                            session_id,
-                            len(schema_result.violations),
+                            session_id, len(schema_result.violations),
                         )
         except Exception as e:
             logger.warning("Output schema validation error: %s", e)
 
-    # ── Step 5.7: SLM semantic output analysis (F2-04, fail-open) ────────
     if _slm is not None and req.llm_output:
         try:
             _out_analysis = _slm.analyze_output(
@@ -1139,16 +1169,16 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                 if ACTION_SEVERITY.get(verdict.final_action, 0) < ACTION_SEVERITY.get("REDACT", 0):
                     verdict = _ethical_engine.decide(
                         RustEvidence(
-                            composite_risk=max(adjusted_risk, _out_analysis.risk),
-                            finding_count=adjusted_finding_count + 1,
-                            critical_count=adjusted_critical_count,
+                            composite_risk=max(adj.risk, _out_analysis.risk),
+                            finding_count=adj.finding_count + 1,
+                            critical_count=adj.critical_count,
                             entropy=req.entropy,
                             total_chars=req.total_chars,
                             policy_action="REDACT",
                             blake3_hash=req.blake3_hash,
                         ),
                         context,
-                        slm_justifiability=_slm_justifiability,
+                        slm_justifiability=slm_meta.justifiability,
                     )
                 logger.warning(
                     "SLM output analysis: leak_type=%s risk=%.2f → REDACT (session=%s)",
@@ -1157,18 +1187,17 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         except Exception as e:
             logger.warning("SLM output analysis error (fail-open): %s", e)
 
-    # ── Step 5.8: SLM natural language explanation (F2-03, fail-open) ────
-    _slm_explanation: Optional[str] = None
+    slm_explanation: Optional[str] = None
     if _slm is not None:
         try:
-            _slm_explanation = _slm.generate_explanation(
+            slm_explanation = _slm.generate_explanation(
                 action=verdict.final_action,
                 original_action=req.action,
                 mercy_applied=verdict.mercy_applied,
                 mercy_scenario=verdict.mercy_scenario or "S6_DEFAULT_NO_MERCY",
                 trust_score=verdict.trust_score,
                 findings_summary=(
-                    f"{adjusted_finding_count} findings, {adjusted_critical_count} critical"
+                    f"{adj.finding_count} findings, {adj.critical_count} critical"
                 ),
                 levinas_note=(
                     "Usuário pode contestar em 24h"
@@ -1185,12 +1214,18 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         except Exception as e:
             logger.warning("SLM explanation error (fail-open): %s", e)
 
-    # ── Step 6: Update trust + persist adjust_post_penalty (Gap 14) ──────
+    return verdict, schema_violations, slm_explanation
+
+
+def _decide_persist_trust(
+    session_id: str,
+    req: "DecideRequest",
+    verdict: "EthicalVerdict",
+    context: "RequestContext",
+) -> None:
     if session_id:
         prev = db_get_session(session_id)
         if prev["last_action"] in ("BLOCK", "EDUCATE") and prev["last_entropy"] > 0.0:
-            # Gap 12/19: usar singleton (activity_log não é perdido)
-            # Gap 14: capturar delta e persistir no SQLite
             if _trust_calculator is not None:
                 delta = _trust_calculator.adjust_post_penalty(
                     session_id=session_id,
@@ -1199,10 +1234,8 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                     subsequent_action=verdict.final_action,
                 )
                 if delta != 0.0:
-                    # Gap 14 fix: delta era descartado; agora persiste no SQLite
                     session_data = db_get_session(session_id)
                     new_trust = max(0.0, min(1.0, session_data["trust_score"] + delta))
-                    # offense_delta=0: adjust_post_penalty nao é nova ofensa
                     db_update_session(session_id, new_trust, 0)
                     logger.info(
                         "adjust_post_penalty persisted: session=%s delta=%.3f new_trust=%.3f",
@@ -1233,7 +1266,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
                 ACTION_SEQUENCE_ESCALATION_TOTAL.labels(pattern=pattern).inc()
     update_trust(session_id, verdict.final_action)
 
-    # ── Over-refusal telemetry (ADR-041 + Art.104/168) ────────────────
+    # Over-refusal telemetry (ADR-041 + Art.104/168)
     _BENIGN_MERCY = {"S1_CRITICAL_OVERRIDE", "S2_LEGAL", "S3_RESEARCH"}
     if (
         verdict.trust_score > 0.7
@@ -1247,10 +1280,53 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
             domain=getattr(context, "domain", None) or "general",
         ).inc()
 
+
+# ═══════════════════════════════════════════════════════════════
+# GOVERNANCE — /v1/decide (Judiciário da República Algorítmica)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/v1/decide", response_model=DecideResponse)
+def decide(req: DecideRequest, _=Depends(require_api_key)):
+    """
+    Pipeline v2.3:
+      0. Hard block → BLOCK imediato (sem mercy, sem ADR-046)
+      1. ADR-046: acumular findings da sessão → cumulative_risk
+      1.5. GoalDriftSentinel: rastrear drift da sessão (Gap 10)
+      2. SLM (ambiguity zone only — ADR-027)
+      3. Profile/sector risk adjustment
+      4. Aplicar cumulative_risk + cross-signal drift×sensitivity (Gap 10)
+      5. EthicalContextEngine.decide() → mercy + trust + HMAC
+      6. Update trust + persist adjust_post_penalty delta (Gap 14)
+    """
+    start = time.perf_counter()
+    session_id = req.session_id or "anonymous"
+
+    resp = _decide_hard_block(req, session_id, start)
+    if resp:
+        return resp
+
+    resp = _decide_run_guards(req, session_id, start)
+    if resp:
+        return resp
+
+    adj = _AdjSignals(req)
+    sensitivity_state, drift_report = _decide_accumulate_signals(req, session_id)
+    slm_meta = _decide_slm(req, session_id, adj)
+    sector_note, cumulative_note, drift_cross_note = _decide_adjust_risk(
+        req, session_id, adj, sensitivity_state, drift_report,
+    )
+
+    verdict, context = _decide_ethical_verdict(req, session_id, adj, slm_meta, sensitivity_state)
+    compliance = _decide_compliance(req, adj, verdict)
+    verdict, schema_violations, slm_explanation = _decide_output_pipeline(
+        req, session_id, adj, context, verdict, slm_meta,
+    )
+
+    _decide_persist_trust(session_id, req, verdict, context)
+
     latency = (time.perf_counter() - start) * 1000
     # F2-03: use SLM natural language explanation when available; fallback to template
-    _base_rationale = _slm_explanation if _slm_explanation else verdict.explanation
-    rationale = _base_rationale + sector_note + cumulative_note + drift_cross_note
+    rationale = (slm_explanation or verdict.explanation) + sector_note + cumulative_note + drift_cross_note
 
     return DecideResponse(
         verdict_id=verdict.verdict_id,
@@ -1260,18 +1336,18 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         mercy_scenario=verdict.mercy_scenario,
         mercy_score=verdict.mercy_score,
         trust_score=verdict.trust_score,
-        adjusted_risk=adjusted_risk,
+        adjusted_risk=adj.risk,
         rationale=rationale,
         contestable=verdict.contestable,
         appeal_deadline_hours=24,
         signature=verdict.hmac_signature,
         latency_ms=latency,
-        slm_used=slm_used,
-        slm_intent=slm_intent,
-        slm_risk=slm_risk,
-        risk_classification=risk_class,
-        compliance_violations=compliance_violations,
-        compliance_rate=compliance_rate,
+        slm_used=slm_meta.used,
+        slm_intent=slm_meta.intent,
+        slm_risk=slm_meta.risk,
+        risk_classification=compliance.risk_class,
+        compliance_violations=compliance.violations,
+        compliance_rate=compliance.rate,
         schema_violations=schema_violations,
     )
 
