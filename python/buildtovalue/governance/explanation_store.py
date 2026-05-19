@@ -5,7 +5,9 @@ Implementa LGPD Art. 20 (direito à explicação).
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any
 import json
-import sqlite3
+import sqlite3  # noqa: F401 — kept for sqlite3.Row / sqlite3.Connection type refs
+
+from buildtovalue.security import sqlite_connect_wal
 from pathlib import Path
 import threading
 import time  # ✅ CORRIGIDO: Import no topo
@@ -55,7 +57,7 @@ class ExplanationStore:
     def _get_connection(self) -> sqlite3.Connection:
         """Retorna conexão thread-local."""
         if not hasattr(self._local, 'conn'):
-            self._local.conn = sqlite3.connect(
+            self._local.conn = sqlite_connect_wal(
                 self.db_path,
                 check_same_thread=False,
             )

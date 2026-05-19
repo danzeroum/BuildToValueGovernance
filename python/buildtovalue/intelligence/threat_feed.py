@@ -6,7 +6,9 @@ MISP/STIX compatible format.
 
 import time
 import hashlib
-import sqlite3
+import sqlite3  # noqa: F401 — kept for type compatibility
+
+from buildtovalue.security import sqlite_connect_wal
 import os
 import json
 from typing import List, Optional, Dict
@@ -17,8 +19,7 @@ DB_PATH = os.environ.get("BTV_THREATS_DB", "data/threats.db")
 
 
 def init_threats_db():
-    os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS threats (
             id TEXT PRIMARY KEY,
@@ -54,7 +55,7 @@ def ingest_threat(
     mitre_id: str = "",
 ) -> dict:
     h = compute_hash(threat_id, threat_type, severity, indicators)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     try:
         conn.execute("""
             INSERT OR REPLACE INTO threats (id, threat_type, severity, source, indicators, description, mitre_id, hash)
@@ -72,7 +73,7 @@ def query_threats(
     source: Optional[str] = None,
     limit: int = 50,
 ) -> list:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     query = "SELECT id, threat_type, severity, source, indicators, description, mitre_id, created_at, hash FROM threats WHERE 1=1"
     params = []
     if threat_type:
@@ -99,7 +100,7 @@ def query_threats(
 
 
 def get_threat(threat_id: str) -> Optional[dict]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     row = conn.execute(
         "SELECT id, threat_type, severity, source, indicators, description, mitre_id, created_at, hash FROM threats WHERE id = ?",
         (threat_id,)
@@ -115,7 +116,7 @@ def get_threat(threat_id: str) -> Optional[dict]:
 
 
 def get_stats() -> dict:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     total = conn.execute("SELECT COUNT(*) FROM threats").fetchone()[0]
     by_type = conn.execute("SELECT threat_type, COUNT(*) FROM threats GROUP BY threat_type").fetchall()
     by_source = conn.execute("SELECT source, COUNT(*) FROM threats GROUP BY source").fetchall()

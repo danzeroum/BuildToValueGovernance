@@ -178,7 +178,7 @@ def _run_rag_guard(
 # HMAC KEY (Gap #10 — env var, fail-secure in production)
 # ═══════════════════════════════════════════════════════════════
 
-from buildtovalue.security import get_hmac_key, init_hmac_key
+from buildtovalue.security import get_hmac_key, init_hmac_key, sqlite_connect_wal
 
 # Snapshot at import time. In Gunicorn pre-fork this runs in the master
 # before workers spawn, so each worker inherits the initialized _KeyHolder
@@ -197,12 +197,7 @@ DB_PATH = os.environ.get("BTV_DB_PATH", "data/trust.db")
 
 
 def init_db():
-    os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    # WAL persists per-database after first PRAGMA; benefits concurrent reads
-    # under FastAPI/uvicorn multi-worker deployments (S-04).
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    conn = sqlite_connect_wal(DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             session_id TEXT PRIMARY KEY,
@@ -237,7 +232,7 @@ def init_db():
 
 
 def db_get_session(session_id: str) -> dict:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     row = conn.execute(
         "SELECT trust_score, offenses, total_requests, last_entropy, last_action "
         "FROM sessions WHERE session_id = ?",
@@ -253,7 +248,7 @@ def db_get_session(session_id: str) -> dict:
 
 def db_update_session_state(session_id: str, last_entropy: float, last_action: str):
     """Persiste last_entropy e last_action (ADR-039 post-penalty analysis)."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     conn.execute(
         "UPDATE sessions SET last_entropy=?, last_action=? WHERE session_id=?",
         (last_entropy, last_action, session_id),
@@ -262,7 +257,7 @@ def db_update_session_state(session_id: str, last_entropy: float, last_action: s
     conn.close()
 
 def db_update_session(session_id: str, trust_score: float, offense_delta: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     existing = conn.execute(
         "SELECT session_id FROM sessions WHERE session_id = ?",
         (session_id,),
@@ -1362,7 +1357,7 @@ def resolve_appeal(appeal_id: str, req: AppealResolveRequest):
 
 @app.get("/health")
 def health():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
     conn.close()
     return {
@@ -1728,7 +1723,7 @@ def agent_register(agent_id: str, req: AgentRegisterRequest, _=Depends(require_a
     key_fingerprint = hashlib.sha256(bytes.fromhex(req.public_key_hex)).hexdigest()[:16]
     registered_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     try:
         conn.execute(
             "INSERT OR REPLACE INTO agent_pubkeys (agent_id, public_key_hex, registered_at, revoked_at, registration_proof) "
@@ -1745,7 +1740,7 @@ def agent_register(agent_id: str, req: AgentRegisterRequest, _=Depends(require_a
 @app.get("/v1/agents/{agent_id}/pubkey")
 def agent_get_pubkey(agent_id: str, _=Depends(require_api_key)):
     """Retrieve registered public key for an agent (C3)."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     row = conn.execute(
         "SELECT public_key_hex, registered_at, revoked_at FROM agent_pubkeys WHERE agent_id = ?",
         (agent_id,),
@@ -1764,7 +1759,7 @@ def agent_get_pubkey(agent_id: str, _=Depends(require_api_key)):
 def agent_revoke(agent_id: str, _=Depends(require_api_key)):
     """Revoke the public key of an agent (C3)."""
     revoked_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     cur = conn.execute(
         "UPDATE agent_pubkeys SET revoked_at = ? WHERE agent_id = ? AND revoked_at IS NULL",
         (revoked_at, agent_id),

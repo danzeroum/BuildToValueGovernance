@@ -13,6 +13,7 @@ Usage rules:
       ``rotate_hmac_key()`` to refresh the holder and zeroize the old buffer.
 """
 
+from buildtovalue.security.db import sqlite_connect_wal
 from buildtovalue.security.keys import (
     HmacKeyNotInitializedError,
     HmacKeyUnsetError,
@@ -26,6 +27,7 @@ __all__ = [
     "get_hmac_key",
     "init_hmac_key",
     "rotate_hmac_key",
+    "sqlite_connect_wal",
     "HmacKeyUnsetError",
     "InsecureHmacKeyError",
     "HmacKeyNotInitializedError",
