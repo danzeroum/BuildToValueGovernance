@@ -108,7 +108,13 @@ pub fn init_kernel_mac_key() -> Result<(), KeyInitError> {
 ///
 /// Panics if `init_kernel_mac_key()` was not called — this is a programmer
 /// error, not a runtime condition. Wire the init in the gateway `main()`.
+///
+/// `expect_used` is intentionally allowed here: silent fallback to a dev key
+/// would be a security regression worse than a fail-loud panic. The gateway
+/// initializes the key in `main()` before serving any request, and tests
+/// that exercise this code path call `init_kernel_mac_key()` in their setup.
 #[must_use]
+#[allow(clippy::expect_used)]
 pub fn kernel_mac_key() -> &'static [u8] {
     KERNEL_MAC_KEY
         .get()
