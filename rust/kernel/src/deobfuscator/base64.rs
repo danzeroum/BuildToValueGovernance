@@ -92,6 +92,7 @@ impl Module for Base64Detector {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.15, 0.05, 20260517, 200)
+                .expect("static bias values are valid")
             .with_limitations("Regex-based; sequências < 8 chars ignoradas para evitar falsos positivos.")
             .with_affected_groups("N/A")
     }

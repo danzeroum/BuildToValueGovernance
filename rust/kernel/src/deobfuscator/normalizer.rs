@@ -400,6 +400,7 @@ impl Module for Normalizer {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.02, 0.05, 20260226, 42)
+                .expect("static bias values are valid")
             .with_limitations(
                 "Homoglyph map cobre apenas blocos Mathematical Bold, Fullwidth e Cyrillic. \
                  Palavra 'at' só substituída com espaços para evitar FP em 'at' como preposição."

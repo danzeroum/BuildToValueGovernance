@@ -83,7 +83,7 @@ impl TechnicalEvidence {
             original_request_hash: 0,
             _pad_metadata: [0; 8],
             stats: InputStatistics::empty(),
-            bias: BiasDeclaration::default(),
+            bias: BiasDeclaration::aggregate(0.0, 0.0, 0, 0),
             findings: [Finding::empty(); MAX_FINDINGS],
             critical_findings: [Finding::empty(); MAX_CRITICAL_FINDINGS],
             finding_count: 0,

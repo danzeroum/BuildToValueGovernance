@@ -300,7 +300,7 @@ impl Gatekeeper {
             }
         }
 
-        evidence.bias = BiasDeclaration::new(
+        evidence.bias = BiasDeclaration::aggregate(
             max_fpr, max_fnr,
             if oldest_calibration == u32::MAX { 0 } else { oldest_calibration },
             total_test_size,

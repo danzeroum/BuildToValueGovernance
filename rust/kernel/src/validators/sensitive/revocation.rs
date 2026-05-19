@@ -28,6 +28,7 @@ impl Module for ConsentRevocationValidator {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.01, 0.00, 20260517, 80)
+                .expect("static bias values are valid")
             .with_limitations(
                 "Race condition between revocation timestamp and async processing jobs."
             )

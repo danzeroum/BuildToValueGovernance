@@ -96,6 +96,7 @@ impl Validator for SensitiveDataValidator {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.18, 0.12, 20260517, 200)
+                .expect("static bias values are valid")
             .with_limitations(
                 "Keyword-based detection (no semantics); Brazilian Portuguese only; high FPR for medical terms."
             )
@@ -116,6 +117,7 @@ impl Module for SensitiveDataValidator {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.18, 0.12, 20260517, 200)
+                .expect("static bias values are valid")
             .with_limitations(
                 "Keyword-based detection (no semantics); Brazilian Portuguese only; high FPR for medical terms."
             )

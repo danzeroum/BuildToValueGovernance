@@ -29,6 +29,7 @@ impl Module for ConsentValidator {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.05, 0.02, 20260517, 120)
+                .expect("static bias values are valid")
             .with_limitations(
                 "Consent validation requires external context; placeholder."
             )

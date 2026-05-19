@@ -71,6 +71,7 @@ impl Module for PhoneValidator {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.10, 0.05, 20260517, 600)
+                .expect("static bias values are valid")
             .with_limitations(
                 "Brazilian format only; does not validate carrier."
             )

@@ -138,6 +138,7 @@ impl SessionDrift {
 
     pub fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.08, 0.12, 20260517, 200)
+                .expect("static bias values are valid")
             .with_limitations(
                 "6-dimensional vector. Cold-start problem: first requests have no baseline."
             )

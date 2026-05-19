@@ -87,6 +87,7 @@ impl Module for LeetspeakDetector {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.15, 0.30, 20260517, 250)
+                .expect("static bias values are valid")
             .with_limitations("Variantes regionais de leetspeak não cobertas.")
             .with_affected_groups("N/A")
     }

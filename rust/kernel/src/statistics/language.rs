@@ -118,7 +118,8 @@ impl Module for LanguageDetector {
             20260518,
             450,
         )
-        .with_limitations(
+            .expect("static bias values are valid")
+            .with_limitations(
             "Textos < 10 chars retornam undetermined. \
              Inputs mistos (PT+EN) detectam apenas idioma dominante. \
              Threshold adaptativo: 0.30 para inputs <= 30 chars, 0.45 para inputs > 30 chars.",

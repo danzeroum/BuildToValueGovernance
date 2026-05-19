@@ -62,6 +62,7 @@ impl Module for NhsValidator {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.12, 0.05, 20260224, 200)
+                .expect("static bias values are valid")
             .with_limitations("Sequências de 10 dígitos sem contexto podem FP (~12%).")
             .with_affected_groups("Textos técnicos com números de 10 dígitos.")
     }

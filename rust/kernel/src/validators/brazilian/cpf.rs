@@ -120,6 +120,7 @@ impl Module for CpfValidator {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.08, 0.02, 20260517, 500)
+                .expect("static bias values are valid")
             .with_limitations(
                 "Algorithm validation only; does not check Receita Federal. Cannot detect obfuscated CPFs."
             )

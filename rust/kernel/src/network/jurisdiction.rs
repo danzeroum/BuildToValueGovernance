@@ -237,6 +237,7 @@ impl JurisdictionMapper {
 
     pub fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.15, 0.25, 20260218, 100)
+                .expect("static bias values are valid")
             .with_limitations(
                 "Static /8 CIDR blocks. Many ranges are shared across countries. \
                  No MaxMind GeoIP. Confidence is low (~70%). \

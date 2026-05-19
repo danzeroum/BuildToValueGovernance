@@ -4,6 +4,8 @@ Implementa LGPD Art. 20 (direito à explicação).
 """
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any
+import hashlib
+import hmac as _hmac
 import json
 import sqlite3  # noqa: F401 — kept for sqlite3.Row / sqlite3.Connection type refs
 
@@ -317,3 +319,30 @@ class ExplanationStore:
             'mercy_rate': mercy_count / total if total > 0 else 0.0,
             'db_size_mb': round(db_size_mb, 2),
         }
+
+
+def verify_appeal_text(explanation_text: str, stored_hash: bytes) -> bool:
+    """Verify that explanation_text authenticates against stored_hash (ADR-062).
+
+    LGPD Art. 20 compliance: the full explanation text in appeals.db must
+    match the BLAKE3 hash recorded in the Ledger at verdict time. Tampering
+    with either the text or the Ledger hash is detectable.
+
+    Uses constant-time comparison to prevent timing side-channels.
+
+    Args:
+        explanation_text: Full explanation text retrieved from appeals.db.
+        stored_hash:      32-byte BLAKE3 digest from the Ledger VerdictRecord.
+
+    Returns:
+        True only when blake3(explanation_text.encode()) == stored_hash.
+    """
+    try:
+        import blake3 as _blake3  # optional dep — falls back to sha3-256 sentinel
+        computed = _blake3.blake3(explanation_text.encode()).digest()
+    except ImportError:
+        # Fallback: sha3-256 produces a 32-byte digest with similar properties.
+        # Production deployments MUST install the `blake3` package.
+        computed = hashlib.sha3_256(explanation_text.encode()).digest()
+
+    return _hmac.compare_digest(computed, stored_hash)

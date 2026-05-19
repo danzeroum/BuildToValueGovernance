@@ -85,6 +85,7 @@ impl Module for EntropyCalculator {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.13, 0.20, 20260517, 500)
+                .expect("static bias values are valid")
             .with_limitations("Textos curtos (<50 chars) podem ter alta entropia.")
             .with_affected_groups("N/A")
     }

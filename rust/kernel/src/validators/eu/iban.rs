@@ -71,6 +71,7 @@ impl Module for IbanValidator {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.02, 0.05, 20260224, 300)
+                .expect("static bias values are valid")
             .with_limitations("Mod 97 elimina quase todos os FP. FNR em IBANs com espaços.")
             .with_affected_groups("Documentos bancários EU.")
     }

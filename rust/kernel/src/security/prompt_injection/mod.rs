@@ -161,6 +161,7 @@ impl Module for PromptInjectionDetector {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.08, 0.18, 20260220, 350)
+                .expect("static bias values are valid")
             .with_limitations("Heuristic + Regex based. May FP on code snippets.")
             .with_affected_groups("Developers, AI Researchers.")
     }

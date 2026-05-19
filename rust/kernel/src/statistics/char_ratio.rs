@@ -87,6 +87,7 @@ impl Module for CharRatioAnalyzer {
 
     fn bias_declaration(&self) -> BiasDeclaration {
         BiasDeclaration::new(0.08, 0.15, 20260517, 300)
+                .expect("static bias values are valid")
             .with_limitations("Idiomas CJK alteram proporções naturais.")
             .with_affected_groups("N/A")
     }
