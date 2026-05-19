@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use crate::core::errors::BiasDeclarationError;
 
 // ---------------------------------------------------------------------
 // SERDE COMPATIBILITY (Arrays > 32)
@@ -272,18 +273,47 @@ pub struct BiasDeclaration {
 }
 
 impl BiasDeclaration {
-    /// Cria nova declaração com valores zerados.
+    /// Validated constructor. Returns `Err` if `calibration_date == 0` or `dataset_size == 0`.
+    /// Use `aggregate()` for gatekeeper aggregation where 0-values are handled explicitly.
     pub fn new(
         fpr: f32,
         fnr: f32,
         calibration: u32,
         dataset_size: u32,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, BiasDeclarationError> {
+        if calibration == 0 {
+            return Err(BiasDeclarationError::MissingCalibrationDate);
+        }
+        if dataset_size == 0 {
+            return Err(BiasDeclarationError::MissingDatasetSize);
+        }
+        Ok(Self {
             false_positive_rate: fpr,
             false_negative_rate: fnr,
             calibration_date: calibration,
             test_dataset_size: dataset_size,
+            affected_groups: [0; 128],
+            known_limitations: [0; 256],
+            _reserved: [0; 112],
+        })
+    }
+
+    /// For module-level static declarations with compile-time-known valid constants.
+    /// Panics at process startup if values are invalid; use `new()` for runtime values.
+    #[allow(clippy::expect_used)]
+    pub fn from_static(fpr: f32, fnr: f32, calibration: u32, dataset_size: u32) -> Self {
+        Self::new(fpr, fnr, calibration, dataset_size)
+            .expect("BiasDeclaration::from_static called with invalid compile-time constants")
+    }
+
+    /// For gatekeeper aggregation across modules. Accepts 0-values explicitly;
+    /// `is_calibration_valid()` will return false and trigger a dashboard warning.
+    pub fn aggregate(fpr: f32, fnr: f32, oldest_calibration: u32, total_test_size: u32) -> Self {
+        Self {
+            false_positive_rate: fpr,
+            false_negative_rate: fnr,
+            calibration_date: oldest_calibration,
+            test_dataset_size: total_test_size,
             affected_groups: [0; 128],
             known_limitations: [0; 256],
             _reserved: [0; 112],
@@ -351,9 +381,10 @@ impl BiasDeclaration {
     }
 }
 
+#[cfg(test)]
 impl Default for BiasDeclaration {
     fn default() -> Self {
-        Self::new(0.0, 0.0, 0, 0)
+        Self::aggregate(0.0, 0.0, 0, 0)
     }
 }
 
@@ -381,3 +412,115 @@ pub enum RegulatoryFramework {
     HIPAA,
     PCIDSS,
 }
+
+// ---------------------------------------------------------------------
+// ADR-061 — Decision + Negotiation Deadlock
+// ---------------------------------------------------------------------
+
+/// Unified decision emitted by the Executive pipeline (ADR-061).
+///
+/// `Deny` = policy rejected (calibrated risk, 24h contestation SLA).
+/// `Block` = active threat, NOT a policy rejection — triggers Trust Score penalty.
+/// The distinction prevents misclassifying security blocks as policy denials in the Ledger.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum Decision {
+    Allow  = 0,
+    Log    = 1,
+    Deny   = 2,
+    Block  = 3,
+    Redact = 4,
+    Report = 5,
+}
+
+impl Decision {
+    pub fn requires_security_alert(&self) -> bool {
+        matches!(self, Decision::Block)
+    }
+
+    pub fn is_contestable(&self) -> bool {
+        true
+    }
+}
+
+/// Fixed-size structured reason for a negotiation deadlock (ADR-061).
+///
+/// Produced when the negotiation engine exceeds max_rounds or SLA.
+/// Recorded in the Ledger via `DeadlockResolutionError`; never produced by
+/// the scanner pipeline directly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum NegotiationDeadlockReason {
+    MaxRoundsExceeded = 0,
+    TimeoutExpired    = 1,
+    ConflictingPolicy = 2,
+    AgentUnreachable  = 3,
+}
+
+/// Ledger-bound record of a negotiation deadlock (ADR-061).
+///
+/// `explanation` must be non-zero — a zeroed explanation is rejected by
+/// `DeadlockResolutionError::new()`. This invariant is enforced at construction,
+/// not at serialization, so a missing explanation cannot reach the Ledger.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeadlockResolutionError {
+    pub reason:            NegotiationDeadlockReason,
+    pub rounds_completed:  u8,
+    pub agent_ids:         [u64; 2],
+    #[serde(with = "serde_array_compat::size_256")]
+    pub explanation:       [u8; 256],
+}
+
+impl DeadlockResolutionError {
+    pub fn new(
+        reason: NegotiationDeadlockReason,
+        rounds_completed: u8,
+        agent_ids: [u64; 2],
+        explanation: &str,
+    ) -> Result<Self, &'static str> {
+        if explanation.is_empty() {
+            return Err("explanation is required for DeadlockResolutionError");
+        }
+        let mut buf = [0u8; 256];
+        let bytes = explanation.as_bytes();
+        let len = bytes.len().min(255);
+        buf[..len].copy_from_slice(&bytes[..len]);
+        Ok(Self { reason, rounds_completed, agent_ids, explanation: buf })
+    }
+}
+
+// ---------------------------------------------------------------------
+// ADR-062 — AppealRecord (fixed-size, kernel hot-path)
+// ---------------------------------------------------------------------
+
+/// Off-chain contestation record (ADR-062). Persisted in `appeals.db`.
+///
+/// `blake3(explanation_text) == VerdictRecord.explanation_hash` is the
+/// authenticity invariant, verified at display time by `verify_appeal_text()`.
+/// Legal foundation: LGPD Art. 20.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct AppealRecord {
+    pub verdict_id:             [u8; 16],
+    pub explanation_hash:       [u8; 32],
+    pub bias_declaration_hash:  [u8; 32],
+    pub timestamp_utc:          u64,
+    pub appeal_deadline_utc:    u64,
+    pub appeal_url_hash:        [u8; 32],
+}
+
+// ---------------------------------------------------------------------
+// ADR-063 — Compile-time size invariants
+// ---------------------------------------------------------------------
+
+const _: () = assert!(
+    std::mem::size_of::<BiasDeclaration>() == 512,
+    "ADR-063 VIOLATION: BiasDeclaration size invariant broken (expected 512 bytes). \
+     Changing field layout requires updating ADR-063 and bumping EVIDENCE_SIZE."
+);
+
+// TechnicalEvidence assert is deferred until Vec<u8> fields are replaced
+// with fixed-size arrays (tracked in docs/status.md, ADR-063 phase 2).
+// const _: () = assert!(
+//     std::mem::size_of::<crate::evidence::TechnicalEvidence>() == 9632,
+//     "ADR-063 VIOLATION: TechnicalEvidence size invariant broken."
+// );

@@ -35,6 +35,6 @@ pub trait Validator: Send + Sync {
     fn validate(&self, input: &str) -> Vec<Finding>;
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::default()
+        BiasDeclaration::aggregate(0.0, 0.0, 0, 0)
     }
 }

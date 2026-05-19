@@ -99,7 +99,7 @@ impl Validator for CnpjValidator {
     }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.06, 0.03, 20260517, 400)
+        BiasDeclaration::from_static(0.06, 0.03, 20260517, 400)
             .with_limitations(
                 "Algorithm validation only; does not check Receita Federal. Cannot detect formatting variations."
             )

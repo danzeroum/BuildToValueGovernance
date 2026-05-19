@@ -169,7 +169,7 @@ impl RustKernel {
     }
 
     fn get_gatekeeper_metrics(&self) -> PyResult<PyObject> {
-        let gatekeeper = self.gatekeeper.lock()
+        let mut gatekeeper = self.gatekeeper.lock()
             .map_err(|_| PyRuntimeError::new_err("Gatekeeper lock poisoned — BLOCK"))?;
         let metrics = gatekeeper.get_metrics();
         Python::with_gil(|py| {
@@ -178,7 +178,10 @@ impl RustKernel {
             dict.set_item("findings_total", metrics.findings_total)?;
             dict.set_item("critical_findings", metrics.critical_findings)?;
             dict.set_item("avg_latency_ms", metrics.avg_latency_ms)?;
+            dict.set_item("p50_latency_ms", metrics.p50_latency_ms)?;
+            dict.set_item("p95_latency_ms", metrics.p95_latency_ms)?;
             dict.set_item("p99_latency_ms", metrics.p99_latency_ms)?;
+            dict.set_item("p999_latency_ms", metrics.p999_latency_ms)?;
             Ok(dict.into())
         })
     }
