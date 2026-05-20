@@ -279,14 +279,35 @@ impl Normalizer {
         if tokens.len() < 5 {
             return input.to_string();
         }
-        let pii_chars = tokens.iter().filter(|t| {
-            t.len() == 1 && t.chars().next()
-                .map(|c| c.is_ascii_digit() || ".,-/@".contains(c))
-                .unwrap_or(false)
-        }).count();
+        let is_pii_char_token = |t: &str| -> bool {
+            t.len() == 1
+                && t.chars()
+                    .next()
+                    .map(|c| c.is_ascii_digit() || ".,-/@".contains(c))
+                    .unwrap_or(false)
+        };
+        let pii_chars = tokens.iter().filter(|t| is_pii_char_token(t)).count();
 
         if pii_chars as f32 / tokens.len() as f32 > 0.6 {
-            return tokens.join("");
+            // Collapse only consecutive PII-char runs; preserve surrounding words.
+            // "Meu CPF é 1 2 3 . 4 5 6 . 7 8 9 - 0 9" → "Meu CPF é 123.456.789-09"
+            let mut result_parts: Vec<String> = Vec::new();
+            let mut pii_run = String::new();
+            for token in &tokens {
+                if is_pii_char_token(token) {
+                    pii_run.push_str(token);
+                } else {
+                    if !pii_run.is_empty() {
+                        result_parts.push(pii_run.clone());
+                        pii_run.clear();
+                    }
+                    result_parts.push(token.to_string());
+                }
+            }
+            if !pii_run.is_empty() {
+                result_parts.push(pii_run);
+            }
+            return result_parts.join(" ");
         }
         input.to_string()
     }
@@ -378,7 +399,7 @@ impl Module for Normalizer {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.02, 0.05, 20260226, 42)
+        BiasDeclaration::from_static(0.02, 0.05, 20260226, 42)
             .with_limitations(
                 "Homoglyph map cobre apenas blocos Mathematical Bold, Fullwidth e Cyrillic. \
                  Palavra 'at' só substituída com espaços para evitar FP em 'at' como preposição."

@@ -19,7 +19,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 try:
     import blake3 as _blake3
@@ -64,16 +64,21 @@ class DelegationLedger:
         self,
         policy_path: Optional[Path] = None,
         hmac_key: Optional[bytes] = None,
+        hmac_key_fn: Optional[Callable[[], bytes]] = None,
     ) -> None:
-        if hmac_key is None:
-            raise ValueError("hmac_key obrigatório — use env BTV_DELEGATION_KEY")
-        if len(hmac_key) < 32:
-            raise ValueError("hmac_key must be >= 32 bytes")
+        if hmac_key_fn is not None:
+            self._key_fn: Callable[[], bytes] = hmac_key_fn
+        elif hmac_key is not None:
+            if len(hmac_key) < 32:
+                raise ValueError("hmac_key must be >= 32 bytes")
+            _captured = hmac_key
+            self._key_fn = lambda: _captured
+        else:
+            raise ValueError("hmac_key obrigatório — use hmac_key or hmac_key_fn")
         raw = self._load(policy_path) if policy_path else {}
         self._max_depth = raw.get("max_chain_depth", _MAX_DEPTH)
         scope_h = raw.get("scope_hierarchy", {})
         self._scope_rank: Dict[str, int] = scope_h
-        self._key = hmac_key
         self._records: Dict[str, DelegationRecord] = {}
         self._children: Dict[str, List[str]] = {}  # parent -> [record_ids]
         self._parent_of: Dict[str, str] = {}  # child -> parent
@@ -117,7 +122,7 @@ class DelegationLedger:
             f"{record_id}|{prev_hash}".encode()
         ).hexdigest()
         sig = hmac_lib.new(
-            self._key,
+            self._key_fn(),
             f"{record_id}|{parent_agent}|{child_agent}|{scope}".encode(),
             hashlib.sha256,
         ).hexdigest()
@@ -264,7 +269,7 @@ def _record_work_contract(
     criteria_hash = _b3(criteria_bytes).hex()
     sig_payload = f"{contract_id}|{contractor}|{scope_merkle.hex()}|{model_hash.hex()}"
     sig = hmac_lib.new(
-        self._key, sig_payload.encode(), hashlib.sha256
+        self._key_fn(), sig_payload.encode(), hashlib.sha256
     ).hexdigest()
     contract = WorkContract(
         contract_id=contract_id,

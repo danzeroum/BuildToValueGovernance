@@ -32,6 +32,10 @@ mod delivery_token;
 #[cfg(feature = "log-client")]
 mod log_client;
 
+// ADR-062 — appeal persistence (feature-gated)
+#[cfg(feature = "appeal-writer")]
+pub mod appeal_writer;
+
 // ── Public API ────────────────────────────────────────────────────────────────────
 
 // Phase 1
@@ -49,5 +53,14 @@ pub use delivery_token::{DeliveryToken, DeliveryPayload, SealError};
 #[cfg(feature = "log-client")]
 pub use log_client::{LogClient, LogClientError};
 
+// ADR-062
+#[cfg(feature = "appeal-writer")]
+pub use appeal_writer::{AppealWriter, AppealWriteError};
+
 // Re-export wire types for convenience
-pub use btv_types::{Decision, VerdictRecord, Blake3Hash as Blake3HashWire};
+pub use btv_types::{
+    Decision, VerdictRecord, Blake3Hash as Blake3HashWire,
+    BiasDeclaration, KnownDisparity,
+    NegotiationDeadlockReason, AppealRecord,
+    BiasDeclarationFixed, TechnicalEvidence,
+};

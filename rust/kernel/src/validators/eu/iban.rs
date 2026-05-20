@@ -70,7 +70,7 @@ impl Module for IbanValidator {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Iban }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.02, 0.05, 20260224, 300)
+        BiasDeclaration::from_static(0.02, 0.05, 20260224, 300)
             .with_limitations("Mod 97 elimina quase todos os FP. FNR em IBANs com espaços.")
             .with_affected_groups("Documentos bancários EU.")
     }

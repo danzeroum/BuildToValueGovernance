@@ -743,7 +743,7 @@ dependencies = [
 
 [[package]]
 name = "btv-core"
-version = "3.0.0-alpha.1"
+version = "0.1.0-alpha.1"
 dependencies = [
  "blake3",
  "btv-types",
@@ -752,18 +752,21 @@ dependencies = [
  "hex",
  "hmac",
  "reqwest",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
  "thiserror 1.0.69",
  "tokio",
+ "tracing",
  "trybuild",
 ]
 
 [[package]]
 name = "btv-executive"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
+ "bincode",
  "blake3",
  "btv-core",
  "btv-types",
@@ -781,7 +784,7 @@ dependencies = [
 
 [[package]]
 name = "btv-gateway"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "axum",
  "axum-test",
@@ -807,7 +810,7 @@ dependencies = [
 
 [[package]]
 name = "btv-governance"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "blake3",
  "btv-types",
@@ -826,7 +829,7 @@ dependencies = [
 
 [[package]]
 name = "btv-judicial"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "btv-types",
  "chrono",
@@ -846,7 +849,7 @@ dependencies = [
 
 [[package]]
 name = "btv-redaction"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "blake3",
  "btv-types",
@@ -862,7 +865,7 @@ dependencies = [
 
 [[package]]
 name = "btv-sigma"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "axum",
  "btv-types",
@@ -881,7 +884,7 @@ dependencies = [
 
 [[package]]
 name = "btv-types"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "sha2",
@@ -889,14 +892,14 @@ dependencies = [
 
 [[package]]
 name = "buildtovalue"
-version = "3.0.0-alpha.1"
+version = "0.1.0-alpha.1"
 dependencies = [
  "btv-core",
 ]
 
 [[package]]
 name = "buildtovalue-bindings"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "buildtovalue-kernel",
@@ -912,7 +915,7 @@ dependencies = [
 
 [[package]]
 name = "buildtovalue-cli"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "clap",
  "colored",
@@ -921,7 +924,7 @@ dependencies = [
 
 [[package]]
 name = "buildtovalue-kernel"
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -932,6 +935,7 @@ dependencies = [
  "blake3",
  "chrono",
  "criterion",
+ "ed25519-dalek",
  "hex",
  "hmac",
  "lazy_static",
@@ -2997,6 +3001,20 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "rusqlite"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b838eba278d213a8beaf485bd313fd580ca4505a00d5871caeb1457c55322cae"
+dependencies = [
+ "bitflags",
+ "fallible-iterator",
+ "fallible-streaming-iterator",
+ "hashlink",
+ "libsqlite3-sys",
+ "smallvec",
 ]
 
 [[package]]

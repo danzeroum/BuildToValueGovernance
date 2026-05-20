@@ -55,13 +55,9 @@ logger = logging.getLogger("btv.api.agent_decide")
 
 router = APIRouter()
 
-# ── HMAC key (shared with app.py) ────────────────────────────────────────────
+# ── HMAC key (shared with app.py via buildtovalue.security) ──────────────────
 
-def _hmac_key() -> bytes:
-    key = os.environ.get("BTV_HMAC_KEY")
-    if key:
-        return key.encode()
-    return b"btv-dev-key-NOT-FOR-PRODUCTION!!"
+from buildtovalue.security import get_hmac_key as _hmac_key
 
 
 _POLICY_VERSION = "1.0.0-agents"

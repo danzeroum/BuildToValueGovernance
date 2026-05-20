@@ -1,17 +1,8 @@
 """
-FFI Client v3.0 — Rust <-> Python bridge (Phase 3).
+FFI Client v4.0 — Rust <-> Python bridge (Phase 4, Strangler Fig PR-7).
 
-Bridge priority:
-  1. PyO3 (buildtovalue_governance.scan_for_evidence_batch) — preferred
-  2. ctypes C ABI (libbuildtovalue_governance.so) — fallback
-
-Fail-strict: any error → raise, never return mock/empty data.
-
-Phase 3 changes from stripped v2.x:
-  - FFIClient class restored with real kernel integration
-  - _scan_pyo3 uses scan_for_evidence_batch (single-item call)
-  - _deserialize_evidence_ctypes parses JSON from real kernel
-  - DeserializationError raised on any parse failure, never silently suppressed
+Bridge: PyO3 (buildtovalue_kernel) only.
+Fail-secure: no ctypes fallback — a security module must not degrade silently.
 """
 from __future__ import annotations
 
@@ -25,10 +16,6 @@ from typing import Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
-RUST_LIB_PATH = os.environ.get(
-    "BUILDTOVALUE_RUST_LIB",
-    "target/release/libbuildtovalue_governance.so",
-)
 MAX_BUFFER_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
@@ -97,15 +84,14 @@ class TechnicalEvidence:
 
 class FFIClient:
     """
-    Rust kernel FFI client v3.0.
+    Rust kernel FFI client v4.0.
 
-    Uses PyO3 (buildtovalue_governance module) if available;
-    falls back to ctypes C ABI. Raises on any error — never returns mock data.
+    PyO3 only — no ctypes fallback. If buildtovalue_kernel is not importable,
+    raises BridgeNotAvailableError at construction time (fail-secure).
     """
 
     def __init__(self, lib_path: Optional[str] = None) -> None:
-        self._lib_path = lib_path or RUST_LIB_PATH
-        self._ctypes_lib: Optional[ctypes.CDLL] = None
+        self._btv_kernel = None
         self.bridge_mode: str = "none"
         self._metrics: Dict[str, int] = {
             "calls_total": 0,
@@ -116,31 +102,20 @@ class FFIClient:
 
     def _init_bridge(self) -> None:
         try:
-            import buildtovalue_governance  # noqa: F401 — just verify import
+            import buildtovalue_kernel as btv
+            kernel = btv.RustKernel()
+            if not hasattr(kernel, "scan_for_evidence_batch"):
+                raise BridgeNotAvailableError(
+                    "scan_for_evidence_batch missing on RustKernel — run `maturin develop` [BLOCK]"
+                )
+            self._btv_kernel = kernel
             self.bridge_mode = "pyo3"
-            logger.info("FFI bridge: PyO3 (buildtovalue_governance)")
-            return
-        except ImportError:
-            logger.debug("PyO3 bridge unavailable, trying ctypes")
-
-        try:
-            lib = ctypes.CDLL(self._lib_path)
-            lib.btv_scan_for_evidence.argtypes = [
-                ctypes.POINTER(ctypes.c_uint8),
-                ctypes.c_size_t,
-                ctypes.c_void_p,
-            ]
-            lib.btv_scan_for_evidence.restype = ctypes.c_int
-            self._ctypes_lib = lib
-            self.bridge_mode = "ctypes"
-            logger.info("FFI bridge: ctypes C ABI (%s)", self._lib_path)
-            return
-        except OSError as exc:
-            logger.error("ctypes bridge unavailable: %s", exc)
-
-        raise BridgeNotAvailableError(
-            "No Rust bridge found. Run `maturin develop` or `cargo build --release`."
-        )
+            logger.info("FFI bridge: PyO3 (buildtovalue_kernel)")
+        except ImportError as exc:
+            raise BridgeNotAvailableError(
+                f"PyO3 bridge mandatory, not available: {exc}. "
+                "Run `maturin develop --features ffi-bindings`."
+            ) from exc
 
     def scan(self, input_text: str) -> TechnicalEvidence:
         """
@@ -160,12 +135,7 @@ class FFIClient:
             raise BufferOverflowError(f"Input {len(raw)} bytes exceeds {MAX_BUFFER_SIZE}")
 
         try:
-            if self.bridge_mode == "pyo3":
-                ev = self._scan_pyo3(input_text)
-            elif self.bridge_mode == "ctypes":
-                ev = self._scan_ctypes(input_text)
-            else:
-                raise BridgeNotAvailableError("No bridge configured")
+            ev = self._scan_pyo3(input_text)
         except (BufferOverflowError, DeserializationError, BridgeNotAvailableError):
             raise
         except Exception as exc:
@@ -176,11 +146,9 @@ class FFIClient:
         return ev
 
     def _scan_pyo3(self, input_text: str) -> TechnicalEvidence:
-        import buildtovalue_governance as btv
-
-        trail_id = uuid.uuid4().int
+        trail_id = uuid.uuid4().int & 0xFFFF_FFFF_FFFF_FFFF  # clamp to u64 max
         try:
-            result_bytes = btv.scan_for_evidence_batch([input_text], [trail_id])
+            result_bytes = self._btv_kernel.scan_for_evidence_batch([input_text], [trail_id])
         except Exception as exc:
             raise FFIError(f"PyO3 scan_for_evidence_batch failed: {exc}") from exc
 
@@ -191,21 +159,6 @@ class FFIClient:
             self._metrics["deserialization_errors"] += 1
             raise DeserializationError(f"Failed to parse PyO3 response: {exc}") from exc
 
-        return self._parse_evidence_dict(data)
-
-    def _scan_ctypes(self, input_text: str) -> TechnicalEvidence:
-        assert self._ctypes_lib is not None
-        raw = input_text.encode("utf-8")
-        buf = (ctypes.c_uint8 * len(raw))(*raw)
-        out_buf = ctypes.create_string_buffer(65536)
-        rc = self._ctypes_lib.btv_scan_for_evidence(buf, len(raw), out_buf)
-        if rc != 0:
-            raise FFIError(f"btv_scan_for_evidence returned {rc}")
-        try:
-            data = json.loads(out_buf.value.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            self._metrics["deserialization_errors"] += 1
-            raise DeserializationError(f"Invalid JSON from C ABI: {exc}") from exc
         return self._parse_evidence_dict(data)
 
     def _parse_evidence_dict(self, data: dict) -> TechnicalEvidence:
@@ -226,6 +179,26 @@ class FFIClient:
                 calibration_date=int(data.get("bias_calibration_date", 0)),
             )
 
+        findings = [
+            Finding(
+                title=str(f.get("title", "")),
+                description=str(f.get("description", "")),
+                severity=float(f.get("severity", 0.0)),
+                confidence=float(f.get("confidence", 0.0)),
+                category=str(f.get("category", "")),
+            )
+            for f in data.get("findings", [])
+        ]
+
+        critical = [
+            Finding(
+                title=str(f.get("title", "")),
+                severity=float(f.get("severity", 0.0)),
+                confidence=float(f.get("confidence", 0.0)),
+            )
+            for f in data.get("critical", [])
+        ]
+
         return TechnicalEvidence(
             version=int(data.get("version", 0)),
             timestamp=int(data.get("timestamp", 0)),
@@ -241,6 +214,8 @@ class FFIClient:
             hash=str(data["hash"]),
             max_severity=str(data.get("max_severity", "Unknown")),
             bias=bias,
+            findings=findings,
+            critical=critical,
         )
 
     def get_metrics(self) -> dict:
