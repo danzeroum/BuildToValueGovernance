@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "1.0.0"
+version = "0.1.0-alpha.1"
 edition = "2021"
 authors = ["BuildToValue Team <team@buildtovalue.com>"]
 license = "Apache-2.0"
@@ -68,6 +68,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # AWS
 aws-sdk-s3 = "1.123.0"
 aws-config = "1.8.14"
+
+rusqlite = { version = "0.31", features = ["bundled"] }
 
 # Dev
 criterion = "0.5"

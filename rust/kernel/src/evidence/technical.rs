@@ -3,6 +3,7 @@
 //! Wire 4: _reserved_metadata[41..73] = skill_mac_tag (PROP-031/supply_guard).
 
 use serde::{Deserialize, Serialize};
+use std::mem::size_of;
 use crate::core::types::{
     BiasDeclaration, InputStatistics, RiskLevel,
     MAX_CRITICAL_FINDINGS, MAX_FINDINGS, HASH_SIZE, EVIDENCE_SIZE,
@@ -64,6 +65,8 @@ pub struct TechnicalEvidence {
     pub hash: [u8; HASH_SIZE],
 }
 
+static_assertions::const_assert_eq!(size_of::<TechnicalEvidence>(), EVIDENCE_SIZE);
+
 impl TechnicalEvidence {
     pub fn new(audit_trail_id: u128) -> Self {
         let now = std::time::SystemTime::now()
@@ -80,7 +83,7 @@ impl TechnicalEvidence {
             original_request_hash: 0,
             _pad_metadata: [0; 8],
             stats: InputStatistics::empty(),
-            bias: BiasDeclaration::default(),
+            bias: BiasDeclaration::aggregate(0.0, 0.0, 0, 0),
             findings: [Finding::empty(); MAX_FINDINGS],
             critical_findings: [Finding::empty(); MAX_CRITICAL_FINDINGS],
             finding_count: 0,

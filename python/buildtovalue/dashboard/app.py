@@ -19,7 +19,7 @@ st.set_page_config(page_title="BuildToValue — Sovereign Trust OS", layout="wid
 # ═══════════════════════════════════════════════════════════════
 
 st.sidebar.title("BuildToValue")
-st.sidebar.caption("Sovereign Trust OS v2.0")
+st.sidebar.caption("Sovereign Trust OS v0.1.0-alpha.1")
 
 page = st.sidebar.radio("Navigation", [
     "Overview",
