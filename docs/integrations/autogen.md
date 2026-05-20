@@ -1,3 +1,11 @@
+[Docs](../README.md) · [Engenheiro](../for-engineers.md) · [Integrações](./index.md) › **AutoGen**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb)
+
+<!-- audience: engineer -->
+
+---
+
 # AutoGen — BTVAutoGenGuard
 
 ```bash
@@ -117,3 +125,15 @@ for agent in agents:
         position=0,
     )
 ```
+
+---
+
+### Próximos passos / Relacionados
+
+- [Integrações — visão geral](./index.md)
+- [API Reference](../api-reference.md)
+- [Conceitos](../concepts.md)
+
+---
+
+<sub>[↑ Hub](../README.md) · [Trilha Engenheiro](../for-engineers.md) · [Trilha DPO/CISO](../for-dpo-ciso.md) · [Links de Referência](../reference-links.md)</sub>

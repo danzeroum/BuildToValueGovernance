@@ -1,3 +1,11 @@
+[Docs](./README.md) › **Research Gaps v3**
+
+![Interno](https://img.shields.io/badge/Trilha-Contribuidor%20%2F%20Interno-6e7681)
+
+<!-- audience: internal -->
+
+---
+
 ```markdown
 # BuildToValue Governance — Lacunas de Produção Identificadas via Literatura
 **Versão:** 3.1 | **Data:** 2026-03-04 | **Status:** APROVADO  
@@ -710,3 +718,17 @@ Decisões a documentar:
 
 Ambas as inspeções devem gerar nota de 2–3 linhas no PR correspondente documentando a
 decisão de extensão v
+
+```
+
+---
+
+### Próximos passos / Relacionados
+
+- [Arquitetura (Atlas)](./ARCHITECTURE_ATLAS.md)
+- [Índice de ADRs](./adr/0000-adr-index.md)
+- [Conceitos](./concepts.md)
+
+---
+
+<sub>[↑ Hub](./README.md) · [Trilha Engenheiro](./for-engineers.md) · [Trilha DPO/CISO](./for-dpo-ciso.md) · [Links de Referência](./reference-links.md)</sub>

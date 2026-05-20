@@ -1,3 +1,11 @@
+[BuildToValue](README.md) · [Docs](docs/README.md) › **Pricing**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb) ![DPO / CISO](https://img.shields.io/badge/Trilha-DPO%20%2F%20CISO-8957e5)
+
+<!-- audience: both -->
+
+---
+
 # BuildToValue — Modelo de Precificação
 
 **Métrica de billing:** decisões governadas (interceptações pelo Trust OS).  
@@ -79,3 +87,15 @@ No serviço gerenciado, `primary_region = "gru"` (São Paulo) garante que o proc
 
 **Como funciona o Contestability Loop?**  
 Cada bloqueio (HTTP 451) retorna `appeal_url` no body. O cliente envia a contestação para essa URL; o AppealEngine notifica um revisor humano e fecha o loop em até 24h com decisão fundamentada e evidência BLAKE3 vinculada.
+
+---
+
+### Próximos passos / Relacionados
+
+- [Compliance — FAQ de conformidade](docs/compliance.md)
+- [Conceitos — como o BTV decide](docs/concepts.md)
+- [Quickstart](docs/quickstart.md)
+
+---
+
+<sub>[↑ Hub](docs/README.md) · [Trilha Engenheiro](docs/for-engineers.md) · [Trilha DPO/CISO](docs/for-dpo-ciso.md) · [Links de Referência](docs/reference-links.md)</sub>

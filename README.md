@@ -2,6 +2,8 @@
 
 **Governança de Agentes de IA com Evidência Criptográfica Imutável.**
 
+> **📚 Documentação:** [Hub da Documentação](docs/README.md) — com trilhas dedicadas para **[Engenheiros](docs/for-engineers.md)** e **[DPO / CISO](docs/for-dpo-ciso.md)**.
+
 ---
 
 ## O que você ganha em 10 minutos

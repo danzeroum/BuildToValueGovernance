@@ -1,3 +1,11 @@
+[Docs](./README.md) · [Engenheiro](./for-engineers.md) › **Arquitetura**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb)
+
+<!-- audience: engineer -->
+
+---
+
 # BuildToValue — Architecture Atlas & Vision (v3.0)
 
 > **NOTA DE CONTEXTO:** Este documento contém a VISÃO COMPLETA do projeto (v1.0 até v3.0).
@@ -359,3 +367,15 @@ class CompliancePlugin(Protocol):
 
 *Última atualização: 09 de março de 2026*
 *Versão do Atlas: 2.0 (sincronizado com v2.2 — ADR-042/049/051 Model Integrity Governance)*
+
+---
+
+### Próximos passos / Relacionados
+
+- [Conceitos](./concepts.md)
+- [Índice de ADRs](./adr/0000-adr-index.md)
+- [Changelog](./changelog.md)
+
+---
+
+<sub>[↑ Hub](./README.md) · [Trilha Engenheiro](./for-engineers.md) · [Trilha DPO/CISO](./for-dpo-ciso.md) · [Links de Referência](./reference-links.md)</sub>

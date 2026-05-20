@@ -1,3 +1,11 @@
+[Docs](./README.md) › **Conceitos**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb) ![DPO / CISO](https://img.shields.io/badge/Trilha-DPO%20%2F%20CISO-8957e5)
+
+<!-- audience: both -->
+
+---
+
 # Conceitos — A República Algorítmica
 
 O BTV usa metáforas políticas para organizar sua arquitetura. Não é academicismo — é uma forma de deixar claro *quem decide o quê* e *por quê*.
@@ -175,3 +183,16 @@ O `profile` ativa políticas específicas do setor:
 | `legal` | Sigilo profissional, dados sensíveis |
 | `research` | Dados anonimizados permitidos com consentimento |
 | `education` | Proteção de menores, COPPA |
+
+---
+
+### Próximos passos / Relacionados
+
+- [Compliance — como o BTV se mapeia às normas](./compliance.md)
+- [API Reference](./api-reference.md)
+- [Arquitetura (Atlas)](./ARCHITECTURE_ATLAS.md)
+- [Índice de ADRs](./adr/0000-adr-index.md)
+
+---
+
+<sub>[↑ Hub](./README.md) · [Trilha Engenheiro](./for-engineers.md) · [Trilha DPO/CISO](./for-dpo-ciso.md) · [Links de Referência](./reference-links.md)</sub>
