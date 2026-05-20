@@ -1,3 +1,11 @@
+[Docs](../README.md) · [Engenheiro](../for-engineers.md) › **Índice de ADRs**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb)
+
+<!-- audience: engineer -->
+
+---
+
 Aqui está o arquivo completo atualizado:
 
 ***
@@ -308,3 +316,15 @@ Os ADRs do Grupo I possuem documentos de referência de implementação em `docs
 | **Grupo L** | ✨ **Novo** — SaaS Deployment: ADR-0059 (Rust/Python Boundary), ADR-0060 (Fly.io) (✅ Ativo v3.0) |
 | **Mapa de dependências** | Adicionada cadeia `ADR-0018 → ADR-0059 → ADR-0060 → fly.toml` |
 | **Estatísticas** | Total 46 (+2), Ativos 23 (+2), Última entrada ADR-0060, Próximo ADR-0061 |
+
+---
+
+### Próximos passos / Relacionados
+
+- [Conceitos](../concepts.md)
+- [Arquitetura (Atlas)](../ARCHITECTURE_ATLAS.md)
+- [Release Gates](../RELEASE_GATES.md)
+
+---
+
+<sub>[↑ Hub](../README.md) · [Trilha Engenheiro](../for-engineers.md) · [Trilha DPO/CISO](../for-dpo-ciso.md) · [Links de Referência](../reference-links.md)</sub>

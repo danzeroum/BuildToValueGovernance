@@ -1,3 +1,11 @@
+[Docs](./README.md) › **Changelog**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb) ![DPO / CISO](https://img.shields.io/badge/Trilha-DPO%20%2F%20CISO-8957e5)
+
+<!-- audience: both -->
+
+---
+
 # Changelog
 
 ## v2.0.0 — 2026-03-20
@@ -34,3 +42,15 @@
 ## v1.x — (histórico)
 
 Versões anteriores do gateway sem SDK público. Consulte os ADRs em `docs/adr/` para histórico de decisões de arquitetura.
+
+---
+
+### Próximos passos / Relacionados
+
+- [Arquitetura (Atlas)](./ARCHITECTURE_ATLAS.md)
+- [API Reference](./api-reference.md)
+- [Índice de ADRs](./adr/0000-adr-index.md)
+
+---
+
+<sub>[↑ Hub](./README.md) · [Trilha Engenheiro](./for-engineers.md) · [Trilha DPO/CISO](./for-dpo-ciso.md) · [Links de Referência](./reference-links.md)</sub>

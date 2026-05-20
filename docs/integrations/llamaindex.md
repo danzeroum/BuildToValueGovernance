@@ -1,3 +1,11 @@
+[Docs](../README.md) · [Engenheiro](../for-engineers.md) · [Integrações](./index.md) › **LlamaIndex**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb)
+
+<!-- audience: engineer -->
+
+---
+
 # LlamaIndex — BTVQueryEngineGuard
 
 ```bash
@@ -106,3 +114,15 @@ guard.query(query_str):
   3. btv.sanitize(response.response)  # sanitiza resposta
   4. retorna response com .response sanitizado
 ```
+
+---
+
+### Próximos passos / Relacionados
+
+- [Integrações — visão geral](./index.md)
+- [API Reference](../api-reference.md)
+- [Conceitos](../concepts.md)
+
+---
+
+<sub>[↑ Hub](../README.md) · [Trilha Engenheiro](../for-engineers.md) · [Trilha DPO/CISO](../for-dpo-ciso.md) · [Links de Referência](../reference-links.md)</sub>

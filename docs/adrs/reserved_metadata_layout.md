@@ -1,3 +1,11 @@
+[Docs](../README.md) › **Reserved Metadata Layout**
+
+![Interno](https://img.shields.io/badge/Trilha-Contribuidor%20%2F%20Interno-6e7681)
+
+<!-- audience: internal -->
+
+---
+
 # Reserved Metadata Layout — TechnicalEvidence._reserved_metadata[7072]
 
 **Status:** DEFINIDO | **Data:** 2026-03-04 | **Referência:** ADR-005, ADR-033
@@ -23,3 +31,14 @@ e o CI deve validar que `sizeof(TechnicalEvidence) == EVIDENCE_SIZE (9632)`.
 - PROP-031: skill_hash BLAKE3 em [8..40]
 - PROP-030: recovery tag em [40..44]
 - PROP-038: drift flag em [44..45]
+
+---
+
+### Próximos passos / Relacionados
+
+- [Project Context](../PROJECT_CONTEXT.md)
+- [Índice de ADRs (este arquivo NÃO faz parte dele)](../adr/0000-adr-index.md)
+
+---
+
+<sub>[↑ Hub](../README.md) · [Trilha Engenheiro](../for-engineers.md) · [Trilha DPO/CISO](../for-dpo-ciso.md) · [Links de Referência](../reference-links.md)</sub>
