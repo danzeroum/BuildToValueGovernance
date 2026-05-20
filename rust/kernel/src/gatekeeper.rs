@@ -57,8 +57,13 @@ pub struct GatekeeperMetrics {
     pub findings_total: u64,
     pub critical_findings: u64,
     pub avg_latency_ms: f32,
+    pub p50_latency_ms: f32,
+    pub p95_latency_ms: f32,
     pub p99_latency_ms: f32,
+    pub p999_latency_ms: f32,
 }
+
+const LATENCY_RING_SIZE: usize = 1000;
 
 // ---------------------------------------------------------------------
 // GATEKEEPER
@@ -281,6 +286,8 @@ impl Gatekeeper {
             for entry in &self.pipeline {
                 if entry.stage != PipelineStage::Validate { continue; }
                 let mut rescan_ctx = ScanContext::default();
+                rescan_ctx.flags.lang_bitmask = ctx.flags.lang_bitmask;
+                rescan_ctx.flags.jurisdiction_bitmask = ctx.flags.jurisdiction_bitmask;
                 let findings = entry.module.scan(&chain_result.final_text, &mut rescan_ctx);
                 for finding in findings { evidence.add_finding(finding); }
             }
@@ -325,9 +332,10 @@ impl Gatekeeper {
         let alpha = 0.1;
         self.metrics.avg_latency_ms =
             (alpha * latency_ms) + ((1.0 - alpha) * self.metrics.avg_latency_ms);
-        if latency_ms > self.metrics.p99_latency_ms {
-            self.metrics.p99_latency_ms = latency_ms;
-        }
+
+        self.latency_ring[self.ring_pos] = latency_ms;
+        self.ring_pos = (self.ring_pos + 1) % LATENCY_RING_SIZE;
+        if self.ring_len < LATENCY_RING_SIZE { self.ring_len += 1; }
     }
 
     pub fn get_metrics(&self) -> &GatekeeperMetrics { &self.metrics }

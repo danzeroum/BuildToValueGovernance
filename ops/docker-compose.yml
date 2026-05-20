@@ -43,7 +43,9 @@ services:
       - ./models:/app/models
       - ledger_data:/app/data/ledger
     environment:
-      - BTV_HMAC_KEY=${BTV_HMAC_KEY:-btv-dev-key-NOT-FOR-PRODUCTION!!}
+      # Required: must be set in the deploying shell or via .env (see ops/.env.example).
+      # No fallback — production compose refuses to start without a real key.
+      - BTV_HMAC_KEY=${BTV_HMAC_KEY:?BTV_HMAC_KEY must be set; generate with: openssl rand -hex 32}
       - BTV_ENV=${BTV_ENV:-development}
       - BTV_POLICY_DIR=/app/data/policies
       - BTV_DB_PATH=/app/data/runtime/trust.db

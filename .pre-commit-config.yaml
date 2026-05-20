@@ -1,0 +1,40 @@
+# BuildToValue — local pre-commit hooks (PR-3)
+#
+# Install:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run manually against the whole tree:
+#   pre-commit run --all-files
+#
+# The hooks below are deliberately cheap; CI runs the same guards plus
+# coverage, license, and SLSA checks.
+
+repos:
+  - repo: local
+    hooks:
+      - id: btv-lint-guards
+        name: BTV lint guards (G1 sqlite3, G2 HMAC sentinels, G3 CORS wildcard)
+        entry: scripts/ci/lint_guards.sh --staged
+        language: system
+        pass_filenames: false
+        stages: [commit]
+        verbose: true
+
+      - id: btv-no-secrets-tracked
+        name: Refuse to commit .env, *.db, *.key, *.crt, *.bin
+        entry: |
+          bash -c '
+            files=$(git diff --cached --name-only --diff-filter=ACMR \
+              | grep -E "^(.*/)?\.env$|\.db$|\.key$|\.crt$|\.pem$|\.bin$" \
+              | grep -vE "(\.example|\.template)$" || true)
+            if [ -n "$files" ]; then
+              echo "Refusing to commit sensitive files:"
+              echo "$files"
+              echo "Add to .gitignore or move to .example/template form."
+              exit 1
+            fi
+          '
+        language: system
+        pass_filenames: false
+        stages: [commit]

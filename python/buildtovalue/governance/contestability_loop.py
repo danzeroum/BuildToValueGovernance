@@ -18,8 +18,12 @@ Mudanças v3.1 (ADR-047):
 - Schema SQLite estendido com colunas opcionais (ALTER TABLE se db existente)
 """
 
+import hashlib
+import hmac
 import os
-import sqlite3
+import sqlite3  # noqa: F401 — kept for sqlite3.Row / sqlite3.Connection type refs
+
+from buildtovalue.security import sqlite_connect_wal
 import time
 import logging
 from enum import Enum

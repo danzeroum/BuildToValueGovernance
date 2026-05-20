@@ -143,7 +143,7 @@ class EthicalContextEngine:
             f"{verdict_id}|{evidence.blake3_hash}|{final_action}|{now}"
         )
         signature = hmac.new(
-            self._signing_key, sign_payload.encode(), hashlib.sha256
+            self._signing_key_fn(), sign_payload.encode(), hashlib.sha256
         ).hexdigest()
 
         return EthicalVerdict(

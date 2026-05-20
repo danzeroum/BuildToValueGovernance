@@ -11,6 +11,7 @@ Changelog v2.3 (Sprint 5, Gaps 10/12/14/19):
   - Gap 10: GoalDriftSentinel integrado ao pipeline; cross-signal drift×sensitivity
 """
 
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -18,6 +19,7 @@ import os
 import sqlite3
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Optional
 
@@ -175,22 +177,10 @@ def _run_rag_guard(
 # HMAC KEY (Gap #10 — env var, fail-secure in production)
 # ═══════════════════════════════════════════════════════════════
 
-def _load_hmac_key() -> bytes:
-    key = os.environ.get("BTV_HMAC_KEY")
-    if key:
-        return key.encode("utf-8")
-    env = os.environ.get("BTV_ENV", "development")
-    if env == "production":
-        raise RuntimeError(
-            "BTV_HMAC_KEY must be set in production. "
-            "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
-        )
-    logger.warning("BTV_HMAC_KEY not set — using dev fallback.")
-    return b"btv-dev-key-NOT-FOR-PRODUCTION!!"
+from buildtovalue.security import get_hmac_key, init_hmac_key, sqlite_connect_wal
 
 
-HMAC_KEY = _load_hmac_key()
-
+_risk_classifier: Optional[RiskClassifier] = RiskClassifier()
 
 _risk_classifier: Optional[RiskClassifier] = RiskClassifier()
 
@@ -202,8 +192,7 @@ DB_PATH = os.environ.get("BTV_DB_PATH", "data/trust.db")
 
 
 def init_db():
-    os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             session_id TEXT PRIMARY KEY,
@@ -238,7 +227,7 @@ def init_db():
 
 
 def db_get_session(session_id: str) -> dict:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     row = conn.execute(
         "SELECT trust_score, offenses, total_requests, last_entropy, last_action "
         "FROM sessions WHERE session_id = ?",
@@ -263,7 +252,7 @@ def db_update_session_state(session_id: str, last_entropy: float, last_action: s
     conn.close()
 
 def db_update_session(session_id: str, trust_score: float, offense_delta: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     existing = conn.execute(
         "SELECT session_id FROM sessions WHERE session_id = ?",
         (session_id,),
@@ -480,8 +469,11 @@ def is_first_offense(session_id: Optional[str]) -> bool:
 
 
 def sign_verdict(verdict_id: str, action: str, risk: float) -> str:
+    # PR-4 (S-09): fetch the current key on every call so SIGHUP rotation
+    # via rotate_hmac_key() takes effect on the next /v1/decide hot-path
+    # request without a process restart.
     payload = f"{verdict_id}:{action}:{risk:.4f}"
-    return hmac.new(HMAC_KEY, payload.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(get_hmac_key(), payload.encode(), hashlib.sha256).hexdigest()
 
 
 def _appeal_to_response(appeal) -> AppealResponse:
@@ -992,8 +984,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         ),
     )
 
-    trust = get_trust_score(session_id)
-    _ethical_engine.set_trust_score(session_id, trust)
+    _decide_persist_trust(session_id, req, verdict, context)
 
     verdict = _ethical_engine.decide(
         evidence, context,
@@ -1220,7 +1211,7 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
         mercy_scenario=verdict.mercy_scenario,
         mercy_score=verdict.mercy_score,
         trust_score=verdict.trust_score,
-        adjusted_risk=adjusted_risk,
+        adjusted_risk=adj.risk,
         rationale=rationale,
         contestable=verdict.contestable,
         appeal_deadline_hours=24,
@@ -1321,7 +1312,7 @@ def resolve_appeal(appeal_id: str, req: AppealResolveRequest):
 
 @app.get("/health")
 def health():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
     conn.close()
     return {

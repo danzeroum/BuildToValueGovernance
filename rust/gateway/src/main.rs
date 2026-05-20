@@ -1,4 +1,4 @@
-//! BTV Gateway v1.9.0 — Axum HTTP server (ADR-018)
+//! BTV Gateway v0.1.0-alpha.1 — Axum HTTP server (ADR-018)
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -11,12 +11,18 @@ mod state;
 use state::AppState;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .with(tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| "btv_gateway=info".into()))
         .init();
+
+    // S-01 / PROP-031: initialize the kernel MAC key from BTV_HMAC_KEY before
+    // any scan runs. Must happen before worker fork; we are still single-threaded
+    // here because tokio::main has just constructed the runtime.
+    buildtovalue_kernel::keys::init_kernel_mac_key()
+        .map_err(|e| format!("kernel MAC key init failed: {e}"))?;
 
     let state = Arc::new(AppState::new());
     let app = routes::create_router(state);

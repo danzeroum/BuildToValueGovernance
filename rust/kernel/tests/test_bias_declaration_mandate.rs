@@ -39,7 +39,7 @@ mod tests {
 
     #[test]
     fn test_all_validators_have_non_default_bias() {
-        let default_bias = BiasDeclaration::default();
+        let default_bias = BiasDeclaration::aggregate(0.0, 0.0, 0, 0);
 
         for m in all_modules() {
             let bias = m.bias_declaration();
@@ -167,6 +167,7 @@ mod tests {
         let long_text = "a".repeat(300);
 
         let bias = BiasDeclaration::new(0.1, 0.05, 20260209, 100)
+            .expect("static values valid")
             .with_limitations(&long_text)
             .with_affected_groups(&long_text);
 
@@ -180,7 +181,8 @@ mod tests {
 
     #[test]
     fn test_expired_calibration_detection() {
-        let expired_bias = BiasDeclaration::new(0.10, 0.05, 20250901, 100);
+        let expired_bias = BiasDeclaration::new(0.10, 0.05, 20250901, 100)
+            .expect("static values valid");
 
         assert!(
             !expired_bias.is_calibration_valid(),
