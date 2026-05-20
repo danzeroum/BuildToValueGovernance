@@ -35,3 +35,9 @@ reports/
 ops/runtime/*.db
 check_branches.sh
 data/*.db
+ops/nginx/btv-dev.key
+
+# Certificados TLS — nunca commitar
+ops/nginx/btv-dev.key
+ops/nginx/btv-dev.crt
+*.pem
