@@ -28,11 +28,6 @@ use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector, Normali
 use crate::interceptor::{InterceptorChain, InterceptAction, ToolScreen}; // Wire 2: PROP-034a
 use crate::security::prompt_injection::PromptInjectionDetector;
 
-/// Chave MAC do kernel para PROP-031 (ADR-031b).
-/// Em produção: substituir por variável de ambiente ou HSM.
-/// Zero heap: &[u8] literal estático.
-const KERNEL_MAC_KEY: &[u8] = b"btv-kernel-supply-guard-v1";
-
 // ---------------------------------------------------------------------
 // PIPELINE STAGE
 // ---------------------------------------------------------------------
@@ -72,6 +67,9 @@ pub struct Gatekeeper {
     pipeline: Vec<StageEntry>,
     metrics: GatekeeperMetrics,
     interceptor_chain: InterceptorChain, // Wire 2: PROP-034a
+    latency_ring: [f32; LATENCY_RING_SIZE],
+    ring_pos: usize,
+    ring_len: usize,
 }
 
 impl Gatekeeper {
@@ -112,6 +110,9 @@ impl Gatekeeper {
             pipeline,
             metrics: GatekeeperMetrics::default(),
             interceptor_chain,
+            latency_ring: [0.0; LATENCY_RING_SIZE],
+            ring_pos: 0,
+            ring_len: 0,
         }
     }
 
@@ -184,7 +185,7 @@ impl Gatekeeper {
         if evidence.has_skill_hash() {
             let hash = evidence.get_skill_hash();
             let mac_tag = evidence.get_skill_mac_tag();
-            match verify_skill(hash, mac_tag, KERNEL_MAC_KEY) {
+            match verify_skill(hash, mac_tag, crate::keys::kernel_mac_key()) {
                 SupplyGuardResult::Allowed => {}
                 SupplyGuardResult::Blocked(ref reason) => {
                     log::warn!(
@@ -293,7 +294,7 @@ impl Gatekeeper {
             }
         }
 
-        evidence.bias = BiasDeclaration::new(
+        evidence.bias = BiasDeclaration::aggregate(
             max_fpr, max_fnr,
             if oldest_calibration == u32::MAX { 0 } else { oldest_calibration },
             total_test_size,

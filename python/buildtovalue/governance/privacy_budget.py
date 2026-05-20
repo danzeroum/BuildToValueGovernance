@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import sqlite3
+from buildtovalue.security import sqlite_connect_wal
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
@@ -411,7 +412,7 @@ class PrivacyBudgetTracker:
         parent = os.path.dirname(self._db_path)
         if parent:
             os.makedirs(parent, exist_ok=True)
-        return sqlite3.connect(self._db_path)
+        return sqlite_connect_wal(self._db_path)
 
     def _init_db(self) -> None:
         """Inicializa o banco. Erros de I/O são registrados — operações futuras ativam fail-secure."""

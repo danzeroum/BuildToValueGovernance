@@ -110,7 +110,7 @@ impl Module for LanguageDetector {
     }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(
+        BiasDeclaration::from_static(
             0.05, // FPR: idioma errado detectado com confiança >= threshold
             0.20, // FNR: textos curtos ou mistos não detectados (undetermined) — reduzido de 0.25
             20260319,

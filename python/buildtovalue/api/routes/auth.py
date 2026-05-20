@@ -8,6 +8,7 @@ import hashlib
 import logging
 import os
 import sqlite3
+from buildtovalue.security import sqlite_connect_wal
 import time
 from typing import Optional
 
@@ -54,7 +55,7 @@ class UserInfo(BaseModel):
 
 def _init_users_db():
     os.makedirs(os.path.dirname(USERS_DB_PATH) or ".", exist_ok=True)
-    conn = sqlite3.connect(USERS_DB_PATH)
+    conn = sqlite_connect_wal(USERS_DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -78,7 +79,7 @@ def _init_users_db():
 
 
 def _verify_user(username: str, password: str) -> Optional[dict]:
-    conn = sqlite3.connect(USERS_DB_PATH)
+    conn = sqlite_connect_wal(USERS_DB_PATH)
     row = conn.execute(
         "SELECT username, password_hash, role FROM users WHERE username = ?",
         (username,),

@@ -17,6 +17,7 @@ import hmac
 import logging
 import os
 import sqlite3
+from buildtovalue.security import sqlite_connect_wal
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -243,7 +244,7 @@ def db_get_session(session_id: str) -> dict:
 
 def db_update_session_state(session_id: str, last_entropy: float, last_action: str):
     """Persiste last_entropy e last_action (ADR-039 post-penalty analysis)."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     conn.execute(
         "UPDATE sessions SET last_entropy=?, last_action=? WHERE session_id=?",
         (last_entropy, last_action, session_id),
@@ -637,9 +638,13 @@ async def lifespan(application):
 
 app = FastAPI(title="BuildToValue Governance", version="2.3.0", lifespan=lifespan)
 
+# CORS origins from BTV_CORS_ORIGINS (comma-separated). Fail-closed: unset = none.
+_cors_origins = [
+    o.strip() for o in os.environ.get("BTV_CORS_ORIGINS", "").split(",") if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1678,7 +1683,7 @@ def agent_register(agent_id: str, req: AgentRegisterRequest, _=Depends(require_a
     key_fingerprint = hashlib.sha256(bytes.fromhex(req.public_key_hex)).hexdigest()[:16]
     registered_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     try:
         conn.execute(
             "INSERT OR REPLACE INTO agent_pubkeys (agent_id, public_key_hex, registered_at, revoked_at, registration_proof) "
@@ -1695,7 +1700,7 @@ def agent_register(agent_id: str, req: AgentRegisterRequest, _=Depends(require_a
 @app.get("/v1/agents/{agent_id}/pubkey")
 def agent_get_pubkey(agent_id: str, _=Depends(require_api_key)):
     """Retrieve registered public key for an agent (C3)."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     row = conn.execute(
         "SELECT public_key_hex, registered_at, revoked_at FROM agent_pubkeys WHERE agent_id = ?",
         (agent_id,),
@@ -1714,7 +1719,7 @@ def agent_get_pubkey(agent_id: str, _=Depends(require_api_key)):
 def agent_revoke(agent_id: str, _=Depends(require_api_key)):
     """Revoke the public key of an agent (C3)."""
     revoked_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_connect_wal(DB_PATH)
     cur = conn.execute(
         "UPDATE agent_pubkeys SET revoked_at = ? WHERE agent_id = ? AND revoked_at IS NULL",
         (revoked_at, agent_id),

@@ -38,4 +38,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     #[allow(clippy::unwrap_used)]
     axum::serve(listener, app).await.unwrap();
+
+    Ok(())
 }

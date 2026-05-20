@@ -4,7 +4,7 @@
 //! The compile-time `const assert` in btv-types is the primary enforcement;
 //! this runtime test makes the CI filter `technical_evidence_size` resolve to a real test.
 use std::mem::size_of;
-use btv_types::TechnicalEvidence;
+use buildtovalue_kernel::TechnicalEvidence;
 
 #[test]
 fn technical_evidence_size() {

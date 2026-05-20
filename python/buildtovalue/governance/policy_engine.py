@@ -31,6 +31,8 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from buildtovalue.security.keys import get_hmac_key
+
 
 class PolicyAction(Enum):
     ALLOW = "ALLOW"
@@ -138,8 +140,6 @@ class PolicyEngine:
     toda decisao e tracavel ao YAML legislativo que a originou.
     Fail-secure (Jonas): excecao interna -> BLOCK, nunca silencio.
     """
-
-    _HMAC_KEY: bytes = b"btv-policy-engine-v1-adr011"
 
     def __init__(self, policies_dir: Optional[Path] = None) -> None:
         self._rules: List[PolicyRule] = []
@@ -445,7 +445,7 @@ class PolicyEngine:
             },
             sort_keys=True,
         ).encode()
-        return hmac.new(self._HMAC_KEY, payload, hashlib.sha256).hexdigest()
+        return hmac.new(get_hmac_key(), payload, hashlib.sha256).hexdigest()
 
     def _fail_secure_result(
         self, error: str, audit_trail_id: str

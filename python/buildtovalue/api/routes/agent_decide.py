@@ -33,6 +33,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from buildtovalue.api.auth import require_api_key
+from buildtovalue.security.keys import get_hmac_key
 from buildtovalue.governance.agent_pdp import (
     ActionImpact,
     AgentAction,
@@ -58,10 +59,7 @@ router = APIRouter()
 # ── HMAC key (shared with app.py) ────────────────────────────────────────────
 
 def _hmac_key() -> bytes:
-    key = os.environ.get("BTV_HMAC_KEY")
-    if key:
-        return key.encode()
-    return b"btv-dev-key-NOT-FOR-PRODUCTION!!"
+    return get_hmac_key()
 
 
 _POLICY_VERSION = "1.0.0-agents"
