@@ -2,7 +2,7 @@
 # Nome comercial final no crates.io
 # Facade de custo zero sobre btv-core — nenhuma lógica aqui.
 name = "buildtovalue"
-version = "0.1.0-alpha.1"
+version = "3.0.0-alpha.1"
 edition = "2021"
 authors = ["Daniel Lau Pereira Soares"]
 description = "Evidência criptográfica imutável para decisões de Agentes de IA. Garantia em tempo de compilação."
@@ -20,4 +20,4 @@ include = [
 
 [dependencies]
 # Depende estritamente da versão local do núcleo criptográfico
-btv-core = { path = "../btv-core", version = "0.1.0-alpha.1" }
+btv-core = { path = "../btv-core", version = "3.0.0-alpha.1" }

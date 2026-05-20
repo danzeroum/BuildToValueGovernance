@@ -70,7 +70,7 @@ fn constant_time_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use btv_types::{BiasDeclaration, Blake3Hash, Decision, VerdictRecord};
+    use btv_types::{Blake3Hash, Decision, VerdictRecord};
 
     fn make_verdict(hmac_tag: [u8; 32]) -> VerdictRecord {
         VerdictRecord {
@@ -79,7 +79,6 @@ mod tests {
             explanation_hash:    Blake3Hash([0x02; 32]),
             hmac_tag,
             legislative_version: 0,
-            bias_declaration:    BiasDeclaration::bootstrap_unvalidated(),
         }
     }
 

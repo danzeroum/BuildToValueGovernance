@@ -257,22 +257,11 @@ impl TechnicalEvidence {
     }
 
     /// Deserializes from a fixed [u8; EVIDENCE_SIZE] buffer produced by `to_bytes`.
-    ///
-    /// Safety: `bytes` is exactly `EVIDENCE_SIZE` bytes (compile-time guarantee via
-    /// ADR-063 const assert). `TechnicalEvidence` is `#[repr(C, align(8))]`;
-    /// `read_unaligned` handles the case where the source pointer is not 8-byte aligned.
-    /// Post-read validation guards against structurally invalid buffers.
     #[allow(unsafe_code)]
     pub fn from_bytes(bytes: &[u8; EVIDENCE_SIZE]) -> Option<Self> {
-        let evidence: Self = unsafe {
+        unsafe {
             let ptr = bytes.as_ptr() as *const TechnicalEvidence;
-            std::ptr::read_unaligned(ptr)
-        };
-        // Reject buffers with an out-of-range version — catches zero-filled or
-        // truncated records before they propagate as live evidence.
-        if evidence.version == 0 || evidence.version > 3 {
-            return None;
+            Some(std::ptr::read_unaligned(ptr))
         }
-        Some(evidence)
     }
 }

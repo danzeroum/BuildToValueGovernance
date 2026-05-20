@@ -25,20 +25,20 @@ on:
     paths:
       - "sdk/integrations/grants/**"
       - "data/policies/sectors/**"
-      - "docs/adr/0057-grant-decision-adapter.md"
+      - "docs/adr/ADR-043*"
       - "tests/**"
       - ".github/workflows/ci.yml"
-      - "scripts/ci/ci_week*.py"
+      - "scripts/ci/**"
       - "Makefile"
   pull_request:
     branches: [main]
     paths:
       - "sdk/integrations/grants/**"
       - "data/policies/sectors/**"
-      - "docs/adr/0057-grant-decision-adapter.md"
+      - "docs/adr/ADR-043*"
       - "tests/**"
       - ".github/workflows/ci.yml"
-      - "scripts/ci/ci_week*.py"
+      - "scripts/ci/**"
   workflow_dispatch:
     inputs:
       week_filter:
@@ -49,7 +49,7 @@ on:
         options: ["1", "2", "3", "4", "all"]
 
 env:
-  PYTHON_VERSION: "3.12"
+  PYTHON_VERSION: "3.11"
   PROJECT_ROOT: ${{ github.workspace }}
   GRANT_ADAPTER_DIR: "sdk/integrations/grants/btv_grants"
   POLICY_DIR: "data/policies/sectors"
@@ -460,10 +460,10 @@ jobs:
 
       - name: "W2.9 — ADR-043 existence and completeness"
         run: |
-          ADR="docs/adr/0057-grant-decision-adapter.md"
+          ADR="docs/adr/ADR-043-grant-decision-adapter.md"
           if [ ! -f "$ADR" ]; then echo "  ❌ ADR-043 not found"; exit 1; fi
           python3 -c "
-          with open('docs/adr/0057-grant-decision-adapter.md') as f:
+          with open('docs/adr/ADR-043-grant-decision-adapter.md') as f:
               adr = f.read()
           for kw in ['use_decide=True','HMAC-SHA256','JSON minified','hard_blocked','GrantBlockedError','null','sectors/']:
               assert kw in adr, f'Missing: {kw}'

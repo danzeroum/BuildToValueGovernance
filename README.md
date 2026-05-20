@@ -1,29 +1,6 @@
 # BuildToValue (BTV)
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange.svg)](https://github.com/danzeroum/BuildToValueGovernance/releases)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](python/pyproject.toml)
-[![Status](https://img.shields.io/badge/status-alpha-red.svg)](docs/status.md)
-
-> *Sua IA toma uma decisão. O BTV prova que foi governada. Um regulador verifica a prova em 327 nanossegundos.*
-
 **Governança de Agentes de IA com Evidência Criptográfica Imutável.**
-
----
-
-### Para Engenheiros (CTO / Head of AI Platform)
-
-Kernel Rust `btv-core` · p99 <50ms · OpenTelemetry · SDK Python · deploy Docker/K8s/Fly.io  
-Proxy transparente: troque `OPENAI_BASE_URL` e toda chamada LLM passa pelo gateway — zero modificação no agente.  
-→ [Quickstart em 3 comandos](#quickstart--5-minutos) · [Benchmarks](benchmarks/) · [API Reference](docs/api-reference.md)
-
-### Para Compliance (DPO / Jurídico)
-
-EU AI Act Art. 12+13 · LGPD Art. 20/46 · GDPR Art. 22 · mapping HIPAA  
-Cada decisão gera evidência forense BLAKE3+HMAC imutável, auditável retroativamente e contestável em 24h.  
-→ [Compliance](docs/compliance.md) · [Contestability](docs/compliance.md#contestability) · [Pricing](PRICING.md)
-
-> **Nota:** Esta documentação não constitui aconselhamento jurídico. Consulte seu DPO ou equipe jurídica para aplicabilidade ao seu contexto regulatório.
 
 ---
 
@@ -75,7 +52,7 @@ Isso não é um problema de logging. É um **problema de accountability estrutur
 
 ## Performance
 
-O BTV adiciona **~1,67μs** por decisão para um payload de contexto de 4KB — cerca de 60.000× menos latência do que uma chamada típica de inferência LLM (~100ms).
+O BTV adiciona **~1,67μs** por decisão para um payload de contexto de 4KB — cinco ordens de magnitude menos do que uma chamada típica de inferência LLM.
 
 | Operação | Latência | Notas |
 |---|---|---|
@@ -83,7 +60,7 @@ O BTV adiciona **~1,67μs** por decisão para um payload de contexto de 4KB — 
 | Verificação de integridade | 327 ns | Auditoria retroativa |
 | Gateway HTTP (sidecar) | < 50ms p99 | Inclui round-trip de rede |
 
-A 1 milhão de decisões/ano, o custo total de infraestrutura é **~$5.000/ano** — comparado a multas GDPR que historicamente alcançam dezenas de milhões de euros por falhas de accountability (fonte: [GDPR Enforcement Tracker](https://www.enforcementtracker.com/)).
+A 1 milhão de decisões/ano, o custo total de infraestrutura é **~$5.000/ano** — comparado à multa mediana do GDPR de **$10,8M** por falhas evidenciais.
 
 ---
 
@@ -132,7 +109,7 @@ cd ops && docker compose up gateway
 ```
 
 ```bash
-curl -X POST http://localhost:8080/v1/scan \
+curl -X POST http://localhost:3000/v1/scan \
   -H "Content-Type: application/json" \
   -d '{"input": "Aprovar crédito para CPF 123.456.789-09", "audit_trail_id": 1}'
 # Retorna: TechnicalEvidence serializada com hash BLAKE3 imutável
@@ -147,7 +124,7 @@ pip install -e python/
 ```python
 from buildtovalue import BTVClient
 
-client = BTVClient("http://localhost:8080")
+client = BTVClient("http://localhost:3000")
 evidence = client.scan(
     input_text="Aprovar crédito para CPF 123.456.789-09",
     audit_trail_id=1
@@ -269,7 +246,7 @@ cd python && pip install -e ".[dev]" && pytest tests/ -v
 
 # Stack completo
 cd ops && docker compose up
-# Gateway: http://localhost:8080  |  Governance: http://localhost:8000
+# Gateway: http://localhost:3000  |  Governance: http://localhost:8000
 ```
 
 ---
@@ -296,7 +273,7 @@ Veja `benchmarks/` para resultados comparativos contra Guardrails AI e NeMo Guar
 
 ## Licença
 
-Apache 2.0 — veja [LICENSE](LICENSE).
+Apache 2.0 — veja [LICENSE-MIT](LICENSE-MIT).
 
 ---
 

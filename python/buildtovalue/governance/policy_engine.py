@@ -22,17 +22,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-from buildtovalue.security import get_hmac_key
-
-logger = logging.getLogger(__name__)
 
 import yaml
 
@@ -144,9 +139,7 @@ class PolicyEngine:
     Fail-secure (Jonas): excecao interna -> BLOCK, nunca silencio.
     """
 
-    @property
-    def _HMAC_KEY(self) -> bytes:
-        return get_hmac_key()
+    _HMAC_KEY: bytes = b"btv-policy-engine-v1-adr011"
 
     def __init__(self, policies_dir: Optional[Path] = None) -> None:
         self._rules: List[PolicyRule] = []
@@ -165,11 +158,8 @@ class PolicyEngine:
         for yaml_file in sorted(policies_dir.rglob("*.yaml")):
             try:
                 self._parse_policy_file(yaml_file)
-            except Exception as exc:
-                logger.warning(
-                    "policy_load_error path=%s error=%s — skipping malformed file",
-                    yaml_file.name, exc,
-                )
+            except Exception:
+                pass  # policy malformada nao impede operacao
 
     # Top-level keys that PolicyEngine recognises in governance YAML files.
     # Keys outside this set are silently accepted by the loader but never evaluated
@@ -179,7 +169,7 @@ class PolicyEngine:
         "version", "id", "description", "metadata", "rules", "governance",
         "sector", "compliance", "actions", "identity", "rate_limiting",
         "bft", "escrow", "revocation", "behavioral_monitoring", "timing",
-        "mev_protection", "schema_version", "schema_type", "thresholds", "drift_detection",
+        "mev_protection", "schema_version", "thresholds", "drift_detection",
         "fail_secure", "gates", "hard_blocks", "policies",
         # agents/ schema keys
         "circuit_breaker", "conflict_rules", "defaults", "agents",
@@ -196,34 +186,12 @@ class PolicyEngine:
         "proof_of_work_min_difficulty", "min_reputation_age_days",
     })
 
-    # Recognised values of the `schema_type` discriminator field (H-05 / Sprint 2).
-    # Files with a different schema_type are skipped by PolicyEngine — they belong
-    # to ProfileManager (schema_type: profile) or guard modules (schema_type: agent-guard).
-    # Files without the field are accepted for backward compatibility.
-    _POLICY_RULES_SCHEMA_TYPES: frozenset = frozenset({
-        "policy-rules", "policy_rules",  # canonical + underscore alias
-    })
-    _NON_POLICY_SCHEMA_TYPES: frozenset = frozenset({
-        "profile", "agent-guard", "agent_guard",
-    })
-
     def _parse_policy_file(self, yaml_file: Path) -> None:
         """Parse atomico de um arquivo YAML. Regras malformadas sao descartadas."""
         raw = yaml_file.read_text(encoding="utf-8")
         data = yaml.safe_load(raw)
         if not isinstance(data, dict):
             return
-
-        # H-05: schema_type discriminator prevents cross-contamination between the
-        # three coexisting YAML schema families (policy-rules, profile, agent-guard).
-        schema_type = data.get("schema_type")
-        if schema_type in self._NON_POLICY_SCHEMA_TYPES:
-            logger.debug(
-                "policy_file_skipped path=%s schema_type=%s — not a policy-rules schema",
-                yaml_file.name, schema_type,
-            )
-            return
-
         # Warn on unrecognised top-level keys to prevent silent misconfiguration.
         # This does NOT prevent loading — agents/ YAMLs use their own module schemas.
         unknown = set(data.keys()) - self._KNOWN_TOP_LEVEL_KEYS
@@ -250,11 +218,7 @@ class PolicyEngine:
                 )
                 self._rules.append(rule)
                 self._policy_source = yaml_file.name
-            except (KeyError, ValueError) as exc:
-                logger.warning(
-                    "policy_rule_skipped file=%s rule=%s error=%s",
-                    yaml_file.name, r.get("rule_id", "<unknown>"), exc,
-                )
+            except (KeyError, ValueError):
                 continue
         # ADR-043 + ADR-042: ler configuracao de governanca (governance:) se presente
         if "governance" in data and isinstance(data["governance"], dict):

@@ -44,7 +44,6 @@ mod sole_entry_point {
                 explanation_hash: btv_types::Blake3Hash([0u8; 32]),
                 hmac_tag: [0u8; 32],  // INVALID HMAC
                 legislative_version: 0,
-                bias_declaration: btv_types::BiasDeclaration::bootstrap_unvalidated(),
             },
             receipt: btv_types::InclusionReceiptWire {
                 log_index: 0,

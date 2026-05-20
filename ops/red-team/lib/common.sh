@@ -20,17 +20,17 @@ RT_FP=0
 # ─────────────────────────────────────────────────────────────
 
 rt_validate() {
-    # Use Python to serialize JSON so UTF-8 chars (é, ã, ç) are preserved correctly
-    # on all platforms (including Windows MINGW64 where shell quoting corrupts them).
-    python -c "import sys,json; print(json.dumps({'input': sys.argv[1]}))" "$1" | \
-        curl -s --max-time 20 -X POST "$GATEWAY/v1/validate" \
-            -H "Content-Type: application/json" \
-            --data-binary @-
+    curl -s --max-time 20 -X POST "$GATEWAY/v1/validate" \
+        -H "Content-Type: application/json" \
+        -d "{\"input\": \"$1\"}"
 }
 
+# Adicionar após rt_validate() em ops/red-team/lib/common.sh
 rt_validate_raw() {
-    # Alias for rt_validate — kept for backwards compat.
-    rt_validate "$1"
+    # Para inputs com UTF-8 — usa printf + stdin para evitar expansão bash
+    printf '%s' "$1" | curl -s --max-time 20 -X POST "$GATEWAY/v1/validate" \
+        -H "Content-Type: application/json" \
+        --data-binary @-
 }
 
 rt_get_field() {
@@ -68,15 +68,13 @@ rt_should_allow() {
     local action
     action=$(rt_get_field "$response" "action")
 
-    # FP = gateway actively blocked a legitimate input (BLOCK or EDUCATE).
-    # Empty action ("") or "ALLOW"/"LOG" all mean the input passed — that is correct.
-    if [[ "$action" == "BLOCK" || "$action" == "EDUCATE" ]]; then
+    if [[ "$action" == "ALLOW" || "$action" == "LOG" ]]; then
+        echo "  ✅ [ALLOWED]  $name → action=$action (no false positive)"
+        RT_PASS=$((RT_PASS + 1))
+    else
         echo "  ⚠️  [FP]       $name → action=$action (FALSE POSITIVE)"
         RT_FAIL=$((RT_FAIL + 1))
         RT_FP=$((RT_FP + 1))
-    else
-        echo "  ✅ [ALLOWED]  $name → action=$action (no false positive)"
-        RT_PASS=$((RT_PASS + 1))
     fi
 }
 

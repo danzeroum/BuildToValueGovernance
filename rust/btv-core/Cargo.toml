@@ -2,7 +2,7 @@
 # Nome interno do workspace — preserva a taxonomia do monolito modular (ADR-009)
 # O nome comercial público (crates.io) é exposto via crate facade: rust/buildtovalue/
 name = "btv-core"
-version = "0.1.0-alpha.1"
+version = "3.0.0-alpha.1"
 edition.workspace = true
 authors = ["Daniel Lau Pereira Soares"]
 
@@ -37,15 +37,10 @@ serde_json = { workspace = true }
 # LogClient HTTP (Phase 2) — feature-gated para manter hot path livre de deps async
 reqwest = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
-# AppealWriter (ADR-062) — feature-gated; keeps hot path free of SQLite + async deps
-rusqlite = { workspace = true, optional = true }
-tracing = { workspace = true, optional = true }
 
 [features]
 # Habilita LogClient (requer reqwest + tokio)
 log-client = ["reqwest", "tokio"]
-# Habilita AppealWriter (requer tokio + rusqlite)
-appeal-writer = ["tokio", "rusqlite", "tracing"]
 
 [dev-dependencies]
 trybuild = "1"

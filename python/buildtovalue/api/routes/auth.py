@@ -7,9 +7,7 @@ Keeps backward compatibility with API key auth for SDK/programmatic access.
 import hashlib
 import logging
 import os
-import sqlite3  # noqa: F401 — kept for type compatibility
-
-from buildtovalue.security import sqlite_connect_wal
+import sqlite3
 import time
 from typing import Optional
 
@@ -22,30 +20,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
-def _load_jwt_secret() -> str:
-    env = os.environ.get("BTV_ENV", "development").lower()
-    secret = os.environ.get("BTV_JWT_SECRET")
-    if env == "production":
-        if not secret:
-            raise RuntimeError(
-                "BTV_JWT_SECRET must be set in production. "
-                'Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
-            )
-        if "NOT-FOR-PRODUCTION" in secret or "btv-dev-jwt" in secret:
-            raise RuntimeError(
-                "BTV_JWT_SECRET matches a development sentinel and is unsafe for production."
-            )
-        return secret
-    if secret:
-        return secret
-    logger.warning(
-        "BTV_JWT_SECRET not set; using dev fallback. "
-        "Set BTV_JWT_SECRET before deploying."
-    )
-    return "dev-jwt-fallback-do-not-deploy"
-
-
-JWT_SECRET = _load_jwt_secret()
+JWT_SECRET = os.environ.get("BTV_JWT_SECRET", "btv-dev-jwt-secret-NOT-FOR-PRODUCTION")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_SECONDS = 3600 * 8  # 8 hours
 REFRESH_EXPIRY_SECONDS = 3600 * 24 * 7  # 7 days
@@ -78,7 +53,8 @@ class UserInfo(BaseModel):
 # ── User Store (SQLite) ────────────────────────────────────
 
 def _init_users_db():
-    conn = sqlite_connect_wal(USERS_DB_PATH)
+    os.makedirs(os.path.dirname(USERS_DB_PATH) or ".", exist_ok=True)
+    conn = sqlite3.connect(USERS_DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -102,7 +78,7 @@ def _init_users_db():
 
 
 def _verify_user(username: str, password: str) -> Optional[dict]:
-    conn = sqlite_connect_wal(USERS_DB_PATH)
+    conn = sqlite3.connect(USERS_DB_PATH)
     row = conn.execute(
         "SELECT username, password_hash, role FROM users WHERE username = ?",
         (username,),

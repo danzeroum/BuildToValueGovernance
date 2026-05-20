@@ -8,6 +8,6 @@ pub mod adapter;
 
 // Re-exports para facilitar o uso
 pub use types::{ValidatorModule, TechnicalSeverity, Action, RiskLevel, BiasDeclaration};
-pub use errors::{EvidenceError, BiasDeclarationError};
+pub use errors::EvidenceError;
 pub use module::{Module, ScanContext};
 pub use adapter::{adapt, AdaptedInput, AdaptError, MAX_INPUT_BYTES};

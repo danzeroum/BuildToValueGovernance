@@ -5,7 +5,6 @@
 #[allow(clippy::module_inception)]
 pub mod policy;
 pub mod budget_enforcer; // Cenário 30: hierarquia de contas no hot path
-pub mod loader;
 
 pub use policy::{
     PolicyEngine, PolicySet, Policy, PolicyAction,
@@ -13,4 +12,3 @@ pub use policy::{
     PolicyMetrics,
 };
 pub use budget_enforcer::{enforce as enforce_budget, AccountTier, PolicyDecision};
-pub use loader::{PolicyWatcher, PolicyLoadError};

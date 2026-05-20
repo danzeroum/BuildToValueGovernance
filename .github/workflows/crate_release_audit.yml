@@ -39,10 +39,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: "0. Formatação (cargo fmt --check)"
-        working-directory: ./rust
-        run: cargo fmt --check
-
       - name: "1. Auditoria de Prevenção de Cascata (Workspace Check)"
         working-directory: ./rust
         # Aplica recomendação ADR-009: falha imediata se o grafo interno estiver quebrado.

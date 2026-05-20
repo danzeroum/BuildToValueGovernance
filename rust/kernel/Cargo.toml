@@ -39,7 +39,6 @@ whatlang = { workspace = true }
 hmac = "0.12"
 sha2 = "0.10"
 zeroize = { version = "1.7", features = ["derive"] }
-ed25519-dalek = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

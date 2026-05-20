@@ -27,9 +27,7 @@ import hmac as _hmac
 import json
 import logging
 import os
-import sqlite3  # noqa: F401 — kept for sqlite3.Connection type refs
-
-from buildtovalue.security import sqlite_connect_wal
+import sqlite3
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
@@ -410,8 +408,10 @@ class PrivacyBudgetTracker:
     # ── SQLite ─────────────────────────────────────────────────────────────────
 
     def _connect(self) -> sqlite3.Connection:
-        # sqlite_connect_wal handles parent dir creation + PRAGMA application
-        return sqlite_connect_wal(self._db_path)
+        parent = os.path.dirname(self._db_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        return sqlite3.connect(self._db_path)
 
     def _init_db(self) -> None:
         """Inicializa o banco. Erros de I/O são registrados — operações futuras ativam fail-secure."""

@@ -2,7 +2,6 @@
 name = "btv-executive"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 description = "Executive power: sole decision pipeline (Paper 5, Theorem 3.5 — Executive Containment)"
 
 [dependencies]
@@ -25,7 +24,6 @@ trybuild         = "1"
 criterion        = { workspace = true }
 tokio            = { workspace = true }
 ed25519-dalek    = { workspace = true }
-bincode          = { workspace = true }
 
 [[bench]]
 name    = "executive"

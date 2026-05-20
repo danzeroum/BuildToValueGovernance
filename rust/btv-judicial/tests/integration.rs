@@ -6,7 +6,7 @@
 use btv_judicial::{HmacVerifier, JudicialAuditor};
 // fix(unused-imports): removido alias duplicado de JudicialAuditor.
 // btv_judicial::JudicialAuditor já está no escopo via use acima.
-use btv_types::{BiasDeclaration, Blake3Hash, Decision, VerdictRecord, MerkleProof};
+use btv_types::{Blake3Hash, Decision, VerdictRecord, MerkleProof};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
@@ -27,7 +27,6 @@ fn make_verdict_with_valid_hmac() -> VerdictRecord {
         explanation_hash:    Blake3Hash([0x02; 32]),
         hmac_tag:            tag,
         legislative_version: 1,
-        bias_declaration:    BiasDeclaration::bootstrap_unvalidated(),
     }
 }
 

@@ -1,5 +1,4 @@
 id: chatbot-vendor-approval-v1
-schema_type: "agent-guard"
 version: "1.0"
 description: "Quais vendors LLM externos são aprovados por sector_id. ADR-0031."
 applies_to:

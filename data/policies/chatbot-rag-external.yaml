@@ -1,5 +1,4 @@
 id: chatbot-rag-external-v1
-schema_type: "agent-guard"
 version: "1.0"
 description: "Anti-injection para chunks RAG em prompts de vendors externos. ADR-0031."
 applies_to:

@@ -9,13 +9,12 @@ info:
     All endpoints (except /health and /metrics) require an API key via
     `X-API-Key` header. Obtain yours by setting `BTV_API_KEYS` in the gateway
     environment.
-  version: "0.1.0-alpha.1"
+  version: "2.0.0"
   contact:
     name: BuildToValue
     url: https://buildtovalue.io
   license:
-    name: Apache-2.0
-    url: https://www.apache.org/licenses/LICENSE-2.0
+    name: Proprietary
 
 servers:
   - url: http://localhost:8080
@@ -34,7 +33,7 @@ components:
   schemas:
     VerdictAction:
       type: string
-      enum: [ALLOW, BLOCK, INSPECT, REDACT, EDUCATE, LOG, REPORT, REFUSE]
+      enum: [ALLOW, BLOCK, INSPECT, REDACT, EDUCATE, LOG]
       description: |
         The governance decision action.
         - ALLOW: input is safe to proceed
@@ -43,8 +42,6 @@ components:
         - REDACT: sensitive content detected, output should be masked
         - EDUCATE: low-risk, user should be informed (Gilligan mercy applied)
         - LOG: allowed but recorded for audit
-        - REPORT: allowed but flagged for regulatory reporting (ADR-043; composite_risk >= threshold with findings)
-        - REFUSE: multi-turn trajectory refused preventively by RefusalGate (MOSAIC-inspired; contestable SLA 24h)
 
     ExplainDecision:
       type: object
@@ -797,7 +794,7 @@ paths:
               example:
                 status: "ok"
                 uptime_seconds: 3600.5
-                version: "0.1.0-alpha.1"
+                version: "2.0.0"
 
   /health/bias:
     get:

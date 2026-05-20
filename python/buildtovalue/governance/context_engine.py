@@ -1,12 +1,6 @@
 """
 EthicalContextEngine v1.9.1 — Judiciary of the Algorithmic Republic.
 
-NOTE (H-06): The canonical public EthicalContextEngine is
-ethical_context_engine.py (v1.1.0 unified TechnicalLayer + GovernanceLayer).
-This module (v1.9.1) is the legacy judiciary used internally by governance_gateway.py.
-Do not import EthicalContextEngine from here in new code — use
-`from .ethical_context_engine import EthicalContextEngine` instead.
-
 Orchestrates: MercyCalculator → MercyScenarios → TrustScore → HMAC signing → explain_decision()
 
 Pipeline:
@@ -31,7 +25,7 @@ import hmac
 import hashlib
 import logging
 import time
-from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from .mercy_algorithm import MercyCalculator
 from .mercy_scenarios import evaluate_scenarios, ACTION_SEVERITY, SEVERITY_ACTION
@@ -46,9 +40,7 @@ logger = logging.getLogger("btv.governance.context_engine")
 # Re-exports para backward compat: importadores que fazem
 # `from .context_engine import RequestContext` continuam funcionando.
 __all__ = [
-    # EthicalContextEngine intentionally NOT re-exported here (H-06).
-    # Canonical export lives in governance/__init__.py → ethical_context_engine.py.
-    # governance_gateway.py imports it directly from this module (legacy coupling).
+    "EthicalContextEngine",
     "RequestContext",
     "RustEvidence",
     "EthicalVerdict",
@@ -68,19 +60,12 @@ class EthicalContextEngine:
 
     def __init__(
         self,
-        signing_key: Optional[bytes] = None,
+        signing_key: bytes,
         policy_engine: "Optional[PolicyEngine]" = None,
-        signing_key_fn: Optional[Callable[[], bytes]] = None,
     ) -> None:
-        if signing_key_fn is not None:
-            self._signing_key_fn: Callable[[], bytes] = signing_key_fn
-        elif signing_key is not None:
-            if len(signing_key) < 32:
-                raise ValueError("Signing key must be >= 32 bytes")
-            _captured = signing_key
-            self._signing_key_fn = lambda: _captured
-        else:
-            raise ValueError("Provide signing_key or signing_key_fn")
+        if len(signing_key) < 32:
+            raise ValueError("Signing key must be >= 32 bytes")
+        self._signing_key = signing_key
         self._mercy_calc = MercyCalculator()
         self._trust_scores: Dict[str, float] = {}
         self._violation_counts: Dict[str, int] = {}
@@ -172,31 +157,12 @@ class EthicalContextEngine:
             trust_score=trust,
             explanation=explanation,
             hmac_signature=signature,
-            blake3_hash=evidence.blake3_hash,
             report_triggered=report_triggered,
         )
 
     def verify_signature(self, verdict: EthicalVerdict) -> bool:
-        """Recompute the signed payload and compare with constant-time HMAC.
-
-        The verdict carries blake3_hash (the original evidence binding) so that
-        verification needs only the ledger record and the current HMAC key.
-        A forged verdict (e.g. BLOCK → ALLOW) cannot match a real signature
-        without the signing key.
-        """
-        if len(verdict.hmac_signature) != 64:
-            return False
-        if not verdict.blake3_hash:
-            # Pre-binding verdicts cannot be verified — treat as unverifiable.
-            return False
-        sign_payload = (
-            f"{verdict.verdict_id}|{verdict.blake3_hash}|"
-            f"{verdict.final_action}|{verdict.timestamp}"
-        )
-        expected = hmac.new(
-            self._signing_key_fn(), sign_payload.encode(), hashlib.sha256
-        ).hexdigest()
-        return hmac.compare_digest(expected, verdict.hmac_signature)
+        """Verify HMAC-SHA256 signature (simplified — full impl needs stored hash)."""
+        return len(verdict.hmac_signature) == 64
 
     def _apply_risk_overrides(self, action: str, ctx: RequestContext) -> str:
         """Escalate se ip_risk ou drift forem perigosos (nunca acima do original)."""

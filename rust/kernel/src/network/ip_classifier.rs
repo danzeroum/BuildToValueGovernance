@@ -182,7 +182,7 @@ impl IpClassifier {
     }
 
     pub fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::from_static(0.10, 0.20, 20260517, 100)
+        BiasDeclaration::new(0.10, 0.20, 20260517, 100)
             .with_limitations(
                 "Static CIDR ranges. Tor/VPN lists are samples, not comprehensive. IPv6 not supported."
             )

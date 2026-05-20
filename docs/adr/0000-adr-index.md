@@ -167,7 +167,7 @@ Este catálogo documenta todas as decisões arquiteturais significativas (ADRs) 
 | **0049** | **IntegrityVerifier** | ✅ Ativo | v2.2 | [Ver Detalhes](./0049-integrity-verifier.md) | Orquestra 4 estágios: `ManifestHashVerifier` (SHA-256) → blacklist `is_known_abliterated()` → whitelist `get_model_info()` → `AbliterationDetector`. `verify()` bool fail-secure. Cadeia de responsabilidade Python→Rust (Jonas). |
 | **0051** | **AbliterationDetector Fase 2** | ✅ Ativo | v2.2 | [Ver Detalhes](./0051-abliteration-detector-phase2.md) | 8 probes calibradas: 5 HARMFUL + 3 BENIGN. Refusal detection via NLP regex (12 padrões). `probe_timeout_ms` enfor­çado via `threading.Thread + queue.Queue` (cross-platform, sem `signal.alarm`). Timeout = recusa implícita (Jonas: fail-secure). Rawls: todas as probes idênticas para todos os modelos (blind). |
 
-> ADR-0043 a ADR-0070 formalizados no Sprint 0/Sprint 2 (2026-05-19). Ver Grupo M abaixo.
+> **Nota de lacuna intencional:** ADR-0043 a ADR-0048 e ADR-0050 estão reservados para ADRs intermediários identificados durante a implementação de v2.2 (ex.: `model_integrity.yaml` schema, `ManifestVerificationResult` contract). Serão formalizados no próximo ciclo de documentação.
 
 ***
 
@@ -178,41 +178,7 @@ Este catálogo documenta todas as decisões arquiteturais significativas (ADRs) 
 | ID | Título | Status | Versão | Link | Resumo |
 |:---|:---|:---:|:---:|:---|:---|
 | **0059** | **Rust/Python Boundary** | ✅ Ativo | v3.0 | [Ver Detalhes](./0059-rust-python-boundary.md) | Formaliza plano de controle Rust (crypto, routing, proxy, tipos afins) vs plano analítico Python (LLMs, ML, contestability). `common.rs` como ponto DRY. Dual auth: BTV `x-api-key` (gateway) + LLM provider `Authorization` (forwarded). |
-| **0070** | **SaaS Deployment — Fly.io** | ✅ Ativo | v3.0 | [Ver Detalhes](./0070-saas-deployment.md) | Fly.io sobre Cloudflare Workers (WASM incompatível com binário Rust standalone) e K8s gerenciado (overhead operacional). `primary_region = "gru"` (São Paulo) — LGPD Art. 44. `PORT` env var configurável. `force_https = true`. `fly.toml` na raiz do repo. Renumerado de ADR-0060 (Sprint 2). |
-
-***
-
-## 🔐 Grupo M: Sprint 0/1/2 — Segurança, Invariantes e Higiene (ADR-0043 a ADR-0070)
-
-*Formalizados em 2026-05-19. Cobrem os fixes de Sprint 0 (segurança), Sprint 1 (invariantes), e Sprint 2 (higiene/renumerações).*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0043** | **Unified Verdict Identity** | ✅ Ativo | v2.3 | [Ver Detalhes](./0043-unified-verdict-identity.md) | Verdict `REPORT` como nova ação (ADR-043); `blake3_hash` em `EthicalVerdict` para auto-verificação; `verify_signature()` com `hmac.compare_digest()`. |
-| **0044** | **TechnicalEvidence Size Canonical** | ✅ Ativo | v2.3 | [Ver Detalhes](./0044-technical-evidence-size-canonical.md) | `EVIDENCE_SIZE = 9632` bytes como constante canônica. Substitui ADR-005. |
-| **0045** | **Policy Schema v2** | ✅ Ativo | v2.3 | [Ver Detalhes](./0045-policy-dchema-v2-threat-model-required-fields.md) | Schema v2 para YAMLs de policy: campos obrigatórios de threat model. |
-| **0046** | **ML Prompt Injection Layer** | ✅ Ativo | v2.3 | [Ver Detalhes](./0046-ml-prompt-injection-layer.md) | Camada ML sobre o detector heurístico (ADR-028). Reduz FNR de 18% para <3%. |
-| **0047** | **Semantic PII Detection via NER** | ✅ Ativo | v2.3 | [Ver Detalhes](./0047-semantic-pii-ner.md) | NER (SLM-based) para PII semântico além de validators determinísticos. |
-| **0048** | **Compliance-as-Code (Ledger Real)** | ✅ Ativo | v2.3 | [Ver Detalhes](./0048-compliance-as-code.md) | LGPD/EU AI Act via documentos reais do ledger (ROPA/RAT) em vez de parâmetros estáticos. |
-| **0050** | **Multi-run Consensus Validator** | 🔒 Proposto | v2.4 | [Ver Detalhes](./0050-multi-run-consensus-validator.md) | Consenso multi-execução para reduzir variância em decisões de alto risco. |
-| **0052** | **Forensic Audit Storage** | ✅ Ativo | v2.4 | [Ver Detalhes](./0052-forensic-audit-storage.md) | Armazenamento forense de evidências com imutabilidade garantida. |
-| **0053** | **Visual Reasoning Guard** | 🔒 Proposto | v2.4 | [Ver Detalhes](./0053-visual-reasoning-guard.md) | Guard para entradas multimodais (imagens + texto). |
-| **0054** | **Agentic Layer** | 🔒 Proposto | v2.4 | [Ver Detalhes](./0054-agentic-layer.md) | Camada de orquestração para agentes compostos. |
-| **0055** | **Policy Elicitor** | 🔒 Proposto | v2.4 | [Ver Detalhes](./0055-policy-elicitor.md) | Elicitação interativa de políticas por domínio. |
-| **0056** | **Negotiation Engine** | 🔒 Proposto | v2.4 | [Ver Detalhes](./0056-negotiation-engine.md) | Motor de negociação de permissões entre agentes. |
-| **0057** | **Grant Decision Adapter** | ✅ Ativo | v3.0 | [Ver Detalhes](./0057-grant-decision-adapter.md) | Adapter para governança de propostas de grants (BTV v3.0). `use_decide=True`, HMAC-SHA256, JSON minified, `hard_blocked` fail-secure. |
-| **0058** | **Arena Reporter** | 🔒 Proposto | v3.0 | [Ver Detalhes](./0058-arena-reporter.md) | Reporting de resultados de avaliações em arena. |
-| **0060** | **BiasDeclaration Validated Constructor** | ✅ Ativo | v3.0 | [Ver Detalhes](./0060-bias-declaration-enforced-constructor.md) | Constructor de `BiasDeclaration` com validação: rejeita `calibration_date=0`. Estende ADR-010. |
-| **0061** | **Decision Block Deadlock Reason** | ✅ Ativo | v3.0 | [Ver Detalhes](./0061-decision-block-deadlock-reason.md) | Código de razão estruturado para bloqueios deadlock em decisões. |
-| **0062** | **Appeal Record Off-Chain Verification** | ✅ Ativo | v3.0 | [Ver Detalhes](./0062-appeal-record-off-chain-verification.md) | Verificação off-chain de registros de appeal via `blake3_hash`. |
-| **0063** | **TechnicalEvidence Size Invariant** | ✅ Ativo | v3.0 | [Ver Detalhes](./0063-technical-evidence-size-invariant.md) | `const assert!(size_of::<TechnicalEvidence>() == 9632)` em `core/types.rs`. `from_bytes()` valida campo `version`. |
-| **0064** | **Policy Reload Ed25519** | ✅ Ativo | v3.0 | [Ver Detalhes](./0064-policy-reload-ed25519.md) | Recarga de políticas verificada via assinatura Ed25519. |
-| **0065** | **Gateway Context Enrichment** | 🚧 Impl. | v3.0 | [Ver Detalhes](./0065-gateway-context-enrichment-ip-classifier-session-drift.md) | IP Classifier + Session Drift no gateway. Renumerado de ADR-0044. |
-| **0066** | **Hybrid Alignment: Session Sensitivity** | 🔒 Proposto | v3.0 | [Ver Detalhes](./0066-hybrid-alignment-session-sensitivity-accumulator.md) | Acumulador de sensibilidade de sessão para LLMs. Renumerado de ADR-0046. |
-| **0067** | **Contestability Structured Mediation** | ✅ Ativo | v3.0 | [Ver Detalhes](./0067-contestability-structured-mediation-protocol.md) | Protocolo estruturado de mediação para contestações. Renumerado de ADR-0047. |
-| **0068** | **Transactional Effect Buffering** | ✅ Ativo | v3.0 | [Ver Detalhes](./0068-transactional-effect-buffering.md) | Buffer atômico para side effects de governança (PROP-029). Renumerado de ADR-0048. |
-| **0069** | **Protocol Designer (ARIA)** | ✅ Ativo | v3.0 | [Ver Detalhes](./0069-protocol-designer.md) | Registry e designer de protocolo para ARIA (sub-componente 3a). Renumerado de ADR-0057. |
-| **0070** | **SaaS Deployment — Fly.io** | ✅ Ativo | v3.0 | [Ver Detalhes](./0070-saas-deployment.md) | Deploy Fly.io como proxy-as-a-service. Renumerado de ADR-0060. Ver Grupo L (ADR-0059). |
+| **0060** | **SaaS Deployment — Fly.io** | ✅ Ativo | v3.0 | [Ver Detalhes](./0060-saas-deployment.md) | Fly.io sobre Cloudflare Workers (WASM incompatível com binário Rust standalone) e K8s gerenciado (overhead operacional). `primary_region = "gru"` (São Paulo) — LGPD Art. 44. `PORT` env var configurável. `force_https = true`. `fly.toml` na raiz do repo. |
 
 ***
 
@@ -318,16 +284,15 @@ Os ADRs do Grupo I possuem documentos de referência de implementação em `docs
 
 | Métrica | Valor |
 |:---|:---:|
-| Total de ADRs | 70 |
-| ✅ Ativos | 40 |
-| 🚧 Em Implementação | 3 |
-| 🔒 Planejados / Propostos | 19 |
+| Total de ADRs | 46 |
+| ✅ Ativos | 23 |
+| 🚧 Em Implementação | 2 |
+| 🔒 Planejados / Propostos | 13 |
 | ⛔ Obsoletos | 1 |
 | 🔮 Visão (sem ADR formal) | 2 |
-| Arquivados (drafts/duplicatas) | 3 |
 | Testes (governance Python) | 39 |
-| Última entrada | ADR-0070 |
-| Próximo disponível | ADR-0071 |
+| Última entrada | ADR-0060 |
+| Próximo disponível | ADR-0061 |
 
 ***
 

@@ -27,7 +27,7 @@ from buildtovalue.security import sqlite_connect_wal
 import time
 import logging
 from enum import Enum
-from typing import Literal, Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -55,91 +55,6 @@ VALID_MEDIATOR_RECOMMENDATIONS: frozenset = frozenset({
     "escalate",
     "educate",
 })
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ETHICAL VERDICT (ADR-0028 + ADR-0005)
-# ─────────────────────────────────────────────────────────────────────────────
-
-from buildtovalue.security import get_hmac_key
-
-_HMAC_KEY: bytes = get_hmac_key()
-
-
-@dataclass
-class EthicalVerdict:
-    """
-    Verdict final do pipeline de governança.
-
-    ADR-0028: explain_decision() obrigatório — toda decisão deve ser explicável.
-    ADR-0005: hmac_signature garante integridade do veredicto.
-    CONTEST: enfileira em appeals.db para revisão humana ≤24h SLA (Jonas).
-    """
-    decision: Literal["ALLOW", "BLOCK", "EDUCATE", "CONTEST"]
-    explanation: str
-    bias_declaration: str
-    finding_count: int = 0
-    critical_count: int = 0
-    hmac_signature: bytes = field(default_factory=bytes)
-
-    def __post_init__(self) -> None:
-        if not self.hmac_signature:
-            self.hmac_signature = self._compute_hmac()
-
-    def _compute_hmac(self) -> bytes:
-        payload = f"{self.decision}|{self.explanation}|{self.bias_declaration}".encode()
-        return hmac.new(_HMAC_KEY, payload, hashlib.sha256).digest()
-
-    def verify(self) -> bool:
-        return hmac.compare_digest(self.hmac_signature, self._compute_hmac())
-
-    def explain_decision(self) -> str:
-        """Return human-readable explanation (ADR-0028 mandatory)."""
-        return (
-            f"Decision: {self.decision}\n"
-            f"Findings: {self.finding_count} total, {self.critical_count} critical\n"
-            f"Bias: {self.bias_declaration}\n"
-            f"Reason: {self.explanation}"
-        )
-
-
-def _derive_decision(finding_count: int, critical_count: int) -> Literal["ALLOW", "BLOCK", "EDUCATE", "CONTEST"]:
-    if critical_count > 0:
-        return "BLOCK"
-    if finding_count > 0:
-        return "EDUCATE"
-    return "ALLOW"
-
-
-def _summarize_bias(fpr: float, fnr: float) -> str:
-    return f"FPR={fpr:.1%} FNR={fnr:.1%}"
-
-
-def _build_explanation(decision: str, finding_count: int, critical_count: int) -> str:
-    if decision == "BLOCK":
-        return f"Blocked: {critical_count} critical finding(s) detected"
-    if decision == "EDUCATE":
-        return f"Flagged: {finding_count} finding(s) requiring review"
-    return "No policy violations detected"
-
-
-def build_verdict(
-    finding_count: int,
-    critical_count: int,
-    fpr: float = 0.0,
-    fnr: float = 0.0,
-) -> EthicalVerdict:
-    """Build and sign an EthicalVerdict from scan results (ADR-0028/ADR-0005)."""
-    decision = _derive_decision(finding_count, critical_count)
-    explanation = _build_explanation(decision, finding_count, critical_count)
-    bias_declaration = _summarize_bias(fpr, fnr)
-    return EthicalVerdict(
-        decision=decision,
-        explanation=explanation,
-        bias_declaration=bias_declaration,
-        finding_count=finding_count,
-        critical_count=critical_count,
-    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -244,9 +159,8 @@ class ContestabilityLoop:
     # ── INIT ──────────────────────────────────────────────────────────────────
 
     def _init_db(self) -> None:
-        # sqlite_connect_wal applies journal_mode=WAL + synchronous=NORMAL +
-        # busy_timeout uniformly (PR-2 / S-04); preserves ADR-047 semantics.
-        with sqlite_connect_wal(self.db_path) as conn:
+        os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
+        with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS appeals (
@@ -262,19 +176,17 @@ class ContestabilityLoop:
                     sla_deadline    INTEGER NOT NULL,
                     evidence_hash   TEXT,
                     grounds         TEXT,
-                    mediator_rec    TEXT,
-                    hash_algorithm  TEXT DEFAULT 'blake3'
+                    mediator_rec    TEXT
                 )
             """)
-            # Migração segura: adicionar colunas ADR-047/ADR-063 se db existente não as tiver
+            # Migração segura: adicionar colunas ADR-047 se db existente não as tiver
             existing = {
                 row[1] for row in conn.execute("PRAGMA table_info(appeals)")
             }
             for col, typedef in [
-                ("evidence_hash",  "TEXT"),
-                ("grounds",        "TEXT"),
-                ("mediator_rec",   "TEXT"),
-                ("hash_algorithm", "TEXT DEFAULT 'blake3'"),
+                ("evidence_hash", "TEXT"),
+                ("grounds",       "TEXT"),
+                ("mediator_rec",  "TEXT"),
             ]:
                 if col not in existing:
                     conn.execute(
@@ -287,7 +199,7 @@ class ContestabilityLoop:
 
     def _load_from_db(self) -> None:
         """Recupera appeals do SQLite na inicialização (recovery após restart)."""
-        with sqlite_connect_wal(self.db_path) as conn:
+        with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             for row in conn.execute("SELECT * FROM appeals"):
                 appeal = self._row_to_appeal(row)
@@ -507,7 +419,7 @@ class ContestabilityLoop:
     def _save_appeal(self, appeal: Appeal) -> None:
         import json as _json
         grounds_json = _json.dumps(appeal.grounds) if appeal.grounds else None
-        with sqlite_connect_wal(self.db_path) as conn:
+        with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO appeals
                 (appeal_id, audit_trail_id, user_id, timestamp, reason,

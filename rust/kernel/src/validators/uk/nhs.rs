@@ -61,7 +61,7 @@ impl Module for NhsValidator {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::NhsNumber }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::from_static(0.12, 0.05, 20260224, 200)
+        BiasDeclaration::new(0.12, 0.05, 20260224, 200)
             .with_limitations("Sequências de 10 dígitos sem contexto podem FP (~12%).")
             .with_affected_groups("Textos técnicos com números de 10 dígitos.")
     }

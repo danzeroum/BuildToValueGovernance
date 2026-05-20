@@ -34,11 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("BTV Gateway listening on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .map_err(|e| format!("failed to bind {addr}: {e}"))?;
-    axum::serve(listener, app)
-        .await
-        .map_err(|e| format!("axum::serve terminated: {e}"))?;
-    Ok(())
+    #[allow(clippy::unwrap_used)]
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    #[allow(clippy::unwrap_used)]
+    axum::serve(listener, app).await.unwrap();
 }
