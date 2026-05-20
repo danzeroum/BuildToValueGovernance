@@ -8,12 +8,9 @@ pub mod bridge;
 pub mod validators_ffi;
 pub mod goal_drift_ffi;
 
-// Phase 4: kernel_ffi is now a re-export shim (deprecated)
-pub mod kernel_ffi;
-
 pub use bridge::{
     RustKernel, PyTechnicalEvidence, PyBiasDeclaration, PyBatchResult,
-    update_accumulator_config, version,
+    version,
 };
 pub use validators_ffi::{
     validate_consent, validate_consent_revocation,
