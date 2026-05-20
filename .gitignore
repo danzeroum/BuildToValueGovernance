@@ -34,3 +34,4 @@ patch_consensus.py
 reports/
 ops/runtime/*.db
 check_branches.sh
+data/*.db
