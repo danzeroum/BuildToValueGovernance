@@ -1,3 +1,11 @@
+[Docs](./README.md) › **Release Gates**
+
+![Interno](https://img.shields.io/badge/Trilha-Contribuidor%20%2F%20Interno-6e7681)
+
+<!-- audience: internal -->
+
+---
+
 # BuildToValue — Release Gates
 
 Each phase of the refinement plan (`/root/.claude/plans/fa-a-uma-analise-do-shiny-wave.md`)
@@ -124,3 +132,15 @@ git log --show-signature -1
 
 GitHub branch protection on `main` should require signed commits in the
 "Require signed commits" setting once Phase 0 closes.
+
+---
+
+### Próximos passos / Relacionados
+
+- [Índice de ADRs](./adr/0000-adr-index.md)
+- [Project Context](./PROJECT_CONTEXT.md)
+- [Changelog](./changelog.md)
+
+---
+
+<sub>[↑ Hub](./README.md) · [Trilha Engenheiro](./for-engineers.md) · [Trilha DPO/CISO](./for-dpo-ciso.md) · [Links de Referência](./reference-links.md)</sub>

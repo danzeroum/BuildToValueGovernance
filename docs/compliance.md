@@ -1,3 +1,11 @@
+[Docs](./README.md) · [DPO / CISO](./for-dpo-ciso.md) › **Compliance**
+
+![DPO / CISO](https://img.shields.io/badge/Trilha-DPO%20%2F%20CISO-8957e5)
+
+<!-- audience: dpo-ciso -->
+
+---
+
 # Compliance — FAQ
 
 Respostas diretas às perguntas de compliance mais comuns. Sem juridiquês.
@@ -152,3 +160,16 @@ print(verdict.signature)  # "hmac-sha256:abc123..."
 ```
 
 O ledger SQLite no gateway registra todos os verdicts com timestamp, input hash e assinatura.
+
+---
+
+### Próximos passos / Relacionados
+
+- [Conceitos — o modelo de decisão](./concepts.md)
+- [Links de Referência — textos regulatórios](./reference-links.md)
+- [Pricing](../PRICING.md)
+- [API Reference](./api-reference.md)
+
+---
+
+<sub>[↑ Hub](./README.md) · [Trilha Engenheiro](./for-engineers.md) · [Trilha DPO/CISO](./for-dpo-ciso.md) · [Links de Referência](./reference-links.md)</sub>

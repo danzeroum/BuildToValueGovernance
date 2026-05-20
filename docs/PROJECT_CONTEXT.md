@@ -1,3 +1,10 @@
+[Docs](./README.md) › **Project Context**
+
+![Interno](https://img.shields.io/badge/Trilha-Contribuidor%20%2F%20Interno-6e7681)
+
+<!-- audience: internal -->
+
+---
 
 # PROJECT_CONTEXT.md — BuildToValue v2.4.0
 
@@ -258,3 +265,15 @@ blake3, arc_swap, whatlang, regex, lazy_static, static_assertions, phf, pyo3, se
 
 **Python (pyproject.toml):**
 fastapi, uvicorn, pyyaml, prometheus-client, httpx, pydantic, llama-cpp-python (optional)
+
+---
+
+### Próximos passos / Relacionados
+
+- [Arquitetura (Atlas)](./ARCHITECTURE_ATLAS.md)
+- [Índice de ADRs](./adr/0000-adr-index.md)
+- [Handoff Templates](./HANDOFF_TEMPLATES.md)
+
+---
+
+<sub>[↑ Hub](./README.md) · [Trilha Engenheiro](./for-engineers.md) · [Trilha DPO/CISO](./for-dpo-ciso.md) · [Links de Referência](./reference-links.md)</sub>

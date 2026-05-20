@@ -1,3 +1,11 @@
+[Docs](./README.md) · [Engenheiro](./for-engineers.md) › **API Reference**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb)
+
+<!-- audience: engineer -->
+
+---
+
 # Referência da API
 
 A spec completa está em [`spec/openapi.yaml`](https://github.com/buildtovalue/buildtovalue/blob/main/spec/openapi.yaml) (OpenAPI 3.0.3).
@@ -200,3 +208,16 @@ from buildtovalue.exceptions import (
     BTVValidationError # 4xx
 )
 ```
+
+---
+
+### Próximos passos / Relacionados
+
+- [Quickstart](./quickstart.md)
+- [Conceitos](./concepts.md)
+- [Integrações](./integrations/index.md)
+- [Changelog](./changelog.md)
+
+---
+
+<sub>[↑ Hub](./README.md) · [Trilha Engenheiro](./for-engineers.md) · [Trilha DPO/CISO](./for-dpo-ciso.md) · [Links de Referência](./reference-links.md)</sub>
