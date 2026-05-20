@@ -52,10 +52,24 @@ graph TD
   COMP --> REF
   CONC --> COMP
   PRICE --> QS
+
+  click ENG "./for-engineers.md" "Trilha Engenheiro"
+  click DPO "./for-dpo-ciso.md" "Trilha DPO / CISO"
+  click CONC "./concepts.md" "Conceitos"
+  click INT2 "./PROJECT_CONTEXT.md" "Contribuidores / Interno"
+  click QS "./quickstart.md" "Quickstart"
+  click API "./api-reference.md" "API Reference"
+  click INT "./integrations/index.md" "Integrações"
+  click ARCH "./ARCHITECTURE_ATLAS.md" "Arquitetura (Atlas)"
+  click ADR "./adr/0000-adr-index.md" "Índice de ADRs"
+  click COMP "./compliance.md" "Compliance"
+  click REF "./reference-links.md" "Links de Referência"
+  click PRICE "../PRICING.md" "Pricing"
 ```
 
-O grafo é um mapa visual; os links clicáveis estão no índice abaixo. **Conceitos** é
-o nó-ponte: alcançável a partir de `API Reference` e de `Compliance`.
+Clique em qualquer caixa do grafo para abrir o documento correspondente. O índice
+abaixo é a alternativa em texto, com descrições. **Conceitos** é o nó-ponte:
+alcançável a partir de `API Reference` e de `Compliance`.
 
 ---
 
