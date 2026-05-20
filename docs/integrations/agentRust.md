@@ -1,3 +1,11 @@
+[Docs](../README.md) · [Engenheiro](../for-engineers.md) · [Integrações](./index.md) › **Agent Rust**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb)
+
+<!-- audience: engineer -->
+
+---
+
 ```markdown
 # Perfil de Integração BTV: AgentRust Next Gen
 
@@ -125,3 +133,16 @@ Se `s`:
 - BTV ADR-0006 (Policy-as-Code — YAMLs que governam as decisões)
 - BTV ADR-0017 (ContestabilityLoop — fluxo de apelação)
 
+```
+
+---
+
+### Próximos passos / Relacionados
+
+- [Integrações — visão geral](./index.md)
+- [API Reference](../api-reference.md)
+- [Conceitos](../concepts.md)
+
+---
+
+<sub>[↑ Hub](../README.md) · [Trilha Engenheiro](../for-engineers.md) · [Trilha DPO/CISO](../for-dpo-ciso.md) · [Links de Referência](../reference-links.md)</sub>

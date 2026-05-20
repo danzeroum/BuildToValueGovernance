@@ -1,3 +1,11 @@
+[Docs](./README.md) › **Handoff Templates**
+
+![Interno](https://img.shields.io/badge/Trilha-Contribuidor%20%2F%20Interno-6e7681)
+
+<!-- audience: internal -->
+
+---
+
 # BuildToValue — Handoff Templates v1.0
 
 ## Template A: Arquiteta → Dev Rust
@@ -155,3 +163,15 @@ Issues: X Critical, Y Major, Z Minor
 - Máximo 3 rounds Dev ↔ Reviewer
 - Se após 3 rounds ainda há CRITICAL → voltar para Arquiteta
 - Reviewer DEVE incluir "O Que Está Bem Feito" em toda review
+
+---
+
+### Próximos passos / Relacionados
+
+- [Project Context](./PROJECT_CONTEXT.md)
+- [Release Gates](./RELEASE_GATES.md)
+- [Índice de ADRs](./adr/0000-adr-index.md)
+
+---
+
+<sub>[↑ Hub](./README.md) · [Trilha Engenheiro](./for-engineers.md) · [Trilha DPO/CISO](./for-dpo-ciso.md) · [Links de Referência](./reference-links.md)</sub>

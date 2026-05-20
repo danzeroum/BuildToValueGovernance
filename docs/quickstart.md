@@ -1,3 +1,11 @@
+[Docs](./README.md) · [Engenheiro](./for-engineers.md) › **Quickstart**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb)
+
+<!-- audience: engineer -->
+
+---
+
 # Quickstart — Under 5 Minutes
 
 Choose your path. **No Docker required** for the primary flow.
@@ -173,3 +181,7 @@ No silent decisions. No logging pipeline to misconfigure. The compiler is the en
 - [Benchmarks](../benchmarks/) — comparative latency vs Guardrails AI / NeMo
 - [LangChain integration](integrations/langchain.md)
 - [Architecture](../docs/ARCHITECTURE_ATLAS.md)
+
+---
+
+<sub>[↑ Hub](./README.md) · [Trilha Engenheiro](./for-engineers.md) · [Trilha DPO/CISO](./for-dpo-ciso.md) · [Links de Referência](./reference-links.md)</sub>

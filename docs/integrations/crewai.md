@@ -1,3 +1,11 @@
+[Docs](../README.md) · [Engenheiro](../for-engineers.md) · [Integrações](./index.md) › **CrewAI**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb)
+
+<!-- audience: engineer -->
+
+---
+
 # CrewAI — BTVCrewGuard
 
 ```bash
@@ -99,3 +107,15 @@ my_task("input"):
   4. btv.sanitize(resultado)  # se sanitize_output=True
   5. Retorna resultado sanitizado
 ```
+
+---
+
+### Próximos passos / Relacionados
+
+- [Integrações — visão geral](./index.md)
+- [API Reference](../api-reference.md)
+- [Conceitos](../concepts.md)
+
+---
+
+<sub>[↑ Hub](../README.md) · [Trilha Engenheiro](../for-engineers.md) · [Trilha DPO/CISO](../for-dpo-ciso.md) · [Links de Referência](../reference-links.md)</sub>

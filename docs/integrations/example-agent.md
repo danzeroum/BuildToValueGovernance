@@ -1,3 +1,11 @@
+[Docs](../README.md) · [Engenheiro](../for-engineers.md) · [Integrações](./index.md) › **Example Agent**
+
+![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb)
+
+<!-- audience: engineer -->
+
+---
+
 # Example BTV-Compatible Agent — Perfil de Integração (ADR-029)
 
 ## Identificação
@@ -69,3 +77,15 @@
 - Cache proibido para `Irreversible`
 - `evidence_id` registrado em todo ALLOW/EDUCATE
 - API key exclusiva por agente
+
+---
+
+### Próximos passos / Relacionados
+
+- [Integrações — visão geral](./index.md)
+- [API Reference](../api-reference.md)
+- [Conceitos](../concepts.md)
+
+---
+
+<sub>[↑ Hub](../README.md) · [Trilha Engenheiro](../for-engineers.md) · [Trilha DPO/CISO](../for-dpo-ciso.md) · [Links de Referência](../reference-links.md)</sub>
