@@ -6,7 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [lib]
-name = "buildtovalue_governance"
+name = "buildtovalue_kernel"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -19,7 +19,7 @@ hex = { workspace = true }
 uuid = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
 sha2 = { workspace = true }
-log = "0.4.29"          # <-- adicionado
+log = "0.4.29"
 
 [features]
 default = ["python", "c"]
@@ -27,4 +27,4 @@ python = ["pyo3/extension-module"]
 c = []
 
 [package.metadata.maturin]
-name = "buildtovalue_governance"
+name = "buildtovalue_kernel"
