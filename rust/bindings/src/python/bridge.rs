@@ -85,6 +85,7 @@ pub struct RustKernel {
     gatekeeper: Gatekeeper,
 }
 
+#[allow(non_local_definitions)] // pyo3 macro generates non-local impl, known issue pre-pyo3 0.22
 #[pymethods]
 impl RustKernel {
     /// Cria uma nova instância do kernel Rust.
