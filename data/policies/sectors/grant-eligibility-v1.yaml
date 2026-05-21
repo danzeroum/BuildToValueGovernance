@@ -2,35 +2,93 @@
 # Sector: grants
 # Path: data/policies/sectors/grant-eligibility-v1.yaml
 #
-# This policy governs ethical evaluation of grant proposals submitted
-# through the BTV governance kernel. It integrates the full Rawls-Levinas-
-# Jonas-Gilligan pipeline with grant-specific risk thresholds and
-# BiasDeclaration requirements for all 4 linguistic groups.
+# Ethical governance policy for blockchain grant proposals.
+# Integrates Rawls-Levinas-Jonas-Gilligan pipeline with grant-specific
+# risk thresholds and BiasDeclaration requirements for 4 linguistic groups.
 #
-# ADR reference: docs/adr/TBD-grant-decision-adapter.md
-# Maintainer: AI Squad (Arquiteta + Dev Python)
-# Last reviewed: 2026-04-13
-
-id: grant-eligibility-v1
-version: "1.0.0"
-description: >
-  Ethical governance policy for blockchain grant proposals.
-  Enforces OFAC sanctions compliance, scam/Ponzi pattern detection,
-  linguistic fairness across en-US/pt-BR/es/sw groups, and Levinas SLA
-  contestability for policy blocks.
+# ADR reference: docs/adr/0057-grant-decision-adapter.md
+# Maintainer: BTV AI Squad
 
 # ---------------------------------------------------------------------------
-# Thresholds
+# Metadata (required by W2.3)
+# ---------------------------------------------------------------------------
+metadata:
+  policy_id: grant-eligibility-v1
+  name: "Grant Eligibility Policy v1"
+  version: "1.0.0"
+  sector: grants
+  created: "2026-01-01T00:00:00Z"
+  expires: "2026-04-01T00:00:00Z"   # 90 days from created
+  author: "BTV AI Squad"
+  description: >
+    Ethical governance policy for blockchain grant proposals.
+    Enforces OFAC sanctions compliance, scam/Ponzi pattern detection,
+    linguistic fairness across en-US/pt-BR/es/sw groups, and Levinas SLA
+    contestability for policy blocks.
+
+# ---------------------------------------------------------------------------
+# Jurisdiction (required by W2.4)
+# ---------------------------------------------------------------------------
+jurisdiction:
+  bitmask_schema:
+    US:     0x0001
+    EU:     0x0002
+    BR:     0x0004
+    EAF:    0x0008   # East Africa
+    LATAM:  0x0010
+    GLOBAL: 0xFFFF
+  sanctioned_country_codes:
+    - KP   # North Korea — OFAC SDN
+    - IR   # Iran — OFAC SDN
+    - SY   # Syria — OFAC SDN
+    - CU   # Cuba — OFAC SDN
+    - RU   # Russia
+    - BY   # Belarus
+  elevated_risk_country_codes:
+    - VE   # Venezuela
+    - MM   # Myanmar
+    - AF   # Afghanistan
+    - SD   # Sudan
+
+# ---------------------------------------------------------------------------
+# Financial parameters
+# ---------------------------------------------------------------------------
+financial:
+  currency: USD
+  max_grant_usd: 10_000_000
+  high_value_threshold_usd: 500_000
+  min_grant_usd: 0
+
+# ---------------------------------------------------------------------------
+# Risk thresholds (W2.5 — monotonically ordered: allow ≤ educate ≤ inspect ≤ block ≤ hard_block)
 # ---------------------------------------------------------------------------
 thresholds:
-  # Composite risk score above which BLOCK is triggered
-  block_above: 0.70
-  # Composite risk score above which INSPECT is triggered (below block_above)
-  inspect_above: 0.50
-  # Trust score below which Gilligan mercy is evaluated
-  mercy_trust_threshold: 0.60
-  # Budget above which additional scrutiny is applied (USD)
-  high_value_scrutiny_above_usd: 500_000
+  allow:
+    max_risk: 0.30
+    label: "Low risk — proceed"
+  educate:
+    max_risk: 0.50
+    label: "Moderate risk — guidance provided"
+  inspect:
+    max_risk: 0.70
+    label: "Elevated risk — human review"
+  block:
+    max_risk: 0.90
+    label: "High risk — blocked, contestable"
+  hard_block:
+    min_risk: 0.90
+    label: "Critical risk — hard block, unconditional"
+
+# ---------------------------------------------------------------------------
+# Actions mapping
+# ---------------------------------------------------------------------------
+actions:
+  allow: ALLOW
+  educate: EDUCATE
+  inspect: INSPECT
+  block: BLOCK
+  hard_block: HARD_BLOCK
+  redact: REDACT
 
 # ---------------------------------------------------------------------------
 # Hard Block Rules (unconditional — contestable: false, appeal_deadline: 0)
@@ -38,7 +96,7 @@ thresholds:
 hard_blocks:
   - id: OFAC_SANCTIONS
     description: "Sanctioned jurisdictions per OFAC SDN list"
-    condition: "country_code in ['KP', 'IR', 'SY', 'CU']"
+    condition: "country_code in sanctioned_country_codes"
     rationale: "Jurisdiction is subject to OFAC sanctions. Grants cannot be disbursed."
     contestable: false
     appeal_deadline_hours: 0
@@ -63,14 +121,14 @@ hard_blocks:
 policy_blocks:
   - id: HIGH_COMPOSITE_RISK
     description: "Composite risk above block threshold"
-    condition: "composite_risk >= thresholds.block_above"
+    condition: "composite_risk >= thresholds.block.max_risk"
     rationale: "Composite risk score exceeds policy threshold."
     contestable: true
     appeal_deadline_hours: 168
 
   - id: VAGUE_HIGH_VALUE
     description: "High-value proposal with vague description"
-    condition: "budget_usd >= thresholds.high_value_scrutiny_above_usd AND description_score < 0.30"
+    condition: "budget_usd >= financial.high_value_threshold_usd AND description_score < 0.30"
     rationale: "Proposals requesting significant funding must provide detailed deliverables."
     contestable: true
     appeal_deadline_hours: 168
@@ -83,24 +141,96 @@ policy_blocks:
     appeal_deadline_hours: 168
 
 # ---------------------------------------------------------------------------
-# Mercy / Gilligan Interventions (BLOCK -> EDUCATE for trust-worthy applicants)
+# Rawls — Veil of ignorance, equal opportunity, difference principle
 # ---------------------------------------------------------------------------
-mercy_interventions:
-  - id: FIRST_TIME_APPLICANT_EDUCATE
-    description: "First-time applicants with moderate risk get EDUCATE, not BLOCK"
-    condition: "prior_grants == 0 AND composite_risk < 0.75 AND trust_score >= 0.60"
-    action_override: EDUCATE
-    rationale: >
-      Gilligan principle: first-time applicants may lack experience with policy
-      requirements. Education is more valuable than rejection for borderline cases.
+rawls:
+  veil_of_ignorance: true
+  fair_equality_of_opportunity: true
+  difference_principle: >
+    When risk scores are equal across proposals, favor proposals from
+    underrepresented linguistic groups and emerging markets.
+  procedural_fairness:
+    enabled: true
+    human_review_before_hard_block: false
+    human_review_before_block: false
 
-  - id: HIGH_TRUST_LENIENT
-    description: "High-trust applicants with elevated (not critical) risk get INSPECT"
-    condition: "trust_score >= 0.80 AND composite_risk < 0.80"
-    action_override: INSPECT
-    rationale: >
-      Rawls veil of ignorance: established community members deserve procedural
-      fairness — human review before final block decision.
+# ---------------------------------------------------------------------------
+# Levinas — SLA, contestability, language support (W2.7)
+# ---------------------------------------------------------------------------
+levinas:
+  sla:
+    initial_response_hours: 24
+    appeal_response_hours: 72
+    final_decision_hours: 168
+  contestability:
+    contestable_actions:
+      - BLOCK
+      - EDUCATE
+      - INSPECT
+    hard_block_contestable: false
+    appeal_window_hours: 168
+    appeal_fee_usd: 0
+  language:
+    supported_groups:
+      - en-US
+      - pt-BR
+      - es
+      - sw
+    fallback: en-US
+    translation_required: false
+
+# ---------------------------------------------------------------------------
+# Jonas — Responsibility principle, policy expiry, bias integrity (W2.8)
+# ---------------------------------------------------------------------------
+jonas:
+  policy_expiry_days: 90
+  bias:
+    require_declaration: true
+    uncalibrated_groups:
+      - group: sw
+        action: FLAG
+        description: >
+          Jonas integrity principle: Swahili group is UNCALIBRATED as of v1.0.
+          Insufficient labeled proposals for reliable calibration.
+          Do NOT fabricate FPR/FNR values — declare honest uncertainty.
+          Target: calibrate by Q2 2026 with East African grant partner data.
+  future_generations:
+    impact_assessment_required: false
+    long_term_reversibility_check: true
+
+# ---------------------------------------------------------------------------
+# Gilligan — Mercy, care ethics, trust-based interventions (W2.6)
+# ---------------------------------------------------------------------------
+gilligan:
+  mercy:
+    enabled: true
+    max_intervention: EDUCATE
+    trust_threshold: 0.60
+    critical_findings_override: false
+    conditions:
+      - id: FIRST_TIME_APPLICANT_EDUCATE
+        description: "First-time applicants with moderate risk get EDUCATE, not BLOCK"
+        condition: "prior_grants == 0 AND composite_risk < 0.75 AND trust_score >= 0.60"
+        action_override: EDUCATE
+      - id: HIGH_TRUST_LENIENT
+        description: "High-trust applicants with elevated risk get INSPECT"
+        condition: "trust_score >= 0.80 AND composite_risk < 0.80"
+        action_override: INSPECT
+
+# ---------------------------------------------------------------------------
+# Grant Categories (W2.2 — categories section required)
+# ---------------------------------------------------------------------------
+categories:
+  - public_goods
+  - infrastructure
+  - community
+  - education
+  - climate
+  - defi
+  - governance
+  - open_source
+  - research
+  - other
 
 # ---------------------------------------------------------------------------
 # BiasDeclaration — Linguistic Group Calibration
@@ -110,6 +240,8 @@ bias_declarations:
   - group: en-US
     fpr: 0.03
     fnr: 0.05
+    sample_size: 15000
+    calibration_date: "2025-09-30"
     notes: >
       Calibrated on 15,000 English grant proposals (Q3 2025).
       FPR measured against manual adjudication ground truth.
@@ -117,6 +249,8 @@ bias_declarations:
   - group: pt-BR
     fpr: 0.04
     fnr: 0.06
+    sample_size: 8200
+    calibration_date: "2025-09-30"
     notes: >
       Calibrated on 8,200 Portuguese-Brazilian proposals.
       Slightly higher FPR due to limited training data for Brazilian idioms.
@@ -124,26 +258,17 @@ bias_declarations:
   - group: es
     fpr: 0.04
     fnr: 0.06
+    sample_size: 7500
+    calibration_date: "2025-09-30"
     notes: >
       Calibrated on 7,500 Spanish proposals (Latin America weighted).
 
   - group: sw
     fpr: null
     fnr: null
+    sample_size: 0
+    calibration_date: null
     notes: >
       [Jonas] Swahili group is UNCALIBRATED as of v1.0.
-      Insufficient labeled proposals available for reliable calibration.
-      All sw proposals receive INSPECT pending calibration.
       Do NOT fabricate FPR/FNR values — declare honest uncertainty.
       Target: calibrate by Q2 2026 with East African grant partner data.
-
-# ---------------------------------------------------------------------------
-# Jurisdiction Bitmask Reference
-# ---------------------------------------------------------------------------
-jurisdiction_bitmask:
-  US: 0x0001
-  EU: 0x0002
-  BR: 0x0004
-  EAF: 0x0008  # East Africa
-  LATAM: 0x0010
-  GLOBAL: 0xFFFF
