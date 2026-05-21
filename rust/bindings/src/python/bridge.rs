@@ -7,6 +7,8 @@
 //! Serializacao: JSON via serde_json (sem fake protobuf manual).
 //! Fail-secure: erros retornam PyRuntimeError, nunca .unwrap().
 
+#![allow(non_local_definitions)] // pyo3 0.20 macros generate non-local impls; fixed in pyo3 0.22
+
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::exceptions::{PyValueError, PyRuntimeError};
@@ -83,6 +85,12 @@ pub fn test_bridge(py: Python) -> PyResult<PyObject> {
 #[pyclass]
 pub struct RustKernel {
     gatekeeper: Gatekeeper,
+}
+
+impl Default for RustKernel {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[pymethods]
