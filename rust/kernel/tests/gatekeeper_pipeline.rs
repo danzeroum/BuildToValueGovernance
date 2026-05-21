@@ -1,6 +1,6 @@
 //! F1.5-05: Gatekeeper Pipeline tests
-//! Atualizado ADR-035: +NHS+VAT+IBAN; +SensitiveDataValidator (LGPD Art.11)
-//! Pipeline: 4 deob + 4 analyze + 8 validate = 16 módulos, 4 stages (Validate splitado)
+//! Atualizado ADR-048: +SqlInjection+Jailbreak+DataExfiltration
+//! Pipeline: 4 deob + 4 analyze + 11 validate = 19 módulos
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
@@ -17,8 +17,8 @@ mod tests {
         let gk = Gatekeeper::new();
         assert_eq!(gk.stage_count(PipelineStage::Deobfuscate), 4);
         assert_eq!(gk.stage_count(PipelineStage::Analyze), 4);
-        assert_eq!(gk.stage_count(PipelineStage::Validate), 8);
-        assert_eq!(gk.module_count(), 16);
+        assert_eq!(gk.stage_count(PipelineStage::Validate), 11); // ADR-048: +3
+        assert_eq!(gk.module_count(), 19); // ADR-048: +3
     }
 
     // -----------------------------------------------------------------
@@ -48,7 +48,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // TEST 4: All 16 modules executed (ADR-035: 13→15; +SensitiveDataValidator: 15→16)
+    // TEST 4: All 19 modules executed (ADR-048: +SqlInjection+Jailbreak+DataExfiltration)
     // -----------------------------------------------------------------
     #[test]
     fn test_pipeline_all_modules_execute() {
@@ -59,7 +59,7 @@ mod tests {
                 evidence.executed_modules.count_ones(),
                 evidence.executed_modules
         );
-        assert_eq!(gk.module_count(), 16);
+        assert_eq!(gk.module_count(), 19); // ADR-048: +3
     }
 
     // -----------------------------------------------------------------
