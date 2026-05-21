@@ -34,7 +34,7 @@ develop:
 # Instalação completa do ambiente
 install:
 	@echo "📦 Instalando dependências Python..."
-	cd python && pip install -r requirements.txt
+	cd python && pip install -e .
 	@make develop
 
 # Bateria completa de testes
