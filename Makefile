@@ -23,7 +23,7 @@ help:
 
 # Compilação pura de Rust
 build:
-	[cite_start]@echo "🦀 Compilando Workspace Rust (Kernel + CLI + Bindings)..." [cite: 6]
+	@echo "🦀 Compilando Workspace Rust (Kernel + CLI + Bindings)..."
 	cd rust && cargo build --release
 
 # A mágica da integração: Maturin instala o Rust dentro do seu venv Python
@@ -33,25 +33,25 @@ develop:
 
 # Instalação completa do ambiente
 install:
-	[cite_start]@echo "📦 Instalando dependências Python..." [cite: 7]
+	@echo "📦 Instalando dependências Python..."
 	cd python && pip install -r requirements.txt
 	@make develop
 
 # Bateria completa de testes
 test: develop
-	[cite_start]@echo "🧪 Executando testes do Rust Kernel..." [cite: 7]
+	@echo "🧪 Executando testes do Rust Kernel..."
 	cd rust && cargo test --release
-	[cite_start]@echo "🐍 Executando testes de Governança Python..." [cite: 7]
+	@echo "🐍 Executando testes de Governança Python..."
 	cd python && pytest tests/ -v
 
 # Testes de ponta-a-ponta (Caminho corrigido para scripts/ci/)
 e2e: develop
-	[cite_start]@echo "🏁 Iniciando validação E2E LGPD..." [cite: 7]
+	@echo "🏁 Iniciando validação E2E LGPD..."
 	bash scripts/ci/run_e2e_lgpd.sh
 
 # Limpeza total
 clean:
-	[cite_start]@echo "🧹 Limpando o território..." [cite: 7]
+	@echo "🧹 Limpando o território..."
 	cd rust && cargo clean
 	cd python && rm -rf build/ dist/ *.egg-info .pytest_cache __pycache__
 	find . -name "*.pyc" -delete
@@ -78,5 +78,5 @@ arena-demo-cli:
 
 # Atalho para desenvolvedor Rust
 quick:
-	[cite_start]@echo "⚡ Teste rápido do Kernel..." [cite: 8]
+	@echo "⚡ Teste rápido do Kernel..."
 	cd rust && cargo test --release -p buildtovalue-kernel
