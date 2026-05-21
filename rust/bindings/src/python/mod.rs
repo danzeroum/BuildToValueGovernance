@@ -9,23 +9,17 @@ use pyo3::prelude::*;
 pub mod batch;
 pub mod bridge;
 
-// Importar funções públicas dos submódulos
+// Importar símbolos públicos dos submódulos
 use batch::calculate_penalties_batch;
-use bridge::{scan_for_evidence_batch, test_bridge};
+use bridge::{scan_for_evidence_batch, test_bridge, RustKernel};
 
 /// BuildToValue Kernel Python Module
-///
-/// Este módulo fornece bindings Python para o sistema BuildToValue Governance.
-///
-/// # Funções disponíveis:
-/// - `calculate_penalties_batch()`: Calcula penalidades em lote
-/// - `scan_for_evidence_batch()`: Escaneia evidências em lote
-/// - `version()`: Retorna a versão
 ///
 /// # Exemplo:
 /// ```python
 /// import buildtovalue_kernel as btv
-/// print(btv.version())
+/// kernel = btv.RustKernel()
+/// result = kernel.scan_for_evidence_batch(["texto"], [123456])
 /// ```
 #[pymodule]
 #[pyo3(name = "buildtovalue_kernel")]
@@ -39,12 +33,13 @@ fn buildtovalue_kernel(py: Python, m: &PyModule) -> PyResult<()> {
     m.add("PROTOCOL_VERSION", 2u8)?;
     m.add("API_VERSION", "2.2.0")?;
 
-    // Funções principais
+    // Classe RustKernel (API OO usada pelo ffi_client)
+    m.add_class::<RustKernel>()?;
+
+    // Funções standalone (API funcional)
     m.add_function(wrap_pyfunction!(calculate_penalties_batch, m)?)?;
     m.add_function(wrap_pyfunction!(scan_for_evidence_batch, m)?)?;
     m.add_function(wrap_pyfunction!(test_bridge, m)?)?;
-
-    // Função de versão
     m.add_function(wrap_pyfunction!(version, m)?)?;
 
     // Exceções customizadas
