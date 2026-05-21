@@ -52,11 +52,12 @@ impl ScanContextFlags {
     pub const JURISDICTION_ALL: u64 = Self::JURISDICTION_BR | Self::JURISDICTION_US | Self::JURISDICTION_EU | Self::JURISDICTION_UK;
 
     // ── Capabilities ─────────────────────────────────────────────
-    pub const CAP_PII: u64       = 1 << 0;
-    pub const CAP_INJECTION: u64 = 1 << 1;
-    pub const CAP_DEOBFUSC: u64  = 1 << 2;
-    pub const CAP_OUTPUT: u64    = 1 << 3;
-    pub const CAP_ALL: u64       = u64::MAX;
+    pub const CAP_PII: u64          = 1 << 0;
+    pub const CAP_INJECTION: u64    = 1 << 1;
+    pub const CAP_DEOBFUSC: u64     = 1 << 2;
+    pub const CAP_OUTPUT: u64       = 1 << 3;
+    pub const CAP_TRUSTED_ROLE: u64 = 1 << 4; // ADR-048: role-aware thresholds
+    pub const CAP_ALL: u64          = u64::MAX;
 
     // ── Helpers ──────────────────────────────────────────────────
 
@@ -139,4 +140,7 @@ pub trait Module: Send + Sync {
     fn name(&self) -> &'static str;
     fn module_id(&self) -> ValidatorModule;
     fn bias_declaration(&self) -> BiasDeclaration;
+    /// Human-readable decision rationale for ContestabilityLoop (ADR-048).
+    /// Default: empty string — legacy modules are unaffected.
+    fn explain_decision(&self, _input: &str) -> &'static str { "" }
 }

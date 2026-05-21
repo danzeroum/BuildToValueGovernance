@@ -200,6 +200,10 @@ pub enum ValidatorModule {
     EuVat,
     Iban,
     PromptInjection,
+    // Attack Validators (ADR-048) — discriminants 27/28/29
+    SqlInjection,
+    Jailbreak,
+    DataExfiltration,
 }
 
 /// Veredito ético (usado pelo Ledger)

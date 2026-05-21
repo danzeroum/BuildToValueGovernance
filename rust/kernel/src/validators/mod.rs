@@ -13,6 +13,7 @@ pub mod eu;
 pub mod sensitive;
 pub mod privacy;
 pub mod analysis;
+pub mod attack;
 
 pub use brazilian::{CpfValidator, CnpjValidator};
 pub use financial::CreditCardValidator;
@@ -24,6 +25,7 @@ pub use eu::{VatValidator, IbanValidator};
 pub use sensitive::SensitiveDataValidator;
 pub use privacy::{ConsentValidator, ConsentRevocationValidator};
 pub use analysis::StatisticalValidator;
+pub use attack::{SqlInjectionDetector, JailbreakDetector, DataExfiltrationDetector};
 
 use crate::evidence::Finding;
 use crate::core::types::BiasDeclaration;
