@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from enum import Enum
@@ -70,7 +70,7 @@ from buildtovalue.governance.visual_input_firewall import (
 )
 from buildtovalue.governance.oracle_trust_gate import OracleTrustGate
 from buildtovalue.governance.rag_integrity_verifier import RagIntegrityVerifier
-from buildtovalue.governance.ffi_client import get_ffi_client, BridgeNotAvailableError
+from buildtovalue.governance.ffi_client import get_ffi_client, BridgeNotAvailableError, FFIError
 logger = logging.getLogger(__name__)
 
 
@@ -1286,7 +1286,7 @@ def _decide_persist_trust(
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/v1/decide", response_model=DecideResponse)
-def decide(req: DecideRequest, _=Depends(require_api_key)):
+def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
     """
     Pipeline v2.3:
       0. Hard block → BLOCK imediato (sem mercy, sem ADR-046)
@@ -1300,6 +1300,27 @@ def decide(req: DecideRequest, _=Depends(require_api_key)):
     """
     start = time.perf_counter()
     session_id = req.session_id or "anonymous"
+
+    # ── Etapa 0: FFI scan — Rust Kernel populates TechnicalEvidence ─────────
+    # Fail-secure: bridge unavailability never blocks the API (silent degradation).
+    _ffi = getattr(request.app.state, "ffi_client", None)
+    if _ffi is not None:
+        try:
+            _ev = _ffi.scan(req.input_text)
+            req.composite_risk = _ev.composite_risk
+            req.finding_count  = _ev.finding_count
+            req.critical_count = _ev.critical_count
+            req.blake3_hash    = _ev.hash
+            req.entropy        = _ev.entropy
+            req.total_chars    = _ev.input_size
+            if not req.matched_policies:
+                req.matched_policies = [
+                    f"{f.category}->{f.title}" for f in _ev.findings
+                ]
+        except FFIError as exc:
+            logger.warning("FFI scan failed — fail-secure (degraded mode): %s", exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("FFI scan unexpected error — fail-secure: %s", exc)
 
     resp = _decide_hard_block(req, session_id, start)
     if resp:
