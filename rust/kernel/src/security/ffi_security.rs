@@ -90,6 +90,7 @@ impl FFIBuffer {
     /// # Errors
     /// - `BufferOverflow` se dados excedem MAX_BUFFER_SIZE
     /// - `IntegrityViolation` se validação falhar
+    #[allow(clippy::expect_used)] // system clock before UNIX epoch = hardware impossible
     pub fn from_python(data: &[u8]) -> FFIResult<Self> {
         // 1. Valida tamanho máximo
         if data.len() > MAX_BUFFER_SIZE {
@@ -182,6 +183,7 @@ impl FFIBuffer {
     }
 
     /// Valida freshness (constant-time helper).
+    #[allow(clippy::expect_used)] // system clock before UNIX epoch = hardware impossible
     fn validate_freshness_ct(&self) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

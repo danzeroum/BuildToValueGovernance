@@ -7,8 +7,8 @@
 //!
 //! # Exemplo Python
 //! ```python
-//! import buildtovalue_governance
-//! result = buildtovalue_governance.calculate_penalties_batch([...])
+//! import buildtovalue_kernel
+//! result = buildtovalue_kernel.calculate_penalties_batch([...])
 //! ```
 
 #![cfg_attr(feature = "c", allow(improper_ctypes))]
