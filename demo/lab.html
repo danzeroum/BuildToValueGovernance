@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laboratório Unificado | BTV Demo</title>
+  <link rel="stylesheet" href="css/btv.css">
+</head>
+<body>
+<div class="header">
+  <span class="logo">⚖ BuildToValue</span>
+  <span class="subtitle">🔬 Laboratório Unificado — Modo Teatro</span>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="lab.html" class="active">Laboratório</a>
+    <a href="persona-eng.html">Engenheiro</a>
+    <a href="persona-ciso.html">CISO</a>
+    <a href="persona-dpo.html">DPO</a>
+    <a href="persona-gov.html">Governança</a>
+  </nav>
+</div>
+
+<div class="container">
+  <!-- Controles -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="grid-3" style="gap:14px;align-items:end">
+      <div>
+        <label>Persona do Observador</label>
+        <select id="lab-persona" onchange="filterScenarios()">
+          <option value="all">Todas as Personas</option>
+          <option value="CISO">🛡️ CISO</option>
+          <option value="DPO">⚖️ DPO</option>
+          <option value="Engenheiro">⚙️ Engenheiro</option>
+        </select>
+      </div>
+      <div>
+        <label>Cenário</label>
+        <select id="lab-scenario"></select>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="runLab()" id="lab-btn">▶ Executar</button>
+        <button class="btn btn-outline" onclick="clearLab()">✕</button>
+      </div>
+    </div>
+    <div id="lab-desc" style="margin-top:12px;font-size:12px;color:var(--muted);padding:10px;background:var(--bg);border-radius:6px"></div>
+  </div>
+
+  <!-- Split view -->
+  <div class="grid-2">
+    <!-- INPUT -->
+    <div class="card">
+      <div class="section-title">Input Enviado ao Kernel</div>
+      <pre class="code-block" id="lab-input" style="min-height:120px">Selecione um cenário e clique em Executar.</pre>
+    </div>
+
+    <!-- VEREDICTO -->
+    <div class="card">
+      <div class="section-title">Veredicto — República Algorítmica</div>
+      <div id="lab-verdict" style="color:var(--muted);font-size:13px;min-height:120px">Aguardando execução...</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Rationale completo -->
+  <div class="card">
+    <div class="section-title">Rationale (Explicação da Decisão — explain_decision)</div>
+    <div id="lab-rationale" style="font-size:13px;color:var(--muted);line-height:1.7">O BTV explica cada decisão de forma legível. Execute um cenário para ver.</div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Histórico da sessão -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="section-title" style="margin:0">Histórico da Sessão</div>
+      <button class="btn btn-outline btn-sm" onclick="clearHistory()">Limpar</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>#</th><th>Cenário</th><th>Input</th><th>Ação</th><th>Risk</th><th>Findings</th><th>Latência</th></tr></thead>
+        <tbody id="lab-history"><tr><td colspan="7" style="color:var(--muted);text-align:center">Nenhuma execução ainda.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="js/api.js"></script>
+<script src="js/lab-engine.js"></script>
+<script>
+  let history = [];
+  let historyCount = 0;
+
+  function filterScenarios() {
+    const persona = document.getElementById('lab-persona').value;
+    const sel = document.getElementById('lab-scenario');
+    sel.innerHTML = SCENARIOS
+      .filter(s => persona === 'all' || s.persona === persona)
+      .map(s => `<option value="${s.id}">${s.label}</option>`)
+      .join('');
+    updateDesc();
+  }
+
+  function updateDesc() {
+    const id = document.getElementById('lab-scenario').value;
+    const s = SCENARIOS.find(x => x.id === id);
+    document.getElementById('lab-desc').textContent = s ? s.description : '';
+    if (s) document.getElementById('lab-input').textContent = s.input_text;
+  }
+
+  document.getElementById('lab-scenario').addEventListener('change', updateDesc);
+
+  async function runLab() {
+    const id = document.getElementById('lab-scenario').value;
+    const s = SCENARIOS.find(x => x.id === id);
+    if (!s) return;
+
+    const btn = document.getElementById('lab-btn');
+    btn.disabled = true; btn.textContent = '⏳ Executando...';
+
+    document.getElementById('lab-input').textContent = s.input_text;
+
+    await runScenario(id, (d, scenario, i, total) => {
+      const action = d.action || 'UNKNOWN';
+      document.getElementById('lab-verdict').innerHTML = `
+        <div class="verdict-block verdict-${action}" style="margin-bottom:16px">
+          <div class="verdict-action">${action}</div>
+          <div style="margin-top:6px;display:flex;gap:16px;flex-wrap:wrap">
+            <span style="font-size:12px">Risk: <b style="font-family:var(--mono)">${(d.adjusted_risk||0).toFixed(3)}</b></span>
+            <span style="font-size:12px">Trust: <b style="font-family:var(--mono)">${(d.trust_score||0).toFixed(2)}</b></span>
+            <span style="font-size:12px">Latência: ${fmtTime(d.latency_ms)}</span>
+            ${d.mercy_applied ? '<span class="badge badge-purple">Mercy Applied</span>' : ''}
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">verdict_id</div>
+        <div class="mono" style="font-size:12px;margin-bottom:8px">${d.verdict_id||'—'}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">HMAC-SHA256</div>
+        <div class="mono" style="font-size:12px;color:var(--green);word-break:break-all">${d.signature||'—'}</div>`;
+
+      document.getElementById('lab-rationale').textContent = d.rationale || '—';
+
+      historyCount++;
+      history.unshift({ n: historyCount, label: scenario.label, input: s.input_text, action, risk: d.adjusted_risk||0, findings: '', latency: d.latency_ms||0 });
+      renderHistory();
+    });
+
+    btn.disabled = false; btn.textContent = '▶ Executar';
+  }
+
+  function renderHistory() {
+    const tbody = document.getElementById('lab-history');
+    if (!history.length) { tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);text-align:center">Nenhuma execução ainda.</td></tr>'; return; }
+    tbody.innerHTML = history.slice(0,20).map(h => `
+      <tr>
+        <td class="mono">${h.n}</td>
+        <td style="font-size:12px">${h.label}</td>
+        <td style="font-size:11px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.input}</td>
+        <td>${badgeAction(h.action)}</td>
+        <td class="mono">${h.risk.toFixed(3)}</td>
+        <td class="mono">${h.findings||'—'}</td>
+        <td>${fmtTime(h.latency)}</td>
+      </tr>`).join('');
+  }
+
+  function clearLab() {
+    document.getElementById('lab-verdict').innerHTML = 'Aguardando execução...';
+    document.getElementById('lab-rationale').textContent = 'Execute um cenário para ver.';
+  }
+
+  function clearHistory() {
+    history = []; historyCount = 0; renderHistory();
+  }
+
+  filterScenarios();
+</script>
+</body>
+</html>

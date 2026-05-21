@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Governança — Contestability Loop | BTV Demo</title>
+  <link rel="stylesheet" href="css/btv.css">
+</head>
+<body>
+<div class="header">
+  <span class="logo">⚖ BuildToValue</span>
+  <span class="subtitle">🏛️ Governança — Contestability Loop</span>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="lab.html">Laboratório</a>
+    <a href="persona-eng.html">Engenheiro</a>
+    <a href="persona-ciso.html">CISO</a>
+    <a href="persona-dpo.html">DPO</a>
+    <a href="persona-gov.html" class="active">Governança</a>
+  </nav>
+</div>
+
+<div class="container">
+  <div class="grid-3" style="margin-bottom:20px">
+    <div class="card">
+      <div class="card-title">SLA Compliance (24h)</div>
+      <div class="card-value" id="gov-sla">—</div>
+      <div class="progress-bar" style="margin-top:8px"><div class="progress-fill progress-green" id="gov-sla-bar" style="width:0%"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Appeals Abertos</div>
+      <div class="card-value" id="gov-open">—</div>
+      <div class="card-sub">aguardando resolução</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Total de Appeals</div>
+      <div class="card-value" id="gov-total">—</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <!-- Novo appeal -->
+    <div class="card">
+      <div class="section-title">Submeter Appeal (Contestação)</div>
+      <div style="margin-bottom:10px">
+        <label>audit_trail_id (ID do veredicto contestado)</label>
+        <input type="number" id="gov-trail-id" value="1" min="1">
+      </div>
+      <div style="margin-bottom:10px">
+        <label>user_id</label>
+        <input type="text" id="gov-user-id" value="user-demo-001">
+      </div>
+      <div style="margin-bottom:10px">
+        <label>Motivo da Contestação</label>
+        <textarea id="gov-reason" rows="3">A decisão bloqueou um input legítimo de contexto educacional. O sistema classificou incorretamente como ameaça.</textarea>
+      </div>
+      <div style="margin-bottom:14px">
+        <label>Fundamentos</label>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)">
+            <input type="checkbox" id="g-fp" checked style="width:auto"> false_positive
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)">
+            <input type="checkbox" id="g-ctx" style="width:auto"> context_missing
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)">
+            <input type="checkbox" id="g-pol" style="width:auto"> policy_misapplied
+          </label>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="submitAppeal()">📨 Submeter Contestação</button>
+      <div id="gov-appeal-result" style="margin-top:14px"></div>
+    </div>
+
+    <!-- Lista de appeals -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="section-title" style="margin:0">Appeals Ativos</div>
+        <button class="btn btn-outline btn-sm" onclick="loadAppeals()">↻ Atualizar</button>
+      </div>
+      <div id="gov-appeals-list" style="color:var(--muted);font-size:13px">Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="js/api.js"></script>
+<script>
+  async function submitAppeal() {
+    const grounds = [];
+    if (document.getElementById('g-fp').checked)  grounds.push('false_positive');
+    if (document.getElementById('g-ctx').checked) grounds.push('context_missing');
+    if (document.getElementById('g-pol').checked) grounds.push('policy_misapplied');
+
+    const body = {
+      audit_trail_id: parseInt(document.getElementById('gov-trail-id').value),
+      user_id:        document.getElementById('gov-user-id').value,
+      reason:         document.getElementById('gov-reason').value,
+      grounds,
+    };
+    const r = await API.appealsCreate(body);
+    const d = r.data;
+    document.getElementById('gov-appeal-result').innerHTML = r.ok ? `
+      <div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:14px">
+        <div style="color:var(--green);font-weight:700;margin-bottom:6px">✅ Appeal Registrado</div>
+        <div class="mono" style="font-size:11px">ID: ${d.appeal_id}</div>
+        <div class="mono" style="font-size:11px">Status: ${d.status}</div>
+        <div class="mono" style="font-size:11px">SLA Deadline: ${d.sla_deadline || '24h a partir de agora'}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Contestabilidade garantida por design (ADR-017)</div>
+      </div>` :
+      `<div style="color:var(--red)">${JSON.stringify(d)}</div>`;
+    await loadAppeals();
+    await loadMetrics();
+  }
+
+  async function loadAppeals() {
+    const r = await API.appealsList();
+    const items = Array.isArray(r.data) ? r.data : (r.data.appeals || []);
+    if (!items.length) {
+      document.getElementById('gov-appeals-list').innerHTML = '<span style="color:var(--muted)">Nenhum appeal registrado ainda.</span>';
+      return;
+    }
+    const statusColor = { pending:'badge-yellow', under_review:'badge-blue', resolved:'badge-green', rejected:'badge-red' };
+    document.getElementById('gov-appeals-list').innerHTML = items.slice(0,10).map(a => `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span class="mono" style="font-size:11px">${a.appeal_id}</span>
+          <span class="badge ${statusColor[a.status]||'badge-blue'}">${a.status}</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">${a.reason?.substring(0,100) || ''}...</div>
+        <div style="font-size:11px;color:var(--muted)">SLA: ${a.sla_deadline || '—'} · user: ${a.user_id || '—'}</div>
+      </div>`).join('');
+  }
+
+  async function loadMetrics() {
+    const r = await API.appealsMetrics();
+    const d = r.data;
+    const sla = ((d.sla_compliance_rate || 0) * 100).toFixed(0);
+    document.getElementById('gov-sla').textContent = sla + '%';
+    document.getElementById('gov-sla-bar').style.width = sla + '%';
+    document.getElementById('gov-open').textContent = d.open_count || d.pending || 0;
+    document.getElementById('gov-total').textContent = d.total || d.total_count || 0;
+  }
+
+  loadMetrics();
+  loadAppeals();
+</script>
+</body>
+</html>

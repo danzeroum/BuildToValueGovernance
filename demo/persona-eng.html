@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engenheiro — The Pulse | BTV Demo</title>
+  <link rel="stylesheet" href="css/btv.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="header">
+  <span class="logo">⚖ BuildToValue</span>
+  <span class="subtitle">⚙️ Engenheiro — The Pulse</span>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="lab.html">Laboratório</a>
+    <a href="persona-eng.html" class="active">Engenheiro</a>
+    <a href="persona-ciso.html">CISO</a>
+    <a href="persona-dpo.html">DPO</a>
+    <a href="persona-gov.html">Governança</a>
+  </nav>
+</div>
+
+<div class="container">
+  <div class="grid-4" style="margin-bottom:20px">
+    <div class="card">
+      <div class="card-title">Status API</div>
+      <div id="eng-status"><span class="badge badge-yellow">Verificando...</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Kernel Rust</div>
+      <div id="eng-rust"><span class="badge badge-yellow">—</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Última Latência</div>
+      <div class="card-value" id="eng-latency">—</div>
+      <div class="card-sub">target: &lt;50ms p99</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Decisões (sessão)</div>
+      <div class="card-value" id="eng-count">0</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="section-title">Latência — últimas 20 decisões</div>
+      <canvas id="latencyChart" height="180"></canvas>
+      <div style="margin-top:12px;display:flex;gap:12px;font-size:12px;color:var(--muted)">
+        <span>p50: <b id="p50">—</b></span>
+        <span>p95: <b id="p95">—</b></span>
+        <span>p99: <b id="p99">—</b></span>
+        <span style="margin-left:auto"><button class="btn btn-outline btn-sm" onclick="probe()">▶ Disparar Probe</button></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Última TechnicalEvidence (Rust)</div>
+      <pre class="code-block" id="eng-evidence">Aguardando probe...</pre>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="js/api.js"></script>
+<script>
+  const latencies = [];
+  let count = 0;
+  let chart;
+
+  function percentile(arr, p) {
+    const s = [...arr].sort((a,b)=>a-b);
+    const i = Math.ceil(p/100*s.length) - 1;
+    return s[Math.max(0,i)]?.toFixed(1) || '—';
+  }
+
+  function updateChart() {
+    const data = latencies.slice(-20);
+    chart.data.labels = data.map((_,i)=>i+1);
+    chart.data.datasets[0].data = data;
+    chart.update();
+    document.getElementById('p50').textContent = percentile(data,50) + 'ms';
+    document.getElementById('p95').textContent = percentile(data,95) + 'ms';
+    document.getElementById('p99').textContent = percentile(data,99) + 'ms';
+  }
+
+  async function probe() {
+    const t0 = performance.now();
+    const r = await API.decide({ input_text: 'latency probe ' + Date.now(), session_id: 'eng-probe' });
+    const ms = r.data.latency_ms || (performance.now() - t0);
+    latencies.push(ms);
+    count++;
+    document.getElementById('eng-count').textContent = count;
+    document.getElementById('eng-latency').innerHTML = fmtTime(ms);
+    const ev = {
+      verdict_id:    r.data.verdict_id,
+      action:        r.data.action,
+      trust_score:   r.data.trust_score,
+      adjusted_risk: r.data.adjusted_risk,
+      latency_ms:    r.data.latency_ms,
+      signature:     r.data.signature,
+      rationale:     r.data.rationale,
+    };
+    document.getElementById('eng-evidence').textContent = JSON.stringify(ev, null, 2);
+    updateChart();
+  }
+
+  (async () => {
+    // Health check
+    const h = await API.health();
+    document.getElementById('eng-status').innerHTML = h.ok
+      ? '<span class="badge badge-green"><span class="dot dot-green"></span> Online</span>'
+      : '<span class="badge badge-red">Offline</span>';
+
+    // Probe inicial
+    await probe();
+
+    // Checar Rust
+    const last = document.getElementById('eng-evidence').textContent;
+    const hasEntropy = last.includes('entropy') || last.includes('BLAKE3') || last.includes('findings');
+    document.getElementById('eng-rust').innerHTML = hasEntropy
+      ? '<span class="badge badge-green">FFI Ativo ✓</span>'
+      : '<span class="badge badge-yellow">Fallback Python</span>';
+
+    // Auto-probe a cada 10s
+    setInterval(probe, 10000);
+
+    // Init chart
+    chart = new Chart(document.getElementById('latencyChart'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          data: [],
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59,130,246,.1)',
+          tension: 0.3,
+          pointRadius: 3,
+          fill: true,
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#6b7280' }, grid: { color: '#2d3748' } },
+          y: { ticks: { color: '#6b7280', callback: v => v+'ms' }, grid: { color: '#2d3748' } }
+        },
+        animation: false,
+      }
+    });
+    updateChart();
+  })();
+</script>
+</body>
+</html>

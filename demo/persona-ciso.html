@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CISO — Decision Inspector | BTV Demo</title>
+  <link rel="stylesheet" href="css/btv.css">
+</head>
+<body>
+<div class="header">
+  <span class="logo">⚖ BuildToValue</span>
+  <span class="subtitle">🛡️ CISO — Decision Inspector</span>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="lab.html">Laboratório</a>
+    <a href="persona-eng.html">Engenheiro</a>
+    <a href="persona-ciso.html" class="active">CISO</a>
+    <a href="persona-dpo.html">DPO</a>
+    <a href="persona-gov.html">Governança</a>
+  </nav>
+</div>
+
+<div class="container">
+  <div class="grid-2">
+    <!-- Laboratório de ataques -->
+    <div class="card">
+      <div class="section-title">Laboratório de Ataques — Executar ao Vivo</div>
+      <div style="margin-bottom:14px">
+        <label>Selecionar Cenário</label>
+        <select id="ciso-scenario">
+          <option value="baseline">✅ Baseline seguro</option>
+          <option value="sql_injection">💉 SQL Injection</option>
+          <option value="prompt_injection">🎭 Prompt Injection</option>
+          <option value="data_exfil">📤 Data Exfiltration</option>
+          <option value="jailbreak">🔓 Jailbreak Attempt</option>
+          <option value="custom">✏️ Input personalizado</option>
+        </select>
+      </div>
+      <div id="scenario-desc" style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:10px;background:var(--bg);border-radius:6px"></div>
+      <div id="custom-input-wrap" style="display:none;margin-bottom:12px">
+        <label>Input personalizado</label>
+        <textarea id="custom-input" rows="3" placeholder="Digite o input para o kernel..."></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="runAttack()" id="btn-attack">▶ Executar Decisão</button>
+    </div>
+
+    <!-- Veredicto -->
+    <div class="card">
+      <div class="section-title">Veredicto</div>
+      <div id="ciso-verdict" style="color:var(--muted);font-size:13px">Aguardando execução...</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Ledger -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="section-title" style="margin:0">Ledger de Decisões (imutável)</div>
+      <button class="btn btn-outline btn-sm" onclick="loadLedger()">↻ Atualizar</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr>
+          <th>Verdict ID</th><th>Ação</th><th>Risk</th><th>Findings</th><th>Signature</th><th>Contestável</th>
+        </tr></thead>
+        <tbody id="ledger-body"><tr><td colspan="6" style="color:var(--muted);text-align:center">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="js/api.js"></script>
+<script src="js/lab-engine.js"></script>
+<script>
+  const descMap = {
+    baseline:         'Input neutro sem indicadores de ameaça. Esperado: ALLOW, 0 findings.',
+    sql_injection:    'Ataque clássico de injeção SQL. Esperado: BLOCK, findings críticos.',
+    prompt_injection: 'Tentativa de jailbreak via prompt injection.',
+    data_exfil:       'Tentativa de exfiltração de dados sensíveis.',
+    jailbreak:        'Tentativa de jailbreak por persona switching.',
+    custom:           'Digite qualquer input para testar o kernel.',
+  };
+
+  document.getElementById('ciso-scenario').addEventListener('change', () => {
+    const v = document.getElementById('ciso-scenario').value;
+    document.getElementById('scenario-desc').textContent = descMap[v] || '';
+    document.getElementById('custom-input-wrap').style.display = v === 'custom' ? 'block' : 'none';
+  });
+  document.getElementById('ciso-scenario').dispatchEvent(new Event('change'));
+
+  async function runAttack() {
+    const id = document.getElementById('ciso-scenario').value;
+    const btn = document.getElementById('btn-attack');
+    btn.disabled = true; btn.textContent = '⏳ Executando...';
+
+    let input_text;
+    if (id === 'custom') {
+      input_text = document.getElementById('custom-input').value || 'test';
+    } else {
+      const s = SCENARIOS.find(x => x.id === id);
+      input_text = s ? s.input_text : 'test';
+    }
+
+    const r = await API.decide({ input_text, session_id: `ciso-${Date.now()}` });
+    const d = r.data;
+    const action = d.action || 'UNKNOWN';
+
+    document.getElementById('ciso-verdict').innerHTML = `
+      <div class="verdict-block verdict-${action}" style="margin-bottom:14px">
+        <div class="verdict-action">${action}</div>
+        <div style="margin-top:8px;font-size:13px;color:var(--muted)">${d.rationale || ''}</div>
+      </div>
+      <div class="grid-3" style="gap:10px;margin-bottom:12px">
+        <div><div style="font-size:11px;color:var(--muted)">Adjusted Risk</div><div style="font-family:var(--mono);font-size:18px;font-weight:700">${(d.adjusted_risk||0).toFixed(3)}</div></div>
+        <div><div style="font-size:11px;color:var(--muted)">Trust Score</div><div style="font-family:var(--mono);font-size:18px;font-weight:700">${(d.trust_score||0).toFixed(2)}</div></div>
+        <div><div style="font-size:11px;color:var(--muted)">Latência</div><div style="font-size:18px;font-weight:700">${fmtTime(d.latency_ms)}</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">HMAC-SHA256 Signature</div>
+      <div class="mono" style="font-size:12px;word-break:break-all;color:var(--green)">${d.signature || '—'}</div>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted)">Verdict ID: <span class="mono">${d.verdict_id || '—'}</span> &nbsp;·&nbsp; Contestável: ${d.contestable ? '✅ 24h' : '—'}</div>`;
+
+    btn.disabled = false; btn.textContent = '▶ Executar Decisão';
+    await loadLedger();
+  }
+
+  async function loadLedger() {
+    const r = await API.ledgerQuery();
+    const entries = Array.isArray(r.data) ? r.data : (r.data.entries || []);
+    const tbody = document.getElementById('ledger-body');
+    if (!entries.length) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);text-align:center">Sem registros</td></tr>'; return; }
+    tbody.innerHTML = entries.slice(0,20).map(e => `
+      <tr>
+        <td class="mono">${(e.verdict_id||e.id||'—').substring(0,20)}...</td>
+        <td>${badgeAction(e.action||'—')}</td>
+        <td class="mono">${(e.adjusted_risk||e.risk||0).toFixed(3)}</td>
+        <td class="mono">${e.finding_count||0} (${e.critical_count||0} crit)</td>
+        <td class="mono" style="color:var(--green)">${fmtHash(e.signature||e.blake3_hash)}</td>
+        <td>${e.contestable ? '<span class="badge badge-blue">✓ 24h</span>' : '—'}</td>
+      </tr>`).join('');
+  }
+
+  loadLedger();
+</script>
+</body>
+</html>

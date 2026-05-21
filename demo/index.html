@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BuildToValue — Trust OS Demo</title>
+  <link rel="stylesheet" href="css/btv.css">
+  <style>
+    .hero { text-align:center; padding: 60px 24px 40px; }
+    .hero-title { font-size: 32px; font-weight: 900; letter-spacing:-.02em; margin-bottom: 10px; }
+    .hero-title span { color: var(--accent); }
+    .hero-sub { color: var(--muted); font-size: 15px; max-width: 520px; margin: 0 auto 40px; line-height: 1.6; }
+    .status-bar { display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:48px; font-size:13px; }
+    .personas-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:20px; max-width:960px; margin:0 auto 40px; }
+    .lab-cta { text-align:center; padding: 32px; background: linear-gradient(135deg, rgba(59,130,246,.1), rgba(139,92,246,.1)); border: 1px solid rgba(59,130,246,.3); border-radius: 12px; max-width:600px; margin:0 auto 48px; }
+    .lab-cta h3 { font-size:18px; margin-bottom:8px; }
+    .lab-cta p { color:var(--muted); font-size:13px; margin-bottom:16px; }
+    .footer { text-align:center; padding: 32px; color:var(--muted); font-size:11px; font-family:var(--mono); border-top:1px solid var(--border); }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <span class="logo">⚖ BuildToValue</span>
+  <span class="subtitle">Trust OS v3.0 — Painel de Demonstração</span>
+  <nav>
+    <a href="index.html" class="active">Home</a>
+    <a href="lab.html">Laboratório</a>
+    <a href="persona-eng.html">Engenheiro</a>
+    <a href="persona-ciso.html">CISO</a>
+    <a href="persona-dpo.html">DPO</a>
+    <a href="persona-gov.html">Governança</a>
+  </nav>
+</div>
+
+<div class="hero">
+  <div class="hero-title">República <span>Algorítmica</span></div>
+  <div class="hero-sub">Governança de IA com transparência radical, evidência forense verificável e contestabilidade por design.</div>
+
+  <div class="status-bar">
+    <span class="dot dot-green" id="dot-health"></span>
+    <span id="status-text" style="color:var(--muted)">Verificando API...</span>
+    <span class="badge badge-blue" id="badge-rust" style="display:none">Rust FFI Ativo</span>
+  </div>
+
+  <div class="personas-grid">
+    <a href="persona-eng.html" class="persona-card">
+      <div class="persona-icon">⚙️</div>
+      <div class="persona-role">Engenheiro</div>
+      <div class="persona-name">The Pulse</div>
+      <div class="persona-desc">Latência p99, saúde do kernel Rust, evidência técnica BLAKE3 em tempo real.</div>
+    </a>
+    <a href="persona-ciso.html" class="persona-card">
+      <div class="persona-icon">🛡️</div>
+      <div class="persona-role">CISO</div>
+      <div class="persona-name">Decision Inspector</div>
+      <div class="persona-desc">Laboratório de ataques ao vivo. Veredictos assinados com HMAC-SHA256. Ledger imutável.</div>
+    </a>
+    <a href="persona-dpo.html" class="persona-card">
+      <div class="persona-icon">⚖️</div>
+      <div class="persona-role">DPO</div>
+      <div class="persona-name">Compliance & Ethics</div>
+      <div class="persona-desc">LGPD, EU AI Act, NIST. Avaliação ao vivo. Geração de FRIA. Relatórios de conformidade.</div>
+    </a>
+    <a href="persona-gov.html" class="persona-card">
+      <div class="persona-icon">🏛️</div>
+      <div class="persona-role">Governança</div>
+      <div class="persona-name">Contestability Loop</div>
+      <div class="persona-desc">SLA 24h garantido. Appeals ao vivo. Direito de contestação como invariante de sistema.</div>
+    </a>
+  </div>
+
+  <div class="lab-cta">
+    <h3>🔬 Laboratório Unificado</h3>
+    <p>Selecione qualquer persona e execute cenários pré-definidos para demonstrar o sistema ao vivo para stakeholders.</p>
+    <a href="lab.html" class="btn btn-primary">Abrir Laboratório →</a>
+  </div>
+</div>
+
+<div class="footer">
+  BuildToValue Trust OS v3.0 — Instância de demonstração provisória · Dados em tempo real da API local
+</div>
+
+<div id="toast"></div>
+
+<script src="js/api.js"></script>
+<script>
+  (async () => {
+    try {
+      const r = await API.health();
+      if (r.ok) {
+        document.getElementById('status-text').textContent = 'API online — ' + (r.data.status || 'ok');
+        document.getElementById('status-text').style.color = 'var(--green)';
+        // Probe decide para checar Rust
+        const d = await API.decide({ input_text: 'ping', session_id: 'demo-index-probe' });
+        if (d.data.rationale && d.data.rationale.includes('entropy')) {
+          document.getElementById('badge-rust').style.display = 'inline-flex';
+        }
+      }
+    } catch(e) {
+      document.getElementById('dot-health').className = 'dot dot-red';
+      document.getElementById('status-text').textContent = 'API offline';
+      document.getElementById('status-text').style.color = 'var(--red)';
+    }
+  })();
+</script>
+</body>
+</html>
