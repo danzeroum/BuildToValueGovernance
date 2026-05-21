@@ -2,15 +2,23 @@
 # BuildToValue v0.1.0-alpha.1 - Sovereign Orquestrator Makefile
 # ═══════════════════════════════════════════════════════════════════════════
 
-.PHONY: help build develop test e2e clean install quick dashboard benchmark setup run run-dev
+# Caminhos absolutos do venv — usados em todos os targets
+# Evita depender de `source activate` (não funciona em subshell Make)
+VENV      = python/venv
+PYTHON    = $(VENV)/bin/python
+PIP       = $(VENV)/bin/pip
+UVICORN   = $(VENV)/bin/uvicorn
+PYTEST    = $(VENV)/bin/pytest
+
+.PHONY: help build develop test e2e clean install quick dashboard benchmark setup run run-dev venv
 
 help:
 	@echo "BuildToValue Governance v0.1.0-alpha.1 - Orquestração Soberana"
 	@echo ""
 	@echo "Primeiros passos / VPS:"
-	@echo "  make setup       - Instala maturin e roda make install (use na primeira vez)"
-	@echo "  make run         - Sobe a API com .env (requer /opt/btv/.env)"
-	@echo "  make run-dev     - Sobe a API sem .env (modo dev)"
+	@echo "  make setup       - Cria venv, instala maturin e tudo mais (primeira vez)"
+	@echo "  make run         - Sobe a API com .env (requer .env na raiz)"
+	@echo "  make run-dev     - Sobe a API sem .env (modo dev, com --reload)"
 	@echo ""
 	@echo "Comandos de Rust:"
 	@echo "  make build        - Compila o Workspace Rust (release)"
@@ -25,48 +33,59 @@ help:
 	@echo "Manutenção:"
 	@echo "  make clean        - Remove artefatos de build de ambos os mundos"
 	@echo ""
+	@echo "Nota: após 'make setup', ative o venv no terminal com:"
+	@echo "  source python/venv/bin/activate"
+	@echo ""
 
-# Primeiro uso / nova VPS: garante maturin e instala tudo
-setup:
+# Cria o venv se ainda não existir
+venv:
+	@test -d $(VENV) || (echo "🐍 Criando venv em $(VENV)..." && python3 -m venv $(VENV))
+
+# Primeiro uso / nova VPS: cria venv, instala maturin e tudo mais
+setup: venv
 	@echo "🚀 Configurando ambiente completo..."
-	pip install maturin
-	@make install
+	$(PIP) install --upgrade pip
+	$(PIP) install maturin
+	@$(MAKE) install
+	@echo ""
+	@echo "✅ Setup concluído! Ative o venv com:"
+	@echo "   source python/venv/bin/activate"
 
 # Sobe a API em produção com variáveis do .env
 run:
 	@echo "▶️  Iniciando API com .env..."
-	cd python && uvicorn buildtovalue.api.app:app --host 0.0.0.0 --port 8000 --env-file ../.env
+	cd python && $(CURDIR)/$(UVICORN) buildtovalue.api.app:app --host 0.0.0.0 --port 8000 --env-file $(CURDIR)/.env
 
-# Sobe a API em modo dev (sem .env, usa fallbacks)
+# Sobe a API em modo dev (sem .env, usa fallbacks, com auto-reload)
 run-dev:
 	@echo "▶️  Iniciando API em modo dev..."
-	cd python && uvicorn buildtovalue.api.app:app --host 0.0.0.0 --port 8000 --reload
+	cd python && $(CURDIR)/$(UVICORN) buildtovalue.api.app:app --host 0.0.0.0 --port 8000 --reload
 
 # Compilação pura de Rust
 build:
 	@echo "🦀 Compilando Workspace Rust (Kernel + CLI + Bindings)..."
 	cd rust && cargo build --release
 
-# A mágica da integração: Maturin instala o Rust dentro do seu venv Python
+# A mágica da integração: Maturin instala o Rust dentro do venv Python
 # O workspace exige -m apontando para o crate de bindings (pyo3)
 develop:
 	@echo "🌉 Instalando Rust Bindings no ambiente Python..."
-	cd rust && maturin develop --release -m bindings/Cargo.toml
+	cd rust && $(CURDIR)/$(VENV)/bin/maturin develop --release -m bindings/Cargo.toml
 
 # Instalação completa do ambiente
 install:
 	@echo "📦 Instalando dependências Python..."
-	cd python && pip install -e .
-	@make develop
+	cd python && $(CURDIR)/$(PIP) install -e .
+	@$(MAKE) develop
 
 # Bateria completa de testes
 test: develop
 	@echo "🧪 Executando testes do Rust Kernel..."
 	cd rust && cargo test --release
 	@echo "🐍 Executando testes de Governança Python..."
-	cd python && pytest tests/ -v
+	cd python && $(CURDIR)/$(PYTEST) tests/ -v
 
-# Testes de ponta-a-ponta (Caminho corrigido para scripts/ci/)
+# Testes de ponta-a-ponta
 e2e: develop
 	@echo "🏁 Iniciando validação E2E LGPD..."
 	bash scripts/ci/run_e2e_lgpd.sh
@@ -86,7 +105,7 @@ dashboard:
 # Public Benchmark
 benchmark:
 	@echo "Running BTV benchmark..."
-	cd benchmarks/comparative && python runner.py --adapters btv
+	cd benchmarks/comparative && $(PYTHON) runner.py --adapters btv
 
 # ARIA Scaling Trust Arena — iterative demo (Streamlit)
 arena-demo:
@@ -96,7 +115,7 @@ arena-demo:
 # ARIA Scaling Trust Arena — iterative demo (CLI walkthrough)
 arena-demo-cli:
 	@echo "Walking through all Arena scenarios in the terminal..."
-	cd python && python -m buildtovalue.cli.main arena-demo --scenario all
+	cd python && $(PYTHON) -m buildtovalue.cli.main arena-demo --scenario all
 
 # Atalho para desenvolvedor Rust
 quick:
