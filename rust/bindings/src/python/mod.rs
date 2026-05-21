@@ -3,6 +3,8 @@
 //! Este é o ÚNICO módulo PyO3 na crate. Ele consolida todas as
 //! funções Python exportadas em um único módulo `buildtovalue_kernel`.
 
+#![allow(non_local_definitions)] // pyo3 0.20 macros generate non-local impls; fixed in pyo3 0.22
+
 use pyo3::prelude::*;
 
 // Módulos internos

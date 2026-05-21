@@ -228,7 +228,7 @@ jobs:
       - name: PyO3 module imports and constants
         run: |
           python3 -c "
-          import buildtovalue_governance as btv
+          import buildtovalue_kernel as btv
           print(f'  version={btv.__version__}')
           assert btv.PROTOCOL_VERSION == 2, f'PROTOCOL_VERSION={btv.PROTOCOL_VERSION}'
           print('  OK: PROTOCOL_VERSION = 2')
@@ -237,7 +237,7 @@ jobs:
       - name: test_bridge returns real kernel data
         run: |
           python3 -c "
-          import json, buildtovalue_governance as btv
+          import json, buildtovalue_kernel as btv
           raw = btv.test_bridge()
           data = json.loads(raw)
           assert len(data) == 1

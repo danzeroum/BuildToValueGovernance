@@ -1,6 +1,8 @@
 //! Batch penalty calculations for Python
 //! Placeholder – será substituído na v1.6+.
 
+#![allow(non_local_definitions)] // pyo3 0.20 macros generate non-local impls; fixed in pyo3 0.22
+
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyDict};
 use pyo3::exceptions::{PyKeyError, PyValueError};
