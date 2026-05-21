@@ -27,9 +27,10 @@ build:
 	cd rust && cargo build --release
 
 # A mágica da integração: Maturin instala o Rust dentro do seu venv Python
+# O workspace exige -m apontando para o crate de bindings (pyo3)
 develop:
 	@echo "🌉 Instalando Rust Bindings no ambiente Python..."
-	cd rust && maturin develop --release
+	cd rust && maturin develop --release -m bindings/Cargo.toml
 
 # Instalação completa do ambiente
 install:
