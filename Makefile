@@ -2,10 +2,15 @@
 # BuildToValue v0.1.0-alpha.1 - Sovereign Orquestrator Makefile
 # ═══════════════════════════════════════════════════════════════════════════
 
-.PHONY: help build develop test e2e clean install quick dashboard benchmark
+.PHONY: help build develop test e2e clean install quick dashboard benchmark setup run run-dev
 
 help:
 	@echo "BuildToValue Governance v0.1.0-alpha.1 - Orquestração Soberana"
+	@echo ""
+	@echo "Primeiros passos / VPS:"
+	@echo "  make setup       - Instala maturin e roda make install (use na primeira vez)"
+	@echo "  make run         - Sobe a API com .env (requer /opt/btv/.env)"
+	@echo "  make run-dev     - Sobe a API sem .env (modo dev)"
 	@echo ""
 	@echo "Comandos de Rust:"
 	@echo "  make build        - Compila o Workspace Rust (release)"
@@ -20,6 +25,22 @@ help:
 	@echo "Manutenção:"
 	@echo "  make clean        - Remove artefatos de build de ambos os mundos"
 	@echo ""
+
+# Primeiro uso / nova VPS: garante maturin e instala tudo
+setup:
+	@echo "🚀 Configurando ambiente completo..."
+	pip install maturin
+	@make install
+
+# Sobe a API em produção com variáveis do .env
+run:
+	@echo "▶️  Iniciando API com .env..."
+	cd python && uvicorn buildtovalue.api.app:app --host 0.0.0.0 --port 8000 --env-file ../.env
+
+# Sobe a API em modo dev (sem .env, usa fallbacks)
+run-dev:
+	@echo "▶️  Iniciando API em modo dev..."
+	cd python && uvicorn buildtovalue.api.app:app --host 0.0.0.0 --port 8000 --reload
 
 # Compilação pura de Rust
 build:
