@@ -69,8 +69,6 @@ impl DeobfuscatorChain {
     pub fn deobfuscate(&self, input: &str) -> ChainResult {
         let start = Instant::now();
         let mut layers: Vec<ChainLayer> = Vec::new();
-        let (normalized, _) = Normalizer::new().normalize(input);
-        let mut current = normalized;
 
         // ADR-0013-v2: normalization counts as a layer so Stage 3.5 gate
         // (!layers.is_empty() && final_text != input) triggers for Unicode/spaced PII.
@@ -303,7 +301,7 @@ impl Module for DeobfuscatorChain {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::Deobfuscator }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.05, 0.15, 20260517, 300)
+        BiasDeclaration::from_static(0.05, 0.15, 20260517, 300)
             .with_limitations(
                 "Max 3 layers. 5ms timeout. Only base64/hex/leetspeak. Custom encodings not covered."
             )

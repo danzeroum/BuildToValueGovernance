@@ -1,3 +1,4 @@
+#![allow(unreachable_code)]
 use btv_core::DeliveryToken;
 fn main() {
     // All fields are private — this must fail with E0451

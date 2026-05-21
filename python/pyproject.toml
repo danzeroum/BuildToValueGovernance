@@ -7,16 +7,15 @@ build-backend = "hatchling.build"
 [project]
 name = "buildtovalue"
 version = "0.1.0a1"
-description = "AI Agent Governance Gateway — cryptographic evidence, LGPD/GDPR/EU AI Act compliance, contestable decisions"
+description = "Sovereign Trust OS - Ethical AI Governance Infrastructure"
 authors = [
     {name = "BuildToValue Team", email = "team@buildtovalue.com"}
 ]
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
-readme = {file = "../README.md", content-type = "text/markdown"}
 keywords = ["ai-governance", "compliance", "ethics", "llm-security"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.10",
@@ -68,11 +67,10 @@ compliance = [
 btv = "buildtovalue.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/danzeroum/BuildToValueGovernance"
-Documentation = "https://github.com/danzeroum/BuildToValueGovernance/tree/main/docs"
-Repository = "https://github.com/danzeroum/BuildToValueGovernance"
-"Issue Tracker" = "https://github.com/danzeroum/BuildToValueGovernance/issues"
-Changelog = "https://github.com/danzeroum/BuildToValueGovernance/releases"
+Homepage = "https://github.com/buildtovalue/sovereign-trust-os"
+Documentation = "https://docs.buildtovalue.com"
+Repository = "https://github.com/buildtovalue/sovereign-trust-os"
+Issues = "https://github.com/buildtovalue/sovereign-trust-os/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["buildtovalue"]

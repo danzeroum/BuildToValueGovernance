@@ -10,7 +10,7 @@ PATTERN: Follows the 4-element BTV adapter contract:
 DESIGN DECISIONS (documented in ADR-043):
   - use_decide=True by default — grants carry real financial risk.
   - hard_blocked checked BEFORE action (fail-secure priority).
-  - HMAC-SHA256 for session_id (Rust kernel handles BLAKE3 internally).
+  - HMAC-SHA256 for session_id (kernel handles internal hashing; adapters must not re-hash).
   - JSON minified serialization (avoids English-prefix language confusion).
   - BTVClient imported lazily (TYPE_CHECKING only) so the adapter module
     can be imported in environments where buildtovalue SDK is not installed.

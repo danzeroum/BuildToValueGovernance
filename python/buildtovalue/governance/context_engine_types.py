@@ -55,6 +55,10 @@ class EthicalVerdict:
     trust_score: float
     explanation: str
     hmac_signature: str
+    # Audit-evidence binding: blake3 hash of the original RustEvidence input,
+    # required for verify_signature() to recompute the signed payload.
+    # Without this, the verdict is not self-verifying.
+    blake3_hash: str = ""
     contestable: bool = True
     appeal_deadline: int = 0
     # ADR-043: True quando veredicto REPORT emitido por threshold
@@ -76,6 +80,7 @@ class EthicalVerdict:
             "trust_score": round(self.trust_score, 4),
             "explanation": self.explanation,
             "hmac_signature": self.hmac_signature,
+            "blake3_hash": self.blake3_hash,
             "contestable": self.contestable,
             "appeal_deadline": self.appeal_deadline,
             "report_triggered": self.report_triggered,

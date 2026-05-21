@@ -28,10 +28,9 @@ use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector, Normali
 use crate::interceptor::{InterceptorChain, InterceptAction, ToolScreen}; // Wire 2: PROP-034a
 use crate::security::prompt_injection::PromptInjectionDetector;
 
-/// Chave MAC do kernel para PROP-031 (ADR-031b).
-/// Em produção: substituir por variável de ambiente ou HSM.
-/// Zero heap: &[u8] literal estático.
-const KERNEL_MAC_KEY: &[u8] = b"btv-kernel-supply-guard-v1";
+// Kernel MAC key (PROP-031 / ADR-031b) is now resolved via
+// `crate::keys::kernel_mac_key()`, backed by a `Zeroizing<Vec<u8>>` singleton
+// initialized in `main()` from `BTV_HMAC_KEY`. See `rust/kernel/src/keys.rs`.
 
 // ---------------------------------------------------------------------
 // PIPELINE STAGE
@@ -72,6 +71,9 @@ pub struct Gatekeeper {
     pipeline: Vec<StageEntry>,
     metrics: GatekeeperMetrics,
     interceptor_chain: InterceptorChain, // Wire 2: PROP-034a
+    latency_ring: Box<[f32; LATENCY_RING_SIZE]>,
+    ring_pos: usize,
+    ring_len: usize,
 }
 
 impl Gatekeeper {
@@ -112,6 +114,9 @@ impl Gatekeeper {
             pipeline,
             metrics: GatekeeperMetrics::default(),
             interceptor_chain,
+            latency_ring: Box::new([0.0_f32; LATENCY_RING_SIZE]),
+            ring_pos: 0,
+            ring_len: 0,
         }
     }
 
@@ -153,12 +158,10 @@ impl Gatekeeper {
             }
         };
 
-        // Hash canônico: slice [0..8] de [u8; 32] é invariante estática, nunca falha.
-        evidence.original_request_hash = u64::from_le_bytes(
-            adapted.blake3_hash[0..8]
-                .try_into()
-                .unwrap_or_else(|_| panic!("BTV invariant violation: blake3_hash slice [0..8] must be exactly 8 bytes"))
-        );
+        // Hash canônico: blake3_hash é [u8;32], cópia dos primeiros 8 bytes é infallível.
+        let mut hash_bytes = [0u8; 8];
+        hash_bytes.copy_from_slice(&adapted.blake3_hash[..8]);
+        evidence.original_request_hash = u64::from_le_bytes(hash_bytes);
         evidence.input_size = adapted.normalized_len as u32;
 
         // ── Wire 2: PROP-034a ToolScreen — pré-voo heurístico ────────────
@@ -184,7 +187,7 @@ impl Gatekeeper {
         if evidence.has_skill_hash() {
             let hash = evidence.get_skill_hash();
             let mac_tag = evidence.get_skill_mac_tag();
-            match verify_skill(hash, mac_tag, KERNEL_MAC_KEY) {
+            match verify_skill(hash, mac_tag, crate::keys::kernel_mac_key()) {
                 SupplyGuardResult::Allowed => {}
                 SupplyGuardResult::Blocked(ref reason) => {
                     log::warn!(
@@ -279,12 +282,14 @@ impl Gatekeeper {
             }
         }
 
-        // Stage 3.5: Re-scan decoded content
+        // Stage 3.5: Re-scan decoded content (ADR-0013-v2)
         let deob_chain = crate::deobfuscator::chain::DeobfuscatorChain::new();
         let chain_result = deob_chain.deobfuscate(input);
         if !chain_result.layers.is_empty() && chain_result.final_text != input {
             for entry in &self.pipeline {
                 if entry.stage != PipelineStage::Validate { continue; }
+                // ADR-0034: inherit lang_bitmask so Tier 1 language patterns apply
+                // on decoded content (e.g. PT-BR injection encoded in base64).
                 let mut rescan_ctx = ScanContext::default();
                 rescan_ctx.flags.lang_bitmask = ctx.flags.lang_bitmask;
                 rescan_ctx.flags.jurisdiction_bitmask = ctx.flags.jurisdiction_bitmask;
@@ -293,7 +298,7 @@ impl Gatekeeper {
             }
         }
 
-        evidence.bias = BiasDeclaration::new(
+        evidence.bias = BiasDeclaration::aggregate(
             max_fpr, max_fnr,
             if oldest_calibration == u32::MAX { 0 } else { oldest_calibration },
             total_test_size,
@@ -338,7 +343,19 @@ impl Gatekeeper {
         if self.ring_len < LATENCY_RING_SIZE { self.ring_len += 1; }
     }
 
-    pub fn get_metrics(&self) -> &GatekeeperMetrics { &self.metrics }
+    pub fn get_metrics(&mut self) -> &GatekeeperMetrics {
+        let n = self.ring_len;
+        if n > 0 {
+            let mut buf: Vec<f32> = self.latency_ring[..n].to_vec();
+            buf.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let pct = |p: f64| buf[((p / 100.0) * (n - 1) as f64).round() as usize];
+            self.metrics.p50_latency_ms  = pct(50.0);
+            self.metrics.p95_latency_ms  = pct(95.0);
+            self.metrics.p99_latency_ms  = pct(99.0);
+            self.metrics.p999_latency_ms = pct(99.9);
+        }
+        &self.metrics
+    }
 }
 
 impl Default for Gatekeeper {

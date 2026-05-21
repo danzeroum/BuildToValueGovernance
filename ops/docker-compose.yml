@@ -57,11 +57,8 @@ services:
         limits:
           memory: 6G
           cpus: "4"
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+        # GPU reserved for inference workloads — optional.
+        # Enable with: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
     healthcheck:
       test: [ "CMD", "python3.11", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
       interval: 10s
