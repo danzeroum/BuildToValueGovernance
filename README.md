@@ -239,17 +239,63 @@ A combinação é: **descarte acidental → erro de build em CI; evidência não
 
 ## Desenvolvimento
 
+### Primeira vez / VPS zerada
+
 ```bash
-# Kernel Rust
-cd rust && cargo build --workspace && cargo test --workspace
-
-# Governança Python
-cd python && pip install -e ".[dev]" && pytest tests/ -v
-
-# Stack completo
-cd ops && docker compose up
-# Gateway: http://localhost:3000  |  Governance: http://localhost:8000
+git clone https://github.com/danzeroum/BuildToValueGovernance
+cd BuildToValueGovernance
+make setup                         # cria venv + instala maturin + deps Python + compila Rust
+source python/venv/bin/activate    # ativa o venv no terminal
 ```
+
+Crie o arquivo `.env` com as chaves de segurança (nunca commitar):
+
+```bash
+cat > .env << EOF
+BTV_HMAC_KEY=$(openssl rand -hex 32)
+BTV_JWT_SECRET=$(openssl rand -hex 32)
+BTV_API_KEYS=$(openssl rand -hex 16)
+EOF
+chmod 600 .env
+```
+
+### Subir a API
+
+```bash
+make run       # produção — carrega variáveis do .env
+make run-dev   # desenvolvimento — sem .env, com --reload
+```
+
+### Atualizar a VPS
+
+```bash
+git pull origin main
+make install   # recompila Rust e reinstala Python se houver mudanças
+make run
+```
+
+### Testes e builds
+
+```bash
+make test      # testes Rust + Python
+make build     # compilação Rust pura (sem instalar no venv)
+make quick     # testes unitários do kernel apenas
+make e2e       # validação E2E LGPD
+```
+
+### Referência de targets do Makefile
+
+| Target | O que faz |
+|---|---|
+| `make setup` | Cria venv + instala maturin + `make install` (primeira vez) |
+| `make install` | `pip install -e .` + `maturin develop` (atualização) |
+| `make run` | Sobe API com `.env` na raiz |
+| `make run-dev` | Sobe API sem `.env`, com `--reload` |
+| `make build` | Compila workspace Rust (release) |
+| `make develop` | Compila e instala bindings Rust no venv |
+| `make test` | Testes Rust + Python |
+| `make quick` | Testes unitários do kernel Rust |
+| `make clean` | Remove artefatos de build |
 
 ---
 

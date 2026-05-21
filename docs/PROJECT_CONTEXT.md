@@ -9,11 +9,88 @@
 # PROJECT_CONTEXT.md — BuildToValue v2.4.0
 
 > Documento de contexto para AI Squad. Colar no início de cada chat de IA.
-> Última atualização: 08 março 2026 (sessão noturna — YAML-driven threshold pattern consolidado).
+> Última atualização: 21 maio 2026 (sessão — setup VPS, FFI bridge PyO3 RustKernel, Makefile targets).
 
 ## O que é
 
 BuildToValue é um Trust OS ético para agentes de IA. Arquitetura híbrida Rust (fatos técnicos) + Python (julgamentos éticos), organizada como "República Algorítmica" com separação de poderes.
+
+---
+
+## Setup & Deploy (VPS / Servidor)
+
+### Primeira vez / VPS zerada
+
+```bash
+git clone https://github.com/danzeroum/BuildToValueGovernance /opt/btv
+cd /opt/btv
+make setup                         # cria python/venv + instala maturin + deps + compila Rust
+source python/venv/bin/activate    # ativar o venv no terminal (necessário uma vez por sessão)
+```
+
+Criar o `.env` com chaves seguras (nunca commitar — já está no `.gitignore`):
+
+```bash
+cat > .env << EOF
+BTV_HMAC_KEY=$(openssl rand -hex 32)
+BTV_JWT_SECRET=$(openssl rand -hex 32)
+BTV_API_KEYS=$(openssl rand -hex 16)
+EOF
+chmod 600 .env
+```
+
+### Subir a API
+
+```bash
+make run       # produção — carrega variáveis do .env via uvicorn --env-file
+make run-dev   # desenvolvimento — sem .env, com --reload
+```
+
+### Atualizar a VPS (fluxo contínuo)
+
+```bash
+cd /opt/btv
+git pull origin main
+make install   # recompila Rust e reinstala Python se houver mudanças
+make run
+```
+
+### Referência de targets do Makefile
+
+| Target | O que faz |
+|---|---|
+| `make setup` | Cria venv + instala maturin + `make install` (primeira vez) |
+| `make install` | `pip install -e .` + `maturin develop --release` (atualização) |
+| `make run` | Sobe API com `.env` na raiz (produção) |
+| `make run-dev` | Sobe API sem `.env`, com `--reload` (dev) |
+| `make develop` | Compila e instala bindings Rust no venv via maturin |
+| `make build` | Compila workspace Rust puro (sem instalar no venv) |
+| `make test` | Testes Rust + Python |
+| `make quick` | Testes unitários do kernel Rust apenas |
+| `make clean` | Remove artefatos de build |
+
+### Variáveis de ambiente
+
+| Variável | Obrigatória em prod | Descrição |
+|---|---|---|
+| `BTV_HMAC_KEY` | ✅ | Chave HMAC-SHA256 para assinatura de evidências |
+| `BTV_JWT_SECRET` | ✅ | Secret para tokens JWT |
+| `BTV_API_KEYS` | ✅ | Chaves de autenticação da API |
+| `BTV_ENV` | — | `development` (default) ou `production` |
+| `BTV_POLICY_DIR` | — | Caminho para policies (default: `data/policies`) |
+
+> **Nota de segurança:** `BTV_HMAC_KEY` é lida uma vez na inicialização e removida de `os.environ` por `security/keys.py` (design intencional — evita vazamento em logs/dumps). O aviso `BTV_HMAC_KEY not set` no lifespan é esperado e inofensivo.
+
+### FFI Bridge (Rust ↔ Python)
+
+O módulo PyO3 se chama `buildtovalue_kernel` e expõe:
+- `RustKernel()` — classe stateful com `scan_for_evidence_batch(inputs, trail_ids)`
+- `scan_for_evidence_batch()` — função standalone equivalente
+- `test_bridge()` — smoke test do bridge
+
+Se o bridge falhar: `cd rust && maturin develop --release -m bindings/Cargo.toml`
+
+---
 
 ## Estado Real do Código
 
@@ -206,7 +283,7 @@ governance:
 | P: Model Integrity Verifier | 051 | ✅ Fase 1 completa + thresholds YAML-driven (ADR-043 pattern) |
 | Q: Model Integrity CI | 052 | ✅ Implementado (fail-secure UNKNOWN→BLOCK, blacklist Heretic +6, ops/ci_gate_g0.py) |
 
-### Commits desta sessão (2026-03-08)
+### Commits sessão 2026-03-08
 
 | Commit | Artefato |
 |:---|:---|
@@ -223,17 +300,25 @@ governance:
 | `230b402` | `PolicyEngine._governance_config` + `report_threshold` property (floor/ceiling) + `EthicalContextEngine` aceita `policy_engine` opcional |
 | `3eeac64` | **`AbliterationDetector._refusal_threshold` + `_sample_size` YAML-driven; `IntegrityVerifier` + `verify_model_integrity()` aceitam `policy_engine`** |
 
+### Commits sessão 2026-05-21 (VPS + FFI bridge)
+
+| Commit | Artefato |
+|:---|:---|
+| `22cffa4` | Makefile — removeu artefatos `[cite_start]` |
+| `85ee802` | Makefile — `make install` usa `pip install -e .` |
+| `b21a590` | Makefile — `make develop` aponta para `bindings/Cargo.toml` |
+| `3293c92` | `rust/bindings/Cargo.toml` — lib renomeada para `buildtovalue_kernel` |
+| `0135dd2` | `rust/bindings/src/python/mod.rs` — `#[pymodule]` renomeado para `buildtovalue_kernel` |
+| `2943416` | `rust/bindings/src/python/bridge.rs` + `mod.rs` — classe `RustKernel` adicionada |
+| `351bbd9` | Makefile — targets `setup` e `run` adicionados |
+| `27c1ab7` | Makefile — `setup` cria venv automaticamente, paths absolutos do venv |
+
 ### Débitos Técnicos Ativos
 
 | # | Débito | Prioridade | Estimativa |
 |:---|:---|:---:|:---:|
-| DT-001 | NHS/VAT/IBAN wired no Gatekeeper pipeline (Stage 3.5a) | ✅ Fechado v1.7.0 | — |
-| DT-002 | `bias_guardian` tipado como `Any` no ethical_context_engine.py | ✅ Fechado — falso positivo (tipo correto) | — |
-| DT-003 | ADR-036.md enum values minúsculas vs código maiúsculas | ✅ Fechado — falso positivo (ambos uppercase) | — |
 | DT-004 | e2e mercy/compliance (4 fails) — schema mismatch governance | Média | 2-4h |
 | DT-005 | `ethical_context_engine.py` excede 200 linhas | Média | Decomposição T1.3 |
-| DT-006 | `bridge.rs` em bindings/ tem placeholder Gatekeeper (não usa real) | ✅ Fechado — falso positivo (já usa Gatekeeper real, v2.0) | — |
-| DT-007 | Trait `Validator` legado coexiste com `Module` | ✅ Fechado v2.1.1 | — |
 
 ### Roadmap Pendente
 
