@@ -27,6 +27,7 @@ use crate::statistics::{EntropyCalculator, ZScoreCalculator, CharRatioAnalyzer, 
 use crate::deobfuscator::{Base64Detector, HexDecoder, LeetspeakDetector, Normalizer};
 use crate::interceptor::{InterceptorChain, InterceptAction, ToolScreen}; // Wire 2: PROP-034a
 use crate::security::prompt_injection::PromptInjectionDetector;
+use crate::validators::attack::{SqlInjectionDetector, JailbreakDetector, DataExfiltrationDetector};
 
 // Kernel MAC key (PROP-031 / ADR-031b) is now resolved via
 // `crate::keys::kernel_mac_key()`, backed by a `Zeroizing<Vec<u8>>` singleton
@@ -95,8 +96,11 @@ impl Gatekeeper {
             StageEntry { module: Box::new(EmailValidator::new()),        stage: PipelineStage::Validate },
             StageEntry { module: Box::new(CreditCardValidator::new()),   stage: PipelineStage::Validate },
             StageEntry { module: Box::new(PhoneValidator::new()),        stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(PromptInjectionDetector::new()), stage: PipelineStage::Validate },
-            StageEntry { module: Box::new(SsnValidator::new()),          stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(PromptInjectionDetector::new()),   stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(SqlInjectionDetector::new()),      stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(JailbreakDetector::new()),         stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(DataExfiltrationDetector::new()),  stage: PipelineStage::Validate },
+            StageEntry { module: Box::new(SsnValidator::new()),              stage: PipelineStage::Validate },
             StageEntry { module: Box::new(SensitiveDataValidator::new()), stage: PipelineStage::Validate },
         ];
 
