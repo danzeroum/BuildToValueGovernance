@@ -87,6 +87,12 @@ pub struct RustKernel {
     gatekeeper: Gatekeeper,
 }
 
+impl Default for RustKernel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[pymethods]
 impl RustKernel {
     /// Cria uma nova instância do kernel Rust.
