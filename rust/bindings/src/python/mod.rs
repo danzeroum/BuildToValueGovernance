@@ -1,7 +1,7 @@
 //! Python FFI Entry Point for BuildToValue Governance
 //!
 //! Este é o ÚNICO módulo PyO3 na crate. Ele consolida todas as
-//! funções Python exportadas em um único módulo `buildtovalue_governance`.
+//! funções Python exportadas em um único módulo `buildtovalue_kernel`.
 
 use pyo3::prelude::*;
 
@@ -13,7 +13,7 @@ pub mod bridge;
 use batch::calculate_penalties_batch;
 use bridge::{scan_for_evidence_batch, test_bridge};
 
-/// BuildToValue Governance Python Module
+/// BuildToValue Kernel Python Module
 ///
 /// Este módulo fornece bindings Python para o sistema BuildToValue Governance.
 ///
@@ -24,12 +24,12 @@ use bridge::{scan_for_evidence_batch, test_bridge};
 ///
 /// # Exemplo:
 /// ```python
-/// import buildtovalue_governance as btv
+/// import buildtovalue_kernel as btv
 /// print(btv.version())
 /// ```
 #[pymodule]
-#[pyo3(name = "buildtovalue_governance")]
-fn buildtovalue_governance(py: Python, m: &PyModule) -> PyResult<()> {
+#[pyo3(name = "buildtovalue_kernel")]
+fn buildtovalue_kernel(py: Python, m: &PyModule) -> PyResult<()> {
     // Metadata do módulo
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("__author__", "BuildToValue Team")?;
@@ -57,5 +57,5 @@ fn buildtovalue_governance(py: Python, m: &PyModule) -> PyResult<()> {
 /// Retorna a versão atual da biblioteca
 #[pyfunction]
 fn version() -> String {
-    format!("BuildToValue Governance v{}", env!("CARGO_PKG_VERSION"))
+    format!("BuildToValue Kernel v{}", env!("CARGO_PKG_VERSION"))
 }
