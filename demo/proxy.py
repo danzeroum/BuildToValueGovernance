@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
 BuildToValue Trust OS Demo — Proxy seguro
-Serve os arquivos estaticos do demo na porta 8080
-e faz proxy das chamadas /api/* para a API real (porta 8000),
-injetando a BTV_API_KEY no header sem expor ao browser.
+Serve os arquivos estáticos do demo e faz proxy das chamadas /api/*
+para a API real (porta 8000), injetando a BTV_API_KEY no header.
 
-Uso: python3 demo/proxy.py
+Uso:
+  python3 demo/proxy.py
+  BTV_DEMO_PORT=9090 python3 demo/proxy.py   # porta alternativa
 """
 
 import os
 import json
+import socket
 import urllib.request
 import urllib.error
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -20,11 +22,20 @@ DEMO_DIR = os.path.dirname(os.path.abspath(__file__))
 PORT     = int(os.environ.get("BTV_DEMO_PORT", "8080"))
 
 
+class ReuseAddrHTTPServer(HTTPServer):
+    """HTTPServer com SO_REUSEADDR para evitar OSError: Address already in use."""
+    allow_reuse_address = True
+
+    def server_bind(self):
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        super().server_bind()
+
+
 class DemoHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DEMO_DIR, **kwargs)
 
-    def log_message(self, fmt, *args):  # silenciar log verboso
+    def log_message(self, fmt, *args):
         if self.path.startswith("/api/"):
             print(f"  [proxy] {self.command} {self.path} → {args[1]}")
 
@@ -84,14 +95,16 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     os.chdir(DEMO_DIR)
-    print(f"""\n  BuildToValue Trust OS — Demo Proxy
+    print(f"""
+  BuildToValue Trust OS — Demo Proxy
   ────────────────────────────────────
   Frontend : http://0.0.0.0:{PORT}
   API proxy: /api/* → {API_BASE}
   API key  : {'*' * 8}{API_KEY[-6:]}
   Demo dir : {DEMO_DIR}
-  ────────────────────────────────────\n""")
-    server = HTTPServer(("0.0.0.0", PORT), DemoHandler)
+  ────────────────────────────────────
+""")
+    server = ReuseAddrHTTPServer(("0.0.0.0", PORT), DemoHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
