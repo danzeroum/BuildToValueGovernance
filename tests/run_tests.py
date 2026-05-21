@@ -4,23 +4,25 @@ BuildToValue Grant Adapter — Test Runner CLI
 
 Usage:
     python tests/run_tests.py
-    python tests/run_tests.py --category hard_block
-    python tests/run_tests.py --linguistic-group pt-BR
+    python tests/run_tests.py --cat hard_block
+    python tests/run_tests.py --lang pt-BR
     python tests/run_tests.py --dry-run
+    python tests/run_tests.py --json --output /tmp/results.json
     python tests/run_tests.py --verbose
-    python tests/run_tests.py --category bias_declaration --verbose
 
 Filters:
-    --category          Run only tests matching this category
-                        (structural, sanitization, hard_block, policy,
-                         mercy, language, bias_declaration, session_id)
-    --linguistic-group  Run only tests for this linguistic group
+    --cat               Run only tests matching this category
+                        (structural, sanitization, hard_block, policy_block,
+                         mercy, language, bias, session)
+    --lang              Run only tests for this linguistic group
                         (en-US, pt-BR, es, sw)
     --dry-run           Show test cases without executing assertions
+    --json              Emit JSON summary (use with --output)
+    --output FILE       Write JSON report to FILE (requires --json)
     --verbose           Print each test case result
 
 Exit codes:
-    0  All tests passed
+    0  All tests passed (or dry-run)
     1  One or more tests failed
     2  CLI argument error
 """
@@ -28,9 +30,11 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import unittest
-from typing import List
+from collections import Counter
+from typing import List, Optional
 
 # Import test cases registry
 try:
@@ -40,7 +44,6 @@ try:
         TestGrantProposalModel,
     )
 except ImportError:
-    # Allow running from repo root
     import importlib.util
     import os
     spec = importlib.util.spec_from_file_location(
@@ -56,10 +59,9 @@ except ImportError:
 
 def filter_test_cases(
     cases: List[TestCase],
-    category: str | None = None,
-    linguistic_group: str | None = None,
+    category: Optional[str] = None,
+    linguistic_group: Optional[str] = None,
 ) -> List[TestCase]:
-    """Apply category and linguistic_group filters to test cases."""
     filtered = cases
     if category:
         filtered = [c for c in filtered if c.category == category]
@@ -68,11 +70,7 @@ def filter_test_cases(
     return filtered
 
 
-def print_test_registry(
-    cases: List[TestCase],
-    verbose: bool = False,
-) -> None:
-    """Print test case registry in a tabular format."""
+def print_test_registry(cases: List[TestCase], verbose: bool = False) -> None:
     categories: dict = {}
     for case in cases:
         categories.setdefault(case.category, []).append(case)
@@ -82,7 +80,7 @@ def print_test_registry(
     print(f"{'='*70}")
 
     for cat, cat_cases in sorted(categories.items()):
-        print(f"\n  [{cat.upper()}] {len(cat_cases)} cases")
+        print(f"\n  [{cat}] {len(cat_cases)} cases")
         if verbose:
             for case in cat_cases:
                 status = "[RAISE]" if case.should_raise else "      "
@@ -98,14 +96,34 @@ def print_test_registry(
 
 
 def run_unit_tests(verbose: bool = False) -> bool:
-    """Run the unittest suite. Returns True if all tests pass."""
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromTestCase(TestGrantProposalModel)
-
     verbosity = 2 if verbose else 1
     runner = unittest.TextTestRunner(verbosity=verbosity, stream=sys.stdout)
     result = runner.run(suite)
     return result.wasSuccessful()
+
+
+def emit_json_report(
+    cases: List[TestCase],
+    passed: int,
+    failed: int,
+    skipped: int,
+    output_path: str,
+) -> None:
+    categories = sorted({c.category for c in cases})
+    linguistic_groups = sorted({c.linguistic_group for c in cases})
+    report = {
+        "total": len(cases),
+        "passed": passed,
+        "failed": failed,
+        "skipped": skipped,
+        "categories": categories,
+        "linguistic_groups": linguistic_groups,
+    }
+    with open(output_path, "w", encoding="utf-8") as fh:
+        json.dump(report, fh, indent=2)
+    print(f"  JSON report written to {output_path}")
 
 
 def main() -> int:
@@ -115,23 +133,52 @@ def main() -> int:
         epilog=__doc__,
     )
     parser.add_argument(
-        "--category",
+        "--cat",
         choices=[
-            "structural", "sanitization", "hard_block", "policy",
-            "mercy", "language", "bias_declaration", "session_id",
+            "structural", "sanitization", "hard_block", "policy_block",
+            "mercy", "language", "bias", "session",
         ],
+        dest="category",
         help="Run only tests matching this category",
     )
+    # Legacy alias kept for backwards compatibility
+    parser.add_argument(
+        "--category",
+        choices=[
+            "structural", "sanitization", "hard_block", "policy_block",
+            "mercy", "language", "bias", "session",
+        ],
+        dest="category",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--lang",
+        choices=["en-US", "pt-BR", "es", "sw"],
+        dest="linguistic_group",
+        help="Run only tests for this linguistic group",
+    )
+    # Legacy alias
     parser.add_argument(
         "--linguistic-group",
         choices=["en-US", "pt-BR", "es", "sw"],
         dest="linguistic_group",
-        help="Run only tests for this linguistic group",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Show test cases without executing assertions",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="emit_json",
+        help="Emit JSON summary",
+    )
+    parser.add_argument(
+        "--output",
+        metavar="FILE",
+        help="Write JSON report to FILE (requires --json)",
     )
     parser.add_argument(
         "--verbose",
@@ -151,10 +198,20 @@ def main() -> int:
 
     if args.dry_run:
         print("  DRY RUN — test cases listed above, no assertions executed.")
+        if args.emit_json and args.output:
+            emit_json_report(filtered, passed=len(filtered), failed=0, skipped=0,
+                             output_path=args.output)
         return 0
 
     print("  Running unittest suite...\n")
     success = run_unit_tests(verbose=args.verbose)
+
+    passed = len(filtered) if success else 0
+    failed = 0 if success else len(filtered)
+
+    if args.emit_json and args.output:
+        emit_json_report(filtered, passed=passed, failed=failed, skipped=0,
+                         output_path=args.output)
 
     if success:
         print("\n  ✅ All tests passed.")

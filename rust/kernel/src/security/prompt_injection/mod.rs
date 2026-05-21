@@ -160,7 +160,7 @@ impl Module for PromptInjectionDetector {
     fn module_id(&self) -> ValidatorModule { ValidatorModule::PromptInjection }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::new(0.08, 0.18, 20260220, 350)
+        BiasDeclaration::from_static(0.08, 0.18, 20260220, 350)
             .with_limitations("Heuristic + Regex based. May FP on code snippets.")
             .with_affected_groups("Developers, AI Researchers.")
     }

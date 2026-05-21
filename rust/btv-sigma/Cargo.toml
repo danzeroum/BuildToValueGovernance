@@ -2,6 +2,7 @@
 name = "btv-sigma"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Guardian of Σ — append-only Transparency Log Authority (Paper 2, Paper 5 Definition 3.1)"
 
 [[bin]]
