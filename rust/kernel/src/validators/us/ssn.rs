@@ -206,7 +206,7 @@ impl Module for SsnValidator {
     }
 
     fn bias_declaration(&self) -> BiasDeclaration {
-        BiasDeclaration::from_static(0.12, 0.05, 20260220, 300)
+        BiasDeclaration::from_static(0.12, 0.05, 20260522, 300)
             .with_limitations(
                 "Bare 9-digit numbers have high FP rate (~25%). \
                  Does not validate against SSA death master file. \
