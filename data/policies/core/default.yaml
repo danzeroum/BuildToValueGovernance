@@ -84,6 +84,39 @@ policies:
       min_confidence: 0.7
     action: LOG
 
+  - id: "block-sqlinjection"
+    name: "Block SQL Injection — Core Defense"
+    description: "Intercepts SQL injection vectors detected by the Rust Kernel"
+    enabled: true
+    priority: 110
+    conditions:
+      validators: ["sqlinjection"]
+      min_severity: 0.5
+      min_confidence: 0.2
+    action: BLOCK
+
+  - id: "block-jailbreak"
+    name: "Block Jailbreak — Core Defense"
+    description: "Intercepts context restriction bypasses detected by the Rust Kernel"
+    enabled: true
+    priority: 110
+    conditions:
+      validators: ["jailbreak"]
+      min_severity: 0.5
+      min_confidence: 0.2
+    action: BLOCK
+
+  - id: "block-dataexfiltration"
+    name: "Block Data Exfiltration — Core Defense"
+    description: "Intercepts outbound data leakage signatures detected by the Rust Kernel"
+    enabled: true
+    priority: 110
+    conditions:
+      validators: ["dataexfiltration"]
+      min_severity: 0.5
+      min_confidence: 0.2
+    action: BLOCK
+
   - id: "educate-low-risk"
     name: "Educate on low-risk findings"
     description: "Send educational message for low-confidence findings"

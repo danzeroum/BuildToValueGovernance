@@ -1322,6 +1322,11 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
         except Exception as exc:  # noqa: BLE001
             logger.warning("FFI scan unexpected error — fail-secure: %s", exc)
 
+    # Fail-secure: critical finding → BLOCK imediato (ADR-048)
+    if req.critical_count > 0:
+        req.action = "BLOCK"
+        req.hard_blocked = True
+
     resp = _decide_hard_block(req, session_id, start)
     if resp:
         return resp
