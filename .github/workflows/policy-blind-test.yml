@@ -48,13 +48,10 @@ jobs:
             bindings-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.lock') }}
             blind-test-${{ runner.os }}-
 
-      - name: Install maturin
-        run: pip install maturin
-
       - name: Build and install PyO3 bindings
         run: |
-          cd rust
-          maturin develop -m bindings/Cargo.toml --features python
+          pip install maturin
+          cd rust && maturin build --release -m bindings/Cargo.toml && pip install target/wheels/*.whl
           echo "  OK: buildtovalue_kernel installed"
 
       - name: Install dependencies
