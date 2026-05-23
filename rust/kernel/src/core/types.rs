@@ -116,6 +116,7 @@ impl fmt::Display for RiskLevel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "score")]
 #[repr(u8)]
 pub enum TechnicalSeverity {
     Info = 0,

@@ -7,7 +7,7 @@ use crate::evidence::Finding;
 const SQL_PATTERNS: &[&str] = &[
     "select ", "insert ", "update ", "delete ", "drop ",
     "union ",  "truncate ", "exec ",  "execute ", "xp_",
-    "'; ",     "\"; ",      "-- ",    "/*",        "*/",
+    "'; ",     "\"; ",      "--",     "/*",        "*/",
     "1=1",     "or 1",      "and 1",  "sleep(",    "waitfor ",
     "benchmark(",
 ];
@@ -99,5 +99,14 @@ mod tests {
         let findings = d.scan("select something", &mut ctx);
         assert!(!findings.is_empty());
         assert_eq!(findings[0].severity, TechnicalSeverity::High);
+    }
+
+    #[test]
+    fn detects_trailing_comment_without_space() {
+        let d = SqlInjectionDetector::new();
+        let mut ctx = ScanContext::default();
+        let findings = d.scan("SELECT * FROM users; DROP TABLE sessions; --", &mut ctx);
+        assert!(!findings.is_empty());
+        assert!(findings[0].severity.is_critical());
     }
 }
