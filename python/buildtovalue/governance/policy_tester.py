@@ -207,7 +207,7 @@ class PolicyTester:
                 resp = client.post(
                     f"{self.gateway_url}/v1/decide",
                     json={
-                        "input":      case.input_text,
+                        "input_text": case.input_text,
                         "profile":    policy_name,
                         "session_id": f"rawls-{int(time.time())}-{case.case_id}",
                         # Véu de Ignorância: SEM profile_id, tenant_id, trust_score
