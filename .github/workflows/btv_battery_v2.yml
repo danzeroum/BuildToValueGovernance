@@ -1,0 +1,77 @@
+name: BTV Battery v2 — Security Coverage
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+    paths:
+      - "rust/kernel/src/validators/attack/**"
+      - "rust/kernel/src/core/types.rs"
+      - "rust/kernel/src/gatekeeper.rs"
+      - "python/buildtovalue/api/app.py"
+      - "tests/ci/test_btv_battery_v2.py"
+      - ".github/workflows/btv_battery_v2.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  battery-v2:
+    name: BTV Battery v2 (60 security cases)
+    runs-on: ubuntu-latest
+
+    env:
+      BTV_HMAC_KEY: "ci-test-hmac-key-exactly-32-bytes!"
+      BTV_ENV: development
+      BTV_API_KEY: "2e9854d03357579fa1a48b7cbdfc3296"
+      BTV_DB_PATH: "/tmp/btv_ci_trust.db"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "rust -> rust/target"
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install project dependencies (Python + maturin)
+        run: make install
+
+      - name: Build Rust kernel + install FFI binding
+        run: make develop
+
+      - name: Start governance server
+        run: |
+          cd python
+          ../python/venv/bin/uvicorn buildtovalue.api.app:app \
+            --host 0.0.0.0 --port 8000 --log-level warning &
+          echo "Waiting for server..."
+          timeout 60 bash -c \
+            'until curl -sf http://localhost:8000/health; do sleep 1; done'
+          echo "Server is up."
+
+      - name: Run BTV Battery v2
+        env:
+          BTV_BASE_URL: "http://localhost:8000"
+        run: |
+          cd python
+          ../python/venv/bin/pytest ../tests/ci/test_btv_battery_v2.py \
+            -v --tb=short -m e2e --no-header \
+            --junit-xml=../battery_v2_results.xml
+
+      - name: Upload JUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: battery-v2-junit
+          path: battery_v2_results.xml
