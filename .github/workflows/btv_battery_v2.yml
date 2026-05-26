@@ -20,6 +20,7 @@ jobs:
   battery-v2:
     name: BTV Battery v2 (60 security cases)
     runs-on: ubuntu-latest
+    timeout-minutes: 40
 
     env:
       BTV_HMAC_KEY: "ci-test-hmac-key-exactly-32-bytes!"
@@ -35,35 +36,41 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: actions/cache@v4
         with:
-          workspaces: "rust -> rust/target"
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: battery-v2-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.lock') }}
+          restore-keys: |
+            battery-v2-${{ runner.os }}-
+            bindings-${{ runner.os }}-
 
-      - name: Install Python 3.12
+      - name: Install Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
-      - name: Create venv + install all dependencies
-        # make setup: creates python/venv, installs maturin + Python deps,
-        # then calls make develop (compiles Rust kernel + FFI binding).
-        run: make setup
+      - name: Install Python dependencies + build Rust kernel
+        run: |
+          pip install maturin pytest httpx
+          pip install -e python/
+          cd rust && maturin build --release -m bindings/Cargo.toml && pip install target/wheels/*.whl
 
       - name: Start governance server
-        # Mirror make run-dev: cd into python/ so buildtovalue package is importable
         run: |
-          (cd python && ../python/venv/bin/uvicorn buildtovalue.api.app:app \
+          (cd python && uvicorn buildtovalue.api.app:app \
             --host 0.0.0.0 --port 8000 --log-level warning) &
           echo "Waiting for governance server..."
           timeout 60 bash -c 'until curl -sf http://localhost:8000/health; do sleep 1; done'
           echo "Server is up."
 
       - name: Run BTV Battery v2
-        # Run from python/ so pytest.ini (which registers the e2e marker) is picked up
         env:
           BTV_BASE_URL: "http://localhost:8000"
         run: |
-          cd python && ../python/venv/bin/pytest ../tests/ci/test_btv_battery_v2.py \
+          cd python && pytest ../tests/ci/test_btv_battery_v2.py \
             -v --tb=short -m e2e \
             --junit-xml=../battery_v2_results.xml
 
