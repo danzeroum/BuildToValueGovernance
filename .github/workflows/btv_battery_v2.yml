@@ -58,9 +58,13 @@ jobs:
       - name: Install Python package + dependencies
         run: pip install -e python/
 
-      - name: Build and install Rust kernel (FFI)
+      - name: Build Rust kernel wheel
         working-directory: rust
-        run: maturin develop --release -m bindings/Cargo.toml
+        run: maturin build --release -m bindings/Cargo.toml
+
+      - name: Install Rust kernel wheel
+        working-directory: rust
+        run: pip install target/wheels/*.whl
 
       - name: Verify kernel import
         run: python -c "import buildtovalue_kernel as k; print('kernel OK, version:', k.__version__)"

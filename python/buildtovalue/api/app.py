@@ -1348,6 +1348,14 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
         elif _cats & _ATTACK_BLOCK and req.critical_count > 0:
             req.action = "BLOCK"
             req.hard_blocked = True
+        elif req.critical_count > 0:
+            # ToolScreen (PROP-034a InterceptorChain) may emit Critical(255) under
+            # ValidatorModule::Unknown before named validators run. That puts
+            # 'Unknown' in _cats (non-empty, so Python fallback is skipped) but
+            # 'Unknown' is not in _ATTACK_BLOCK, causing silent ALLOW. Fail-secure:
+            # any critical finding that reaches here must block.
+            req.action = "BLOCK"
+            req.hard_blocked = True
         elif "SqlInjection" in _cats and any(p in _t for p in _SQL_ATTACK_SIGS):
             req.action = "BLOCK"
             req.hard_blocked = True
