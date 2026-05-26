@@ -477,7 +477,7 @@
 
 <!-- ── NAV ──────────────────────────────────────────── -->
 <nav class="nav">
-  <a href="BuildToValue Landing.html" class="nav-logo">
+  <a href="index.html" class="nav-logo">
     <span class="logo-mark">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 21l18 0M12 21l0 -10M5 21l0 -8M19 21l0 -8M3 11l9 -8l9 8"/></svg>
     </span>
@@ -487,8 +487,8 @@
 
   <div class="nav-mid">
     <div class="nav-group">
-      <a href="BuildToValue Landing.html">Home</a>
-      <a href="Lab.html" class="active">Lab</a>
+      <a href="index.html">Home</a>
+      <a href="lab.html" class="active">Lab</a>
     </div>
     <div class="nav-group">
       <a href="proxy-demo.html">Proxy</a>
@@ -498,14 +498,14 @@
     </div>
     <div class="nav-group">
       <a href="persona-eng.html">Eng</a>
-      <a href="Persona CISO.html">CISO</a>
+      <a href="persona-ciso.html">CISO</a>
       <a href="persona-dpo.html">DPO</a>
       <a href="persona-gov.html">Gov</a>
     </div>
   </div>
 
   <div class="nav-right">
-    <button class="nav-icon-btn" onclick="window.location.href='BuildToValue Landing.html#top'" title="Reabrir tour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+    <button class="nav-icon-btn" onclick="window.location.href='index.html#top'" title="Reabrir tour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
     <button class="nav-icon-btn" onclick="toggleTheme()" title="Alternar tema">
       <svg id="t-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       <svg id="t-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
@@ -516,12 +516,12 @@
 
 <div class="mobile-menu" id="mobile-menu">
   <div class="group-label">Principal</div>
-  <a href="BuildToValue Landing.html">Home</a>
-  <a href="Lab.html">Laboratório</a>
+  <a href="index.html">Home</a>
+  <a href="lab.html">Laboratório</a>
   <div class="group-label">Demos</div>
   <a href="proxy-demo.html">Proxy</a><a href="sanitizer-demo.html">Sanitizer</a><a href="ledger-explorer.html">Ledger</a><a href="dashboard.html">Dashboard</a>
   <div class="group-label">Personas</div>
-  <a href="persona-eng.html">Engenheiro</a><a href="Persona CISO.html">CISO</a><a href="persona-dpo.html">DPO</a><a href="persona-gov.html">Governança</a>
+  <a href="persona-eng.html">Engenheiro</a><a href="persona-ciso.html">CISO</a><a href="persona-dpo.html">DPO</a><a href="persona-gov.html">Governança</a>
 </div>
 
 <!-- ── INTRO BAR ────────────────────────────────────── -->
@@ -773,7 +773,6 @@ async function runCustom() {
   document.querySelectorAll('.scen').forEach(x => x.classList.remove('active'));
   document.getElementById('prompt-text').textContent = txt;
 
-  // Heuristic for custom mock
   const lower = txt.toLowerCase();
   let mock;
   if (/select|drop\s+table|union\s|--/.test(lower)) mock = { pipe:{R:'warn',L:'ok',J:'fail',G:'ok'}, action:'BLOCK', risk:0.88, reason:'Padrão SQL detectado no input customizado. Bloqueio por Jonas.', label:'Custom · SQL-like' };
@@ -789,15 +788,12 @@ async function runCustom() {
 async function runDecision(s) {
   running = true;
 
-  // reset pipeline cells to running state
   const cells = document.querySelectorAll('.pipe-cell .pipe-state');
   cells.forEach(c => { c.className = 'pipe-state pending running'; c.innerHTML = '<span class="dot"></span>...'; });
 
-  // hide previous verdict
   document.getElementById('verdict-body').innerHTML = `<div class="v-empty"><div class="glyph"><div style="border:2px solid currentColor;border-top-color:transparent;border-radius:50%;width:22px;height:22px;animation:spin 0.8s linear infinite"></div></div><div class="hint">Processando…</div></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
   document.getElementById('v-footer').style.display = 'none';
 
-  // sequential validator reveal
   const t0 = performance.now();
   const order = [
     { idx:0, key:'R' }, { idx:1, key:'L' }, { idx:2, key:'J' }, { idx:3, key:'G' }
@@ -814,9 +810,7 @@ async function runDecision(s) {
   await sleep(180);
   const t1 = performance.now();
 
-  // render verdict
   renderVerdict(s, t1 - t0);
-  // history
   HISTORY.unshift({ ...s, ts: Date.now(), latency: Math.round(t1 - t0 + 12) });
   renderHistory();
   renderTrust();
@@ -862,7 +856,6 @@ function renderVerdict(s, latencyMs) {
   document.getElementById('v-lat').textContent = lat + 'ms';
   document.getElementById('v-footer').style.display = 'flex';
 
-  // forensic side
   document.getElementById('forensic-body').innerHTML = `
     <div class="forensic-row"><div class="k">verdict_id</div><div class="v">${id}</div></div>
     <div class="forensic-row"><div class="k">action</div><div class="v" style="color:${riskColor}">${s.action}</div></div>
@@ -914,7 +907,7 @@ function renderTrust() {
     if (!v) html += '<div class="trust-bar" style="height:8%"></div>';
     else {
       const h = ((1 - v.risk) * 100).toFixed(0);
-      const cls = v.action[0]; // A/B/E/R
+      const cls = v.action[0];
       html += `<div class="trust-bar ${cls}" style="height:${Math.max(h, 6)}%"></div>`;
     }
   }
@@ -975,7 +968,6 @@ function toggleTheme() {
 window.addEventListener('DOMContentLoaded', () => {
   applyTheme(localStorage.getItem('btv-theme') || 'dark');
   renderScenarios();
-  // empty trust bars
   const bars = document.getElementById('trust-bars');
   bars.innerHTML = Array.from({length: 20}, () => '<div class="trust-bar" style="height:8%"></div>').join('');
 });
