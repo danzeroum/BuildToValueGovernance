@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger Explorer — BuildToValue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0d13; --bg-2:#0d1117; --surface:#141921; --surface-2:#1c222c; --surface-3:#262d39;
+    --border:rgba(255,255,255,0.07); --border-strong:rgba(255,255,255,0.14);
+    --text:#e6edf3; --muted:#8b95a3; --muted-2:#5a6470;
+    --accent:#388bfd; --accent-2:#79c0ff;
+    --allow:#3fb950; --block:#f85149; --educate:#d29922; --redact:#bc8cff;
+    --chain:#a5f3fc;
+    --mono:'JetBrains Mono',ui-monospace,monospace; --sans:'Inter',system-ui,sans-serif;
+  }
+  [data-theme="light"] {
+    --bg:#F4F6F9; --bg-2:#EEF1F5; --surface:#FFFFFF; --surface-2:#EEF1F5; --surface-3:#E2E8F0;
+    --border:rgba(15,23,42,0.10); --border-strong:rgba(15,23,42,0.18);
+    --text:#0F172A; --muted:#475569; --muted-2:#64748B;
+    --accent:#004BD6; --accent-2:#1D4ED8;
+    --allow:#059669; --block:#DC2626; --educate:#B45309; --redact:#7C3AED;
+  }
+  [data-theme="light"] .chain-entry, [data-theme="light"] .hmac-stage, [data-theme="light"] .detail-row .hash-val, [data-theme="light"] .copy-btn { background:#0B0F19; color:#E5E7EB; border-color:#243249; }
+  [data-theme="light"] .chain-entry { color: #E5E7EB; }
+  [data-theme="light"] .chain-entry .lbl { color: #9CA3AF; }
+  [data-theme="light"] .chain-entry .va { color: #E5E7EB; }
+  [data-theme="light"] .hmac-step { background:#161E2E; border-color:#243249; color: #E5E7EB; }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.55; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  button { font-family: inherit; cursor: pointer; }
+
+  body::before {
+    content: ""; position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 600px 400px at 10% -10%, rgba(56,139,253,0.07), transparent 60%),
+      radial-gradient(ellipse 500px 300px at 90% 10%, rgba(165,243,252,0.04), transparent 60%);
+    pointer-events: none; z-index: 0;
+  }
+  main, .nav { position: relative; z-index: 1; }
+
+  /* nav (shared) */
+  .nav { display:flex; align-items:center; gap:14px; padding:14px 28px; border-bottom:1px solid var(--border); background:rgba(10,13,19,0.75); backdrop-filter:blur(10px); position:sticky; top:0; z-index:50; }
+  [data-theme="light"] .nav { background: rgba(244,246,249,0.85); }
+  .nav-logo { display:flex; align-items:center; gap:10px; font-weight:800; font-size:15px; color:var(--text); }
+  .nav-logo:hover { text-decoration:none; }
+  .logo-mark { width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; background:linear-gradient(135deg, var(--accent), #4ea1ff); border-radius:7px; box-shadow:0 0 24px rgba(56,139,253,0.35), inset 0 1px 0 rgba(255,255,255,0.2); }
+  .nav-tag { font-family:var(--mono); font-size:11px; color:var(--muted); padding:3px 8px; border:1px solid var(--border); border-radius:4px; background:var(--surface); }
+  .nav-mid { margin-left:auto; margin-right:auto; display:flex; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:100px; padding:4px; }
+  .nav-group { display:flex; gap:2px; padding:0 4px; }
+  .nav-group + .nav-group { border-left:1px solid var(--border); }
+  .nav-mid a { color:var(--muted); font-size:12.5px; font-weight:500; padding:6px 11px; border-radius:100px; white-space:nowrap; transition:all .15s; }
+  .nav-mid a:hover { color:var(--text); background:var(--surface-2); text-decoration:none; }
+  .nav-mid a.active { background:var(--accent); color:white; }
+  .nav-right { display:flex; gap:6px; }
+  .nav-icon-btn { width:34px; height:34px; border-radius:8px; background:var(--surface); border:1px solid var(--border); color:var(--muted); display:inline-flex; align-items:center; justify-content:center; transition:all .15s; }
+  .nav-icon-btn:hover { color:var(--text); background:var(--surface-2); border-color:var(--border-strong); }
+  .mobile-toggle { display:none; }
+  .mobile-menu { display:none; position:fixed; top:62px; left:0; right:0; background:var(--surface); border-bottom:1px solid var(--border); padding:14px 28px; z-index:49; }
+  .mobile-menu.open { display:block; }
+  .mobile-menu .group-label { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--muted); padding:10px 0 6px; }
+  .mobile-menu a { display:block; padding:9px 10px; border-radius:7px; color:var(--text); font-size:14px; }
+  @media (max-width:1080px) { .nav-mid, .nav-tag { display:none; } .mobile-toggle { display:inline-flex; margin-left:auto; } }
+
+  /* intro */
+  .intro { max-width: 1480px; margin: 0 auto; padding: 26px 28px 0; display: flex; align-items: center; gap: 18px; }
+  .pg-title { display: flex; align-items: center; gap: 14px; }
+  .pg-ico {
+    width: 52px; height: 52px; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(165,243,252,.18), rgba(56,139,253,.06));
+    border: 1px solid rgba(165,243,252,.35);
+    color: var(--chain);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pg-eyebrow { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--chain); font-weight: 700; }
+  .pg-h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin-top: 1px; }
+  .pg-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+  .explainer {
+    margin-left: auto; max-width: 560px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--chain);
+    padding: 12px 16px; border-radius: 8px;
+    font-size: 13px; color: var(--muted); line-height: 1.55;
+  }
+  .explainer b { color: var(--text); }
+  @media (max-width:1080px) { .intro { flex-wrap:wrap; gap: 14px; } .explainer { max-width: 100%; margin-left:0; } }
+
+  /* KPI strip */
+  .kpis { max-width: 1480px; margin: 18px auto 0; padding: 0 28px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  @media (max-width:1080px) { .kpis { grid-template-columns: 1fr 1fr 1fr; } }
+  @media (max-width:680px) { .kpis { grid-template-columns: 1fr 1fr; } }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 14px 18px; }
+  .kpi .lbl { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 4px; }
+  .kpi .val { font-family: var(--mono); font-size: 24px; font-weight: 800; line-height: 1.1; }
+  .kpi .sub { font-size: 11px; color: var(--muted-2); margin-top: 3px; font-family: var(--mono); }
+  .badge-inline { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 100px; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+  .badge-inline.ok { background: rgba(63,185,80,.12); color: var(--allow); border: 1px solid rgba(63,185,80,.3); }
+  .badge-inline.warn { background: rgba(210,153,34,.12); color: var(--educate); border: 1px solid rgba(210,153,34,.3); }
+  .dot-anim { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor; animation: pulse-dot 1.6s infinite; }
+  @keyframes pulse-dot { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
+
+  /* controls bar */
+  .controls {
+    max-width: 1480px; margin: 18px auto 0; padding: 0 28px;
+  }
+  .ctrl-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .search-input {
+    flex: 1; min-width: 260px;
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    border-radius: 9px; padding: 9px 14px;
+    color: var(--text); font-family: var(--mono); font-size: 13px;
+    outline: none;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .filter-pills { display: flex; gap: 4px; }
+  .filter-pill {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--muted); padding: 6px 12px; border-radius: 100px;
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+    letter-spacing: 0.04em; transition: all .12s;
+  }
+  .filter-pill:hover { color: var(--text); }
+  .filter-pill.on {
+    color: var(--c, var(--accent-2));
+    background: var(--cb, rgba(56,139,253,.1));
+    border-color: var(--c, var(--accent));
+  }
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; border: 1px solid transparent; transition: all .15s; min-height: 36px; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #2f7cf4; }
+  .btn-outline { background: transparent; color: var(--text); border-color: var(--border-strong); }
+  .btn-outline:hover { background: var(--surface-2); }
+  .btn-verify { background: var(--chain); color: var(--bg); border-color: var(--chain); }
+  .btn-verify:hover { background: #c8f6fa; }
+
+  /* verify status */
+  .verify-status {
+    max-width: 1480px; margin: 12px auto 0; padding: 0 28px;
+  }
+  .verify-banner {
+    border-radius: 12px; padding: 14px 18px;
+    display: none;
+    align-items: center; gap: 12px;
+    font-size: 13px;
+  }
+  .verify-banner.show { display: flex; }
+  .verify-banner.ok { background: rgba(63,185,80,.08); border: 1px solid rgba(63,185,80,.3); color: var(--allow); }
+  .verify-banner.bad { background: rgba(248,81,73,.08); border: 1px solid rgba(248,81,73,.3); color: var(--block); }
+  .verify-banner b { font-weight: 800; }
+  .verify-banner .running { color: var(--accent-2); }
+
+  /* main grid */
+  .main { max-width: 1480px; margin: 18px auto 0; padding: 0 28px 28px; display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width:1080px) { .main { grid-template-columns: 1fr; } }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; overflow: hidden; }
+  .card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .card-head .title { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 600; }
+  .card-head .title .acc { color: var(--chain); }
+
+  /* CHAIN VISUAL */
+  .chain {
+    padding: 16px 22px 22px;
+    max-height: 720px; overflow-y: auto;
+    position: relative;
+  }
+  .chain::-webkit-scrollbar { width: 8px; }
+  .chain::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 8px; }
+
+  .chain-entry {
+    position: relative;
+    background: #0B0F19;
+    border: 1px solid #243249;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-left: 28px;
+    margin-bottom: 14px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .chain-entry:hover {
+    border-color: var(--accent-2);
+    transform: translateX(2px);
+  }
+  .chain-entry.selected {
+    border-color: var(--chain);
+    box-shadow: 0 0 0 1px var(--chain), 0 0 24px rgba(165,243,252,0.15);
+  }
+  .chain-entry::before {
+    content: "";
+    position: absolute;
+    left: -22px; top: 26px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--chain);
+    border: 3px solid var(--bg-2);
+    box-shadow: 0 0 0 1px var(--chain), 0 0 10px rgba(165,243,252,0.4);
+    z-index: 2;
+  }
+  /* connecting line */
+  .chain-entry::after {
+    content: "";
+    position: absolute;
+    left: -16px; top: 40px; bottom: -14px;
+    width: 1.5px;
+    background: linear-gradient(180deg, var(--chain), rgba(165,243,252,0.2));
+    z-index: 1;
+  }
+  .chain-entry:last-child::after { display: none; }
+  .chain-entry.verified::before { background: var(--allow); box-shadow: 0 0 0 1px var(--allow), 0 0 10px rgba(63,185,80,0.5); }
+  .chain-entry.invalid::before { background: var(--block); box-shadow: 0 0 0 1px var(--block), 0 0 10px rgba(248,81,73,0.5); }
+
+  .ce-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .ce-action {
+    font-family: var(--mono); font-size: 11px; font-weight: 800;
+    padding: 3px 10px; border-radius: 100px;
+    letter-spacing: 0.05em;
+    border: 1px solid;
+  }
+  .ce-action.ALLOW { color: var(--allow); background: rgba(63,185,80,.1); border-color: rgba(63,185,80,.3); }
+  .ce-action.BLOCK { color: var(--block); background: rgba(248,81,73,.1); border-color: rgba(248,81,73,.3); }
+  .ce-action.EDUCATE { color: var(--educate); background: rgba(210,153,34,.1); border-color: rgba(210,153,34,.3); }
+  .ce-action.REDACT { color: var(--redact); background: rgba(188,140,255,.1); border-color: rgba(188,140,255,.3); }
+
+  .ce-seq { font-family: var(--mono); font-size: 11px; color: #9CA3AF; }
+  .ce-time { font-family: var(--mono); font-size: 10.5px; color: #6B7280; }
+
+  .ce-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .ce-grid .lbl { font-family: var(--mono); font-size: 9.5px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1px; }
+  .ce-grid .va { font-family: var(--mono); font-size: 11.5px; color: #E5E7EB; font-weight: 600; }
+  .ce-grid .va.risk-h { color: var(--block); }
+  .ce-grid .va.risk-m { color: var(--educate); }
+  .ce-grid .va.risk-l { color: var(--allow); }
+
+  .ce-hash {
+    background: #0B0F19;
+    border-top: 1px dashed #243249;
+    padding-top: 8px;
+    font-family: var(--mono); font-size: 10px;
+    color: var(--chain);
+    word-break: break-all;
+    line-height: 1.5;
+  }
+  .ce-hash .lbl { color: #6B7280; text-transform: uppercase; letter-spacing: 0.08em; font-size: 9px; margin-bottom: 2px; }
+  .ce-hash .prev { color: #9CA3AF; margin-top: 6px; padding-top: 6px; border-top: 1px dotted #243249; }
+
+  .ce-verify {
+    margin-top: 8px;
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 10.5px;
+    opacity: 0;
+    transition: opacity .25s;
+  }
+  .ce-verify.show { opacity: 1; }
+  .ce-verify.ok { color: var(--allow); }
+  .ce-verify.bad { color: var(--block); }
+
+  /* DETAIL panel */
+  .detail-empty {
+    padding: 60px 22px; text-align: center; color: var(--muted);
+  }
+  .detail-empty .glyph {
+    width: 60px; height: 60px; border-radius: 50%;
+    background: var(--surface-2); color: var(--chain);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 14px;
+  }
+  .detail-body { padding: 20px 22px; }
+  .detail-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 18px; padding-bottom: 14px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .detail-action {
+    font-family: var(--mono); font-size: 32px; font-weight: 900;
+    letter-spacing: 0.04em; line-height: 1;
+  }
+  .detail-action.ALLOW { color: var(--allow); }
+  .detail-action.BLOCK { color: var(--block); }
+  .detail-action.EDUCATE { color: var(--educate); }
+  .detail-action.REDACT { color: var(--redact); }
+  .detail-seq { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; }
+  .detail-seq b { color: var(--accent-2); }
+
+  .detail-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+  .detail-stat { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; }
+  .detail-stat .lbl { font-family: var(--mono); font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .detail-stat .val { font-family: var(--mono); font-size: 16px; font-weight: 800; margin-top: 2px; }
+
+  .detail-row { margin-bottom: 14px; }
+  .detail-row .lbl { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 5px; display: flex; justify-content: space-between; }
+  .detail-row .hash-val {
+    font-family: var(--mono); font-size: 11px; color: #a5f3fc;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 7px; padding: 9px 11px;
+    word-break: break-all; line-height: 1.5;
+  }
+  .detail-row .hash-val.green { color: var(--allow); }
+  .detail-row .hash-val.muted { color: var(--muted); }
+  .copy-btn {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--muted); padding: 3px 9px; border-radius: 5px;
+    font-family: var(--mono); font-size: 10px; cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--text); background: var(--surface-3); }
+
+  /* HMAC visual verification */
+  .hmac-wrap {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 11px; padding: 16px;
+    margin-top: 4px;
+  }
+  .hmac-title {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.1em;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .hmac-stages {
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .hmac-stage {
+    display: grid; grid-template-columns: 28px 1fr auto;
+    gap: 12px; align-items: center;
+    background: #0B0F19;
+    border: 1px solid #243249;
+    border-radius: 9px; padding: 11px 14px;
+    transition: all .25s;
+    opacity: 0.35;
+  }
+  .hmac-stage.running { opacity: 1; border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2); }
+  .hmac-stage.done { opacity: 1; border-color: var(--allow); }
+  .hmac-stage.bad { opacity: 1; border-color: var(--block); }
+  .hmac-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #161E2E; color: #9CA3AF;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 11px; font-weight: 800;
+    border: 1px solid #243249;
+  }
+  .hmac-stage.running .hmac-num { background: var(--accent-2); color: var(--bg); border-color: var(--accent-2); }
+  .hmac-stage.done .hmac-num { background: var(--allow); color: white; border-color: var(--allow); }
+  .hmac-stage.bad .hmac-num { background: var(--block); color: white; border-color: var(--block); }
+  .hmac-name { font-family: var(--mono); font-size: 12px; font-weight: 700; color: #E5E7EB; }
+  .hmac-desc { font-family: var(--mono); font-size: 10.5px; color: #9CA3AF; margin-top: 2px; }
+  .hmac-icon {
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    color: #6B7280;
+  }
+  .hmac-stage.done .hmac-icon { color: var(--allow); }
+  .hmac-stage.bad .hmac-icon { color: var(--block); }
+  .hmac-stage.running .hmac-icon {
+    border: 2px solid var(--accent-2); border-top-color: transparent;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hmac-result {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: rgba(63,185,80,.08); border: 1px solid rgba(63,185,80,.3);
+    border-radius: 9px;
+    text-align: center;
+    color: var(--allow);
+    font-weight: 700; font-size: 13px;
+    display: none;
+  }
+  .hmac-result.show { display: block; }
+  .hmac-result.bad { background: rgba(248,81,73,.08); border-color: rgba(248,81,73,.3); color: var(--block); }
+  .hmac-result .sub { font-family: var(--mono); font-size: 11px; color: var(--muted); font-weight: 500; margin-top: 4px; }
+
+  .detail-actions { display: flex; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border); }
+  .detail-actions .btn { flex: 1; }
+
+  /* Verify all overlay */
+  .verify-all-running {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--accent-2); font-family: var(--mono); font-size: 12px;
+  }
+  .verify-all-running .ld {
+    width: 14px; height: 14px;
+    border: 2px solid var(--accent-2); border-top-color: transparent;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="BuildToValue Landing.html" class="nav-logo">
+    <span class="logo-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 21l18 0M12 21l0 -10M5 21l0 -8M19 21l0 -8M3 11l9 -8l9 8"/></svg></span>
+    BuildToValue
+  </a>
+  <span class="nav-tag">Ledger Explorer</span>
+  <div class="nav-mid">
+    <div class="nav-group"><a href="BuildToValue Landing.html">Home</a><a href="Lab.html">Lab</a></div>
+    <div class="nav-group"><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html" class="active">Ledger</a><a href="Dashboard.html">Dashboard</a></div>
+    <div class="nav-group"><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a></div>
+  </div>
+  <div class="nav-right">
+    <button class="nav-icon-btn" onclick="window.location.href='BuildToValue Landing.html#top'" title="Tour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+    <button class="nav-icon-btn" onclick="toggleTheme()">
+      <svg id="t-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="t-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+    <button class="nav-icon-btn mobile-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('open')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+  </div>
+</nav>
+<div class="mobile-menu" id="mobile-menu">
+  <div class="group-label">Principal</div><a href="BuildToValue Landing.html">Home</a><a href="Lab.html">Lab</a>
+  <div class="group-label">Demos</div><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a>
+  <div class="group-label">Personas</div><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a>
+</div>
+
+<div class="intro">
+  <div class="pg-title">
+    <div class="pg-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/></svg></div>
+    <div>
+      <div class="pg-eyebrow">Evidência forense</div>
+      <div class="pg-h1">Ledger Explorer</div>
+      <div class="pg-sub">BLAKE3 chain · HMAC-SHA256 · WAL imutável</div>
+    </div>
+  </div>
+  <div class="explainer">
+    <b>Cada decisão é um nó.</b> Encadeada à anterior via BLAKE3 (estilo Merkle). Editar o passado quebra todas as entradas seguintes. <b>Clique uma entrada</b> à esquerda → veja sua assinatura HMAC-SHA256 verificada passo-a-passo à direita. Exporte CSV ou JSON.
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="kpis">
+  <div class="kpi">
+    <div class="lbl">Total de registros</div>
+    <div class="val" id="kpi-total">—</div>
+    <div class="sub" id="kpi-total-sub">primeiro: —</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Bloqueados</div>
+    <div class="val" id="kpi-block" style="color:var(--block)">—</div>
+    <div class="sub" id="kpi-block-sub">—</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Permitidos</div>
+    <div class="val" id="kpi-allow" style="color:var(--allow)">—</div>
+    <div class="sub" id="kpi-allow-sub">—</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Status da cadeia</div>
+    <div style="padding-top:5px"><span class="badge-inline warn" id="kpi-chain"><span class="dot-anim"></span> não verificado</span></div>
+    <div class="sub" id="kpi-chain-sub">clique "Verificar integridade"</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Última verificação</div>
+    <div class="val" id="kpi-last-verif" style="font-size:14px;line-height:1.4;padding-top:8px">—</div>
+    <div class="sub" id="kpi-last-verif-sub">—</div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <div class="ctrl-card">
+    <input type="text" class="search-input" id="search" placeholder="Buscar por verdict_id, hash BLAKE3 ou HMAC…">
+
+    <div class="filter-pills" id="filters">
+      <button class="filter-pill on" data-f="all">Todos</button>
+      <button class="filter-pill" data-f="BLOCK" style="--c:var(--block);--cb:rgba(248,81,73,.1)">BLOCK</button>
+      <button class="filter-pill" data-f="ALLOW" style="--c:var(--allow);--cb:rgba(63,185,80,.1)">ALLOW</button>
+      <button class="filter-pill" data-f="EDUCATE" style="--c:var(--educate);--cb:rgba(210,153,34,.1)">EDUCATE</button>
+      <button class="filter-pill" data-f="REDACT" style="--c:var(--redact);--cb:rgba(188,140,255,.1)">REDACT</button>
+    </div>
+
+    <button class="btn btn-verify" onclick="verifyChain()" id="verify-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 5-3.5 7.5-9 9.5-5.5-2-9-4.5-9-9.5V5l9-3 9 3v7z"/></svg>
+      Verificar integridade
+    </button>
+
+    <button class="btn btn-outline" onclick="exportCSV()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      CSV
+    </button>
+    <button class="btn btn-outline" onclick="exportJSON()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      JSON
+    </button>
+  </div>
+</div>
+
+<div class="verify-status">
+  <div class="verify-banner" id="verify-banner"></div>
+</div>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- LEFT: chain -->
+  <section class="card">
+    <div class="card-head">
+      <span class="title">Chain <span class="acc">· últimos registros</span></span>
+      <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted-2)" id="chain-count">0 visíveis</span>
+    </div>
+    <div class="chain" id="chain"></div>
+  </section>
+
+  <!-- RIGHT: detail + HMAC -->
+  <section class="card">
+    <div class="card-head">
+      <span class="title">Detalhe & verificação <span class="acc">· HMAC-SHA256</span></span>
+    </div>
+    <div id="detail-zone">
+      <div class="detail-empty">
+        <div class="glyph"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h6"/><path d="M9 17h6"/></svg></div>
+        <div style="font-size:13.5px;line-height:1.6">
+          <b style="color:var(--text)">Clique uma entrada à esquerda</b><br>
+          para ver hash, assinatura, encadeamento e<br>
+          a verificação HMAC passo-a-passo.
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const ACTIONS = ['ALLOW','BLOCK','EDUCATE','REDACT','ALLOW','ALLOW','BLOCK','ALLOW','REDACT','BLOCK','ALLOW','EDUCATE','ALLOW','BLOCK','ALLOW','BLOCK','REDACT','ALLOW','BLOCK','ALLOW'];
+const VECTORS_BY_ACTION = {
+  ALLOW: ['educacional','baseline','code help','factual','culinária','definição'],
+  BLOCK: ['SQL injection','XSS','jailbreak DAN','prompt injection','RCE attempt','SSTI Jinja2','data exfil'],
+  EDUCATE: ['hipotético phishing','desinformação leve','contexto ambíguo'],
+  REDACT: ['PII · CPF','PII · email','PII · cartão','PII · médica']
+};
+const FINDINGS_BY_ACTION = {
+  BLOCK: ['sql_injection','prompt_injection','jailbreak_persona','xss_payload','rce_attempt'],
+  REDACT: ['pii_cpf','pii_email','pii_credit_card','pii_medical'],
+  EDUCATE: ['misinformation','context_ambiguity'],
+  ALLOW: [],
+};
+
+function rid(n=12) { const c='abcdef0123456789'; let s=''; for(let i=0;i<n;i++) s+=c[Math.floor(Math.random()*16)]; return s; }
+function blake3() { return rid(64); }
+function hmac() { return rid(64); }
+
+// Build chain: each entry references the previous_hash
+const NOW = Date.now();
+const CHAIN = [];
+let prevHash = '0000000000000000000000000000000000000000000000000000000000000000';
+for (let i = 0; i < 22; i++) {
+  const action = ACTIONS[i] || (Math.random() > 0.7 ? 'BLOCK' : 'ALLOW');
+  const vectors = VECTORS_BY_ACTION[action];
+  const vector = vectors[Math.floor(Math.random() * vectors.length)];
+  const findings = FINDINGS_BY_ACTION[action];
+  const risk = action === 'ALLOW' ? 0.02 + Math.random()*0.15
+             : action === 'BLOCK' ? 0.78 + Math.random()*0.21
+             : action === 'REDACT' ? 0.5 + Math.random()*0.25
+             : 0.4 + Math.random()*0.2;
+  const myHash = blake3();
+  const seq = 80123 + i;
+  CHAIN.push({
+    seq,
+    verdict_id: 'v_' + rid(10),
+    action,
+    vector,
+    adjusted_risk: parseFloat(risk.toFixed(4)),
+    trust_score: parseFloat((1 - risk).toFixed(3)),
+    latency_ms: parseFloat((28 + Math.random()*22).toFixed(2)),
+    findings,
+    blake3_hash: myHash,
+    previous_hash: prevHash,
+    signature: hmac(),
+    contestable: action === 'BLOCK' || action === 'REDACT',
+    timestamp: NOW - (CHAIN.length === 0 ? 0 : (Math.random() * 600 + 60) * 1000 * (22 - i)),
+  });
+  prevHash = myHash;
+}
+CHAIN.reverse(); // newest first
+
+let filter = 'all';
+let searchTerm = '';
+let verified = new Set();
+let selectedSeq = null;
+
+// ━━━ RENDER CHAIN ━━━
+
+function filtered() {
+  return CHAIN.filter(e => {
+    if (filter !== 'all' && e.action !== filter) return false;
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      if (!e.verdict_id.toLowerCase().includes(s)
+          && !e.blake3_hash.toLowerCase().includes(s)
+          && !e.signature.toLowerCase().includes(s)) return false;
+    }
+    return true;
+  });
+}
+
+function fmtTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+function ago(ts) {
+  const s = Math.floor((Date.now()-ts)/1000);
+  if (s < 60) return s+'s';
+  if (s < 3600) return Math.floor(s/60)+'min';
+  if (s < 86400) return Math.floor(s/3600)+'h';
+  return Math.floor(s/86400)+'d';
+}
+
+function renderChain() {
+  const list = filtered();
+  document.getElementById('chain-count').textContent = list.length + ' visível' + (list.length !== 1 ? 'is' : '');
+  if (!list.length) {
+    document.getElementById('chain').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Nenhum registro corresponde aos filtros.</div>';
+    return;
+  }
+  document.getElementById('chain').innerHTML = list.map(e => {
+    const riskCls = e.adjusted_risk < 0.3 ? 'risk-l' : e.adjusted_risk < 0.7 ? 'risk-m' : 'risk-h';
+    const isVerified = verified.has(e.seq);
+    return `<div class="chain-entry ${isVerified ? 'verified' : ''} ${selectedSeq === e.seq ? 'selected' : ''}" data-seq="${e.seq}" onclick="selectEntry(${e.seq})">
+      <div class="ce-row">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="ce-action ${e.action}">${e.action}</span>
+          <span class="ce-seq">#${e.seq}</span>
+        </div>
+        <span class="ce-time">${ago(e.timestamp)} atrás</span>
+      </div>
+      <div class="ce-grid">
+        <div>
+          <div class="lbl">verdict_id</div>
+          <div class="va">${e.verdict_id}</div>
+        </div>
+        <div>
+          <div class="lbl">risk · vetor</div>
+          <div class="va"><span class="${riskCls}">${e.adjusted_risk.toFixed(3)}</span> · ${e.vector}</div>
+        </div>
+      </div>
+      <div class="ce-hash">
+        <div class="lbl">BLAKE3 (this)</div>
+        ${e.blake3_hash.slice(0, 56)}…
+        <div class="prev"><span class="lbl">prev →</span> ${e.previous_hash.slice(0, 56)}…</div>
+      </div>
+      <div class="ce-verify ${isVerified ? 'show ok' : ''}" id="ce-v-${e.seq}">${isVerified ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> chain ok · HMAC ok' : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+// ━━━ KPI ━━━
+
+function renderKpis() {
+  const total = CHAIN.length;
+  const blocks = CHAIN.filter(e => e.action === 'BLOCK').length;
+  const allows = CHAIN.filter(e => e.action === 'ALLOW').length;
+  document.getElementById('kpi-total').textContent = total;
+  document.getElementById('kpi-total-sub').textContent = 'primeiro: #' + CHAIN[CHAIN.length-1].seq;
+  document.getElementById('kpi-block').textContent = blocks;
+  document.getElementById('kpi-block-sub').textContent = (blocks/total*100).toFixed(0) + '% do total';
+  document.getElementById('kpi-allow').textContent = allows;
+  document.getElementById('kpi-allow-sub').textContent = (allows/total*100).toFixed(0) + '% do total';
+}
+
+// ━━━ FILTERS + SEARCH ━━━
+
+document.querySelectorAll('.filter-pill').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.filter-pill').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    filter = b.dataset.f;
+    renderChain();
+  });
+});
+document.getElementById('search').addEventListener('input', (e) => {
+  searchTerm = e.target.value.trim();
+  renderChain();
+});
+
+// ━━━ DETAIL + HMAC VERIFICATION ━━━
+
+function selectEntry(seq) {
+  selectedSeq = seq;
+  renderChain();
+  const e = CHAIN.find(x => x.seq === seq);
+  if (!e) return;
+
+  const riskColor = e.adjusted_risk < 0.3 ? 'var(--allow)' : e.adjusted_risk < 0.7 ? 'var(--educate)' : 'var(--block)';
+
+  document.getElementById('detail-zone').innerHTML = `
+    <div class="detail-body">
+      <div class="detail-head">
+        <div>
+          <div class="detail-action ${e.action}">${e.action}</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px">${e.vector}</div>
+        </div>
+        <div class="detail-seq">
+          <div>ledger_seq</div>
+          <div><b>#${e.seq}</b></div>
+          <div style="margin-top:6px">${fmtTime(e.timestamp)}</div>
+        </div>
+      </div>
+
+      <div class="detail-stats">
+        <div class="detail-stat">
+          <div class="lbl">risk</div>
+          <div class="val" style="color:${riskColor}">${e.adjusted_risk.toFixed(3)}</div>
+        </div>
+        <div class="detail-stat">
+          <div class="lbl">trust</div>
+          <div class="val">${e.trust_score.toFixed(2)}</div>
+        </div>
+        <div class="detail-stat">
+          <div class="lbl">latency</div>
+          <div class="val">${e.latency_ms.toFixed(1)}ms</div>
+        </div>
+      </div>
+
+      <div class="detail-row">
+        <div class="lbl"><span>verdict_id</span><button class="copy-btn" onclick="copy('${e.verdict_id}')">copiar</button></div>
+        <div class="hash-val muted">${e.verdict_id}</div>
+      </div>
+
+      <div class="detail-row">
+        <div class="lbl"><span>BLAKE3 (this entry)</span><button class="copy-btn" onclick="copy('${e.blake3_hash}')">copiar</button></div>
+        <div class="hash-val">${e.blake3_hash}</div>
+      </div>
+
+      <div class="detail-row">
+        <div class="lbl">previous BLAKE3 (chain link)</div>
+        <div class="hash-val muted">${e.previous_hash}</div>
+      </div>
+
+      <div class="detail-row">
+        <div class="lbl"><span>HMAC-SHA256 signature</span><button class="copy-btn" onclick="copy('${e.signature}')">copiar</button></div>
+        <div class="hash-val green">${e.signature}</div>
+      </div>
+
+      <!-- HMAC verification visual -->
+      <div class="hmac-wrap">
+        <div class="hmac-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Verificação HMAC-SHA256 — passo a passo
+        </div>
+
+        <div class="hmac-stages" id="hmac-stages">
+          <div class="hmac-stage" data-step="1">
+            <div class="hmac-num">1</div>
+            <div>
+              <div class="hmac-name">Reconstruir payload canônico</div>
+              <div class="hmac-desc">JSON serializado · keys ordenadas · UTF-8 bytes</div>
+            </div>
+            <div class="hmac-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+          </div>
+          <div class="hmac-stage" data-step="2">
+            <div class="hmac-num">2</div>
+            <div>
+              <div class="hmac-name">Aplicar HMAC com chave secreta</div>
+              <div class="hmac-desc">HMAC(K, payload) com SHA-256 · 256 bits</div>
+            </div>
+            <div class="hmac-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+          </div>
+          <div class="hmac-stage" data-step="3">
+            <div class="hmac-num">3</div>
+            <div>
+              <div class="hmac-name">Comparar com signature armazenada</div>
+              <div class="hmac-desc">constant-time compare · não vaza por timing</div>
+            </div>
+            <div class="hmac-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+          </div>
+          <div class="hmac-stage" data-step="4">
+            <div class="hmac-num">4</div>
+            <div>
+              <div class="hmac-name">Verificar encadeamento BLAKE3</div>
+              <div class="hmac-desc">previous_hash deve == BLAKE3 do registro #${e.seq - 1}</div>
+            </div>
+            <div class="hmac-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="hmac-result" id="hmac-result"></div>
+
+        <button class="btn btn-primary" style="width:100%;margin-top:12px" onclick="runHmacVerify(${e.seq})" id="hmac-run-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          Executar verificação
+        </button>
+      </div>
+
+      <div class="detail-actions">
+        ${e.contestable ? `<button class="btn btn-outline" style="color:var(--educate);border-color:rgba(210,153,34,.4)" onclick="alert('Em produção: abre o fluxo de contestação. Usuário recebe a justificativa, pode apelar, conselho tem SLA de 24h.')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1l3 5 6 1-4.5 4 1 6L12 14.7 6.5 17l1-6L3 7l6-1z"/></svg> Contestar</button>` : ''}
+        <button class="btn btn-outline" onclick="copy(JSON.stringify({verdict_id:'${e.verdict_id}',blake3:'${e.blake3_hash}',signature:'${e.signature}'}, null, 2))">📋 Copiar evidência</button>
+      </div>
+    </div>
+  `;
+
+  // auto-run verification if already verified
+  if (verified.has(seq)) {
+    setTimeout(() => runHmacVerify(seq, true), 50);
+  } else {
+    // smooth scroll into view in chain panel
+    setTimeout(() => {
+      const el = document.querySelector('.chain-entry[data-seq="' + seq + '"]');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  }
+}
+
+async function runHmacVerify(seq, instant) {
+  const btn = document.getElementById('hmac-run-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.5'; }
+
+  const stages = document.querySelectorAll('#hmac-stages .hmac-stage');
+  stages.forEach(s => s.classList.remove('running', 'done', 'bad'));
+  document.getElementById('hmac-result').classList.remove('show', 'bad');
+
+  for (let i = 0; i < stages.length; i++) {
+    stages[i].classList.add('running');
+    await sleep(instant ? 80 : 350 + Math.random() * 200);
+    stages[i].classList.remove('running');
+    stages[i].classList.add('done');
+  }
+
+  // Always OK (mock)
+  const res = document.getElementById('hmac-result');
+  res.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg> Assinatura válida · cadeia íntegra<div class="sub">Esta decisão pode ser apresentada como evidência forense.</div>';
+  res.classList.add('show');
+
+  verified.add(seq);
+  if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Reexecutar verificação'; }
+  renderChain();
+}
+
+function copy(txt) {
+  navigator.clipboard?.writeText(txt);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ━━━ VERIFY CHAIN (all) ━━━
+
+let verifying = false;
+async function verifyChain() {
+  if (verifying) return;
+  verifying = true;
+  const btn = document.getElementById('verify-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="verify-all-running"><div class="ld"></div> Verificando…</div>';
+
+  const banner = document.getElementById('verify-banner');
+  banner.className = 'verify-banner show';
+  banner.style.background = 'rgba(56,139,253,0.06)';
+  banner.style.borderColor = 'rgba(56,139,253,0.3)';
+  banner.style.color = 'var(--accent-2)';
+  banner.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Reverificando ' + CHAIN.length + ' entradas da cadeia (BLAKE3 + HMAC-SHA256)…';
+
+  // animate each
+  for (let i = 0; i < CHAIN.length; i++) {
+    await sleep(60 + Math.random() * 40);
+    verified.add(CHAIN[i].seq);
+    const v = document.getElementById('ce-v-' + CHAIN[i].seq);
+    if (v) {
+      v.classList.add('show', 'ok');
+      v.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> chain ok · HMAC ok';
+    }
+    const entry = document.querySelector('.chain-entry[data-seq="' + CHAIN[i].seq + '"]');
+    if (entry) entry.classList.add('verified');
+  }
+
+  banner.className = 'verify-banner show ok';
+  banner.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> <b>Cadeia íntegra.</b> Todas as ${CHAIN.length} entradas verificadas — nenhuma adulteração detectada. <span style="opacity:0.7;margin-left:auto;font-family:var(--mono);font-size:11px">${new Date().toLocaleTimeString('pt-BR')}</span>`;
+
+  document.getElementById('kpi-chain').outerHTML = '<span class="badge-inline ok"><span class="dot-anim"></span> íntegra</span>';
+  document.getElementById('kpi-chain-sub').textContent = CHAIN.length + ' entradas verificadas';
+  document.getElementById('kpi-last-verif').textContent = new Date().toLocaleTimeString('pt-BR');
+  document.getElementById('kpi-last-verif-sub').textContent = 'agora · operador você';
+
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 5-3.5 7.5-9 9.5-5.5-2-9-4.5-9-9.5V5l9-3 9 3v7z"/></svg> Reverificar';
+  verifying = false;
+  renderChain();
+}
+
+// ━━━ EXPORT ━━━
+
+function download(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportCSV() {
+  const list = filtered();
+  const headers = ['seq','verdict_id','action','vector','adjusted_risk','trust_score','latency_ms','blake3_hash','previous_hash','signature','contestable','timestamp'];
+  const rows = [headers.join(',')];
+  list.forEach(e => {
+    rows.push([
+      e.seq, e.verdict_id, e.action, '"'+e.vector+'"',
+      e.adjusted_risk, e.trust_score, e.latency_ms,
+      e.blake3_hash, e.previous_hash, e.signature,
+      e.contestable, new Date(e.timestamp).toISOString()
+    ].join(','));
+  });
+  download(`btv-ledger-${Date.now()}.csv`, rows.join('\n'), 'text/csv');
+}
+
+function exportJSON() {
+  const list = filtered();
+  const out = {
+    exported_at: new Date().toISOString(),
+    total: list.length,
+    chain_verified: verified.size === CHAIN.length,
+    entries: list
+  };
+  download(`btv-ledger-${Date.now()}.json`, JSON.stringify(out, null, 2), 'application/json');
+}
+
+// ━━━ THEME ━━━
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('t-moon').style.display = theme === 'light' ? 'none' : '';
+  document.getElementById('t-sun').style.display = theme === 'light' ? '' : 'none';
+  localStorage.setItem('btv-theme', theme);
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  applyTheme(localStorage.getItem('btv-theme') || 'dark');
+  renderKpis();
+  renderChain();
+});
+</script>
+</body>
+</html>

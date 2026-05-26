@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DPO · Compliance & Ética — BuildToValue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0d13; --bg-2:#0d1117; --surface:#141921; --surface-2:#1c222c; --surface-3:#262d39;
+    --border:rgba(255,255,255,0.07); --border-strong:rgba(255,255,255,0.14);
+    --text:#e6edf3; --muted:#8b95a3; --muted-2:#5a6470;
+    --accent:#388bfd; --accent-2:#79c0ff;
+    --allow:#3fb950; --block:#f85149; --educate:#d29922; --redact:#bc8cff;
+    --persona:#bc8cff; --persona-bg:rgba(188,140,255,0.12);
+    --mono:'JetBrains Mono',ui-monospace,monospace; --sans:'Inter',system-ui,sans-serif;
+  }
+  [data-theme="light"] {
+    --bg:#F4F6F9; --bg-2:#EEF1F5; --surface:#FFFFFF; --surface-2:#EEF1F5; --surface-3:#E2E8F0;
+    --border:rgba(15,23,42,0.10); --border-strong:rgba(15,23,42,0.18);
+    --text:#0F172A; --muted:#475569; --muted-2:#64748B;
+    --accent:#004BD6; --accent-2:#1D4ED8;
+    --allow:#059669; --block:#DC2626; --educate:#B45309; --redact:#7C3AED;
+    --persona:#7C3AED; --persona-bg:rgba(124,58,237,0.10);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.55; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  button { font-family: inherit; cursor: pointer; }
+
+  body::before {
+    content: ""; position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 600px 400px at 10% -10%, rgba(188,140,255,0.07), transparent 60%),
+      radial-gradient(ellipse 500px 300px at 90% 10%, rgba(56,139,253,0.05), transparent 60%);
+    pointer-events: none; z-index: 0;
+  }
+  main, .nav { position: relative; z-index: 1; }
+
+  /* nav (shared) */
+  .nav { display:flex; align-items:center; gap:14px; padding:14px 28px; border-bottom:1px solid var(--border); background:rgba(10,13,19,0.75); backdrop-filter:blur(10px); position:sticky; top:0; z-index:50; }
+  [data-theme="light"] .nav { background: rgba(244,246,249,0.85); }
+  .nav-logo { display:flex; align-items:center; gap:10px; font-weight:800; font-size:15px; color:var(--text); }
+  .nav-logo:hover { text-decoration:none; }
+  .logo-mark { width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; background:linear-gradient(135deg, var(--accent), #4ea1ff); border-radius:7px; box-shadow:0 0 24px rgba(56,139,253,0.35), inset 0 1px 0 rgba(255,255,255,0.2); }
+  .nav-tag { font-family:var(--mono); font-size:11px; color:var(--muted); padding:3px 8px; border:1px solid var(--border); border-radius:4px; background:var(--surface); }
+  .nav-mid { margin-left:auto; margin-right:auto; display:flex; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:100px; padding:4px; }
+  .nav-group { display:flex; gap:2px; padding:0 4px; }
+  .nav-group + .nav-group { border-left:1px solid var(--border); }
+  .nav-mid a { color:var(--muted); font-size:12.5px; font-weight:500; padding:6px 11px; border-radius:100px; white-space:nowrap; transition:all .15s; }
+  .nav-mid a:hover { color:var(--text); background:var(--surface-2); text-decoration:none; }
+  .nav-mid a.active { background:var(--accent); color:white; }
+  .nav-right { display:flex; gap:6px; }
+  .nav-icon-btn { width:34px; height:34px; border-radius:8px; background:var(--surface); border:1px solid var(--border); color:var(--muted); display:inline-flex; align-items:center; justify-content:center; transition:all .15s; }
+  .nav-icon-btn:hover { color:var(--text); background:var(--surface-2); border-color:var(--border-strong); }
+  .mobile-toggle { display:none; }
+  .mobile-menu { display:none; position:fixed; top:62px; left:0; right:0; background:var(--surface); border-bottom:1px solid var(--border); padding:14px 28px; z-index:49; }
+  .mobile-menu.open { display:block; }
+  .mobile-menu .group-label { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--muted); padding:10px 0 6px; }
+  .mobile-menu a { display:block; padding:9px 10px; border-radius:7px; color:var(--text); font-size:14px; }
+  @media (max-width:1080px) { .nav-mid, .nav-tag { display:none; } .mobile-toggle { display:inline-flex; margin-left:auto; } }
+
+  /* intro */
+  .intro { max-width: 1480px; margin: 0 auto; padding: 26px 28px 0; display: flex; align-items: center; gap: 18px; }
+  .persona-badge { display: flex; align-items: center; gap: 14px; }
+  .pb-ico {
+    width: 52px; height: 52px; border-radius: 14px;
+    background: linear-gradient(135deg, var(--persona-bg), rgba(188,140,255,.04));
+    border: 1px solid var(--persona);
+    color: var(--persona);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pb-role { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--persona); font-weight: 700; }
+  .pb-name { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin-top: 1px; }
+  .pb-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+  .explainer {
+    margin-left: auto; max-width: 560px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--persona);
+    padding: 12px 16px; border-radius: 8px;
+    font-size: 13px; color: var(--muted); line-height: 1.55;
+  }
+  .explainer b { color: var(--text); }
+  @media (max-width:1080px) { .intro { flex-wrap:wrap; gap: 14px; } .explainer { max-width: 100%; margin-left:0; } }
+
+  /* frameworks strip */
+  .fw-strip {
+    max-width: 1480px; margin: 22px auto 0; padding: 0 28px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  }
+  @media (max-width:900px) { .fw-strip { grid-template-columns: 1fr 1fr; } }
+  .fw-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px;
+    border-top: 3px solid var(--c, var(--accent));
+    position: relative;
+  }
+  .fw-name { font-size: 14px; font-weight: 800; margin-bottom: 2px; }
+  .fw-region { font-family: var(--mono); font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+  .fw-rate {
+    font-family: var(--mono); font-size: 24px; font-weight: 800;
+    color: var(--c, var(--accent));
+    line-height: 1.1;
+  }
+  .fw-rate.green { color: var(--allow); }
+  .fw-rate.yellow { color: var(--educate); }
+  .fw-sub { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+  .fw-bar { margin-top: 8px; height: 5px; background: var(--surface-2); border-radius: 100px; overflow: hidden; }
+  .fw-fill { height: 100%; border-radius: 100px; transition: width 0.6s; }
+
+  /* main grid */
+  .grid { max-width: 1480px; margin: 18px auto 0; padding: 0 28px 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width:1080px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; overflow: hidden; }
+  .card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .card-head .title { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 600; }
+  .card-head .title .acc { color: var(--persona); }
+  .card-body { padding: 18px; }
+
+  /* form bits */
+  label.lab { display:block; font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); margin-bottom:5px; font-weight:600; }
+  select, input[type="text"], textarea {
+    width: 100%; background: var(--surface-2);
+    border: 1px solid var(--border-strong); border-radius: 8px;
+    color: var(--text); padding: 9px 12px;
+    font-size: 13px; font-family: var(--sans);
+    outline: none; transition: border-color .15s;
+  }
+  select:focus, input:focus, textarea:focus { border-color: var(--accent); }
+  textarea { font-family: var(--mono); font-size: 12px; line-height: 1.5; resize: vertical; min-height: 72px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .field { margin-bottom: 12px; }
+  .check {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px;
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    border-radius: 8px; cursor: pointer;
+    font-size: 12.5px; transition: all .12s;
+  }
+  .check:hover { border-color: var(--persona); }
+  .check.on { border-color: var(--allow); background: rgba(63,185,80,.06); color: var(--allow); }
+  .check input { display: none; }
+  .check .box {
+    width: 16px; height: 16px; border-radius: 4px;
+    border: 1.5px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .check.on .box { background: var(--allow); border-color: var(--allow); }
+  .check.on .box::after { content: "✓"; color: white; font-weight: 800; font-size: 10px; }
+
+  /* btn */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid transparent; transition: all .15s; min-height: 36px; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #2f7cf4; }
+  .btn-outline { background: transparent; color: var(--text); border-color: var(--border-strong); }
+  .btn-outline:hover { background: var(--surface-2); }
+  .btn-purple { background: var(--persona); color: white; }
+  .btn-purple:hover { filter: brightness(1.1); }
+
+  /* result card */
+  .result-empty {
+    padding: 36px 24px; text-align: center; color: var(--muted);
+    background: var(--bg-2); border-radius: 10px; border: 1px dashed var(--border);
+  }
+  .result-empty .ico {
+    width: 48px; height: 48px; margin: 0 auto 12px;
+    background: var(--surface-3); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted-2);
+  }
+
+  .compl-result {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px;
+  }
+  .compl-rate {
+    font-family: var(--mono); font-size: 42px; font-weight: 900; line-height: 1;
+  }
+  .compl-rate.red { color: var(--block); }
+  .compl-rate.yellow { color: var(--educate); }
+  .compl-rate.green { color: var(--allow); }
+  .compl-bar { height: 8px; background: var(--surface-2); border-radius: 100px; margin: 12px 0; overflow: hidden; }
+  .compl-fill { height: 100%; border-radius: 100px; transition: width .6s; }
+  .compl-viol {
+    display: flex; flex-wrap: wrap; gap: 5px; margin-top: 14px;
+  }
+  .compl-viol .v {
+    font-family: var(--mono); font-size: 10.5px;
+    background: rgba(248,81,73,.08); color: var(--block);
+    border: 1px solid rgba(248,81,73,.3);
+    padding: 3px 9px; border-radius: 100px;
+  }
+  .compl-ok { color: var(--allow); font-size: 12.5px; margin-top: 12px; }
+
+  /* PII */
+  .pii-input-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px;
+    margin-bottom: 14px;
+  }
+  .pii-input-row textarea { min-height: 64px; }
+  .pii-stats {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+    margin-bottom: 14px;
+  }
+  @media(max-width:700px){.pii-stats{grid-template-columns:1fr 1fr 1fr;}}
+  .pii-stat {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px;
+    text-align: center;
+  }
+  .pii-stat.on { border-color: var(--c); background: var(--cb); }
+  .pii-stat .typ { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .pii-stat .ct  { font-family: var(--mono); font-size: 22px; font-weight: 800; line-height: 1.1; color: var(--muted-2); margin-top: 3px; }
+  .pii-stat.on .ct { color: var(--c); }
+  .pii-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media(max-width:700px){.pii-diff{grid-template-columns:1fr;}}
+  .pii-pane {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 9px; padding: 14px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.6;
+    min-height: 90px;
+  }
+  .pii-pane .head { font-family: var(--sans); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
+  .pii-hl {
+    background: rgba(248,81,73,.18); color: #fca5a5;
+    padding: 1px 4px; border-radius: 3px;
+    border-bottom: 1.5px solid var(--block);
+  }
+  .pii-hl.cpf { background: rgba(210,153,34,.18); color: #f9c574; border-color: var(--educate); }
+  .pii-hl.email { background: rgba(88,166,255,.18); color: #79c0ff; border-color: var(--accent); }
+  .pii-hl.phone { background: rgba(63,185,80,.18); color: #7ee787; border-color: var(--allow); }
+  .pii-hl.card { background: rgba(248,81,73,.18); color: #ff8983; border-color: var(--block); }
+  .pii-red { color: var(--muted); }
+
+  /* appeals */
+  .appeals-list { padding: 8px 14px 14px; }
+  .appeal-row {
+    padding: 11px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .appeal-row:last-child { border-bottom: none; }
+  .appeal-row .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .appeal-row .id { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .appeal-row .reason { font-size: 12.5px; color: var(--text); line-height: 1.4; }
+  .appeal-row .when { font-family: var(--mono); font-size: 10px; color: var(--muted-2); margin-top: 4px; }
+  .ap-badge {
+    font-family: var(--mono); font-size: 10px; font-weight: 700;
+    padding: 3px 10px; border-radius: 100px;
+    letter-spacing: 0.05em;
+  }
+  .ap-badge.pending { background: rgba(210,153,34,.12); color: var(--educate); border: 1px solid rgba(210,153,34,.3); }
+  .ap-badge.review { background: rgba(56,139,253,.12); color: var(--accent-2); border: 1px solid rgba(56,139,253,.3); }
+  .ap-badge.resolved { background: rgba(63,185,80,.12); color: var(--allow); border: 1px solid rgba(63,185,80,.3); }
+  .ap-badge.rejected { background: rgba(248,81,73,.12); color: var(--block); border: 1px solid rgba(248,81,73,.3); }
+
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="BuildToValue Landing.html" class="nav-logo">
+    <span class="logo-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 21l18 0M12 21l0 -10M5 21l0 -8M19 21l0 -8M3 11l9 -8l9 8"/></svg></span>
+    BuildToValue
+  </a>
+  <span class="nav-tag">Persona · DPO</span>
+  <div class="nav-mid">
+    <div class="nav-group"><a href="BuildToValue Landing.html">Home</a><a href="Lab.html">Lab</a></div>
+    <div class="nav-group"><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a></div>
+    <div class="nav-group"><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html" class="active">DPO</a><a href="Persona Gov.html">Gov</a></div>
+  </div>
+  <div class="nav-right">
+    <button class="nav-icon-btn" onclick="window.location.href='BuildToValue Landing.html#top'" title="Tour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+    <button class="nav-icon-btn" onclick="toggleTheme()">
+      <svg id="t-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="t-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+    <button class="nav-icon-btn mobile-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('open')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+  </div>
+</nav>
+<div class="mobile-menu" id="mobile-menu">
+  <div class="group-label">Principal</div><a href="BuildToValue Landing.html">Home</a><a href="Lab.html">Lab</a>
+  <div class="group-label">Demos</div><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a>
+  <div class="group-label">Personas</div><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a>
+</div>
+
+<div class="intro">
+  <div class="persona-badge">
+    <div class="pb-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="18" rx="2"/><rect x="8" y="2" width="8" height="4"/><path d="M9 14l2 2 4-4"/></svg></div>
+    <div>
+      <div class="pb-role">Persona · Proteção de Dados</div>
+      <div class="pb-name">Compliance & Ética</div>
+      <div class="pb-sub">DPO · LGPD · GDPR · EU AI Act · HIPAA</div>
+    </div>
+  </div>
+  <div class="explainer">
+    <b>Você é o DPO.</b> A pergunta aqui é: <b>se o regulador bater na porta amanhã, eu estou pronto?</b> Avaliação de agente por preset, detecção de PII com diff, geração de FRIA em 1 clique, e o painel de apelações dos usuários — tudo mapeado para a jurisdição certa.
+  </div>
+</div>
+
+<!-- frameworks -->
+<div class="fw-strip" id="fw-strip"></div>
+
+<main class="grid">
+
+  <!-- LEFT: Agent evaluator -->
+  <section class="card">
+    <div class="card-head">
+      <span class="title">Avaliador de agente <span class="acc">· compliance ao vivo</span></span>
+    </div>
+    <div class="card-body">
+
+      <div class="field">
+        <label class="lab">Preset</label>
+        <select id="preset" onchange="loadPreset()">
+          <option value="healthcare">🏥 Healthcare autônomo (alto risco)</option>
+          <option value="fintech">💰 Fintech — credit scoring</option>
+          <option value="hr">👥 RH — triagem de candidatos</option>
+          <option value="safe">✓ Agente seguro com supervisão</option>
+        </select>
+      </div>
+
+      <div class="row2 field">
+        <div>
+          <label class="lab">agent_id</label>
+          <input type="text" id="agent-id" value="agent-demo-001">
+        </div>
+        <div>
+          <label class="lab">setor</label>
+          <input type="text" id="sector" value="healthcare">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lab">capabilities (vírgula)</label>
+        <input type="text" id="caps" value="diagnose,prescribe">
+      </div>
+
+      <div class="row2 field">
+        <label class="check" id="ck-oversight" onclick="toggleCheck(this)"><input type="checkbox"><span class="box"></span><span>Supervisão humana</span></label>
+        <label class="check" id="ck-conformity" onclick="toggleCheck(this)"><input type="checkbox"><span class="box"></span><span>Conformidade concluída</span></label>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+        <button class="btn btn-primary" onclick="runEval()" style="flex:1;min-width:160px">▶ Avaliar compliance</button>
+        <button class="btn btn-purple" onclick="runFria()">📋 Gerar FRIA</button>
+      </div>
+
+      <div id="result-zone">
+        <div class="result-empty">
+          <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
+          <div style="font-size:13px;line-height:1.6">
+            <b style="color:var(--text)">Configure o agente</b> e clique <b style="color:var(--text)">Avaliar</b>.<br>
+            Cada preset mostra como o BTV reage.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- RIGHT: Appeals + Compliance report -->
+  <section style="display:flex;flex-direction:column;gap:16px">
+
+    <div class="card">
+      <div class="card-head">
+        <span class="title">Relatório por framework</span>
+        <div style="display:flex;gap:6px">
+          <select id="fw-select" onchange="loadReport()" style="width:auto;font-size:11.5px;padding:5px 10px;min-height:30px">
+            <option value="LGPD">LGPD</option>
+            <option value="EU_AI_ACT">EU AI Act</option>
+            <option value="GDPR">GDPR</option>
+            <option value="HIPAA">HIPAA</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body" id="fw-report"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="title">Apelações <span class="acc">· últimas 24h</span></span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted-2)" id="ap-count">5 ativas</span>
+      </div>
+      <div class="appeals-list" id="appeals-list"></div>
+    </div>
+
+  </section>
+
+</main>
+
+<!-- PII tracker full width -->
+<main style="max-width: 1480px; margin: 0 auto; padding: 0 28px 28px;">
+  <div class="card">
+    <div class="card-head">
+      <span class="title">PII Detection Tracker <span class="acc">· CPF · email · telefone · cartão · CNPJ</span></span>
+    </div>
+    <div class="card-body">
+      <div class="pii-input-row">
+        <textarea id="pii-text">Meu CPF é 123.456.789-09 e meu email é usuario@example.com. Contato: +55 11 98765-4321. Cartão: 4532015112830366.</textarea>
+        <button class="btn btn-primary" onclick="runPii()" style="min-width:130px">🔍 Detectar PII</button>
+      </div>
+
+      <div class="pii-stats" id="pii-stats"></div>
+
+      <div class="pii-diff" id="pii-diff">
+        <div class="pii-pane">
+          <div class="head">Original (com PII destacada)</div>
+          <div id="pii-original" class="pii-red">Clique <b>Detectar PII</b> para analisar.</div>
+        </div>
+        <div class="pii-pane">
+          <div class="head">Sanitizado (o que o LLM recebe)</div>
+          <div id="pii-sanitized" class="pii-red">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const FRAMEWORKS = [
+  { id:'LGPD',      name:'LGPD',       region:'Brasil',          color:'#3fb950', rate:94, articles: 23, compliant: 22, violations: 1 },
+  { id:'EU_AI_ACT', name:'EU AI Act',  region:'União Europeia',  color:'#d29922', rate:78, articles: 31, compliant: 24, violations: 7 },
+  { id:'GDPR',      name:'GDPR',       region:'União Europeia',  color:'#3fb950', rate:91, articles: 18, compliant: 17, violations: 1 },
+  { id:'HIPAA',     name:'HIPAA',      region:'Estados Unidos',  color:'#79c0ff', rate:88, articles: 12, compliant: 11, violations: 1 },
+];
+
+const PRESETS = {
+  healthcare: { sector:'healthcare', caps:'diagnose,prescribe', oversight:false, conformity:false, rate:32, violations:['EU_AI_ACT_ART_14','EU_AI_ACT_ART_29','LGPD_ART_20','HIPAA_164_312'] },
+  fintech:    { sector:'fintech',    caps:'credit_scoring,auto_approve', oversight:false, conformity:false, rate:48, violations:['EU_AI_ACT_ART_14','LGPD_ART_20','GDPR_ART_22'] },
+  hr:         { sector:'hr',         caps:'resume_screening,ranking', oversight:false, conformity:true, rate:62, violations:['EU_AI_ACT_ART_29','LGPD_ART_20'] },
+  safe:       { sector:'general',    caps:'read,summarize', oversight:true, conformity:true, rate:96, violations:[] },
+};
+
+const APPEALS = [
+  { id:'ap_8f3b21', status:'pending',  reason:'Sistema bloqueou uma pergunta legítima sobre meu próprio histórico médico.',           when:'há 2h' },
+  { id:'ap_7c41a9', status:'review',   reason:'Solicito revisão da redação de PII — o número 0800 era de atendimento público.',     when:'há 5h' },
+  { id:'ap_9d227e', status:'pending',  reason:'Quero entender por que minha solicitação de FRIA foi classificada como "alto risco".', when:'há 7h' },
+  { id:'ap_4a18cc', status:'resolved', reason:'Resolvido: política de retenção atualizada após análise da equipe.',                  when:'há 9h' },
+  { id:'ap_3e09b1', status:'rejected', reason:'Pedido para acesso a dados de outro usuário — rejeitado por princípio de finalidade.', when:'há 14h' },
+];
+
+const PII_PATTERNS = [
+  { type:'CPF',         re:/\d{3}\.\d{3}\.\d{3}-\d{2}/g, cls:'cpf',   color:'#d29922', cb:'rgba(210,153,34,0.08)' },
+  { type:'EMAIL',       re:/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, cls:'email', color:'#388bfd', cb:'rgba(56,139,253,0.08)' },
+  { type:'PHONE',       re:/\+?\d{0,3}\s?\(?\d{2,3}\)?[\s-]?\d{4,5}-?\d{4}/g, cls:'phone', color:'#3fb950', cb:'rgba(63,185,80,0.08)' },
+  { type:'CREDIT_CARD', re:/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, cls:'card',  color:'#f85149', cb:'rgba(248,81,73,0.08)' },
+  { type:'CNPJ',        re:/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g, cls:'card', color:'#bc8cff', cb:'rgba(188,140,255,0.08)' },
+];
+
+// ━━━ FRAMEWORKS ━━━
+
+function renderFrameworks() {
+  document.getElementById('fw-strip').innerHTML = FRAMEWORKS.map(f => {
+    const cls = f.rate >= 90 ? 'green' : f.rate >= 70 ? 'yellow' : 'red';
+    return `<div class="fw-card" style="--c:${f.color}">
+      <div class="fw-name">${f.name}</div>
+      <div class="fw-region">${f.region}</div>
+      <div class="fw-rate ${cls}">${f.rate}%</div>
+      <div class="fw-sub">${f.compliant}/${f.articles} artigos · ${f.violations} pendente${f.violations!==1?'s':''}</div>
+      <div class="fw-bar"><div class="fw-fill" style="width:${f.rate}%;background:${f.color}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// ━━━ EVALUATOR ━━━
+
+function toggleCheck(el) {
+  el.classList.toggle('on');
+  el.querySelector('input').checked = el.classList.contains('on');
+}
+function setCheck(el, val) {
+  el.classList.toggle('on', val);
+  el.querySelector('input').checked = val;
+}
+
+function loadPreset() {
+  const p = PRESETS[document.getElementById('preset').value];
+  document.getElementById('sector').value = p.sector;
+  document.getElementById('caps').value = p.caps;
+  setCheck(document.getElementById('ck-oversight'), p.oversight);
+  setCheck(document.getElementById('ck-conformity'), p.conformity);
+}
+
+async function runEval() {
+  const presetKey = document.getElementById('preset').value;
+  const p = PRESETS[presetKey];
+  // adjust rate slightly based on user toggles
+  let rate = p.rate;
+  if (document.getElementById('ck-oversight').classList.contains('on')) rate += 18;
+  if (document.getElementById('ck-conformity').classList.contains('on')) rate += 14;
+  rate = Math.min(rate, 98);
+
+  const violations = rate >= 85 ? [] : p.violations;
+  const cls = rate >= 80 ? 'green' : rate >= 50 ? 'yellow' : 'red';
+  const color = cls === 'green' ? 'var(--allow)' : cls === 'yellow' ? 'var(--educate)' : 'var(--block)';
+
+  document.getElementById('result-zone').innerHTML = `
+    <div class="compl-result">
+      <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:6px">Taxa de conformidade</div>
+      <div class="compl-rate ${cls}">${rate}%</div>
+      <div class="compl-bar"><div class="compl-fill" style="width:${rate}%;background:${color}"></div></div>
+      ${violations.length ? `
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:14px">${violations.length} violação${violations.length>1?'ões':''} detectada${violations.length>1?'s':''}:</div>
+        <div class="compl-viol">${violations.map(v => `<span class="v">${v}</span>`).join('')}</div>
+      ` : `<div class="compl-ok">✓ Sem violações detectadas. Agente está conforme.</div>`}
+    </div>
+  `;
+}
+
+async function runFria() {
+  const agentId = document.getElementById('agent-id').value;
+  const sector = document.getElementById('sector').value;
+  const caps = document.getElementById('caps').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const friaId = 'fria_' + Math.random().toString(36).slice(2,10);
+
+  const fria = {
+    fria_id: friaId,
+    agent_id: agentId,
+    sector,
+    capabilities: caps,
+    generated_at: new Date().toISOString(),
+    jurisdictions: ['EU_AI_ACT','LGPD','GDPR'],
+    risk_classification: 'high',
+    fundamental_rights_assessed: ['privacy','non_discrimination','human_dignity','effective_remedy'],
+    mitigations_required: ['human_oversight','transparency_score>=0.8','impact_audit_90d'],
+    next_review: '2026-08-26'
+  };
+
+  document.getElementById('result-zone').innerHTML = `
+    <div class="compl-result">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <span style="background:var(--persona);color:white;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:0.05em">📋 FRIA GERADA</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${friaId}</span>
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:12px;font-family:var(--mono);font-size:10.5px;color:#a5f3fc;line-height:1.6;max-height:260px;overflow:auto;white-space:pre-wrap">${JSON.stringify(fria, null, 2)}</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-outline" onclick="window.print()">🖨 Exportar PDF</button>
+        <button class="btn btn-outline" onclick="navigator.clipboard?.writeText(${JSON.stringify(JSON.stringify(fria))})">Copiar JSON</button>
+      </div>
+    </div>
+  `;
+}
+
+// ━━━ COMPLIANCE REPORT ━━━
+
+function loadReport() {
+  const id = document.getElementById('fw-select').value;
+  const f = FRAMEWORKS.find(x => x.id === id);
+  const cls = f.rate >= 90 ? 'green' : f.rate >= 70 ? 'yellow' : 'red';
+  const color = cls === 'green' ? 'var(--allow)' : cls === 'yellow' ? 'var(--educate)' : 'var(--block)';
+
+  document.getElementById('fw-report').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:11px 14px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Conforme</div>
+        <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:var(--allow)">${f.compliant}</div>
+      </div>
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:11px 14px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Violações</div>
+        <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:var(--block)">${f.violations}</div>
+      </div>
+    </div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px">Taxa de conformidade · ${f.region}</div>
+    <div class="compl-bar"><div class="compl-fill" style="width:${f.rate}%;background:${color}"></div></div>
+    <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted-2);margin-top:6px">
+      <span>0%</span><span style="color:${color};font-weight:700">${f.rate}%</span><span>100%</span>
+    </div>
+  `;
+}
+
+// ━━━ APPEALS ━━━
+
+function renderAppeals() {
+  document.getElementById('appeals-list').innerHTML = APPEALS.map(a => `
+    <div class="appeal-row">
+      <div class="top">
+        <span class="id">${a.id}</span>
+        <span class="ap-badge ${a.status}">${a.status}</span>
+      </div>
+      <div class="reason">${a.reason}</div>
+      <div class="when">SLA 24h · ${a.when}</div>
+    </div>
+  `).join('');
+  document.getElementById('ap-count').textContent = APPEALS.filter(a => a.status === 'pending' || a.status === 'review').length + ' ativas';
+}
+
+// ━━━ PII ━━━
+
+function runPii() {
+  const text = document.getElementById('pii-text').value;
+  const detected = {};
+  let highlighted = text;
+
+  PII_PATTERNS.forEach(p => {
+    const matches = text.match(p.re) || [];
+    if (matches.length) {
+      detected[p.type] = { count: matches.length, color: p.color, cb: p.cb, cls: p.cls };
+      matches.forEach(m => {
+        highlighted = highlighted.replace(m, `<mark class="pii-hl ${p.cls}">${m}</mark>`);
+      });
+    }
+  });
+
+  // sanitized: replace each detected
+  let sanitized = text;
+  PII_PATTERNS.forEach(p => {
+    sanitized = sanitized.replace(p.re, `<span class="pii-red">[${p.type}_REDACTED]</span>`);
+  });
+
+  // render stats
+  const allTypes = ['CPF','EMAIL','PHONE','CREDIT_CARD','CNPJ'];
+  document.getElementById('pii-stats').innerHTML = allTypes.map(t => {
+    const d = detected[t];
+    const on = !!d;
+    const cb = d ? d.cb : 'transparent';
+    const c  = d ? d.color : 'var(--muted-2)';
+    return `<div class="pii-stat ${on?'on':''}" style="--c:${c};--cb:${cb}">
+      <div class="typ">${t}</div>
+      <div class="ct">${d ? d.count : 0}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('pii-original').innerHTML = highlighted;
+  document.getElementById('pii-sanitized').innerHTML = sanitized;
+}
+
+// ━━━ THEME ━━━
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('t-moon').style.display = theme === 'light' ? 'none' : '';
+  document.getElementById('t-sun').style.display = theme === 'light' ? '' : 'none';
+  localStorage.setItem('btv-theme', theme);
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  applyTheme(localStorage.getItem('btv-theme') || 'dark');
+  renderFrameworks();
+  loadPreset();
+  loadReport();
+  renderAppeals();
+  runPii();
+});
+</script>
+</body>
+</html>

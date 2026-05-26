@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Governança · Contestabilidade — BuildToValue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0d13; --bg-2:#0d1117; --surface:#141921; --surface-2:#1c222c; --surface-3:#262d39;
+    --border:rgba(255,255,255,0.07); --border-strong:rgba(255,255,255,0.14);
+    --text:#e6edf3; --muted:#8b95a3; --muted-2:#5a6470;
+    --accent:#388bfd; --accent-2:#79c0ff;
+    --allow:#3fb950; --block:#f85149; --educate:#d29922; --redact:#bc8cff;
+    --persona:#d29922; --persona-bg:rgba(210,153,34,0.12);
+    --mono:'JetBrains Mono',ui-monospace,monospace; --sans:'Inter',system-ui,sans-serif;
+  }
+  [data-theme="light"] {
+    --bg:#F4F6F9; --bg-2:#EEF1F5; --surface:#FFFFFF; --surface-2:#EEF1F5; --surface-3:#E2E8F0;
+    --border:rgba(15,23,42,0.10); --border-strong:rgba(15,23,42,0.18);
+    --text:#0F172A; --muted:#475569; --muted-2:#64748B;
+    --accent:#004BD6; --accent-2:#1D4ED8;
+    --allow:#059669; --block:#DC2626; --educate:#B45309; --redact:#7C3AED;
+    --persona:#B45309; --persona-bg:rgba(180,83,9,0.10);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.55; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  button { font-family: inherit; cursor: pointer; }
+
+  body::before {
+    content: ""; position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 600px 400px at 10% -10%, rgba(210,153,34,0.07), transparent 60%),
+      radial-gradient(ellipse 500px 300px at 90% 10%, rgba(56,139,253,0.05), transparent 60%);
+    pointer-events: none; z-index: 0;
+  }
+  main, .nav { position: relative; z-index: 1; }
+
+  /* nav */
+  .nav { display:flex; align-items:center; gap:14px; padding:14px 28px; border-bottom:1px solid var(--border); background:rgba(10,13,19,0.75); backdrop-filter:blur(10px); position:sticky; top:0; z-index:50; }
+  [data-theme="light"] .nav { background: rgba(244,246,249,0.85); }
+  .nav-logo { display:flex; align-items:center; gap:10px; font-weight:800; font-size:15px; color:var(--text); }
+  .nav-logo:hover { text-decoration:none; }
+  .logo-mark { width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; background:linear-gradient(135deg, var(--accent), #4ea1ff); border-radius:7px; box-shadow:0 0 24px rgba(56,139,253,0.35), inset 0 1px 0 rgba(255,255,255,0.2); }
+  .nav-tag { font-family:var(--mono); font-size:11px; color:var(--muted); padding:3px 8px; border:1px solid var(--border); border-radius:4px; background:var(--surface); }
+  .nav-mid { margin-left:auto; margin-right:auto; display:flex; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:100px; padding:4px; }
+  .nav-group { display:flex; gap:2px; padding:0 4px; }
+  .nav-group + .nav-group { border-left:1px solid var(--border); }
+  .nav-mid a { color:var(--muted); font-size:12.5px; font-weight:500; padding:6px 11px; border-radius:100px; white-space:nowrap; transition:all .15s; }
+  .nav-mid a:hover { color:var(--text); background:var(--surface-2); text-decoration:none; }
+  .nav-mid a.active { background:var(--accent); color:white; }
+  .nav-right { display:flex; gap:6px; }
+  .nav-icon-btn { width:34px; height:34px; border-radius:8px; background:var(--surface); border:1px solid var(--border); color:var(--muted); display:inline-flex; align-items:center; justify-content:center; transition:all .15s; }
+  .nav-icon-btn:hover { color:var(--text); background:var(--surface-2); border-color:var(--border-strong); }
+  .mobile-toggle { display:none; }
+  .mobile-menu { display:none; position:fixed; top:62px; left:0; right:0; background:var(--surface); border-bottom:1px solid var(--border); padding:14px 28px; z-index:49; }
+  .mobile-menu.open { display:block; }
+  .mobile-menu .group-label { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--muted); padding:10px 0 6px; }
+  .mobile-menu a { display:block; padding:9px 10px; border-radius:7px; color:var(--text); font-size:14px; }
+  @media (max-width:1080px) { .nav-mid, .nav-tag { display:none; } .mobile-toggle { display:inline-flex; margin-left:auto; } }
+
+  /* intro */
+  .intro { max-width: 1480px; margin: 0 auto; padding: 26px 28px 0; display: flex; align-items: center; gap: 18px; }
+  .persona-badge { display: flex; align-items: center; gap: 14px; }
+  .pb-ico {
+    width: 52px; height: 52px; border-radius: 14px;
+    background: linear-gradient(135deg, var(--persona-bg), rgba(210,153,34,.04));
+    border: 1px solid var(--persona);
+    color: var(--persona);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pb-role { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--persona); font-weight: 700; }
+  .pb-name { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin-top: 1px; }
+  .pb-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+  .explainer {
+    margin-left: auto; max-width: 560px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--persona);
+    padding: 12px 16px; border-radius: 8px;
+    font-size: 13px; color: var(--muted); line-height: 1.55;
+  }
+  .explainer b { color: var(--text); }
+  @media (max-width:1080px) { .intro { flex-wrap:wrap; gap: 14px; } .explainer { max-width: 100%; margin-left:0; } }
+
+  /* KPIs */
+  .kpis { max-width: 1480px; margin: 18px auto 0; padding: 0 28px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  @media (max-width:1080px) { .kpis { grid-template-columns: 1fr 1fr 1fr; } }
+  @media (max-width:680px) { .kpis { grid-template-columns: 1fr 1fr; } }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 14px 18px; }
+  .kpi .lbl { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 4px; }
+  .kpi .val { font-family: var(--mono); font-size: 26px; font-weight: 800; line-height: 1.1; }
+  .kpi .sub { font-size: 11px; color: var(--muted-2); margin-top: 4px; font-family: var(--mono); }
+  .kpi-bar { height: 5px; background: var(--surface-2); border-radius: 100px; margin-top: 8px; overflow: hidden; }
+  .kpi-fill { height: 100%; border-radius: 100px; transition: width 0.6s; }
+  .badge-inline {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 100px;
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+  }
+  .badge-inline.ok { background: rgba(63,185,80,.12); color: var(--allow); border: 1px solid rgba(63,185,80,.3); }
+  .dot-anim { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor; animation: pulse-dot 1.6s infinite; }
+  @keyframes pulse-dot { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
+
+  /* shared card */
+  .container { max-width: 1480px; margin: 18px auto 0; padding: 0 28px 28px; display: flex; flex-direction: column; gap: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; overflow: hidden; }
+  .card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .card-head .title { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 600; }
+  .card-head .title .acc { color: var(--persona); }
+  .card-body { padding: 22px; }
+
+  /* philosophical pipeline */
+  .phil-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    padding: 20px;
+  }
+  @media (max-width: 880px) { .phil-grid { grid-template-columns: 1fr 1fr; } }
+  .phil {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 11px; padding: 16px 16px 14px;
+    cursor: pointer; transition: all .15s;
+    border-top: 2px solid var(--c, var(--accent));
+  }
+  .phil:hover, .phil.active {
+    border-color: var(--c, var(--accent));
+    background: var(--surface-2);
+    transform: translateY(-2px);
+  }
+  .phil.active { box-shadow: 0 0 0 1px var(--c, var(--accent)); }
+  .phil .nm { font-family: var(--mono); font-size: 11px; color: var(--c, var(--accent)); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; margin-bottom: 4px; }
+  .phil .full { font-size: 14px; font-weight: 700; line-height: 1.2; margin-bottom: 4px; }
+  .phil .ask { font-size: 12px; color: var(--muted); line-height: 1.45; min-height: 32px; }
+  .phil .sc { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  .phil .sc-lbl { font-family: var(--mono); font-size: 10px; color: var(--muted-2); }
+  .phil .sc-val { font-family: var(--mono); font-size: 16px; font-weight: 800; color: var(--c, var(--accent)); }
+  .phil .sc-val.pending { color: var(--muted-2); font-weight: 500; }
+
+  .phil-detail {
+    margin: 0 20px 18px;
+    padding: 14px 18px;
+    background: var(--bg-2); border: 1px solid var(--c, var(--persona));
+    border-radius: 10px;
+    border-left: 3px solid var(--c, var(--persona));
+  }
+  .phil-detail .who { font-family: var(--mono); font-size: 11px; color: var(--c, var(--persona)); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; margin-bottom: 6px; }
+  .phil-detail .what { font-size: 13.5px; color: var(--text); line-height: 1.6; }
+
+  .phil-test {
+    border-top: 1px solid var(--border);
+    padding: 18px 20px;
+  }
+  .phil-test-row {
+    display: flex; gap: 10px;
+  }
+  .phil-test input {
+    flex: 1; background: var(--bg-2);
+    border: 1px solid var(--border-strong); border-radius: 8px;
+    color: var(--text); padding: 10px 12px;
+    font-size: 13px; font-family: var(--sans);
+    outline: none;
+  }
+  .phil-test input:focus { border-color: var(--accent); }
+  .phil-result {
+    margin-top: 12px;
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+    display: none;
+  }
+  .phil-result.show { display: block; }
+  .phil-result .top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .phil-result .badge {
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+    padding: 3px 10px; border-radius: 100px; letter-spacing: 0.05em;
+  }
+  .phil-result .badge.ALLOW { background: rgba(63,185,80,.12); color: var(--allow); border: 1px solid rgba(63,185,80,.3); }
+  .phil-result .badge.BLOCK { background: rgba(248,81,73,.12); color: var(--block); border: 1px solid rgba(248,81,73,.3); }
+  .phil-result .badge.EDUCATE { background: rgba(210,153,34,.12); color: var(--educate); border: 1px solid rgba(210,153,34,.3); }
+  .phil-result .mercy { background: rgba(188,140,255,.12); color: var(--redact); border: 1px solid rgba(188,140,255,.3); }
+  .phil-result .rt { font-size: 12.5px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+  /* btn */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid transparent; transition: all .15s; min-height: 36px; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #2f7cf4; }
+  .btn-outline { background: transparent; color: var(--text); border-color: var(--border-strong); }
+  .btn-outline:hover { background: var(--surface-2); }
+  .btn-gold { background: var(--persona); color: white; }
+  .btn-gold:hover { filter: brightness(1.1); }
+
+  /* republic powers */
+  .powers {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    padding: 22px;
+  }
+  @media(max-width:880px){.powers{grid-template-columns:1fr;}}
+  .power {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+    border-top: 3px solid var(--c);
+    position: relative;
+  }
+  .power-ico { width: 36px; height: 36px; border-radius: 9px; background: var(--cb); color: var(--c); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .power-name { font-size: 16px; font-weight: 800; margin-bottom: 2px; }
+  .power-tech { font-family: var(--mono); font-size: 11px; color: var(--c); margin-bottom: 10px; font-weight: 700; }
+  .power-desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .powers-foot {
+    text-align: center; padding: 12px 20px 22px;
+    font-family: var(--mono); font-size: 11px; color: var(--muted-2);
+  }
+
+  /* appeal form + list grid */
+  .ap-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  @media(max-width:980px){.ap-grid{grid-template-columns:1fr;}}
+
+  /* form */
+  label.lab { display:block; font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); margin-bottom:5px; font-weight:600; }
+  input[type=text], textarea {
+    width:100%; background:var(--surface-2);
+    border:1px solid var(--border-strong); border-radius:8px;
+    color:var(--text); padding:9px 12px; font-size:13px; font-family:var(--sans);
+    outline:none; transition:border-color .15s;
+  }
+  input[type=text]:focus, textarea:focus { border-color: var(--accent); }
+  textarea { font-family: var(--mono); font-size: 12px; line-height: 1.5; resize: vertical; min-height: 72px; }
+  .field { margin-bottom: 14px; }
+
+  .grounds { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ground {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    padding: 6px 11px; border-radius: 100px;
+    font-size: 11.5px; cursor: pointer; transition: all .12s;
+  }
+  .ground:hover { border-color: var(--persona); color: var(--persona); }
+  .ground.on { background: rgba(210,153,34,.1); color: var(--persona); border-color: var(--persona); }
+  .ground input { display: none; }
+  .ground .box {
+    width: 14px; height: 14px; border-radius: 3px;
+    border: 1.5px solid var(--border-strong);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .ground.on .box { background: var(--persona); border-color: var(--persona); color: white; }
+  .ground.on .box::after { content: "✓"; font-size: 9px; font-weight: 800; }
+
+  .ap-result {
+    margin-top: 14px;
+    background: rgba(63,185,80,.08);
+    border: 1px solid rgba(63,185,80,.25);
+    border-radius: 9px; padding: 14px;
+    display: none;
+  }
+  .ap-result.show { display: block; }
+  .ap-result .ok { color: var(--allow); font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .ap-result .det { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .ap-result .adr { font-size: 11px; color: var(--muted-2); margin-top: 6px; }
+
+  /* appeals list */
+  .appeals { padding: 8px 18px 18px; max-height: 380px; overflow-y: auto; }
+  .ap-row { padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .ap-row:last-child { border-bottom: none; }
+  .ap-row .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .ap-row .aid { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .ap-row .reason { font-size: 12.5px; color: var(--text); line-height: 1.4; }
+  .ap-row .meta { font-family: var(--mono); font-size: 10px; color: var(--muted-2); margin-top: 4px; }
+  .ap-badge {
+    font-family: var(--mono); font-size: 10px; font-weight: 700;
+    padding: 3px 10px; border-radius: 100px; letter-spacing: 0.05em;
+  }
+  .ap-badge.pending { background: rgba(210,153,34,.12); color: var(--educate); border: 1px solid rgba(210,153,34,.3); }
+  .ap-badge.review { background: rgba(56,139,253,.12); color: var(--accent-2); border: 1px solid rgba(56,139,253,.3); }
+  .ap-badge.resolved { background: rgba(63,185,80,.12); color: var(--allow); border: 1px solid rgba(63,185,80,.3); }
+
+  /* contestability loop */
+  .loop {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; flex-wrap: wrap;
+    padding: 28px 22px 18px;
+  }
+  .loop-step {
+    background: var(--surface-2);
+    border: 1.5px solid var(--c);
+    border-radius: 12px;
+    padding: 14px 16px; min-width: 130px;
+    text-align: center;
+    transition: all .2s;
+  }
+  .loop-step:hover { background: var(--c); transform: translateY(-3px); }
+  .loop-step:hover .ico, .loop-step:hover .nm, .loop-step:hover .sub { color: white; }
+  .loop-step .ico { color: var(--c); margin-bottom: 6px; display: flex; justify-content: center; transition: color .2s; }
+  .loop-step .nm { font-size: 12.5px; font-weight: 700; transition: color .2s; }
+  .loop-step .sub { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 3px; transition: color .2s; }
+  .loop-arrow {
+    font-size: 16px; color: var(--muted-2);
+    padding: 0 12px;
+  }
+  .loop-foot {
+    text-align: center;
+    font-family: var(--mono); font-size: 10.5px; color: var(--muted-2);
+    padding: 0 22px 18px;
+  }
+
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="BuildToValue Landing.html" class="nav-logo">
+    <span class="logo-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 21l18 0M12 21l0 -10M5 21l0 -8M19 21l0 -8M3 11l9 -8l9 8"/></svg></span>
+    BuildToValue
+  </a>
+  <span class="nav-tag">Persona · Governança</span>
+  <div class="nav-mid">
+    <div class="nav-group"><a href="BuildToValue Landing.html">Home</a><a href="Lab.html">Lab</a></div>
+    <div class="nav-group"><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a></div>
+    <div class="nav-group"><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html" class="active">Gov</a></div>
+  </div>
+  <div class="nav-right">
+    <button class="nav-icon-btn" onclick="window.location.href='BuildToValue Landing.html#top'" title="Tour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+    <button class="nav-icon-btn" onclick="toggleTheme()">
+      <svg id="t-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="t-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+    <button class="nav-icon-btn mobile-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('open')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+  </div>
+</nav>
+<div class="mobile-menu" id="mobile-menu">
+  <div class="group-label">Principal</div><a href="BuildToValue Landing.html">Home</a><a href="Lab.html">Lab</a>
+  <div class="group-label">Demos</div><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a>
+  <div class="group-label">Personas</div><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a>
+</div>
+
+<div class="intro">
+  <div class="persona-badge">
+    <div class="pb-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10l7-5 7 5v11M9 21v-6h6v6"/></svg></div>
+    <div>
+      <div class="pb-role">Persona · Governança</div>
+      <div class="pb-name">Contestability Loop</div>
+      <div class="pb-sub">Conselho · ética · contestabilidade · SLA 24h</div>
+    </div>
+  </div>
+  <div class="explainer">
+    <b>Você é o conselho.</b> A pergunta aqui é: <b>se o usuário contestar uma decisão, eu respondo em 24h?</b> Pipeline filosófico interativo (Rawls, Levinas, Jonas, Gilligan), submissão de apelação, loop de contestabilidade garantido por design, e separação de poderes da República Algorítmica.
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi">
+    <div class="lbl">SLA Compliance (24h)</div>
+    <div class="val" style="color:var(--allow)" id="kpi-sla">96%</div>
+    <div class="kpi-bar"><div class="kpi-fill" style="width:96%;background:var(--allow)"></div></div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Apelações abertas</div>
+    <div class="val" id="kpi-open">3</div>
+    <div class="sub">aguardando resolução</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Total (30d)</div>
+    <div class="val" id="kpi-total">47</div>
+    <div class="sub">média de 1.6/dia</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Bias Guardian</div>
+    <div style="padding-top:5px"><span class="badge-inline ok"><span class="dot-anim"></span> Calibrado</span></div>
+    <div class="sub">drift &lt; 0.02 σ</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Transparency Score</div>
+    <div class="val" style="color:var(--allow)" id="kpi-trans">92%</div>
+    <div class="sub">target &gt; 80%</div>
+  </div>
+</div>
+
+<main class="container">
+
+  <!-- Philosophical pipeline -->
+  <div class="card">
+    <div class="card-head">
+      <span class="title">Pipeline filosófico <span class="acc">· clique cada filósofo para a justificativa</span></span>
+    </div>
+    <div class="phil-grid">
+      <div class="phil" data-id="rawls" style="--c:#79c0ff" onclick="selectPhil('rawls', this)">
+        <div class="nm">Rawls</div>
+        <div class="full">Equidade</div>
+        <div class="ask">Isso afeta o mais vulnerável sob o "véu da ignorância"?</div>
+        <div class="sc"><span class="sc-lbl">score</span><span class="sc-val pending" id="sc-rawls">—</span></div>
+      </div>
+      <div class="phil" data-id="levinas" style="--c:#bc8cff" onclick="selectPhil('levinas', this)">
+        <div class="nm">Levinas</div>
+        <div class="full">Dignidade</div>
+        <div class="ask">Reconhece a face do Outro? Ou reduz a um dado?</div>
+        <div class="sc"><span class="sc-lbl">score</span><span class="sc-val pending" id="sc-levinas">—</span></div>
+      </div>
+      <div class="phil" data-id="jonas" style="--c:#d29922" onclick="selectPhil('jonas', this)">
+        <div class="nm">Jonas</div>
+        <div class="full">Responsabilidade</div>
+        <div class="ask">Os efeitos são compatíveis com a permanência de vida humana?</div>
+        <div class="sc"><span class="sc-lbl">score</span><span class="sc-val pending" id="sc-jonas">—</span></div>
+      </div>
+      <div class="phil" data-id="gilligan" style="--c:#3fb950" onclick="selectPhil('gilligan', this)">
+        <div class="nm">Gilligan</div>
+        <div class="full">Cuidado</div>
+        <div class="ask">Sustenta a rede de relações? Uma resposta mais compassiva caberia?</div>
+        <div class="sc"><span class="sc-lbl">score</span><span class="sc-val pending" id="sc-gilligan">—</span></div>
+      </div>
+    </div>
+
+    <div class="phil-detail" id="phil-detail" style="display:none">
+      <div class="who" id="phil-who"></div>
+      <div class="what" id="phil-what"></div>
+    </div>
+
+    <div class="phil-test">
+      <label class="lab">Testar pipeline com um input real</label>
+      <div class="phil-test-row">
+        <input type="text" id="phil-input" value="Minha mãe idosa precisa de informação urgente sobre medicação.">
+        <button class="btn btn-primary" onclick="runPhilTest()">▶ Analisar</button>
+      </div>
+      <div class="phil-result" id="phil-result"></div>
+    </div>
+  </div>
+
+  <!-- Republic powers -->
+  <div class="card">
+    <div class="card-head">
+      <span class="title">República Algorítmica <span class="acc">· separação de poderes (ADR-001)</span></span>
+    </div>
+    <div class="powers">
+      <div class="power" style="--c:#d29922;--cb:rgba(210,153,34,.1)">
+        <div class="power-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+        <div class="power-name">Legislativo</div>
+        <div class="power-tech">YAML Policies · versionadas</div>
+        <div class="power-desc">Definição de regras éticas como código. Auditáveis, com histórico imutável. Não tocadas em runtime.</div>
+      </div>
+      <div class="power" style="--c:#388bfd;--cb:rgba(56,139,253,.1)">
+        <div class="power-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+        <div class="power-name">Executivo</div>
+        <div class="power-tech">Rust Axum · &lt;2μs hot path</div>
+        <div class="power-desc">Kernel de validação. 15 módulos. Zero-heap. Imutável em runtime. Executa o que o Legislativo determinou.</div>
+      </div>
+      <div class="power" style="--c:#3fb950;--cb:rgba(63,185,80,.1)">
+        <div class="power-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v2l4 11a3 3 0 0 1-3 4H8a3 3 0 0 1-3-4l4-11V3z"/><path d="M9 13h6"/></svg></div>
+        <div class="power-name">Judiciário</div>
+        <div class="power-tech">Python FastAPI · pipeline</div>
+        <div class="power-desc">Deliberação ética. Trust scoring. Contestabilidade. Apelações com SLA 24h. Pode revisar o Executivo.</div>
+      </div>
+    </div>
+    <div class="powers-foot">Cada poder é independente · separação arquitetural garantida por design · ADR-001</div>
+  </div>
+
+  <!-- Appeal form + list -->
+  <div class="ap-grid">
+    <div class="card">
+      <div class="card-head"><span class="title">Submeter apelação <span class="acc">· contestabilidade</span></span></div>
+      <div class="card-body">
+        <div class="field">
+          <label class="lab">verdict_id (decisão contestada)</label>
+          <input type="text" id="vid" value="v_8f3b21cd">
+        </div>
+        <div class="field">
+          <label class="lab">user_id</label>
+          <input type="text" id="uid" value="user-demo-001">
+        </div>
+        <div class="field">
+          <label class="lab">motivo</label>
+          <textarea id="reason">A decisão bloqueou um input legítimo de contexto educacional. O sistema classificou incorretamente como ameaça sem considerar o contexto completo.</textarea>
+        </div>
+        <div class="field">
+          <label class="lab">fundamentos</label>
+          <div class="grounds" id="grounds">
+            <label class="ground on" onclick="toggleGround(this)"><input type="checkbox" checked value="false_positive"><span class="box"></span>Falso positivo</label>
+            <label class="ground" onclick="toggleGround(this)"><input type="checkbox" value="rawls_equity"><span class="box"></span>Equidade (Rawls)</label>
+            <label class="ground" onclick="toggleGround(this)"><input type="checkbox" value="context_missing"><span class="box"></span>Contexto ausente</label>
+            <label class="ground" onclick="toggleGround(this)"><input type="checkbox" value="gilligan_mercy"><span class="box"></span>Cuidado (Gilligan)</label>
+            <label class="ground" onclick="toggleGround(this)"><input type="checkbox" value="policy_misapplied"><span class="box"></span>Política mal aplicada</label>
+          </div>
+        </div>
+        <button class="btn btn-gold" style="width:100%" onclick="submitAppeal()">📨 Submeter contestação</button>
+
+        <div class="ap-result" id="ap-result">
+          <div class="ok">✅ Apelação registrada</div>
+          <div class="det" id="ap-result-id">—</div>
+          <div class="det" id="ap-result-sla">—</div>
+          <div class="adr">ADR-017 · contestabilidade garantida por design · GDPR Art. 22 · EU AI Act Art. 86</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="title">Apelações ativas</span><span style="font-family:var(--mono);font-size:10.5px;color:var(--muted-2)" id="ap-list-count">—</span></div>
+      <div class="appeals" id="appeals-list"></div>
+    </div>
+  </div>
+
+  <!-- Contestability loop -->
+  <div class="card">
+    <div class="card-head"><span class="title">Contestability Loop <span class="acc">· fluxo garantido por design</span></span></div>
+    <div class="loop">
+      <div class="loop-step" style="--c:var(--block)">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>
+        <div class="nm">1. Decisão</div>
+        <div class="sub">BLOCK / EDUCATE</div>
+      </div>
+      <div class="loop-arrow">→</div>
+      <div class="loop-step" style="--c:var(--educate)">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4"/><line x1="9" y1="14" x2="15" y2="14"/></svg></div>
+        <div class="nm">2. Contestação</div>
+        <div class="sub">appeal submetido</div>
+      </div>
+      <div class="loop-arrow">→</div>
+      <div class="loop-step" style="--c:var(--accent)">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        <div class="nm">3. Revisão</div>
+        <div class="sub">SLA 24h</div>
+      </div>
+      <div class="loop-arrow">→</div>
+      <div class="loop-step" style="--c:var(--allow)">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="nm">4. Resolução</div>
+        <div class="sub">garantida</div>
+      </div>
+    </div>
+    <div class="loop-foot">Contestabilidade como invariante de sistema · ADR-017 · GDPR Art. 22 · EU AI Act Art. 86</div>
+  </div>
+
+</main>
+
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const PHIL = {
+  rawls:    { who:'John Rawls — Equidade', what:'O "véu da ignorância" pergunta se a decisão sobreviveria caso você não soubesse quem é o usuário. O princípio maximin prioriza o pior caso possível — a decisão precisa proteger o mais vulnerável da rede.' },
+  levinas:  { who:'Emmanuel Levinas — Dignidade & Alteridade', what:'O reconhecimento da face do Outro é princípio ético central. A IA não pode reduzir pessoas a dados de entrada. Quando detectamos PII sensível ou tratamento meramente instrumental, Levinas veta.' },
+  jonas:    { who:'Hans Jonas — Princípio da Responsabilidade', what:'"Aja de modo que os efeitos de suas ações sejam compatíveis com a permanência de vida humana genuína." Avalia dano de longo prazo, manipulação, gatilhos sistêmicos, desinformação reverberante.' },
+  gilligan: { who:'Carol Gilligan — Ética do Cuidado', what:'O contexto relacional importa. Uma resposta tecnicamente correta pode quebrar vínculos (paciente-cuidador, idoso-familiar, comunidade). Mercy algorithm avalia se uma resposta mais compassiva seria eticamente superior.' },
+};
+
+const APPEALS = [
+  { id:'ap_8f3b21', status:'pending',  reason:'Sistema bloqueou pergunta legítima sobre meu próprio histórico médico.',          when:'há 2h',  sla:'em 22h' },
+  { id:'ap_7c41a9', status:'review',   reason:'Revisão da redação de PII — o número 0800 era atendimento público.',             when:'há 5h',  sla:'em 19h' },
+  { id:'ap_9d227e', status:'pending',  reason:'Entender por que minha solicitação de FRIA foi classificada como alto risco.',  when:'há 7h',  sla:'em 17h' },
+  { id:'ap_4a18cc', status:'resolved', reason:'Resolvido: política atualizada após análise.',                                    when:'há 9h',  sla:'cumprido' },
+  { id:'ap_3e09b1', status:'resolved', reason:'Resolvido: contexto adicional aceito; decisão revertida para ALLOW.',            when:'há 14h', sla:'cumprido' },
+];
+
+let currentPhil = null;
+
+function selectPhil(id, el) {
+  document.querySelectorAll('.phil').forEach(x => x.classList.remove('active'));
+  el.classList.add('active');
+  currentPhil = id;
+
+  const p = PHIL[id];
+  const det = document.getElementById('phil-detail');
+  det.style.display = 'block';
+  // match border color
+  const c = el.style.getPropertyValue('--c');
+  det.style.setProperty('--c', c);
+  document.getElementById('phil-who').textContent = p.who;
+  document.getElementById('phil-who').style.color = c;
+  document.getElementById('phil-what').textContent = p.what;
+  det.style.borderColor = c;
+  det.style.borderLeftColor = c;
+}
+
+function runPhilTest() {
+  const input = document.getElementById('phil-input').value.trim();
+  if (!input) return;
+
+  const lower = input.toLowerCase();
+  // heuristic
+  const harm = /idosa|criança|vulneráv|urgent|emergenc/.test(lower);
+  const risky = /ignore.*instru|dan|select|drop|cartão/.test(lower);
+  const mercy = harm && !risky;
+
+  let action, risk, rationale;
+  if (risky) {
+    action = 'BLOCK'; risk = 0.88;
+    rationale = 'Padrão de ameaça detectado. Jonas (responsabilidade) e Rawls (equidade) bloqueiam — dano sistêmico previsível.';
+  } else if (mercy) {
+    action = 'ALLOW'; risk = 0.18;
+    rationale = 'Input cuidadoso, contexto de vulnerabilidade reconhecido. Mercy algorithm (Gilligan) aplicado — resposta compassiva tem prioridade.';
+  } else {
+    action = 'ALLOW'; risk = 0.08 + Math.random() * 0.1;
+    rationale = 'Input neutro. Todos os 4 validators aprovaram.';
+  }
+
+  // simulated scores
+  const scores = {
+    rawls:    mercy ? 0.92 : risky ? 0.21 : 0.82,
+    levinas:  mercy ? 0.95 : risky ? 0.78 : 0.84,
+    jonas:    mercy ? 0.78 : risky ? 0.12 : 0.86,
+    gilligan: mercy ? 0.98 : risky ? 0.66 : 0.81,
+  };
+  for (const k of Object.keys(scores)) {
+    const el = document.getElementById('sc-' + k);
+    el.textContent = scores[k].toFixed(2);
+    el.classList.remove('pending');
+  }
+
+  const res = document.getElementById('phil-result');
+  res.classList.add('show');
+  res.innerHTML = `
+    <div class="top">
+      <span class="badge ${action}">${action}</span>
+      <span style="font-family:var(--mono);font-size:12px;color:var(--muted)">risk ${risk.toFixed(3)}</span>
+      ${mercy ? '<span class="badge mercy">♥ Mercy aplicado</span>' : ''}
+    </div>
+    <div class="rt">${rationale}</div>
+  `;
+}
+
+function toggleGround(el) {
+  el.classList.toggle('on');
+  el.querySelector('input').checked = el.classList.contains('on');
+}
+
+function submitAppeal() {
+  const id = 'ap_' + Math.random().toString(36).slice(2,8);
+  const sla = new Date(Date.now() + 24*60*60*1000);
+  const slaText = sla.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  const res = document.getElementById('ap-result');
+  res.classList.add('show');
+  document.getElementById('ap-result-id').textContent = 'ID: ' + id;
+  document.getElementById('ap-result-sla').textContent = 'SLA: até ' + slaText;
+
+  // add to list
+  APPEALS.unshift({
+    id,
+    status: 'pending',
+    reason: document.getElementById('reason').value.slice(0, 100),
+    when: 'agora',
+    sla: 'em 24h'
+  });
+  renderAppeals();
+  document.getElementById('kpi-open').textContent = APPEALS.filter(a => a.status !== 'resolved').length;
+  document.getElementById('kpi-total').textContent = 47 + APPEALS.filter(a => a.id.startsWith('ap_') && !'8f3b21,7c41a9,9d227e,4a18cc,3e09b1'.includes(a.id.slice(3))).length;
+}
+
+function renderAppeals() {
+  document.getElementById('appeals-list').innerHTML = APPEALS.map(a => `
+    <div class="ap-row">
+      <div class="top">
+        <span class="aid">${a.id}</span>
+        <span class="ap-badge ${a.status}">${a.status}</span>
+      </div>
+      <div class="reason">${a.reason}</div>
+      <div class="meta">${a.when} · SLA ${a.sla}</div>
+    </div>
+  `).join('');
+  document.getElementById('ap-list-count').textContent = APPEALS.length + ' total';
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('t-moon').style.display = theme === 'light' ? 'none' : '';
+  document.getElementById('t-sun').style.display = theme === 'light' ? '' : 'none';
+  localStorage.setItem('btv-theme', theme);
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  applyTheme(localStorage.getItem('btv-theme') || 'dark');
+  renderAppeals();
+});
+</script>
+</body>
+</html>
