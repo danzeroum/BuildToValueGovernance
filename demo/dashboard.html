@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="css/btv.css">
   <link rel="stylesheet" href="css/animations.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/theme.css">
+  <script src="js/theme.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js" defer></script>
 </head>
 <body>
@@ -27,6 +29,14 @@
     <a href="persona-dpo.html">DPO</a>
     <a href="persona-gov.html">Gov</a>
   </nav>
+  <div class="header-actions">
+    <button id="theme-toggle-btn"
+            class="theme-toggle-btn"
+            onclick="toggleRepublicTheme()"
+            title="Alternar modo claro/escuro">
+      ☀️
+    </button>
+  </div>
 </div>
 
 <div class="container">

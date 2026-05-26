@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="css/btv.css">
   <link rel="stylesheet" href="css/animations.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/theme.css">
+  <script src="js/theme.js"></script>
   <style>
     .proxy-flow { display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr; gap: 0; align-items: start; }
     .proxy-step { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
@@ -47,6 +49,14 @@
     <a href="sanitizer-demo.html">Sanitizer</a>
     <a href="ledger-explorer.html">Ledger</a>
   </nav>
+  <div class="header-actions">
+    <button id="theme-toggle-btn"
+            class="theme-toggle-btn"
+            onclick="toggleRepublicTheme()"
+            title="Alternar modo claro/escuro">
+      ☀️
+    </button>
+  </div>
 </div>
 
 <div class="container">
