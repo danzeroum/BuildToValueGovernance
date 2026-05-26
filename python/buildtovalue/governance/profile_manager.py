@@ -178,11 +178,13 @@ class ProfileManager:
         # Parse rules
         rules = []
         for rule_data in data.get('rules', []):
+            if not isinstance(rule_data, dict):
+                continue
             rule = PolicyRule(
-                id=rule_data['id'],
-                name=rule_data['name'],
-                description=rule_data['description'],
-                action=rule_data['action'],
+                id=rule_data.get('id', ''),
+                name=rule_data.get('name', ''),
+                description=rule_data.get('description', ''),
+                action=rule_data.get('action', 'ALLOW'),
                 priority=rule_data.get('priority', 100),
                 validators=rule_data.get('validators', []),
                 categories=rule_data.get('categories', []),
@@ -194,6 +196,8 @@ class ProfileManager:
         # Parse domain configs
         domain_config = {}
         for domain, config_data in data.get('domain_config', {}).items():
+            if not isinstance(config_data, dict):
+                continue
             config = DomainConfig(
                 risk_multiplier=config_data.get('risk_multiplier', 1.0),
                 allowed_findings=config_data.get('allowed_findings', []),
@@ -202,11 +206,11 @@ class ProfileManager:
             )
             domain_config[domain] = config
 
-        # Create profile
+        # Create profile — use .get() so non-profile YAMLs don't crash
         return Profile(
-            id=data['id'],
-            name=data['name'],
-            description=data['description'],
+            id=data.get('id', ''),
+            name=data.get('name', ''),
+            description=data.get('description', ''),
             parent_id=data.get('parent_id'),
             rules=rules,
             domain_config=domain_config,
