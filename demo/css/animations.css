@@ -1,0 +1,155 @@
+/* BuildToValue — Animations & Transitions */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: .4; }
+}
+
+@keyframes blink {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+
+@keyframes ripple {
+  0%   { transform: scale(1); opacity: .6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes gaugeSweep {
+  from { stroke-dashoffset: 283; }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes typewriter {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+
+/* Utility animation classes */
+.anim-fade-in  { animation: fadeIn .3s ease both; }
+.anim-slide-up { animation: slideUp .3s ease both; }
+.anim-slide-down { animation: slideDown .3s ease both; }
+.anim-slide-left { animation: slideLeft .3s ease both; }
+
+/* Staggered children */
+.stagger-children > * { animation: slideUp .3s ease both; }
+.stagger-children > *:nth-child(1) { animation-delay: .05s; }
+.stagger-children > *:nth-child(2) { animation-delay: .10s; }
+.stagger-children > *:nth-child(3) { animation-delay: .15s; }
+.stagger-children > *:nth-child(4) { animation-delay: .20s; }
+.stagger-children > *:nth-child(5) { animation-delay: .25s; }
+.stagger-children > *:nth-child(6) { animation-delay: .30s; }
+
+/* Loading spinner */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.spinner-sm { width: 14px; height: 14px; }
+.spinner-lg { width: 28px; height: 28px; border-width: 3px; }
+
+/* Pulse dot (live indicator) */
+.dot-pulse {
+  position: relative;
+}
+.dot-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .3;
+  animation: ripple 1.5s ease-out infinite;
+}
+
+/* Card entrance */
+.card-enter { animation: slideUp .25s ease both; }
+
+/* Verdict card flash */
+@keyframes verdictFlash {
+  0%   { transform: scale(1); }
+  25%  { transform: scale(1.015); }
+  100% { transform: scale(1); }
+}
+.verdict-flash { animation: verdictFlash .3s ease; }
+
+/* Progress bar animated */
+.progress-animated .progress-fill {
+  animation: progressIn .6s cubic-bezier(.4,0,.2,1) both;
+}
+@keyframes progressIn {
+  from { width: 0 !important; }
+}
+
+/* Number counting animation */
+.count-up { animation: countUp .4s ease both; }
+
+/* Chain verify check */
+@keyframes checkReveal {
+  0%   { opacity: 0; transform: scale(0) rotate(-45deg); }
+  60%  { transform: scale(1.2) rotate(3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+.check-reveal { animation: checkReveal .35s cubic-bezier(.34,1.56,.64,1) both; }
+
+/* Flow arrows */
+@keyframes arrowFlow {
+  0%   { opacity: .3; transform: translateX(-4px); }
+  50%  { opacity: 1; }
+  100% { opacity: .3; transform: translateX(4px); }
+}
+.arrow-flow { animation: arrowFlow 1.5s ease infinite; }
+
+/* Typing cursor */
+.cursor-blink::after {
+  content: '▋';
+  animation: blink .8s step-end infinite;
+  color: var(--accent);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .spinner { animation: none; border-top-color: var(--accent); }
+}

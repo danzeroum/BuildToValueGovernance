@@ -4,34 +4,47 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DPO — Compliance & Ethics | BTV Demo</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/btv.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/components.css">
 </head>
 <body>
+
+<div id="toast"></div>
+<div class="offline-badge">⚡ OFFLINE MODE</div>
+
 <div class="header">
-  <span class="logo">⚖ BuildToValue</span>
+  <a href="index.html" class="logo">⚖ BuildToValue</a>
   <span class="subtitle">⚖️ DPO — Compliance &amp; Ethics</span>
   <nav>
     <a href="index.html">Home</a>
-    <a href="lab.html">Laboratório</a>
-    <a href="persona-eng.html">Engenheiro</a>
+    <a href="lab.html">Lab</a>
+    <a href="persona-eng.html">Eng</a>
     <a href="persona-ciso.html">CISO</a>
     <a href="persona-dpo.html" class="active">DPO</a>
-    <a href="persona-gov.html">Governança</a>
+    <a href="persona-gov.html">Gov</a>
   </nav>
 </div>
 
 <div class="container">
-  <!-- Frameworks -->
-  <div class="card" style="margin-bottom:20px">
+
+  <!-- Compliance frameworks -->
+  <div class="card mb-20">
     <div class="section-title">Frameworks de Compliance Ativos</div>
-    <div id="dpo-frameworks" class="grid-3"><span style="color:var(--muted)">Carregando...</span></div>
+    <div id="dpo-frameworks" class="compliance-grid stagger-children">
+      <div class="skeleton" style="height:80px;border-radius:var(--radius)"></div>
+      <div class="skeleton" style="height:80px;border-radius:var(--radius)"></div>
+      <div class="skeleton" style="height:80px;border-radius:var(--radius)"></div>
+      <div class="skeleton" style="height:80px;border-radius:var(--radius)"></div>
+    </div>
   </div>
 
-  <div class="grid-2">
-    <!-- Simulador de Agente -->
+  <div class="grid-2 mb-20">
+    <!-- Agent evaluator -->
     <div class="card">
       <div class="section-title">Simulador de Agente — Avaliação ao Vivo</div>
-      <div style="margin-bottom:10px">
+      <div class="form-group">
         <label>Preset de Agente</label>
         <select id="dpo-preset" onchange="loadPreset()">
           <option value="healthcare">🏥 Healthcare Autônomo (Alto Risco)</option>
@@ -40,151 +53,275 @@
           <option value="safe">✅ Agente Seguro com Supervisão</option>
         </select>
       </div>
-      <div style="margin-bottom:10px">
-        <label>agent_id</label>
-        <input type="text" id="dpo-agent-id" value="agent-demo-001">
+      <div class="grid-2" style="gap:10px">
+        <div class="form-group">
+          <label>agent_id</label>
+          <input type="text" id="dpo-agent-id" value="agent-demo-001">
+        </div>
+        <div class="form-group">
+          <label>Setor</label>
+          <input type="text" id="dpo-sector" value="healthcare">
+        </div>
       </div>
-      <div style="margin-bottom:10px">
-        <label>Setor</label>
-        <input type="text" id="dpo-sector" value="healthcare">
-      </div>
-      <div style="margin-bottom:10px">
+      <div class="form-group">
         <label>Capabilities (separadas por vírgula)</label>
         <input type="text" id="dpo-caps" value="diagnose,prescribe">
       </div>
-      <div style="margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;color:var(--text)">
           <input type="checkbox" id="dpo-oversight" style="width:auto"> Supervisão humana
         </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;color:var(--text)">
           <input type="checkbox" id="dpo-conformity" style="width:auto"> Conformidade concluída
         </label>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="runEval()">▶ Avaliar Compliance</button>
         <button class="btn btn-outline" onclick="runFria()">📋 Gerar FRIA</button>
+        <button class="btn btn-outline" onclick="runPiiScan()">🔍 Scan PII</button>
       </div>
     </div>
 
-    <!-- Resultado -->
+    <!-- Result panel -->
     <div class="card">
       <div class="section-title">Resultado</div>
-      <div id="dpo-result" style="color:var(--muted);font-size:13px">Aguardando avaliação...</div>
+      <div id="dpo-result" style="color:var(--muted);font-size:13px;min-height:180px;display:flex;align-items:center;justify-content:center">
+        <div class="text-center">Configure o agente e clique em Avaliar.</div>
+      </div>
     </div>
   </div>
 
-  <hr class="divider">
-
-  <!-- Relatório por Framework -->
-  <div class="card">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-      <div class="section-title" style="margin:0">Relatório de Conformidade</div>
-      <select id="dpo-fw-select" style="width:auto;max-width:200px">
-        <option value="LGPD">LGPD</option>
-        <option value="EU_AI_ACT">EU AI Act</option>
-      </select>
-      <button class="btn btn-outline btn-sm" onclick="loadReport()">↻ Carregar</button>
+  <!-- PII Tracker -->
+  <div class="card mb-20">
+    <div class="section-title">PII Detection Tracker</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-end">
+      <div style="flex:1">
+        <label>Texto para análise de PII</label>
+        <textarea id="pii-text" rows="3" placeholder="Cole texto com CPF, e-mail, telefone, cartão…">Meu CPF é 123.456.789-09 e meu email é usuario@example.com. Contato: +55 11 98765-4321. Cartão: 4532015112830366.</textarea>
+      </div>
+      <button class="btn btn-outline" onclick="runPiiDetect()">🔍 Detectar PII</button>
     </div>
-    <div id="dpo-report" style="color:var(--muted);font-size:13px">Selecione um framework acima.</div>
+    <div id="pii-results"></div>
   </div>
+
+  <div class="grid-2 mb-20">
+    <!-- Compliance report -->
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div class="section-title" style="margin:0">Relatório de Conformidade</div>
+        <select id="dpo-fw-select" style="width:auto;font-size:12px">
+          <option value="LGPD">LGPD</option>
+          <option value="EU_AI_ACT">EU AI Act</option>
+          <option value="GDPR">GDPR</option>
+          <option value="HIPAA">HIPAA</option>
+        </select>
+        <button class="btn btn-sm btn-outline" onclick="loadReport()">↻ Carregar</button>
+      </div>
+      <div id="dpo-report" style="color:var(--muted);font-size:13px">Selecione um framework.</div>
+    </div>
+
+    <!-- Appeals Dashboard -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="section-title" style="margin:0">Appeals Dashboard</div>
+        <button class="btn btn-sm btn-outline" onclick="loadAppeals()">↻</button>
+      </div>
+      <div id="dpo-appeals" style="color:var(--muted);font-size:13px">Carregando…</div>
+    </div>
+  </div>
+
 </div>
 
-<div id="toast"></div>
-<script src="js/api.js"></script>
-<script src="js/lab-engine.js"></script>
-<script>
-  const presets = {
-    healthcare: { sector:'healthcare', caps:'diagnose,prescribe', oversight:false, conformity:false, risk:'high', use_case:'medical_diagnosis', transparency:0.4 },
-    fintech:    { sector:'fintech',    caps:'credit_scoring,auto_approve', oversight:false, conformity:false, risk:'high', use_case:'credit_scoring', transparency:0.6 },
-    hr:         { sector:'hr',         caps:'resume_screening,ranking', oversight:false, conformity:false, risk:'high', use_case:'employment', transparency:0.5 },
-    safe:       { sector:'general',    caps:'read,summarize', oversight:true, conformity:true, risk:'minimal', use_case:'information_retrieval', transparency:0.95 },
+<script src="js/api.js" defer></script>
+<script src="js/session.js" defer></script>
+<script src="js/mock-data.js" defer></script>
+<script src="js/components.js" defer></script>
+<script defer>
+const presets = {
+  healthcare:{ sector:'healthcare', caps:'diagnose,prescribe', oversight:false, conformity:false, risk:'high', use_case:'medical_diagnosis', transparency:0.4 },
+  fintech:   { sector:'fintech',    caps:'credit_scoring,auto_approve', oversight:false, conformity:false, risk:'high', use_case:'credit_scoring', transparency:0.6 },
+  hr:        { sector:'hr',         caps:'resume_screening,ranking', oversight:false, conformity:false, risk:'high', use_case:'employment', transparency:0.5 },
+  safe:      { sector:'general',    caps:'read,summarize', oversight:true, conformity:true, risk:'minimal', use_case:'information_retrieval', transparency:0.95 },
+};
+
+function loadPreset() {
+  const p = presets[document.getElementById('dpo-preset').value];
+  if (!p) return;
+  document.getElementById('dpo-sector').value    = p.sector;
+  document.getElementById('dpo-caps').value      = p.caps;
+  document.getElementById('dpo-oversight').checked  = p.oversight;
+  document.getElementById('dpo-conformity').checked = p.conformity;
+}
+
+async function runEval() {
+  const preset = presets[document.getElementById('dpo-preset').value] || presets.safe;
+  const body = {
+    agent_metadata: {
+      agent_id:   document.getElementById('dpo-agent-id').value,
+      risk_level: preset.risk,
+      use_case:   preset.use_case,
+      conformity_assessment_completed: document.getElementById('dpo-conformity').checked,
+      deployment_requested: true,
+      human_oversight_enabled: document.getElementById('dpo-oversight').checked,
+      transparency_score: preset.transparency,
+    }
   };
 
-  function loadPreset() {
-    const p = presets[document.getElementById('dpo-preset').value];
-    document.getElementById('dpo-sector').value = p.sector;
-    document.getElementById('dpo-caps').value = p.caps;
-    document.getElementById('dpo-oversight').checked = p.oversight;
-    document.getElementById('dpo-conformity').checked = p.conformity;
-  }
+  document.getElementById('dpo-result').innerHTML = '<div class="spinner spinner-lg" style="margin:auto"></div>';
+  const r = await getAPI().complianceEvaluate(body);
+  const d = r.data;
+  const rate = ((d.compliance_rate || d.overall_compliance_rate || 0) * 100).toFixed(0);
+  const color = rate >= 80 ? 'var(--allow)' : rate >= 50 ? 'var(--educate)' : 'var(--block)';
 
-  async function runEval() {
-    const caps = document.getElementById('dpo-caps').value.split(',').map(s=>s.trim());
-    const preset = presets[document.getElementById('dpo-preset').value] || presets.safe;
-    const body = {
-      agent_metadata: {
-        agent_id: document.getElementById('dpo-agent-id').value,
-        risk_level: preset.risk,
-        use_case: preset.use_case,
-        conformity_assessment_completed: document.getElementById('dpo-conformity').checked,
-        deployment_requested: true,
-        human_oversight_enabled: document.getElementById('dpo-oversight').checked,
-        transparency_score: preset.transparency,
-      }
-    };
-    const r = await API.complianceEvaluate(body);
-    const d = r.data;
-    const rate = ((d.compliance_rate || d.overall_compliance_rate || 0) * 100).toFixed(0);
-    const color = rate >= 80 ? 'var(--green)' : rate >= 50 ? 'var(--yellow)' : 'var(--red)';
-    document.getElementById('dpo-result').innerHTML = `
-      <div style="margin-bottom:12px">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Taxa de Conformidade Geral</div>
-        <div style="font-size:32px;font-weight:900;font-family:var(--mono);color:${color}">${rate}%</div>
-        <div class="progress-bar" style="margin-top:6px"><div class="progress-fill ${rate>=80?'progress-green':rate>=50?'progress-yellow':'progress-red'}" style="width:${rate}%"></div></div>
+  document.getElementById('dpo-result').innerHTML = `
+    <div>
+      <div class="mb-12">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">TAXA DE CONFORMIDADE</div>
+        <div style="font-family:var(--mono);font-size:36px;font-weight:900;color:${color}">${rate}%</div>
+        <div class="progress-bar mt-8"><div class="progress-fill ${rate>=80?'progress-green':rate>=50?'progress-yellow':'progress-red'}" style="width:${rate}%"></div></div>
       </div>
-      <pre class="code-block">${JSON.stringify(d, null, 2)}</pre>`;
-  }
+      ${(d.violations||[]).length ? `
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Violações detectadas:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          ${(d.violations||[]).map(v => `<span class="badge badge-red" style="font-size:10px">${v}</span>`).join('')}
+        </div>` : '<div style="color:var(--allow);font-size:12px">✓ Sem violações detectadas</div>'}
+    </div>`;
+}
 
-  async function runFria() {
-    const caps = document.getElementById('dpo-caps').value.split(',').map(s=>s.trim());
-    const body = {
-      agent_id: document.getElementById('dpo-agent-id').value,
-      sector: document.getElementById('dpo-sector').value,
-      capabilities: caps,
-      deployment_context: { autonomous: !document.getElementById('dpo-oversight').checked },
-    };
-    const r = await API.complianceFria(body);
-    document.getElementById('dpo-result').innerHTML = `
-      <div style="margin-bottom:10px"><span class="badge badge-purple">📋 FRIA Gerada</span></div>
-      <pre class="code-block">${JSON.stringify(r.data, null, 2)}</pre>
-      <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="downloadJSON('fria.json', ${JSON.stringify(JSON.stringify(r.data))})">⬇ Download JSON</button>`;
-  }
-
-  function downloadJSON(filename, content) {
-    const a = document.createElement('a');
-    a.href = 'data:application/json,' + encodeURIComponent(content);
-    a.download = filename;
-    a.click();
-  }
-
-  async function loadReport() {
-    const fw = document.getElementById('dpo-fw-select').value;
-    const r = await API.complianceReport(fw);
-    const d = r.data;
-    const rate = ((d.compliance_rate || 0) * 100).toFixed(0);
-    document.getElementById('dpo-report').innerHTML = `
-      <div class="grid-4" style="margin-bottom:16px">
-        <div><div class="card-title">Framework</div><div class="card-value" style="font-size:18px">${d.framework||fw}</div></div>
-        <div><div class="card-title">Compliance Rate</div><div class="card-value" style="font-size:18px;color:${rate>=80?'var(--green)':rate>=50?'var(--yellow)':'var(--red)'}">${rate}%</div></div>
-        <div><div class="card-title">Compliant</div><div class="card-value" style="font-size:18px;color:var(--green)">${d.compliant||0}</div></div>
-        <div><div class="card-title">Violations</div><div class="card-value" style="font-size:18px;color:var(--red)">${d.non_compliant||0}</div></div>
+async function runFria() {
+  const caps = document.getElementById('dpo-caps').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const body = {
+    agent_id: document.getElementById('dpo-agent-id').value,
+    sector:   document.getElementById('dpo-sector').value,
+    capabilities: caps,
+    deployment_context: { autonomous: !document.getElementById('dpo-oversight').checked },
+  };
+  document.getElementById('dpo-result').innerHTML = '<div class="spinner spinner-lg" style="margin:auto"></div>';
+  const r = await getAPI().complianceFria(body);
+  const d = r.data;
+  document.getElementById('dpo-result').innerHTML = `
+    <div>
+      <div class="mb-12"><span class="badge badge-purple">📋 FRIA Gerada</span></div>
+      ${d.fria_id ? `<div style="font-size:11px;color:var(--muted)">ID: <span class="mono">${d.fria_id}</span></div>` : ''}
+      <pre class="code-block" style="max-height:200px;margin-top:10px">${JSON.stringify(d, null, 2)}</pre>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-sm btn-outline" onclick="window.print()">🖨 Exportar PDF</button>
+        <button class="btn btn-sm btn-outline" onclick="copyToClipboard(${JSON.stringify(JSON.stringify(d))},'FRIA copiada')">Copiar JSON</button>
       </div>
-      <pre class="code-block">${JSON.stringify(d, null, 2)}</pre>`;
-  }
+    </div>`;
+}
 
-  async function loadFrameworks() {
-    const r = await API.complianceFrameworks();
-    const frameworks = Array.isArray(r.data) ? r.data : (r.data.frameworks || []);
-    document.getElementById('dpo-frameworks').innerHTML = frameworks.map(f => `
-      <div class="card" style="text-align:center;padding:14px">
-        <div class="card-title">${f.id||f.name||f}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:4px">${f.description||''}</div>
-        <span class="badge badge-blue" style="margin-top:8px">${f.version||'v1.0'}</span>
-      </div>`).join('') || '<span style="color:var(--muted)">Nenhum framework encontrado</span>';
-  }
+async function runPiiScan() {
+  const text = document.getElementById('pii-text').value;
+  document.getElementById('dpo-result').innerHTML = '<div class="spinner spinner-lg" style="margin:auto"></div>';
+  const r = await getAPI().sanitize({ input_text: text, text });
+  const d = r.data;
+  const dets = d.detections || [];
+  document.getElementById('dpo-result').innerHTML = `
+    <div>
+      <div class="mb-12"><b style="font-size:14px">${dets.length} item(s) de PII detectado(s)</b></div>
+      ${dets.length ? `<div class="pii-stats">
+        ${['CPF','EMAIL','PHONE','CREDIT_CARD','CNPJ'].map(t => {
+          const cnt = dets.filter(d=>d.type===t).length;
+          if (!cnt) return '';
+          const colors={CPF:'var(--educate)',EMAIL:'var(--log)',PHONE:'var(--allow)',CREDIT_CARD:'var(--block)',CNPJ:'var(--redact)'};
+          return `<div class="pii-stat-item" style="border-color:${colors[t]||'var(--border)'}"><span style="color:${colors[t]||'var(--muted)'}">●</span>${t}: ${cnt}</div>`;
+        }).join('')}
+      </div>` : '<div style="color:var(--allow)">✓ Nenhum dado pessoal detectado</div>'}
+    </div>`;
+}
 
+async function runPiiDetect() {
+  const text = document.getElementById('pii-text').value;
+  const r = await getAPI().sanitize({ input_text: text, text });
+  const d = r.data;
+  const det = d.detections || [];
+  if (!det.length) {
+    document.getElementById('pii-results').innerHTML = '<div style="color:var(--allow);font-size:13px">✓ Nenhum dado pessoal detectado.</div>';
+    return;
+  }
+  const typeColors = {CPF:'pii-cpf',EMAIL:'pii-email',PHONE:'pii-phone',CREDIT_CARD:'pii-card',CNPJ:'pii-cnpj'};
+  document.getElementById('pii-results').innerHTML = `
+    <div class="pii-stats mb-12">
+      ${[...new Set(det.map(d=>d.type))].map(t => {
+        const cnt = det.filter(d=>d.type===t).length;
+        return `<div class="pii-stat-item"><span class="badge ${typeColors[t]||'badge-muted'}">${t}</span> ${cnt}x</div>`;
+      }).join('')}
+    </div>
+    <div class="diff-wrap">
+      <div class="diff-panel">
+        <div class="diff-panel-header">Original (com PII destacada)</div>
+        <div class="diff-content">${_highlightPii(text, det)}</div>
+      </div>
+      <div class="diff-panel">
+        <div class="diff-panel-header">Sanitizado</div>
+        <div class="diff-content">${d.sanitized || text}</div>
+      </div>
+    </div>`;
+}
+
+function _highlightPii(text, detections) {
+  let result = text;
+  const typeClass = {CPF:'pii-cpf',EMAIL:'pii-email',PHONE:'pii-phone',CREDIT_CARD:'pii-card',CNPJ:'pii-cnpj'};
+  detections.forEach(d => {
+    const cls = typeClass[d.type] || 'pii-cpf';
+    result = result.replace(d.value, `<mark class="pii-highlight ${cls}" title="${d.type}">${d.value}</mark>`);
+  });
+  return result;
+}
+
+async function loadReport() {
+  const fw = document.getElementById('dpo-fw-select').value;
+  const r = await getAPI().complianceReport(fw);
+  const d = r.data;
+  const rate = ((d.compliance_rate||0)*100).toFixed(0);
+  const color = rate >= 80 ? 'var(--allow)' : rate >= 50 ? 'var(--educate)' : 'var(--block)';
+  document.getElementById('dpo-report').innerHTML = `
+    <div class="kpi-row" style="margin-bottom:12px">
+      <div class="kpi-item"><div class="kpi-label">Framework</div><div style="font-size:14px;font-weight:700">${d.framework||fw}</div></div>
+      <div class="kpi-item"><div class="kpi-label">Compliance</div><div style="font-family:var(--mono);font-size:20px;font-weight:700;color:${color}">${rate}%</div></div>
+      <div class="kpi-item"><div class="kpi-label">Conforme</div><div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--allow)">${d.compliant||0}</div></div>
+      <div class="kpi-item"><div class="kpi-label">Violações</div><div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--block)">${d.non_compliant||0}</div></div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill ${rate>=80?'progress-green':rate>=50?'progress-yellow':'progress-red'}" style="width:${rate}%"></div></div>`;
+}
+
+async function loadAppeals() {
+  const r = await getAPI().appealsList();
+  const items = Array.isArray(r.data) ? r.data : (r.data?.appeals || []);
+  const statusColor = { pending:'badge-yellow', under_review:'badge-blue', resolved:'badge-green', rejected:'badge-red' };
+  document.getElementById('dpo-appeals').innerHTML = !items.length
+    ? '<span style="color:var(--muted)">Nenhum appeal registrado.</span>'
+    : items.slice(0,5).map(a => `
+        <div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <span class="mono" style="font-size:10px">${a.appeal_id||'—'}</span>
+            <span class="badge ${statusColor[a.status]||'badge-blue'} " style="font-size:10px">${a.status||'—'}</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${(a.reason||'').substring(0,80)}…</div>
+        </div>`).join('');
+}
+
+async function loadFrameworks() {
+  const r = await getAPI().complianceFrameworks();
+  const fw = Array.isArray(r.data) ? r.data : (r.data?.frameworks || []);
+  const statusColors = { active:'badge-green', inactive:'badge-muted', pending:'badge-yellow' };
+  document.getElementById('dpo-frameworks').innerHTML = fw.map(f => `
+    <div class="compliance-badge-card anim-slide-up">
+      <div class="compliance-badge-name">${f.id||f.name||f}</div>
+      <div class="compliance-badge-art">${f.description||''}</div>
+      <span class="badge ${statusColors[f.status]||'badge-blue'}">${f.version||'v1.0'}</span>
+    </div>`).join('') || '<span style="color:var(--muted)">Nenhum framework.</span>';
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  Session.init();
+  try { await API.health(); OfflineMode.disable(); } catch { OfflineMode.enable(); }
   loadFrameworks();
   loadPreset();
+  loadAppeals();
+  loadReport();
+});
 </script>
 </body>
 </html>

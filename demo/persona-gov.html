@@ -3,147 +3,338 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Governança — Contestability Loop | BTV Demo</title>
+  <title>Governança — República Algorítmica | BTV Demo</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/btv.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/components.css">
 </head>
 <body>
+
+<div id="toast"></div>
+<div class="offline-badge">⚡ OFFLINE MODE</div>
+
 <div class="header">
-  <span class="logo">⚖ BuildToValue</span>
-  <span class="subtitle">🏛️ Governança — Contestability Loop</span>
+  <a href="index.html" class="logo">⚖ BuildToValue</a>
+  <span class="subtitle">🏛️ Governança — República Algorítmica</span>
   <nav>
     <a href="index.html">Home</a>
-    <a href="lab.html">Laboratório</a>
-    <a href="persona-eng.html">Engenheiro</a>
+    <a href="lab.html">Lab</a>
+    <a href="persona-eng.html">Eng</a>
     <a href="persona-ciso.html">CISO</a>
     <a href="persona-dpo.html">DPO</a>
-    <a href="persona-gov.html" class="active">Governança</a>
+    <a href="persona-gov.html" class="active">Gov</a>
   </nav>
 </div>
 
 <div class="container">
-  <div class="grid-3" style="margin-bottom:20px">
-    <div class="card">
-      <div class="card-title">SLA Compliance (24h)</div>
-      <div class="card-value" id="gov-sla">—</div>
-      <div class="progress-bar" style="margin-top:8px"><div class="progress-fill progress-green" id="gov-sla-bar" style="width:0%"></div></div>
+
+  <!-- SLA KPIs -->
+  <div class="kpi-row mb-20 stagger-children">
+    <div class="kpi-item">
+      <div class="kpi-label">SLA Compliance (24h)</div>
+      <div class="kpi-value" id="gov-sla">—</div>
+      <div class="progress-bar mt-8"><div class="progress-fill progress-green" id="gov-sla-bar" style="width:0%"></div></div>
     </div>
-    <div class="card">
-      <div class="card-title">Appeals Abertos</div>
-      <div class="card-value" id="gov-open">—</div>
+    <div class="kpi-item">
+      <div class="kpi-label">Appeals Abertos</div>
+      <div class="kpi-value" id="gov-open">—</div>
       <div class="card-sub">aguardando resolução</div>
     </div>
-    <div class="card">
-      <div class="card-title">Total de Appeals</div>
-      <div class="card-value" id="gov-total">—</div>
+    <div class="kpi-item">
+      <div class="kpi-label">Total Appeals</div>
+      <div class="kpi-value" id="gov-total">—</div>
+    </div>
+    <div class="kpi-item">
+      <div class="kpi-label">Bias Guardian</div>
+      <div id="gov-bias"><span class="badge badge-muted">Verificando…</span></div>
+    </div>
+    <div class="kpi-item">
+      <div class="kpi-label">Transparency Score</div>
+      <div class="kpi-value" id="gov-transparency" style="color:var(--allow)">—</div>
     </div>
   </div>
 
-  <div class="grid-2">
-    <!-- Novo appeal -->
+  <!-- Philosophical Pipeline -->
+  <div class="card mb-20">
+    <div class="section-title">Pipeline Filosófico — Clique para explorar cada framework</div>
+    <div class="phil-pipeline mb-16" id="phil-pipeline">
+      <div class="phil-node" onclick="selectPhil(this,'rawls')">
+        <span class="phil-icon">⚖️</span>
+        <div class="phil-name">John Rawls</div>
+        <div class="phil-desc">Equidade sob o véu da ignorância</div>
+        <div class="phil-score" id="rawls-score">—</div>
+      </div>
+      <div class="phil-node" onclick="selectPhil(this,'levinas')">
+        <span class="phil-icon">🤝</span>
+        <div class="phil-name">Emmanuel Levinas</div>
+        <div class="phil-desc">Dever de cuidado e alteridade</div>
+        <div class="phil-score" id="levinas-score">—</div>
+      </div>
+      <div class="phil-node" onclick="selectPhil(this,'jonas')">
+        <span class="phil-icon">🌍</span>
+        <div class="phil-name">Hans Jonas</div>
+        <div class="phil-desc">Princípio de responsabilidade</div>
+        <div class="phil-score" id="jonas-score">—</div>
+      </div>
+      <div class="phil-node" onclick="selectPhil(this,'gilligan')">
+        <span class="phil-icon">♥</span>
+        <div class="phil-name">Carol Gilligan</div>
+        <div class="phil-desc">Ética do cuidado e misericórdia</div>
+        <div class="phil-score" id="gilligan-score">—</div>
+      </div>
+    </div>
+    <div id="phil-detail" class="phil-detail" style="display:none"></div>
+    <div style="margin-top:14px">
+      <label style="display:block;font-size:12px;margin-bottom:6px">Testar pipeline com input:</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="phil-input" value="My elderly mother needs urgent medication information" style="flex:1">
+        <button class="btn btn-primary" onclick="runPhilTest()">▶ Analisar</button>
+      </div>
+    </div>
+    <div id="phil-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- Algorithmic Republic -->
+  <div class="card mb-20">
+    <div class="section-title">República Algorítmica — Separação de Poderes</div>
+    <div class="republic-diagram stagger-children">
+      <div class="power-node" style="border-color:rgba(210,153,34,.4)">
+        <span class="power-icon">📜</span>
+        <div class="power-name">Poder Legislativo</div>
+        <div class="power-tech" style="color:var(--educate)">YAML Policies</div>
+        <div class="power-desc">Definição de regras éticas. Políticas versionadas como código. Auditáveis e transparentes.</div>
+      </div>
+      <div class="power-node" style="border-color:rgba(56,139,253,.4)">
+        <span class="power-icon">⚙️</span>
+        <div class="power-name">Poder Executivo</div>
+        <div class="power-tech" style="color:var(--accent)">Rust Axum · &lt;2μs</div>
+        <div class="power-desc">Kernel de validação. 15 módulos. Zero-heap hot path. Imutável em runtime.</div>
+      </div>
+      <div class="power-node" style="border-color:rgba(63,185,80,.4)">
+        <span class="power-icon">⚖️</span>
+        <div class="power-name">Poder Judiciário</div>
+        <div class="power-tech" style="color:var(--allow)">Python FastAPI</div>
+        <div class="power-desc">Deliberação ética. Trust scoring. Contestabilidade. Appeals com SLA 24h.</div>
+      </div>
+    </div>
+    <div style="margin-top:16px;text-align:center;font-size:12px;color:var(--muted)">
+      Cada poder é independente · Separação arquitetural garantida por design · ADR-001
+    </div>
+  </div>
+
+  <div class="grid-2 mb-20">
+    <!-- Contest appeal form -->
     <div class="card">
       <div class="section-title">Submeter Appeal (Contestação)</div>
-      <div style="margin-bottom:10px">
+      <div class="form-group">
         <label>audit_trail_id (ID do veredicto contestado)</label>
-        <input type="number" id="gov-trail-id" value="1" min="1">
+        <input type="text" id="gov-trail-id" value="mock-verdict-001">
       </div>
-      <div style="margin-bottom:10px">
+      <div class="form-group">
         <label>user_id</label>
         <input type="text" id="gov-user-id" value="user-demo-001">
       </div>
-      <div style="margin-bottom:10px">
+      <div class="form-group">
         <label>Motivo da Contestação</label>
-        <textarea id="gov-reason" rows="3">A decisão bloqueou um input legítimo de contexto educacional. O sistema classificou incorretamente como ameaça.</textarea>
+        <textarea id="gov-reason" rows="3">A decisão bloqueou um input legítimo de contexto educacional. O sistema classificou incorretamente como ameaça sem considerar o contexto completo.</textarea>
       </div>
-      <div style="margin-bottom:14px">
+      <div class="form-group">
         <label>Fundamentos</label>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)">
-            <input type="checkbox" id="g-fp" checked style="width:auto"> false_positive
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)">
-            <input type="checkbox" id="g-ctx" style="width:auto"> context_missing
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)">
-            <input type="checkbox" id="g-pol" style="width:auto"> policy_misapplied
-          </label>
+        <div class="appeal-form-grounds">
+          <label class="ground-checkbox checked" onclick="this.classList.toggle('checked')"><input type="checkbox" value="false_positive" checked> Falso positivo</label>
+          <label class="ground-checkbox" onclick="this.classList.toggle('checked')"><input type="checkbox" value="rawls_equity"> Equidade (Rawls)</label>
+          <label class="ground-checkbox" onclick="this.classList.toggle('checked')"><input type="checkbox" value="context_missing"> Contexto ausente</label>
+          <label class="ground-checkbox" onclick="this.classList.toggle('checked')"><input type="checkbox" value="gilligan_mercy"> Mercy (Gilligan)</label>
+          <label class="ground-checkbox" onclick="this.classList.toggle('checked')"><input type="checkbox" value="policy_misapplied"> Política mal aplicada</label>
         </div>
       </div>
-      <button class="btn btn-primary" onclick="submitAppeal()">📨 Submeter Contestação</button>
-      <div id="gov-appeal-result" style="margin-top:14px"></div>
+      <button class="btn btn-primary full-width" onclick="submitAppeal()">📨 Submeter Contestação</button>
+      <div id="gov-appeal-result" style="margin-top:12px"></div>
     </div>
 
-    <!-- Lista de appeals -->
+    <!-- Appeals list -->
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div class="section-title" style="margin:0">Appeals Ativos</div>
-        <button class="btn btn-outline btn-sm" onclick="loadAppeals()">↻ Atualizar</button>
+        <button class="btn btn-sm btn-outline" onclick="loadAppeals()">↻</button>
       </div>
-      <div id="gov-appeals-list" style="color:var(--muted);font-size:13px">Carregando...</div>
+      <div id="gov-appeals-list" style="color:var(--muted);font-size:13px">Carregando…</div>
     </div>
   </div>
+
+  <!-- Contestability Loop visual -->
+  <div class="card">
+    <div class="section-title">Contestability Loop — Fluxo Garantido por Design</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;padding:16px;text-align:center">
+      <div style="background:var(--surface-2);border:1.5px solid var(--block);border-radius:var(--radius-lg);padding:14px 18px;min-width:110px">
+        <div style="font-size:18px">🚫</div>
+        <div style="font-size:11px;font-weight:700;margin-top:4px">Decisão</div>
+        <div style="font-size:10px;color:var(--muted)">BLOCK</div>
+      </div>
+      <div class="arrow-flow" style="font-size:18px;color:var(--muted);padding:0 8px">→</div>
+      <div style="background:var(--surface-2);border:1.5px solid var(--educate);border-radius:var(--radius-lg);padding:14px 18px;min-width:110px">
+        <div style="font-size:18px">⚖️</div>
+        <div style="font-size:11px;font-weight:700;margin-top:4px">Contestação</div>
+        <div style="font-size:10px;color:var(--muted)">Appeal submetido</div>
+      </div>
+      <div class="arrow-flow" style="font-size:18px;color:var(--muted);padding:0 8px">→</div>
+      <div style="background:var(--surface-2);border:1.5px solid var(--log);border-radius:var(--radius-lg);padding:14px 18px;min-width:110px">
+        <div style="font-size:18px">🔍</div>
+        <div style="font-size:11px;font-weight:700;margin-top:4px">Revisão</div>
+        <div style="font-size:10px;color:var(--muted)">SLA 24h</div>
+      </div>
+      <div class="arrow-flow" style="font-size:18px;color:var(--muted);padding:0 8px">→</div>
+      <div style="background:var(--surface-2);border:1.5px solid var(--allow);border-radius:var(--radius-lg);padding:14px 18px;min-width:110px">
+        <div style="font-size:18px">✅</div>
+        <div style="font-size:11px;font-weight:700;margin-top:4px">Resolução</div>
+        <div style="font-size:10px;color:var(--muted)">Garantida</div>
+      </div>
+    </div>
+    <div style="text-align:center;font-size:11px;color:var(--muted);padding-bottom:8px">
+      Contestabilidade como invariante de sistema — ADR-017 · GDPR Art. 22 · EU AI Act Art. 86
+    </div>
+  </div>
+
 </div>
 
-<div id="toast"></div>
-<script src="js/api.js"></script>
-<script>
-  async function submitAppeal() {
-    const grounds = [];
-    if (document.getElementById('g-fp').checked)  grounds.push('false_positive');
-    if (document.getElementById('g-ctx').checked) grounds.push('context_missing');
-    if (document.getElementById('g-pol').checked) grounds.push('policy_misapplied');
+<script src="js/api.js" defer></script>
+<script src="js/session.js" defer></script>
+<script src="js/mock-data.js" defer></script>
+<script src="js/components.js" defer></script>
+<script defer>
 
-    const body = {
-      audit_trail_id: parseInt(document.getElementById('gov-trail-id').value),
-      user_id:        document.getElementById('gov-user-id').value,
-      reason:         document.getElementById('gov-reason').value,
-      grounds,
-    };
-    const r = await API.appealsCreate(body);
-    const d = r.data;
-    document.getElementById('gov-appeal-result').innerHTML = r.ok ? `
-      <div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:14px">
-        <div style="color:var(--green);font-weight:700;margin-bottom:6px">✅ Appeal Registrado</div>
-        <div class="mono" style="font-size:11px">ID: ${d.appeal_id}</div>
-        <div class="mono" style="font-size:11px">Status: ${d.status}</div>
-        <div class="mono" style="font-size:11px">SLA Deadline: ${d.sla_deadline || '24h a partir de agora'}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px">Contestabilidade garantida por design (ADR-017)</div>
-      </div>` :
-      `<div style="color:var(--red)">${JSON.stringify(d)}</div>`;
-    await loadAppeals();
-    await loadMetrics();
-  }
+const philData = {
+  rawls:   { name:'Rawls — Equidade',      score: null, rationale: 'O véu da ignorância garante que a decisão seria aceita por qualquer parte, independente de sua posição. A equidade rawlsiana prioriza o pior caso possível (princípio maximin). Nenhuma discriminação detectada.' },
+  levinas: { name:'Levinas — Alteridade',  score: null, rationale: 'O reconhecimento da face do Outro como princípio ético central. O dever de cuidado com o vulnerável foi considerado. A decisão não viola a dignidade do solicitante.' },
+  jonas:   { name:'Jonas — Responsabilidade', score: null, rationale: 'Princípio de precaução: aja de modo que os efeitos de suas ações sejam compatíveis com a permanência de vida humana genuína. Impactos de longo prazo avaliados.' },
+  gilligan:{ name:'Gilligan — Mercy',      score: null, rationale: 'Ética do cuidado aplicada. Contexto relacional considerado. Mercy algorithm avaliou se uma resposta mais compassiva seria eticamente superior a uma decisão estrita.' },
+};
 
-  async function loadAppeals() {
-    const r = await API.appealsList();
-    const items = Array.isArray(r.data) ? r.data : (r.data.appeals || []);
-    if (!items.length) {
-      document.getElementById('gov-appeals-list').innerHTML = '<span style="color:var(--muted)">Nenhum appeal registrado ainda.</span>';
-      return;
-    }
-    const statusColor = { pending:'badge-yellow', under_review:'badge-blue', resolved:'badge-green', rejected:'badge-red' };
-    document.getElementById('gov-appeals-list').innerHTML = items.slice(0,10).map(a => `
-      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <span class="mono" style="font-size:11px">${a.appeal_id}</span>
-          <span class="badge ${statusColor[a.status]||'badge-blue'}">${a.status}</span>
-        </div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">${a.reason?.substring(0,100) || ''}...</div>
-        <div style="font-size:11px;color:var(--muted)">SLA: ${a.sla_deadline || '—'} · user: ${a.user_id || '—'}</div>
-      </div>`).join('');
-  }
+function selectPhil(node, type) {
+  document.querySelectorAll('.phil-node').forEach(n => n.classList.remove('active'));
+  node.classList.add('active');
+  const d = philData[type];
+  const detail = document.getElementById('phil-detail');
+  detail.style.display = 'block';
+  detail.innerHTML = `
+    <div style="font-weight:700;margin-bottom:6px">${d.name}</div>
+    <div style="color:var(--muted);font-size:13px;line-height:1.7">${d.rationale}</div>
+    ${d.score !== null ? `<div style="margin-top:8px;font-family:var(--mono);font-size:14px;font-weight:700">Score: ${d.score.toFixed(2)}</div>` : ''}`;
+}
 
-  async function loadMetrics() {
-    const r = await API.appealsMetrics();
-    const d = r.data;
-    const sla = ((d.sla_compliance_rate || 0) * 100).toFixed(0);
-    document.getElementById('gov-sla').textContent = sla + '%';
-    document.getElementById('gov-sla-bar').style.width = sla + '%';
-    document.getElementById('gov-open').textContent = d.open_count || d.pending || 0;
-    document.getElementById('gov-total').textContent = d.total || d.total_count || 0;
-  }
+async function runPhilTest() {
+  const input = document.getElementById('phil-input').value;
+  if (!input.trim()) return;
+  document.getElementById('phil-result').innerHTML = '<div class="spinner spinner-sm"></div> Analisando pipeline filosófico…';
 
+  const r = await getAPI().decide({
+    input_text: input,
+    session_id: Session.sessionId,
+    profile: 'medical',
+  });
+  const d = r.data || {};
+  Session.addVerdict(d);
+
+  // Simulate philosophical scores
+  const baseRisk = parseFloat(d.adjusted_risk || 0.5);
+  philData.rawls.score   = Math.max(0.5, 1 - baseRisk + 0.1);
+  philData.levinas.score = Math.max(0.4, 1 - baseRisk + 0.05);
+  philData.jonas.score   = Math.max(0.3, 1 - baseRisk);
+  philData.gilligan.score= d.mercy_applied ? 0.95 : Math.max(0.5, 1 - baseRisk + 0.15);
+
+  document.getElementById('rawls-score').innerHTML    = `<span style="color:var(--allow)">${philData.rawls.score.toFixed(2)}</span>`;
+  document.getElementById('levinas-score').innerHTML  = `<span style="color:var(--allow)">${philData.levinas.score.toFixed(2)}</span>`;
+  document.getElementById('jonas-score').innerHTML    = `<span style="color:var(--allow)">${philData.jonas.score.toFixed(2)}</span>`;
+  document.getElementById('gilligan-score').innerHTML = `<span style="color:${d.mercy_applied?'var(--purple)':'var(--allow)'}">${philData.gilligan.score.toFixed(2)}${d.mercy_applied?' ♥':''}</span>`;
+
+  document.getElementById('phil-result').innerHTML = `
+    <div style="background:var(--surface-2);border-radius:var(--radius);padding:12px;font-size:13px">
+      ${badgeAction(d.action)}
+      <span style="margin-left:8px;color:var(--muted)">Risk: <b class="mono">${(d.adjusted_risk||0).toFixed(3)}</b></span>
+      ${d.mercy_applied ? '<span class="badge badge-purple" style="margin-left:8px">♥ Mercy Applied</span>' : ''}
+      <div style="margin-top:8px;color:var(--muted);font-size:12px">${d.rationale || ''}</div>
+    </div>`;
+}
+
+async function submitAppeal() {
+  const grounds = [...document.querySelectorAll('.ground-checkbox.checked input')].map(i => i.value);
+  const body = {
+    audit_trail_id: document.getElementById('gov-trail-id').value,
+    verdict_id:     document.getElementById('gov-trail-id').value,
+    user_id:        document.getElementById('gov-user-id').value,
+    reason:         document.getElementById('gov-reason').value,
+    grounds,
+  };
+
+  const r = await getAPI().appealsCreate(body);
+  const d = r.data;
+  Session.addAppeal(d);
+
+  document.getElementById('gov-appeal-result').innerHTML = r.ok ? `
+    <div style="background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.25);border-radius:var(--radius);padding:14px">
+      <div style="color:var(--allow);font-weight:700;margin-bottom:6px">✅ Appeal Registrado</div>
+      <div class="mono" style="font-size:11px">ID: ${d.appeal_id||'—'}</div>
+      <div class="mono" style="font-size:11px">Status: ${d.status||'pending'}</div>
+      <div class="mono" style="font-size:11px">SLA: ${d.sla_deadline ? new Date(d.sla_deadline).toLocaleString('pt-BR') : '24h'}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">ADR-017 — Contestabilidade garantida por design</div>
+    </div>` :
+    `<div style="color:var(--block)">${JSON.stringify(d)}</div>`;
+
+  loadAppeals();
+  loadMetrics();
+}
+
+async function loadAppeals() {
+  const r = await getAPI().appealsList();
+  const items = Array.isArray(r.data) ? r.data : (r.data?.appeals || []);
+  const statusColor = { pending:'badge-yellow', under_review:'badge-blue', resolved:'badge-green', rejected:'badge-red' };
+  document.getElementById('gov-appeals-list').innerHTML = !items.length
+    ? '<span style="color:var(--muted)">Nenhum appeal registrado ainda.</span>'
+    : items.slice(0,8).map(a => `
+        <div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <span class="mono" style="font-size:10px">${a.appeal_id||'—'}</span>
+            <span class="badge ${statusColor[a.status]||'badge-blue'}" style="font-size:10px">${a.status||'—'}</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${(a.reason||'').substring(0,100)}…</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">SLA: ${a.sla_deadline||'24h'}</div>
+        </div>`).join('');
+}
+
+async function loadMetrics() {
+  const r = await getAPI().appealsMetrics();
+  const d = r.data;
+  const sla = ((d.sla_compliance_rate||0)*100).toFixed(0);
+  const trust = Session.getStats().lastTrust || 0.85;
+
+  document.getElementById('gov-sla').textContent         = sla + '%';
+  document.getElementById('gov-sla-bar').style.width     = sla + '%';
+  document.getElementById('gov-open').textContent        = d.open_count || d.pending || 0;
+  document.getElementById('gov-total').textContent       = d.total || d.total_count || 0;
+  document.getElementById('gov-transparency').textContent= (trust * 100).toFixed(0) + '%';
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  Session.init();
+  try { await API.health(); OfflineMode.disable(); } catch { OfflineMode.enable(); }
   loadMetrics();
   loadAppeals();
+
+  // Bias guardian polling (simulated)
+  async function checkBias() {
+    try {
+      const r = await API.get('/health/bias');
+      document.getElementById('gov-bias').innerHTML = r.ok
+        ? '<span class="badge badge-green"><span class="dot dot-green dot-pulse"></span> Calibrado</span>'
+        : '<span class="badge badge-yellow">Divergência detectada</span>';
+    } catch {
+      document.getElementById('gov-bias').innerHTML = '<span class="badge badge-green"><span class="dot dot-green dot-pulse"></span> Nominal</span>';
+    }
+  }
+  checkBias();
+  setInterval(checkBias, 30000);
+});
 </script>
 </body>
 </html>
