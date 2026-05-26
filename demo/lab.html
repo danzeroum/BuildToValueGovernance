@@ -4,175 +4,317 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Laboratório Unificado | BTV Demo</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/btv.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/components.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js" defer></script>
+  <style>
+    body { overflow-x: hidden; }
+    .lab-wrap { display: grid; grid-template-columns: 270px 1fr 290px; gap: 14px; padding: 16px; align-items: start; }
+    .lab-history-wrap { padding: 0 16px 16px; }
+    .scenario-list { list-style: none; margin: 0; padding: 0; }
+    .scenario-item { padding: 7px 10px; border-radius: var(--radius); cursor: pointer; font-size: 12px; color: var(--muted); transition: all .12s; border: 1px solid transparent; margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+    .scenario-item:hover { color: var(--text); background: var(--surface-2); }
+    .scenario-item.active { background: rgba(56,139,253,.08); border-color: rgba(56,139,253,.2); color: var(--accent); }
+    .persona-filter { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+    .persona-filter-btn { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--muted); transition: all .12s; font-family: var(--sans); }
+    .persona-filter-btn:hover, .persona-filter-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(56,139,253,.08); }
+    .verdict-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 280px; color: var(--muted); text-align: center; gap: 12px; }
+    .verdict-placeholder svg { opacity: .3; }
+    @media (max-width: 1100px) { .lab-wrap { grid-template-columns: 240px 1fr; } .lab-side-col { display: none; } }
+    @media (max-width: 768px)  { .lab-wrap { grid-template-columns: 1fr; } .lab-left-col { position: static; } }
+  </style>
 </head>
 <body>
-<div class="header">
-  <span class="logo">⚖ BuildToValue</span>
-  <span class="subtitle">🔬 Laboratório Unificado — Modo Teatro</span>
-  <nav>
-    <a href="index.html">Home</a>
-    <a href="lab.html" class="active">Laboratório</a>
-    <a href="persona-eng.html">Engenheiro</a>
-    <a href="persona-ciso.html">CISO</a>
-    <a href="persona-dpo.html">DPO</a>
-    <a href="persona-gov.html">Governança</a>
-  </nav>
-</div>
-
-<div class="container">
-  <!-- Controles -->
-  <div class="card" style="margin-bottom:20px">
-    <div class="grid-3" style="gap:14px;align-items:end">
-      <div>
-        <label>Persona do Observador</label>
-        <select id="lab-persona" onchange="filterScenarios()">
-          <option value="all">Todas as Personas</option>
-          <option value="CISO">🛡️ CISO</option>
-          <option value="DPO">⚖️ DPO</option>
-          <option value="Engenheiro">⚙️ Engenheiro</option>
-        </select>
-      </div>
-      <div>
-        <label>Cenário</label>
-        <select id="lab-scenario"></select>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" style="flex:1" onclick="runLab()" id="lab-btn">▶ Executar</button>
-        <button class="btn btn-outline" onclick="clearLab()">✕</button>
-      </div>
-    </div>
-    <div id="lab-desc" style="margin-top:12px;font-size:12px;color:var(--muted);padding:10px;background:var(--bg);border-radius:6px"></div>
-  </div>
-
-  <!-- Split view -->
-  <div class="grid-2">
-    <!-- INPUT -->
-    <div class="card">
-      <div class="section-title">Input Enviado ao Kernel</div>
-      <pre class="code-block" id="lab-input" style="min-height:120px">Selecione um cenário e clique em Executar.</pre>
-    </div>
-
-    <!-- VEREDICTO -->
-    <div class="card">
-      <div class="section-title">Veredicto — República Algorítmica</div>
-      <div id="lab-verdict" style="color:var(--muted);font-size:13px;min-height:120px">Aguardando execução...</div>
-    </div>
-  </div>
-
-  <hr class="divider">
-
-  <!-- Rationale completo -->
-  <div class="card">
-    <div class="section-title">Rationale (Explicação da Decisão — explain_decision)</div>
-    <div id="lab-rationale" style="font-size:13px;color:var(--muted);line-height:1.7">O BTV explica cada decisão de forma legível. Execute um cenário para ver.</div>
-  </div>
-
-  <hr class="divider">
-
-  <!-- Histórico da sessão -->
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div class="section-title" style="margin:0">Histórico da Sessão</div>
-      <button class="btn btn-outline btn-sm" onclick="clearHistory()">Limpar</button>
-    </div>
-    <div style="overflow-x:auto">
-      <table>
-        <thead><tr><th>#</th><th>Cenário</th><th>Input</th><th>Ação</th><th>Risk</th><th>Findings</th><th>Latência</th></tr></thead>
-        <tbody id="lab-history"><tr><td colspan="7" style="color:var(--muted);text-align:center">Nenhuma execução ainda.</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-</div>
 
 <div id="toast"></div>
-<script src="js/api.js"></script>
-<script src="js/lab-engine.js"></script>
-<script>
-  let history = [];
-  let historyCount = 0;
+<div class="offline-badge">⚡ OFFLINE MODE</div>
 
-  function filterScenarios() {
-    const persona = document.getElementById('lab-persona').value;
-    const sel = document.getElementById('lab-scenario');
-    sel.innerHTML = SCENARIOS
-      .filter(s => persona === 'all' || s.persona === persona)
-      .map(s => `<option value="${s.id}">${s.label}</option>`)
-      .join('');
-    updateDesc();
-  }
+<div class="header">
+  <a href="index.html" class="logo">⚖ BuildToValue</a>
+  <span class="subtitle">🔬 Laboratório Unificado</span>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="lab.html" class="active">Lab</a>
+    <a href="persona-eng.html">Eng</a>
+    <a href="persona-ciso.html">CISO</a>
+    <a href="persona-dpo.html">DPO</a>
+    <a href="persona-gov.html">Gov</a>
+  </nav>
+  <div class="header-actions">
+    <button class="btn btn-sm btn-ghost" id="offline-toggle" title="Toggle offline mode">⚡</button>
+    <button class="btn btn-sm btn-ghost" id="deepseek-toggle" title="Toggle DeepSeek">✦</button>
+  </div>
+</div>
 
-  function updateDesc() {
-    const id = document.getElementById('lab-scenario').value;
-    const s = SCENARIOS.find(x => x.id === id);
-    document.getElementById('lab-desc').textContent = s ? s.description : '';
-    if (s) document.getElementById('lab-input').textContent = s.input_text;
-  }
+<div class="lab-wrap">
+  <!-- LEFT: Scenario picker -->
+  <div class="lab-left-col lab-sidebar">
+    <div class="card" style="padding:14px">
+      <div class="section-title" style="margin-bottom:10px">Cenários</div>
 
-  document.getElementById('lab-scenario').addEventListener('change', updateDesc);
+      <div class="persona-filter" id="persona-filter">
+        <button class="persona-filter-btn active" data-persona="all" onclick="filterPersona(this,'all')">Todos</button>
+        <button class="persona-filter-btn" data-persona="CISO" onclick="filterPersona(this,'CISO')">🛡 CISO</button>
+        <button class="persona-filter-btn" data-persona="DPO" onclick="filterPersona(this,'DPO')">⚖ DPO</button>
+        <button class="persona-filter-btn" data-persona="Engenheiro" onclick="filterPersona(this,'Engenheiro')">⚙ Eng</button>
+        <button class="persona-filter-btn" data-persona="Governança" onclick="filterPersona(this,'Governança')">🏛 Gov</button>
+      </div>
 
-  async function runLab() {
-    const id = document.getElementById('lab-scenario').value;
-    const s = SCENARIOS.find(x => x.id === id);
-    if (!s) return;
+      <ul class="scenario-list" id="scenario-list"></ul>
 
-    const btn = document.getElementById('lab-btn');
-    btn.disabled = true; btn.textContent = '⏳ Executando...';
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+        <label>Input personalizado</label>
+        <textarea id="custom-input" rows="3" placeholder="Digite qualquer texto para testar…"></textarea>
+        <button class="btn btn-primary full-width" style="margin-top:8px" onclick="runCustom()">▶ Testar Input</button>
+      </div>
+    </div>
 
-    document.getElementById('lab-input').textContent = s.input_text;
+    <div class="card" style="margin-top:12px;padding:12px;font-size:11px;color:var(--muted)">
+      <div id="scenario-desc">Selecione um cenário para ver a descrição.</div>
+    </div>
+  </div>
 
-    await runScenario(id, (d, scenario, i, total) => {
-      const action = d.action || 'UNKNOWN';
-      document.getElementById('lab-verdict').innerHTML = `
-        <div class="verdict-block verdict-${action}" style="margin-bottom:16px">
-          <div class="verdict-action">${action}</div>
-          <div style="margin-top:6px;display:flex;gap:16px;flex-wrap:wrap">
-            <span style="font-size:12px">Risk: <b style="font-family:var(--mono)">${(d.adjusted_risk||0).toFixed(3)}</b></span>
-            <span style="font-size:12px">Trust: <b style="font-family:var(--mono)">${(d.trust_score||0).toFixed(2)}</b></span>
-            <span style="font-size:12px">Latência: ${fmtTime(d.latency_ms)}</span>
-            ${d.mercy_applied ? '<span class="badge badge-purple">Mercy Applied</span>' : ''}
-          </div>
+  <!-- CENTER: Verdict -->
+  <div class="lab-main">
+    <div id="verdict-wrap">
+      <div class="verdict-placeholder">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+        </svg>
+        <div style="font-size:14px;font-weight:600">Selecione um cenário</div>
+        <div style="font-size:12px">e clique para executar a decisão BTV</div>
+      </div>
+    </div>
+
+    <!-- Risk gauge -->
+    <div class="card" style="margin-top:14px;padding:16px;display:none" id="gauge-card">
+      <div class="section-title">Risco Calculado</div>
+      <div style="display:flex;align-items:center;gap:20px">
+        <div id="lab-risk-gauge" style="min-width:120px"></div>
+        <div style="flex:1">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Adjusted Risk</div>
+          <div id="lab-risk-value" style="font-family:var(--mono);font-size:24px;font-weight:900">—</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px" id="lab-risk-label">—</div>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">verdict_id</div>
-        <div class="mono" style="font-size:12px;margin-bottom:8px">${d.verdict_id||'—'}</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">HMAC-SHA256</div>
-        <div class="mono" style="font-size:12px;color:var(--green);word-break:break-all">${d.signature||'—'}</div>`;
+      </div>
+    </div>
 
-      document.getElementById('lab-rationale').textContent = d.rationale || '—';
+    <!-- DeepSeek panel -->
+    <div id="lab-deepseek-container" style="margin-top:14px"></div>
+  </div>
 
-      historyCount++;
-      history.unshift({ n: historyCount, label: scenario.label, input: s.input_text, action, risk: d.adjusted_risk||0, findings: '', latency: d.latency_ms||0 });
-      renderHistory();
-    });
+  <!-- RIGHT: Trust + Forensic -->
+  <div class="lab-side-col lab-side-panel">
+    <div class="card" style="padding:14px;margin-bottom:12px">
+      <div class="section-title">Trust Score</div>
+      <div style="height:160px;position:relative">
+        <canvas id="trust-chart"></canvas>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:6px">
+        <span style="color:var(--muted)">Sessão: <b id="side-session-n" style="color:var(--text)">0</b> decisões</span>
+        <span id="side-last-trust" style="font-family:var(--mono);font-weight:700">—</span>
+      </div>
+    </div>
 
-    btn.disabled = false; btn.textContent = '▶ Executar';
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="section-title" style="padding:12px 14px;margin:0;border-bottom:none">Evidência Forense</div>
+      <div id="side-forensic">
+        <div style="padding:14px;color:var(--muted);font-size:12px">Execute um cenário para ver.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Session history -->
+<div class="lab-history-wrap">
+  <div class="card" style="padding:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="section-title" style="margin:0">Histórico da Sessão</div>
+      <button class="btn btn-sm btn-ghost" onclick="clearSessionHistory()">Limpar</button>
+    </div>
+    <div class="session-history" id="session-history">
+      <div style="color:var(--muted);font-size:12px;padding:8px">Nenhuma execução ainda.</div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js" defer></script>
+<script src="js/session.js" defer></script>
+<script src="js/mock-data.js" defer></script>
+<script src="js/components.js" defer></script>
+<script src="js/charts.js" defer></script>
+<script src="js/deepseek.js" defer></script>
+<script src="js/lab-engine.js" defer></script>
+<script defer>
+let trustChart = null;
+let currentPersonaFilter = 'all';
+let _running = false;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  Session.init();
+
+  // Init offline detection
+  try {
+    const r = await API.health();
+    if (!r.ok) throw new Error();
+    OfflineMode.disable();
+  } catch {
+    OfflineMode.enable();
   }
 
-  function renderHistory() {
-    const tbody = document.getElementById('lab-history');
-    if (!history.length) { tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);text-align:center">Nenhuma execução ainda.</td></tr>'; return; }
-    tbody.innerHTML = history.slice(0,20).map(h => `
-      <tr>
-        <td class="mono">${h.n}</td>
-        <td style="font-size:12px">${h.label}</td>
-        <td style="font-size:11px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.input}</td>
-        <td>${badgeAction(h.action)}</td>
-        <td class="mono">${h.risk.toFixed(3)}</td>
-        <td class="mono">${h.findings||'—'}</td>
-        <td>${fmtTime(h.latency)}</td>
-      </tr>`).join('');
+  renderScenarioList();
+  initTrustChart();
+  renderSessionHistory();
+
+  // Offline toggle
+  document.getElementById('offline-toggle').addEventListener('click', () => {
+    if (OfflineMode.enabled) { OfflineMode.disable(); toast('Modo online', 'success'); }
+    else { OfflineMode.enable(); toast('Modo offline ativo', 'warning'); }
+  });
+
+  // DeepSeek toggle
+  const dsBtn = document.getElementById('deepseek-toggle');
+  dsBtn.style.color = Session.isDeepSeekEnabled() ? 'var(--accent)' : 'var(--muted)';
+  dsBtn.addEventListener('click', () => {
+    const enabled = Session.toggleDeepSeek();
+    dsBtn.style.color = enabled ? 'var(--accent)' : 'var(--muted)';
+    toast(enabled ? 'DeepSeek ativado' : 'DeepSeek desativado', 'info');
+  });
+});
+
+function renderScenarioList() {
+  const list = document.getElementById('scenario-list');
+  const filtered = SCENARIOS.filter(s => currentPersonaFilter === 'all' || s.persona === currentPersonaFilter);
+  list.innerHTML = filtered.map(s => `
+    <li class="scenario-item" data-id="${s.id}" onclick="selectScenario('${s.id}', this)">
+      <span>${s.label}</span>
+    </li>`).join('');
+}
+
+function filterPersona(btn, persona) {
+  document.querySelectorAll('.persona-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentPersonaFilter = persona;
+  renderScenarioList();
+}
+
+function selectScenario(id, el) {
+  document.querySelectorAll('.scenario-item').forEach(i => i.classList.remove('active'));
+  el?.classList.add('active');
+  const s = SCENARIOS.find(x => x.id === id);
+  if (s) {
+    document.getElementById('scenario-desc').textContent = s.description;
+    document.getElementById('custom-input').value = s.input_text;
+    runScenarioById(id);
+  }
+}
+
+async function runScenarioById(id) {
+  if (_running) return;
+  _running = true;
+  document.getElementById('verdict-wrap').innerHTML = '<div class="verdict-placeholder"><div class="spinner spinner-lg"></div><div style="font-size:13px;color:var(--muted)">Processando…</div></div>';
+  document.getElementById('gauge-card').style.display = 'none';
+
+  try {
+    await runScenario(id, (d) => displayVerdict(d));
+  } catch(e) {
+    document.getElementById('verdict-wrap').innerHTML = `<div class="card"><div style="color:var(--block)">Erro: ${e.message}</div></div>`;
+  }
+  _running = false;
+}
+
+async function runCustom() {
+  if (_running) return;
+  const text = document.getElementById('custom-input').value.trim();
+  if (!text) return;
+  _running = true;
+
+  document.querySelectorAll('.scenario-item').forEach(i => i.classList.remove('active'));
+  document.getElementById('verdict-wrap').innerHTML = '<div class="verdict-placeholder"><div class="spinner spinner-lg"></div></div>';
+  document.getElementById('gauge-card').style.display = 'none';
+
+  try {
+    const r = await getAPI().decide({ input_text: text, session_id: Session.sessionId });
+    displayVerdict(r.data);
+  } catch(e) {
+    document.getElementById('verdict-wrap').innerHTML = `<div class="card"><div style="color:var(--block)">Erro: ${e.message}</div></div>`;
+  }
+  _running = false;
+}
+
+function displayVerdict(d) {
+  // Center: verdict card
+  document.getElementById('verdict-wrap').innerHTML = renderVerdictCard(d);
+
+  // Risk gauge
+  const gaugeCard = document.getElementById('gauge-card');
+  gaugeCard.style.display = 'block';
+  const risk = parseFloat(d.adjusted_risk || 0);
+  renderRiskGauge('lab-risk-gauge', risk);
+  const riskColor = risk < 0.3 ? 'var(--allow)' : risk < 0.7 ? 'var(--educate)' : 'var(--block)';
+  document.getElementById('lab-risk-value').innerHTML = `<span style="color:${riskColor}">${risk.toFixed(3)}</span>`;
+  document.getElementById('lab-risk-label').textContent = risk < 0.3 ? 'Baixo risco — ALLOW típico' : risk < 0.7 ? 'Risco moderado — revisão recomendada' : 'Alto risco — BLOCK aplicado';
+
+  // DeepSeek panel (only ALLOW)
+  const dsContainer = document.getElementById('lab-deepseek-container');
+  if (d.action === 'ALLOW' && Session.isDeepSeekEnabled()) {
+    dsContainer.style.display = 'block';
+    DeepSeek.renderPanel('lab-deepseek-container', d, 'lab');
+  } else {
+    dsContainer.innerHTML = '';
   }
 
-  function clearLab() {
-    document.getElementById('lab-verdict').innerHTML = 'Aguardando execução...';
-    document.getElementById('lab-rationale').textContent = 'Execute um cenário para ver.';
+  // Side: trust chart update
+  if (trustChart && d.trust_score !== undefined) {
+    BtvCharts.updateTrustTimeline(trustChart, { value: d.trust_score, action: d.action, n: 0 });
+    document.getElementById('side-last-trust').innerHTML = `<span style="color:${d.trust_score > 0.6 ? 'var(--allow)' : d.trust_score > 0.3 ? 'var(--educate)' : 'var(--block)'}">${d.trust_score.toFixed(3)}</span>`;
   }
+  const n = Session.getHistory().length;
+  document.getElementById('side-session-n').textContent = n;
 
-  function clearHistory() {
-    history = []; historyCount = 0; renderHistory();
+  // Side: forensic summary
+  document.getElementById('side-forensic').innerHTML = `
+    <div style="padding:12px 14px;font-size:11px">
+      <div style="color:var(--muted);margin-bottom:3px">Verdict ID</div>
+      <div class="mono truncate" title="${d.verdict_id || ''}">${fmtHash(d.verdict_id)}</div>
+      <div style="color:var(--muted);margin-top:8px;margin-bottom:3px">HMAC-SHA256</div>
+      <div class="mono word-break" style="color:var(--allow);font-size:10px">${(d.signature || '—').substring(0,40)}…</div>
+      <div style="margin-top:10px">
+        <button class="btn btn-sm btn-outline full-width" onclick="openForensicPanel(${JSON.stringify(JSON.stringify(d))})">Ver evidência completa</button>
+      </div>
+    </div>`;
+
+  renderSessionHistory();
+}
+
+function initTrustChart() {
+  const history = Session.getTrustHistory();
+  trustChart = BtvCharts.createTrustTimeline('trust-chart', history);
+}
+
+function renderSessionHistory() {
+  const container = document.getElementById('session-history');
+  const history = Session.getHistory(30);
+  if (!history.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">Nenhuma execução ainda.</div>';
+    return;
   }
+  container.innerHTML = history.map((v, i) => `
+    <div class="history-item" title="${v.rationale || ''}" style="animation-delay:${i*0.02}s">
+      <div class="history-action" style="color:${actionColor(v.action)}">${v.action}</div>
+      <div class="history-risk">${(v.adjusted_risk||0).toFixed(3)}</div>
+      <div class="history-time">${fmtTime(v.latency_ms)}</div>
+    </div>`).join('');
+}
 
-  filterScenarios();
+function clearSessionHistory() {
+  Session.clear();
+  renderSessionHistory();
+  if (trustChart) { trustChart.data.labels=[]; trustChart.data.datasets.forEach(d=>d.data=[]); trustChart.update(); }
+  toast('Sessão limpa', 'info');
+}
 </script>
 </body>
 </html>
