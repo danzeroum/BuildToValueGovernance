@@ -52,11 +52,18 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Python dependencies + build Rust kernel
-        run: |
-          pip install maturin pytest httpx
-          pip install -e python/
-          cd rust && maturin build --release -m bindings/Cargo.toml && pip install target/wheels/*.whl
+      - name: Install build tools
+        run: pip install maturin pytest httpx
+
+      - name: Install Python package + dependencies
+        run: pip install -e python/
+
+      - name: Build and install Rust kernel (FFI)
+        working-directory: rust
+        run: maturin develop --release -m bindings/Cargo.toml
+
+      - name: Verify kernel import
+        run: python -c "import buildtovalue_kernel as k; print('kernel OK, version:', k.__version__)"
 
       - name: Start governance server
         run: |
