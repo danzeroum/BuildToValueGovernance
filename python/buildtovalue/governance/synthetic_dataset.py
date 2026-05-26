@@ -1,5 +1,5 @@
 """
-SyntheticDatasetGenerator v1.0.0 — Gerador determinístico para ADR-042.
+SyntheticDatasetGenerator v1.0.1 — Gerador determinístico para ADR-042.
 
 Filosofia (Jonas): Dataset auditável — mesma seed + epoch = mesma sequência.
 BiasDeclaration vencida (>90d) → RuntimeError antes de gerar qualquer caso.
