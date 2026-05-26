@@ -41,3 +41,18 @@ ops/nginx/btv-dev.key
 ops/nginx/btv-dev.key
 ops/nginx/btv-dev.crt
 *.pem
+
+# Secrets e variáveis de ambiente — NUNCA commitar
+.env
+.env.*
+!.env.example
+
+# Virtualenvs
+python/venv/
+venv/
+.venv/
+
+# Dados de runtime e sessões
+scripts/deploy.sh
+scripts/start.sh
+python/data/policies/
