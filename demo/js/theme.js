@@ -1,0 +1,42 @@
+/**
+ * BuildToValue Trust OS — Theme Controller
+ * Fundamentação: Gilligan (Acessibilidade), Rawls (Equidade de acesso visual)
+ *
+ * Mecanismo: dataset.theme no <html> — compatível com [data-theme="light"]
+ * já definido em btv.css. NÃO usar classList para não conflitar.
+ */
+
+(function () {
+  'use strict';
+
+  const STORAGE_KEY = 'btv-theme';
+  const DEFAULT     = 'dark';
+
+  function getTheme() {
+    try { return localStorage.getItem(STORAGE_KEY) || DEFAULT; } catch { return DEFAULT; }
+  }
+
+  function setTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem(STORAGE_KEY, theme); } catch {}
+    // Atualizar ícone do botão se existir
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
+    console.info(`[BTV Governance] Tema: ${theme.toUpperCase()}`);
+  }
+
+  // Aplicar IMEDIATAMENTE (antes do DOMContentLoaded) para evitar FOUC
+  setTheme(getTheme());
+
+  // Expor globalmente para o botão no header
+  window.toggleRepublicTheme = function () {
+    const current = document.documentElement.dataset.theme || DEFAULT;
+    setTheme(current === 'light' ? 'dark' : 'light');
+  };
+
+  // Re-sincronizar ícone após DOM pronto
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) btn.textContent = getTheme() === 'light' ? '🌙' : '☀️';
+  });
+})();

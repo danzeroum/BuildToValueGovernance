@@ -7,6 +7,8 @@
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/btv.css">
   <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/theme.css">
+  <script src="js/theme.js"></script>
   <style>
     .hero { text-align: center; padding: 64px 24px 48px; }
     .hero-eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--accent); margin-bottom: 16px; font-weight: 600; }
@@ -42,6 +44,14 @@
     <a href="persona-dpo.html">DPO</a>
     <a href="persona-gov.html">Gov</a>
   </nav>
+  <div class="header-actions">
+    <button id="theme-toggle-btn"
+            class="theme-toggle-btn"
+            onclick="toggleRepublicTheme()"
+            title="Alternar modo claro/escuro">
+      ☀️
+    </button>
+  </div>
 </div>
 
 <div class="hero anim-fade-in">
