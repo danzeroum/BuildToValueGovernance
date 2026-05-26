@@ -11,6 +11,16 @@ const EXFIL_PATTERNS: &[&str] = &[
     "enviar todos os dados", "vazar dados",          "http://evil",
     "https://evil",          "webhook.site",         "requestbin",
     "burpcollaborator",      "interactsh",
+    // D-block gaps: credential exposure + exfiltration channels
+    "AKIA",                      // AWS access key ID prefix
+    "Bearer ey",                 // JWT Bearer token (eyJ... base64 prefix)
+    "BEGIN RSA PRIVATE KEY",     // PEM RSA private key header
+    "BEGIN PRIVATE KEY",         // PEM generic private key header
+    "ngrok.io",                  // ngrok tunnel exfiltration
+    "| bash",                    // pipe-to-bash remote code execution
+    "| sh",                      // pipe-to-sh variant
+    "base64 -d",                 // decode-and-execute credential pipeline
+    "all environment variable",  // "print all environment variables..."
 ];
 
 #[inline]
@@ -31,7 +41,7 @@ impl Module for DataExfiltrationDetector {
         let Some(pattern) = matched else { return Vec::new(); };
         vec![Finding::new(
             ValidatorModule::DataExfiltration,
-            TechnicalSeverity::High,
+            TechnicalSeverity::Critical(200),
             "EXFIL_PATTERN",
             pattern,
             input,

@@ -1330,7 +1330,7 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
     # before routing decisions are made.
     _ANALYSIS_MODULES = {"Deobfuscator", "ZScore"}
     _ALWAYS_BLOCK     = {"CPF", "CNPJ", "CreditCard", "Luhn"}
-    _ATTACK_BLOCK     = {"SqlInjection", "Jailbreak", "DataExfiltration"}
+    _ATTACK_BLOCK     = {"SqlInjection", "Jailbreak", "DataExfiltration", "Xss", "Ssti"}
     _EDUCATE          = {"SSN", "Email", "Phone", "Iban", "EuVat", "SensitiveData", "PromptInjection"}
     _LOG              = {"NhsNumber", "Network"}
     # Distinguishes SQL injection attacks from benign SQL queries (both trigger
@@ -1346,6 +1346,14 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
             req.action = "BLOCK"
             req.hard_blocked = True
         elif _cats & _ATTACK_BLOCK and req.critical_count > 0:
+            req.action = "BLOCK"
+            req.hard_blocked = True
+        elif req.critical_count > 0:
+            # ToolScreen (PROP-034a InterceptorChain) may emit Critical(255) under
+            # ValidatorModule::Unknown before named validators run. That puts
+            # 'Unknown' in _cats (non-empty, so Python fallback is skipped) but
+            # 'Unknown' is not in _ATTACK_BLOCK, causing silent ALLOW. Fail-secure:
+            # any critical finding that reaches here must block.
             req.action = "BLOCK"
             req.hard_blocked = True
         elif "SqlInjection" in _cats and any(p in _t for p in _SQL_ATTACK_SIGS):
@@ -1367,7 +1375,9 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
                        "union select", "drop table", "drop database"]
         _EDUCATE_TEXT = [
             "ignore as instru", "desconsidere suas", "you are now unrestricted",
-            "forget all previous", "base64:", "cpf", "iban",
+            "forget all previous", "cpf", "iban",
+            # "base64:" removed: benign encoding is now distinguished from attack
+            # patterns by EXFIL "base64 -d" and XSS "eval(atob" in the kernel.
         ]
         if any(p in _t for p in _BLOCK_TEXT):
             req.action = "BLOCK"

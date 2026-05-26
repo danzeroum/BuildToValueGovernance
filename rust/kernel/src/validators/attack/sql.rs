@@ -4,12 +4,18 @@ use crate::core::module::{Module, ScanContext, ScanContextFlags};
 use crate::core::types::{BiasDeclaration, TechnicalSeverity, ValidatorModule};
 use crate::evidence::Finding;
 
-const SQL_PATTERNS: &[&str] = &[
-    "select ", "insert ", "update ", "delete ", "drop ",
-    "union ",  "truncate ", "exec ",  "execute ", "xp_",
-    "'; ",     "\"; ",      "--",     "/*",        "*/",
-    "1=1",     "or 1",      "and 1",  "sleep(",    "waitfor ",
+// Tier 1: definite attack signals — suspicious in isolation
+const SQL_ATTACK_SIGNALS: &[&str] = &[
+    "'; ",    "\"; ",   "--",      "/*",     "*/",
+    "1=1",    "or 1",   "and 1",   "sleep(", "waitfor ",
     "benchmark(",
+    "union ",  "drop ",  "truncate ", "exec ", "execute ", "xp_",
+    "insert ", "delete ",
+];
+
+// Tier 2: context words — benign alone, suspicious only alongside attack signals
+const SQL_CONTEXT_WORDS: &[&str] = &[
+    "select ", "update ",
 ];
 
 #[inline]
@@ -25,13 +31,18 @@ impl SqlInjectionDetector { pub fn new() -> Self { Self } }
 impl Module for SqlInjectionDetector {
     fn scan(&self, input: &str, ctx: &mut ScanContext) -> Vec<Finding> {
         let bytes = input.as_bytes();
-        let hits = SQL_PATTERNS.iter()
+        let attack_hits = SQL_ATTACK_SIGNALS.iter()
             .filter(|p| contains_ci(bytes, p.as_bytes()))
             .count().min(255) as u8;
-        if hits == 0 { return Vec::new(); }
+        // No finding when there are only context words (benign SQL like SELECT/UPDATE)
+        if attack_hits == 0 { return Vec::new(); }
+        let context_hits = SQL_CONTEXT_WORDS.iter()
+            .filter(|p| contains_ci(bytes, p.as_bytes()))
+            .count().min(255) as u8;
+        let total_hits = attack_hits.saturating_add(context_hits);
         // Rawls: DBAs with CAP_TRUSTED_ROLE need 3 hits for Critical (vs 2)
         let threshold: u8 = if ctx.flags.has_capability(ScanContextFlags::CAP_TRUSTED_ROLE) { 3 } else { 2 };
-        let severity = if hits >= threshold {
+        let severity = if total_hits >= threshold {
             TechnicalSeverity::Critical(200)
         } else {
             TechnicalSeverity::High
@@ -42,7 +53,7 @@ impl Module for SqlInjectionDetector {
             "SQL_PATTERN_MATCH",
             "SQL_INJECTION_ATTEMPT",
             input,
-        ).with_confidence((hits.saturating_mul(30)).min(95))]
+        ).with_confidence((total_hits.saturating_mul(30)).min(95))]
     }
 
     fn name(&self) -> &'static str { "sql_injection" }
@@ -57,13 +68,13 @@ impl Module for SqlInjectionDetector {
 
     fn explain_decision(&self, input: &str) -> &'static str {
         let bytes = input.as_bytes();
-        let hits = SQL_PATTERNS.iter()
+        let attack_hits = SQL_ATTACK_SIGNALS.iter()
             .filter(|p| contains_ci(bytes, p.as_bytes()))
             .count();
-        match hits {
-            0 => "No SQL injection patterns detected.",
-            1 => "One SQL keyword detected — elevated risk. Contestable within 24h.",
-            _ => "Multiple SQL keywords detected — Critical. Contestable within 24h.",
+        match attack_hits {
+            0 => "No SQL attack signals detected.",
+            1 => "One SQL attack signal detected — elevated risk. Contestable within 24h.",
+            _ => "Multiple SQL attack signals detected — Critical. Contestable within 24h.",
         }
     }
 }
@@ -95,10 +106,20 @@ mod tests {
         let d = SqlInjectionDetector::new();
         let mut ctx = ScanContext::default();
         ctx.flags.capability_mask = ScanContextFlags::CAP_TRUSTED_ROLE;
-        // Single "select " hit → High (not Critical) for trusted role
-        let findings = d.scan("select something", &mut ctx);
+        // "select " (context=1) + "1=1" (attack=1) → total=2, trusted threshold=3 → High.
+        // Without trusted role: threshold=2 → Critical. Demonstrates role-aware severity.
+        let findings = d.scan("SELECT * FROM users WHERE 1=1", &mut ctx);
         assert!(!findings.is_empty());
         assert_eq!(findings[0].severity, TechnicalSeverity::High);
+    }
+
+    #[test]
+    fn bare_select_is_not_an_attack() {
+        let d = SqlInjectionDetector::new();
+        let mut ctx = ScanContext::default();
+        // Benign SQL without any attack signal → no finding (G1 / G2 fix)
+        assert!(d.scan("SELECT name, price FROM products WHERE category='books'", &mut ctx).is_empty());
+        assert!(d.scan("UPDATE profile SET name='João' WHERE id=42", &mut ctx).is_empty());
     }
 
     #[test]
