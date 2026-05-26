@@ -1,0 +1,118 @@
+/* ==========================================================================
+   BuildToValue Trust OS — Theme Extensions
+   Pearl Administrative Light + Forensic Dark Micro-environments
+   Fundamentação: Gilligan (Acessibilidade Cognitiva), Rawls (Equidade WCAG)
+   ATENÇÃO: Carregar SEMPRE após btv.css, animations.css e components.css
+   ========================================================================== */
+
+/* ── Extensão do modo claro (completa os tokens ausentes em btv.css) ─────── */
+[data-theme="light"] {
+  /* Tokens semânticos de ação — ajustados para WCAG AA em fundo claro */
+  --allow:     #059669;   /* Esmeralda escurecido — contraste 4.8:1 sobre #F4F6F9 */
+  --block:     #DC2626;   /* Carmesim absoluto — contraste 5.9:1 */
+  --educate:   #B45309;   /* Âmbar profundo — contraste 5.1:1 */
+  --log:       #1D4ED8;   /* Azul índigo — contraste 7.2:1 */
+  --redact:    #4B5563;   /* Grafite legível — contraste 6.1:1 */
+  --inspect:   #0369A1;   /* Azul oceano — contraste 5.8:1 */
+  --report:    #92400E;   /* Âmbar escuro — contraste 7.0:1 */
+  --refuse:    #DC2626;   /* Igual ao block */
+  --accent:    #004BD6;   /* Royal Blue ajustado — contraste 7.5:1 */
+  --green:     #059669;
+  --red:       #DC2626;
+  --yellow:    #B45309;
+  --purple:    #7C3AED;
+  --blue:      #1D4ED8;
+
+  /* Superfícies Pearl Slate */
+  --bg:        #F4F6F9;
+  --surface:   #FFFFFF;
+  --surface-2: #EEF1F5;
+  --border:    rgba(0,0,0,0.10);
+  --text:      #0F172A;
+  --muted:     #475569;
+  --shadow:    0 4px 24px rgba(0,0,0,0.10);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* ── VerdictCard BLOCK — isolamento visual Levinas (Fail-Secure) ─────────── */
+/* Dark: já funciona com tokens default. Light: reforço explícito. */
+[data-theme="light"] .verdict-card.action-BLOCK {
+  border-top-color: var(--block);
+  background: rgba(220, 38, 38, 0.05);
+  border: 1.5px solid rgba(220, 38, 38, 0.35);
+}
+
+[data-theme="light"] .verdict-block.verdict-BLOCK,
+[data-theme="light"] .verdict-BLOCK {
+  background: rgba(220, 38, 38, 0.05);
+  border-color: var(--block);
+}
+
+/* ── ForensicPanel — micro-ambiente escuro local (terminal industrial) ───── */
+/* Hashes BLAKE3 e assinaturas HMAC-SHA256 sempre em fundo soberano escuro   */
+[data-theme="light"] .forensic-value,
+[data-theme="light"] .code-block,
+[data-theme="light"] .forensic-body pre,
+[data-theme="light"] .forensic-panel {
+  background: #0B0F19;          /* --bg do Sovereign Dark — hard-coded intencional */
+  color: #E5E7EB;
+  border-color: #243249;
+}
+
+[data-theme="light"] .forensic-tab {
+  color: #9CA3AF;
+  background: #0B0F19;
+}
+
+[data-theme="light"] .forensic-tab.active {
+  color: #388bfd;
+  border-bottom-color: #388bfd;
+}
+
+[data-theme="light"] .copy-btn {
+  background: #161E2E;
+  border-color: #243249;
+  color: #9CA3AF;
+}
+
+[data-theme="light"] .copy-btn:hover {
+  background: #243249;
+  color: #E5E7EB;
+}
+
+/* ── table — ajuste de borda para fundo claro ────────────────────────────── */
+[data-theme="light"] td {
+  border-bottom-color: rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] tr:hover td {
+  background: rgba(0,0,0,0.025);
+}
+
+/* ── Badges — opacidade dos fundos ajustada para fundo claro ─────────────── */
+[data-theme="light"] .badge-allow   { background: rgba(5,150,105,.12);  border-color: rgba(5,150,105,.3);  }
+[data-theme="light"] .badge-block   { background: rgba(220,38,38,.12);  border-color: rgba(220,38,38,.3);  }
+[data-theme="light"] .badge-educate { background: rgba(180,83,9,.12);   border-color: rgba(180,83,9,.3);   }
+[data-theme="light"] .badge-log     { background: rgba(29,78,216,.12);  border-color: rgba(29,78,216,.3);  }
+[data-theme="light"] .badge-redact  { background: rgba(75,85,99,.12);   border-color: rgba(75,85,99,.3);   }
+[data-theme="light"] .badge-muted   { background: rgba(71,85,105,.10);  border-color: rgba(71,85,105,.25); }
+
+/* ── Botão toggle — estado ativo no header ───────────────────────────────── */
+.theme-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 5px 8px;
+  transition: all .15s;
+  font-family: var(--sans);
+  min-height: 30px;
+  line-height: 1;
+}
+.theme-toggle-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--accent);
+}

@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="css/btv.css">
   <link rel="stylesheet" href="css/animations.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/theme.css">
+  <script src="js/theme.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js" defer></script>
   <style>
     body { overflow-x: hidden; }
@@ -45,6 +47,12 @@
   <div class="header-actions">
     <button class="btn btn-sm btn-ghost" id="offline-toggle" title="Toggle offline mode">⚡</button>
     <button class="btn btn-sm btn-ghost" id="deepseek-toggle" title="Toggle DeepSeek">✦</button>
+    <button id="theme-toggle-btn"
+            class="theme-toggle-btn"
+            onclick="toggleRepublicTheme()"
+            title="Alternar modo claro/escuro">
+      ☀️
+    </button>
   </div>
 </div>
 
