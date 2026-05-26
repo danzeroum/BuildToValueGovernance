@@ -23,6 +23,7 @@ jobs:
 
     env:
       BTV_HMAC_KEY: "ci-test-hmac-key-exactly-32-bytes!"
+      BTV_JWT_SECRET: "ci-test-jwt-secret-36-chars-long-ok!"
       BTV_ENV: development
       BTV_API_KEY: "2e9854d03357579fa1a48b7cbdfc3296"
       BTV_DB_PATH: "/tmp/btv_ci_trust.db"
@@ -42,31 +43,28 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Install project dependencies (Python + maturin)
-        run: make install
-
-      - name: Build Rust kernel + install FFI binding
-        run: make develop
+      - name: Create venv + install all dependencies
+        # make setup: creates python/venv, installs maturin + Python deps,
+        # then calls make develop (compiles Rust kernel + FFI binding).
+        run: make setup
 
       - name: Start governance server
+        # Mirror make run-dev: cd into python/ so buildtovalue package is importable
         run: |
-          cd python
-          ../python/venv/bin/uvicorn buildtovalue.api.app:app \
-            --host 0.0.0.0 --port 8000 --log-level warning &
-          echo "Waiting for server..."
-          timeout 60 bash -c \
-            'until curl -sf http://localhost:8000/health; do sleep 1; done'
+          (cd python && ../python/venv/bin/uvicorn buildtovalue.api.app:app \
+            --host 0.0.0.0 --port 8000 --log-level warning) &
+          echo "Waiting for governance server..."
+          timeout 60 bash -c 'until curl -sf http://localhost:8000/health; do sleep 1; done'
           echo "Server is up."
 
       - name: Run BTV Battery v2
+        # Run from python/ so pytest.ini (which registers the e2e marker) is picked up
         env:
           BTV_BASE_URL: "http://localhost:8000"
         run: |
-          cd python
-          ../python/venv/bin/pytest ../tests/ci/test_btv_battery_v2.py \
-            -v --tb=short -m e2e --no-header \
+          cd python && ../python/venv/bin/pytest ../tests/ci/test_btv_battery_v2.py \
+            -v --tb=short -m e2e \
             --junit-xml=../battery_v2_results.xml
 
       - name: Upload JUnit results
