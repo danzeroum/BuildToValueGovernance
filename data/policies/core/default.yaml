@@ -3,7 +3,7 @@ metadata:
   name: "BTV Core Policies"
   description: "Default policy set for Sovereign Trust OS"
   created_at: "2026-02-15"
-  updated_at: "2026-02-15"
+  updated_at: "2026-05-26"
   author: "BuildToValue Architecture Team"
 
 hard_blocks:
