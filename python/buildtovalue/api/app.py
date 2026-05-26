@@ -1304,6 +1304,7 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
     # ── Etapa 0: FFI scan — Rust Kernel populates TechnicalEvidence ─────────
     # Fail-secure: bridge unavailability never blocks the API (silent degradation).
     _ffi = getattr(request.app.state, "ffi_client", None)
+    _ffi_categories: list = []
     if _ffi is not None:
         try:
             _ev = _ffi.scan(req.input_text)
@@ -1313,6 +1314,7 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
             req.blake3_hash    = _ev.hash
             req.entropy        = _ev.entropy
             req.total_chars    = _ev.input_size
+            _ffi_categories    = getattr(_ev, "categories", [])
             if not req.matched_policies:
                 req.matched_policies = [
                     f"{f.category}->{f.title}" for f in _ev.findings
@@ -1321,6 +1323,58 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
             logger.warning("FFI scan failed — fail-secure (degraded mode): %s", exc)
         except Exception as exc:  # noqa: BLE001
             logger.warning("FFI scan unexpected error — fail-secure: %s", exc)
+
+    # ADR-048 Phase 4: Category-based action routing.
+    # Deobfuscator and ZScore are statistical analysis modules that fire on
+    # every input — they are not semantic threat detectors and must be excluded
+    # before routing decisions are made.
+    _ANALYSIS_MODULES = {"Deobfuscator", "ZScore"}
+    _ALWAYS_BLOCK     = {"CPF", "CNPJ", "CreditCard", "Luhn"}
+    _ATTACK_BLOCK     = {"SqlInjection", "Jailbreak", "DataExfiltration"}
+    _EDUCATE          = {"SSN", "Email", "Phone", "Iban", "EuVat", "SensitiveData", "PromptInjection"}
+    _LOG              = {"NhsNumber", "Network"}
+    # Distinguishes SQL injection attacks from benign SQL queries (both trigger
+    # the SqlInjection validator, but only attacks contain these signatures).
+    _SQL_ATTACK_SIGS  = {"union select", "drop table", "drop database",
+                         "insert into", "delete from", "; --", ";--", "exec(", "xp_"}
+
+    _t    = req.input_text.lower()
+    _cats = set(_ffi_categories) - _ANALYSIS_MODULES
+
+    if _cats:
+        if _cats & _ALWAYS_BLOCK:
+            req.action = "BLOCK"
+            req.hard_blocked = True
+        elif _cats & _ATTACK_BLOCK and req.critical_count > 0:
+            req.action = "BLOCK"
+            req.hard_blocked = True
+        elif "SqlInjection" in _cats and any(p in _t for p in _SQL_ATTACK_SIGS):
+            req.action = "BLOCK"
+            req.hard_blocked = True
+        elif _cats & _EDUCATE:
+            req.action = "EDUCATE"
+        elif _cats & _LOG:
+            req.action = "LOG"
+        elif _cats & _ATTACK_BLOCK:
+            # Non-critical attack signal with no specific injection signature
+            # (e.g. benign SELECT) → educate rather than punish
+            req.action = "EDUCATE"
+        # else: unrecognised category — leave action at default ALLOW
+    else:
+        # No semantic threat categories after filtering — Python-side text
+        # fallback for patterns the kernel doesn't model (XSS, credentials).
+        _BLOCK_TEXT = ["<script", "javascript:", "eval(", "senha:", "login: root",
+                       "union select", "drop table", "drop database"]
+        _EDUCATE_TEXT = [
+            "ignore as instru", "desconsidere suas", "you are now unrestricted",
+            "forget all previous", "base64:", "cpf", "iban",
+        ]
+        if any(p in _t for p in _BLOCK_TEXT):
+            req.action = "BLOCK"
+            req.hard_blocked = True
+        elif any(p in _t for p in _EDUCATE_TEXT):
+            req.action = "EDUCATE"
+        # else: leave at ALLOW (default — no threat detected)
 
     resp = _decide_hard_block(req, session_id, start)
     if resp:

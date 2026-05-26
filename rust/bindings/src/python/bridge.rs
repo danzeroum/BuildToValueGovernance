@@ -38,6 +38,13 @@ pub fn scan_for_evidence_batch(
 
     for (i, (input, trail_id)) in inputs.iter().zip(audit_trail_ids.iter()).enumerate() {
         let ev = gatekeeper.scan_for_evidence(input, *trail_id);
+        let mut categories: Vec<String> = (0..ev.finding_count as usize)
+            .map(|j| format!("{:?}", ev.findings[j].module))
+            .collect();
+        categories.extend(
+            (0..ev.critical_count as usize)
+                .map(|j| format!("{:?}", ev.critical_findings[j].module))
+        );
         batch.push(serde_json::json!({
             "index": i,
             "audit_trail_id": trail_id.to_string(),
@@ -49,6 +56,7 @@ pub fn scan_for_evidence_batch(
             "hash": hex::encode(ev.hash),
             "bias_fpr": ev.bias.false_positive_rate,
             "bias_fnr": ev.bias.false_negative_rate,
+            "categories": categories,
         }));
 
         if i % 100 == 0 {
@@ -125,6 +133,13 @@ impl RustKernel {
 
         for (i, (input, trail_id)) in inputs.iter().zip(audit_trail_ids.iter()).enumerate() {
             let ev = self.gatekeeper.scan_for_evidence(input, *trail_id);
+            let mut categories: Vec<String> = (0..ev.finding_count as usize)
+                .map(|j| format!("{:?}", ev.findings[j].module))
+                .collect();
+            categories.extend(
+                (0..ev.critical_count as usize)
+                    .map(|j| format!("{:?}", ev.critical_findings[j].module))
+            );
             batch.push(serde_json::json!({
                 "index": i,
                 "audit_trail_id": trail_id.to_string(),
@@ -136,6 +151,7 @@ impl RustKernel {
                 "hash": hex::encode(ev.hash),
                 "bias_fpr": ev.bias.false_positive_rate,
                 "bias_fnr": ev.bias.false_negative_rate,
+                "categories": categories,
             }));
 
             if i % 100 == 0 {
