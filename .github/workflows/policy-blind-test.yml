@@ -31,6 +31,32 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: blind-test-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.lock') }}
+          restore-keys: |
+            bindings-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.lock') }}
+            blind-test-${{ runner.os }}-
+
+      - name: Build and install PyO3 bindings
+        run: |
+          pip install maturin
+          # Remove stale wheels from cargo cache (may be built for a different
+          # Python version than the one active in this CI job).
+          rm -f rust/target/wheels/*.whl
+          cd rust && maturin build --release -m bindings/Cargo.toml && pip install target/wheels/*.whl
+          echo "  OK: buildtovalue_kernel installed"
+
       - name: Install dependencies
         run: pip install -e "python/[dev]"
 

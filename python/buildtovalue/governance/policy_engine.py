@@ -236,7 +236,7 @@ class PolicyEngine:
                 yaml_file.name,
                 sorted(unknown),
             )
-        for r in data.get("rules", []):
+        for r in (data.get("rules") or data.get("policies") or []):
             try:
                 rule = PolicyRule(
                     rule_id=r["rule_id"],

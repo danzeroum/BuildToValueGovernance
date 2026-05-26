@@ -76,6 +76,7 @@ class TechnicalEvidence:
     findings: List[Finding] = field(default_factory=list)
     critical: List[Finding] = field(default_factory=list)
     stats: Dict[str, float] = field(default_factory=dict)
+    categories: List[str] = field(default_factory=list)
     ffi_validation_time_ms: float = 0.0
     ffi_buffer_size: int = 0
 
@@ -216,6 +217,7 @@ class FFIClient:
             bias=bias,
             findings=findings,
             critical=critical,
+            categories=[str(c) for c in data.get("categories", [])],
         )
 
     def get_metrics(self) -> dict:
