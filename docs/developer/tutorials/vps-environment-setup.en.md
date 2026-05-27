@@ -431,6 +431,233 @@ orphaned resources (*zombie processes*) can silently destabilize the VPS.
 
 ---
 
+## Appendix E — Reference Pattern: Secure VPS Architecture
+
+> This appendix documents the principles of this architecture in a reusable form,
+> without exposing operational details of the production environment.
+> It is the canonical version for reference in other projects, peer reviews, or public portfolio.
+
+### Model overview
+
+This infrastructure implements the **Infrastructure as Code (IaC)** model with Docker Compose
+and Nginx as a unified Ingress Controller. The central premise:
+
+- **Production:** exposed via HTTPS/TLS, behind a reverse proxy with a valid certificate
+- **Development:** topologically isolated from the internet, with no public inbound or outbound
+  routes, accessible exclusively via encrypted SSH tunnels
+
+No line of development code travels in plain text. No development port is publicly opened.
+Isolation is enforced by kernel primitives — not by operator discipline.
+
+### Phase 1 — Perimeter security (Firewall)
+
+The network configuration follows the **Principle of Least Privilege** with a `DENY ALL` default
+policy. The firewall operates at layer 4, silently dropping any packet outside the explicit exceptions:
+
+| Port | Protocol | Justification |
+|---|---|---|
+| 22 | TCP | Management via SSH with asymmetric keys (passwords disabled) |
+| 80 | TCP | HTTP → HTTPS redirect and ACME renewal (Let's Encrypt) |
+| 443 | TCP | Only entry point for public production traffic |
+
+**Password-free authentication (asymmetric keys):**
+
+```bash
+# Generate key pair on the developer's machine
+ssh-keygen -t ed25519 -C "dev@project"
+
+# Copy the public key to the server
+ssh-copy-id -i ~/.ssh/id_ed25519.pub usuario@<SERVER>
+```
+
+Then disable password authentication in `/etc/ssh/sshd_config` on the server:
+
+```
+PasswordAuthentication no
+PubkeyAuthentication yes
+```
+
+!!! note "ed25519 vs rsa-4096"
+    `ed25519` keys are preferred for new projects: same cryptographic strength,
+    smaller keys, and faster authentication operations.
+
+### Phase 2 — Docker isolation (Zero Trust)
+
+The network topology implements **Zero Trust** at two independent levels:
+
+```yaml
+networks:
+  prod-net:
+    driver: bridge
+    # Containers have a route to the host and to the internet via Nginx
+
+  dev-net:
+    driver: bridge
+    internal: true
+    # 'internal: true' removes the default gateway at the kernel level.
+    # Containers cannot reach the internet — by design, not by firewall policy.
+```
+
+**Service configuration example:**
+
+```yaml
+services:
+  # Production: public, behind the Ingress Controller
+  app-prod:
+    image: your-image:tag
+    networks: [prod-net]
+    restart: unless-stopped
+    mem_limit: 512m       # cgroups: prevents OOM on shared VPS
+
+  # Development: isolated, accessible only via SSH tunnel
+  app-dev:
+    image: your-image:tag
+    networks: [dev-net]
+    ports:
+      - "127.0.0.1:8080:8000"  # loopback: externally invisible
+    volumes:
+      - ./src:/app:rw           # hot-reload without rebuild
+    restart: on-failure:3       # Fail-Secure: stops after 3 failures, no infinite loop
+    mem_limit: 256m
+```
+
+The difference between `restart: unless-stopped` (prod) and `restart: on-failure:3` (dev) is
+intentional: production must always come back; development must **signal failure and stop**,
+not consume resources indefinitely.
+
+### Phase 3 — Nginx gateway and TLS
+
+Nginx operates as the only **Ingress Controller**: all external traffic passes through it before
+reaching any container. Server block pattern:
+
+```nginx
+# HTTP → HTTPS redirect (required)
+server {
+    listen 80;
+    server_name app.example.com;
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS block with SSL Offloading
+server {
+    listen 443 ssl;
+    server_name app.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/app.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
+
+    # Mandatory security headers
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+
+    location / {
+        proxy_pass         http://app-prod:8000;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+**Certificate issuance and automatic renewal:**
+
+```bash
+# Initial issuance
+sudo certbot --nginx -d app.example.com
+
+# Verify automatic renewal
+sudo certbot renew --dry-run
+```
+
+!!! note "Certbot and Nginx container"
+    After issuing the certificate, stop the host Nginx before starting the
+    `nginx-prod` container. The container mounts `/etc/letsencrypt` as `:ro` and manages
+    TLS termination independently.
+
+### Phase 4 — DEV access pattern (SSH Tunnel)
+
+Since development services are bound to the VPS `127.0.0.1` and the `dev-net` network has
+no gateway, developer access uses **SSH Port Forwarding**:
+
+```bash
+# General syntax
+ssh -L <LOCAL_PORT>:localhost:<VPS_PORT> usuario@<SERVER> -N
+
+# Multiple simultaneous services
+ssh -L 8080:localhost:8080 \
+    -L 9091:localhost:9091 \
+    usuario@<SERVER> -N
+```
+
+**VS Code Remote-SSH integration** (automatic tunnel on connect):
+
+```
+# ~/.ssh/config
+Host my-dev-server
+  HostName <SERVER>
+  User usuario
+  IdentityFile ~/.ssh/id_ed25519
+  LocalForward 8080 localhost:8080
+  LocalForward 9091 localhost:9091
+```
+
+With this configuration, connecting via Remote-SSH establishes the tunnel automatically —
+no separate terminal needed.
+
+**Full development flow without public exposure:**
+
+```
+Local editor (VS Code Remote-SSH)
+│  saves file
+▼
+Docker volume (:rw mount on VPS)
+│  reflects immediately
+▼
+DEV container (hot-reload active)
+│  serves on internal port 8000
+▼
+SSH Tunnel (127.0.0.1:8080 → VPS:8080)
+│
+▼
+Local browser: http://localhost:8080
+```
+
+Not a single byte of this cycle travels in plain text. No port is publicly opened.
+The risk of accidental exposure is **structurally impossible**.
+
+### Synthesis: independent protection layers
+
+```
+Internet
+│
+▼  LAYER 1: Firewall (UFW/iptables)
+│  DENY ALL except 22/80/443
+▼  LAYER 2: Nginx (Ingress Controller)
+│  TLS termination · security headers · routing
+▼  LAYER 3: Docker Network (prod-net / dev-net)
+│  internal: true removes DEV gateway at kernel level
+▼  LAYER 4: Port binding (127.0.0.1)
+│  Loopback-only for development services
+▼  LAYER 5: cgroups (mem_limit / cpus)
+   Isolates resource consumption between DEV and PROD
+```
+
+Each layer is **independent**: disabling one does not compromise the others.
+This is the principle of **Defense in Depth** applied to infrastructure —
+the same philosophy that underpins the isolation model documented in this tutorial.
+
+### External references
+
+- [Docker Networking — `internal` networks](https://docs.docker.com/network/)
+- [Nginx — Reverse Proxy](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)
+- [Certbot — Let's Encrypt](https://certbot.eff.org/)
+- [SSH Port Forwarding](https://www.ssh.com/academy/ssh/tunneling/example)
+- [Linux cgroups v2](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
+
+---
+
 ## What you learned
 
 - DEV/PROD separation on a single VPS is implemented via Linux kernel primitives
