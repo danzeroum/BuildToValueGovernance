@@ -36,3 +36,6 @@ jobs:
 
       - name: Confirm RELEASE_GATES present
         run: test -f docs/RELEASE_GATES.md
+
+      - name: Validate VPS compose syntax
+        run: docker compose -f ops/docker-compose.vps.yml config --quiet && echo "VPS compose OK"
