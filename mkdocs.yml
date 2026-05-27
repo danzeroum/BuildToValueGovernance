@@ -62,6 +62,7 @@ plugins:
             "02 — Primeira Integração": "02 — First Integration"
             "03 — Verificação com btv-cli": "03 — Verification with btv-cli"
             "04 — Propor uma Política": "04 — Propose a Policy"
+            "05 — Configuração VPS": "05 — VPS Setup"
             Anatomia da Evidência: Evidence Anatomy
             Fail-Secure: Fail-Secure
             ContestabilityLoop: ContestabilityLoop
@@ -119,6 +120,7 @@ nav:
       - "02 — Primeira Integração": developer/tutorials/02-first-integration.md
       - "03 — Verificação com btv-cli": developer/tutorials/03-verify-evidence-cli.md
       - "04 — Propor uma Política": developer/tutorials/04-propose-policy.md
+      - "05 — Configuração VPS": developer/tutorials/vps-environment-setup.md
     - Compliance:
       - Dimensionamento Econômico: developer/compliance/sizing-guide.md
       - Mapa Regulatório: developer/compliance/regulatory-map.md
