@@ -67,6 +67,7 @@ plugins:
             ContestabilityLoop: ContestabilityLoop
             Dimensionamento Econômico: Economic Sizing
             Mapa Regulatório: Regulatory Map
+            Mapa Operacional de YAMLs: Operational YAML Map
             Trilha de ADRs: ADR Trail
             Protocolo CAP: CAP Protocol
             Registro de Riscos: Risk Register
@@ -121,6 +122,7 @@ nav:
     - Compliance:
       - Dimensionamento Econômico: developer/compliance/sizing-guide.md
       - Mapa Regulatório: developer/compliance/regulatory-map.md
+      - Mapa Operacional de YAMLs: developer/compliance/dpo-ciso-yaml-map.md
     - Trilha de ADRs: developer/adr-trail/README.md
     - Protocolo CAP: developer/cap-protocol.md
     - Registro de Riscos: developer/RISK_REGISTER.md

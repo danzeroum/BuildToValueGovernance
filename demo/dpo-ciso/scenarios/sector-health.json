@@ -1,0 +1,18 @@
+{
+  "metrics": {
+    "decisions_today": 1842,
+    "pending_appeals": 36,
+    "blocks_24h": 117,
+    "sla_breach": 2
+  },
+  "frameworks": ["LGPD", "GDPR", "EU AI Act", "HIPAA", "ISO 42001", "NIST AI RMF"],
+  "appeals": [
+    { "id": "APL-1001", "agent": "demo-clinical",  "reason": "PHI exposure",            "severity_shift": 1, "deadline_offset_hours": 22 },
+    { "id": "APL-1002", "agent": "support-bot",    "reason": "Sensitive bias signal",   "severity_shift": 0, "deadline_offset_hours": 16 },
+    { "id": "APL-1003", "agent": "rh-screen",      "reason": "PII redaction failure",   "severity_shift": 0, "deadline_offset_hours": 9 },
+    { "id": "APL-1004", "agent": "compliance-bot", "reason": "Unverified vendor LLM",   "severity_shift": 0, "deadline_offset_hours": 5 },
+    { "id": "APL-1005", "agent": "pa-oracle",      "reason": "Threshold drift",         "severity_shift": 1, "deadline_offset_hours": 1.2 },
+    { "id": "APL-1006", "agent": "demo-clinical",  "reason": "SLA breach (expired)",    "severity_shift": 0, "deadline_offset_hours": -0.3 }
+  ],
+  "note": "Synthetic scenario. In production, the dashboard reads /api/decisions and /api/appeals. The dashboard derives the deadlines from offsets at load time to keep the demo educational."
+}

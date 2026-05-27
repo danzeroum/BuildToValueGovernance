@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Governance Console · BuildToValue</title>
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/btv.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <style>
+    :root {
+      --gov-bg: #f8f9fb;
+      --gov-card: #fff;
+      --gov-border: #e1e4e8;
+      --gov-text: #24292f;
+      --gov-muted: #57606a;
+      --gov-accent: #6f42c1;
+      --gov-ok: #16a34a;
+      --gov-warn: #d97706;
+      --gov-danger: #dc2626;
+      --gov-critical: #7f1d1d;
+    }
+    body { background: var(--gov-bg); color: var(--gov-text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; }
+    header.gov-header { background: var(--gov-card); border-bottom: 1px solid var(--gov-border); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+    header.gov-header h1 { margin: 0; font-size: 1.25rem; }
+    header.gov-header .lang { font-size: 0.875rem; color: var(--gov-muted); }
+    nav.gov-tabs { background: var(--gov-card); border-bottom: 1px solid var(--gov-border); padding: 0 2rem; display: flex; gap: 1.5rem; }
+    nav.gov-tabs button { background: none; border: none; padding: 1rem 0.25rem; font-size: 0.95rem; cursor: pointer; color: var(--gov-muted); border-bottom: 3px solid transparent; }
+    nav.gov-tabs button.active { color: var(--gov-accent); border-bottom-color: var(--gov-accent); font-weight: 600; }
+    main.gov-main { padding: 2rem; max-width: 1200px; margin: 0 auto; }
+    .gov-panel { display: none; }
+    .gov-panel.active { display: block; }
+    .gov-card { background: var(--gov-card); border: 1px solid var(--gov-border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+    .gov-card h2, .gov-card h3 { margin-top: 0; }
+    .gov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    .gov-metric { background: var(--gov-card); border: 1px solid var(--gov-border); border-radius: 8px; padding: 1rem; text-align: center; }
+    .gov-metric .num { font-size: 2rem; font-weight: 700; color: var(--gov-accent); }
+    .gov-metric .label { font-size: 0.75rem; color: var(--gov-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    table.gov-table { width: 100%; border-collapse: collapse; background: var(--gov-card); }
+    table.gov-table th, table.gov-table td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--gov-border); font-size: 0.875rem; }
+    table.gov-table th { background: var(--gov-bg); font-weight: 600; color: var(--gov-muted); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; }
+    .badge.s1 { background: #dcfce7; color: var(--gov-ok); }
+    .badge.s2 { background: #fef9c3; color: #854d0e; }
+    .badge.s3 { background: #ffedd5; color: var(--gov-warn); }
+    .badge.s4 { background: #fee2e2; color: var(--gov-danger); }
+    .badge.s5 { background: var(--gov-danger); color: #fff; }
+    .badge.s6 { background: var(--gov-critical); color: #fff; }
+    .badge.allow { background: #dcfce7; color: var(--gov-ok); }
+    .badge.block { background: #fee2e2; color: var(--gov-danger); }
+    .badge.educate { background: #dbeafe; color: #1e40af; }
+    .badge.redact { background: #fef9c3; color: #854d0e; }
+    .sim-banner { background: #1f2937; color: #fbbf24; padding: 0.5rem 1rem; font-size: 0.8rem; font-weight: bold; letter-spacing: 0.05em; text-align: center; }
+    button.gov-btn { background: var(--gov-accent); color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; }
+    button.gov-btn:hover { background: #5a32a3; }
+    button.gov-btn.secondary { background: transparent; color: var(--gov-accent); border: 1px solid var(--gov-accent); }
+    .form-row { margin-bottom: 1rem; }
+    .form-row label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.875rem; }
+    .form-row input, .form-row select, .form-row textarea { width: 100%; padding: 0.5rem; border: 1px solid var(--gov-border); border-radius: 4px; font-family: inherit; box-sizing: border-box; }
+    .form-row .hint { font-size: 0.75rem; color: var(--gov-muted); margin-top: 0.25rem; }
+    details.yaml-preview { margin-top: 1rem; }
+    details.yaml-preview summary { cursor: pointer; font-weight: 600; color: var(--gov-muted); }
+    pre { background: #f6f8fa; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.8rem; }
+    .flow-warning { background: #fffbeb; border-left: 4px solid var(--gov-warn); padding: 0.75rem 1rem; border-radius: 4px; margin: 1rem 0; font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+  <div class="sim-banner">[SIMULAÇÃO DIDÁTICA — ESTADO DO LEDGER NÃO AFETADO · DIDACTIC SIMULATION — LEDGER NOT AFFECTED]</div>
+
+  <header class="gov-header">
+    <h1>Governance Console · BuildToValue</h1>
+    <div class="lang">
+      <label for="lang-select">Idioma · Language:</label>
+      <select id="lang-select">
+        <option value="pt" selected>Português (BR)</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+  </header>
+
+  <nav class="gov-tabs" id="tabs">
+    <button data-tab="dashboard" class="active" data-i18n="tab_dashboard">Compliance Dashboard</button>
+    <button data-tab="audit" data-i18n="tab_audit">Audit Trail</button>
+    <button data-tab="editor" data-i18n="tab_editor">Policy Editor</button>
+  </nav>
+
+  <main class="gov-main">
+    <section id="panel-dashboard" class="gov-panel active"></section>
+    <section id="panel-audit" class="gov-panel"></section>
+    <section id="panel-editor" class="gov-panel"></section>
+  </main>
+
+  <script src="./governance-console.js"></script>
+  <script src="./panels/compliance-dashboard.js"></script>
+  <script src="./panels/audit-trail.js"></script>
+  <script src="./panels/policy-editor.js"></script>
+  <script>GovernanceConsole.boot();</script>
+</body>
+</html>

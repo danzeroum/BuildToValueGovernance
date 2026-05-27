@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buildtovalue.io/schemas/policy.schema.json",
+  "title": "BuildToValue Policy YAML — DPO/CISO Governance Console",
+  "description": "Permissive schema validated client-side by the Governance Console and server-side by scripts/validate_policy_schema.py. It accepts the diverse YAML families currently under data/policies/. Newly authored policies (created via Console Panel 1 or with --require-constitutional) must additionally carry the bias_declaration and jurisdiction constitutional fields — enforced by the script flag, not by this schema.",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string" },
+    "schema_version": { "type": "string" },
+    "schema_type": { "type": "string" },
+    "policy_id": { "type": "string" },
+    "_metadata": { "type": "object" },
+    "metadata": { "type": "object" },
+    "jurisdiction": {
+      "description": "Jurisdictions this policy applies to. Constitutional field. Accepts string (single, comma-separated, or named region), array, or object describing a bitmask.",
+      "anyOf": [
+        { "type": "string", "minLength": 2 },
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    },
+    "bias_declaration": {
+      "description": "Explicit declaration of bias surface the author was aware of. Constitutional field (Rawls blind-test invariant).",
+      "type": "object"
+    },
+    "governance": { "type": "object" },
+    "policies": { "type": "array" },
+    "rules": { "type": "array" },
+    "frameworks": { "type": "array" },
+    "thresholds": { "type": "object" }
+  },
+  "additionalProperties": true
+}

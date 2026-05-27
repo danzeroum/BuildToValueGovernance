@@ -1,0 +1,9 @@
+{
+  "metrics": { "decisions_today": 4218, "pending_appeals": 12, "blocks_24h": 304, "sla_breach": 0 },
+  "frameworks": ["LGPD", "GDPR", "PCI-DSS", "ISO 42001", "NIST AI RMF"],
+  "appeals": [
+    { "id": "APL-2001", "agent": "fraud-screen", "reason": "PAN exposure",       "severity_shift": 1, "deadline_offset_hours": 20 },
+    { "id": "APL-2002", "agent": "credit-bot",   "reason": "Score discrimination","severity_shift": 1, "deadline_offset_hours": 8 },
+    { "id": "APL-2003", "agent": "fraud-screen", "reason": "False positive",     "severity_shift": 0, "deadline_offset_hours": 3 }
+  ]
+}

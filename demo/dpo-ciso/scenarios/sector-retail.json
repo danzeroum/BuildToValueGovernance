@@ -1,0 +1,9 @@
+{
+  "metrics": { "decisions_today": 9842, "pending_appeals": 7, "blocks_24h": 88, "sla_breach": 1 },
+  "frameworks": ["LGPD", "GDPR", "ISO 42001"],
+  "appeals": [
+    { "id": "APL-3001", "agent": "support-bot",   "reason": "PII in chat",          "severity_shift": 0, "deadline_offset_hours": 19 },
+    { "id": "APL-3002", "agent": "recommend-bot", "reason": "Profiling without basis","severity_shift": 0, "deadline_offset_hours": 11 },
+    { "id": "APL-3003", "agent": "support-bot",   "reason": "Hard block contested",  "severity_shift": 1, "deadline_offset_hours": 0.8 }
+  ]
+}
