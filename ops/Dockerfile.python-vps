@@ -21,4 +21,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=5s \
     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"
 
+# SOMENTE DEV: python3 -m http.server não tem TLS, rate limiting, nem autenticação.
+# Para conteúdo público de produção, use nginx:alpine (ver docker-compose.vps.yml).
 CMD ["python3", "-m", "http.server", "8000", "--bind", "0.0.0.0"]
