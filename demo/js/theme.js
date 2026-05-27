@@ -19,9 +19,16 @@
   function setTheme(theme) {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem(STORAGE_KEY, theme); } catch {}
-    // Atualizar ícone do botão se existir
+    // Atualizar ícone do botão se existir (emoji fallback)
     const btn = document.getElementById('theme-toggle-btn');
     if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
+    // Suporte ao par de SVGs moon/sun usado na navbar global
+    const moon = document.getElementById('t-moon');
+    const sun  = document.getElementById('t-sun');
+    if (moon && sun) {
+      moon.style.display = theme === 'light' ? 'block' : 'none';
+      sun.style.display  = theme === 'light' ? 'none'  : 'block';
+    }
     console.info(`[BTV Governance] Tema: ${theme.toUpperCase()}`);
   }
 
@@ -33,10 +40,19 @@
     const current = document.documentElement.dataset.theme || DEFAULT;
     setTheme(current === 'light' ? 'dark' : 'light');
   };
+  // Alias para compatibilidade com onclick="toggleTheme()" na navbar global
+  window.toggleTheme = window.toggleRepublicTheme;
 
-  // Re-sincronizar ícone após DOM pronto
+  // Re-sincronizar ícones após DOM pronto
   document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('theme-toggle-btn');
-    if (btn) btn.textContent = getTheme() === 'light' ? '🌙' : '☀️';
+    const theme = getTheme();
+    const btn  = document.getElementById('theme-toggle-btn');
+    if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
+    const moon = document.getElementById('t-moon');
+    const sun  = document.getElementById('t-sun');
+    if (moon && sun) {
+      moon.style.display = theme === 'light' ? 'block' : 'none';
+      sun.style.display  = theme === 'light' ? 'none'  : 'block';
+    }
   });
 })();
