@@ -185,10 +185,10 @@ Ports 9090 and 9091 are bound to `127.0.0.1` on the VPS — invisible externally
 Access occurs via an **encrypted SSH tunnel**, run on **your local machine** (not on the VPS):
 
 ```bash
-# On your local machine:
+# On your local machine (using the btv-vps alias from ~/.ssh/config):
 ssh -L 9090:localhost:9090 \
     -L 9091:localhost:9091 \
-    root@76.13.238.209 -N
+    btv-vps -N
 ```
 
 With the tunnel active, access from your local browser:
@@ -206,11 +206,22 @@ With the tunnel active, access from your local browser:
 > **Levinas — Protection:** ports bound to `127.0.0.1` ensure the lab environment is
 > never exposed to third parties who have no way to audit what is being tested.
 
-**Recommended alias** (add to `~/.zshrc` or `~/.bashrc` on your local machine):
+**Recommended configuration** — add to `~/.ssh/config` on your local machine to abstract the IP out of the command line and make the alias resilient to address changes:
+
+```
+# ~/.ssh/config
+Host btv-vps
+  HostName <VPS_IP>
+  User root
+```
+
+Then add the alias to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-alias btv-tunnel='ssh -L 9090:localhost:9090 -L 9091:localhost:9091 root@76.13.238.209 -N -v'
+alias btv-tunnel='ssh -L 9090:localhost:9090 -L 9091:localhost:9091 btv-vps -N -v'
 ```
+
+With this setup, a VPS IP change only requires updating `~/.ssh/config` — the alias and documentation remain unchanged.
 
 ---
 

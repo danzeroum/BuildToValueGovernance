@@ -186,10 +186,10 @@ externamente. O acesso ocorre via **túnel SSH criptografado**, executado na
 **sua máquina local** (não na VPS):
 
 ```bash
-# Na sua máquina local:
+# Na sua máquina local (usando o alias btv-vps do ~/.ssh/config):
 ssh -L 9090:localhost:9090 \
     -L 9091:localhost:9091 \
-    root@76.13.238.209 -N
+    btv-vps -N
 ```
 
 Com o túnel ativo, acesse no navegador local:
@@ -208,11 +208,22 @@ Com o túnel ativo, acesse no navegador local:
 > de laboratório nunca é exposto a terceiros que não têm como auditar o que está
 > sendo testado.
 
-**Alias recomendado** (adicione no `~/.zshrc` ou `~/.bashrc` da sua máquina local):
+**Configuração recomendada** — adicione ao `~/.ssh/config` da sua máquina local para abstrair o IP fora da linha de comando e tornar o alias resiliente a mudanças de endereço:
+
+```
+# ~/.ssh/config
+Host btv-vps
+  HostName <IP_DA_VPS>
+  User root
+```
+
+Em seguida, adicione o alias no `~/.zshrc` ou `~/.bashrc`:
 
 ```bash
-alias btv-tunnel='ssh -L 9090:localhost:9090 -L 9091:localhost:9091 root@76.13.238.209 -N -v'
+alias btv-tunnel='ssh -L 9090:localhost:9090 -L 9091:localhost:9091 btv-vps -N -v'
 ```
+
+Com esta configuração, uma eventual troca de IP da VPS exige alteração em apenas um lugar (`~/.ssh/config`), sem tocar no alias ou na documentação.
 
 ---
 
