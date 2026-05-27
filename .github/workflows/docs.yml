@@ -1,0 +1,47 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "scripts/autogen_reference.py"
+      - "scripts/validate_invariants.py"
+      - "rust/kernel/src/core/types.rs"
+      - "rust/btv-types/src/lib.rs"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Princípio do mínimo privilégio (Analista 3 #3): este job apenas lê o kernel
+    # e produz HTML; nunca tem acesso a chaves HMAC/Ledger.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install docs dependencies
+        run: |
+          pip install -r docs/requirements.txt
+          pip install mkdocs-material
+
+      - name: Generate technical reference from Rust source
+        run: python scripts/autogen_reference.py
+
+      - name: Validate invariants
+        run: python scripts/validate_invariants.py
+
+      - name: Build site
+        # NOTE: --strict desativado temporariamente: o repositório tem ~96 warnings
+        # preexistentes (links quebrados em docs/integrations/*.md) que precedem
+        # o Portal do Desenvolvedor. Os arquivos sob docs/developer/ são limpos.
+        # Reativar --strict assim que os links de integrations forem corrigidos.
+        run: mkdocs build

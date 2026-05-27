@@ -1,0 +1,16 @@
+{
+  "decision": "BLOCK",
+  "reason": "policy_violation:HIPAA_base",
+  "evidence_hash": "b3e2c9a8f4d1...truncado",
+  "verdict_id": "01HXYZABC123",
+  "contestability": {
+    "endpoint": "/v1/contest",
+    "sla_hours": 24,
+    "protocol": "ADR-0047"
+  },
+  "request": {
+    "agent_id": "demo-clinical-agent",
+    "action": "share_phi",
+    "context": { "user_consent": false }
+  }
+}
