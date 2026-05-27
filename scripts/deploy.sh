@@ -96,13 +96,12 @@ if [ -f "$BTV_ROOT/docs/requirements.txt" ]; then
   pip install -q -r "$BTV_ROOT/docs/requirements.txt"
 fi
 
-# ── 5. Reiniciar API Python se código alterado ────────────────────────────────
+# ── 5. API Python — reiniciar se código mudou OU se não estiver rodando ──────
 API_CHANGED=$(git diff "${BEFORE_HASH}..${AFTER_HASH}" --name-only 2>/dev/null | grep -c "^python/" || true)
+API_ALIVE=false
+curl -sf "http://localhost:$API_PORT/health" > /dev/null 2>&1 && API_ALIVE=true
 
-if [ "$API_CHANGED" -gt 0 ]; then
-  log "Código Python alterado ($API_CHANGED arquivos) — reiniciando API..."
-
-  # Parar instância anterior
+_start_api() {
   if [ -f "$PID_API" ]; then
     kill "$(cat "$PID_API" 2>/dev/null)" 2>/dev/null || true
     rm -f "$PID_API"
@@ -120,13 +119,13 @@ if [ "$API_CHANGED" -gt 0 ]; then
 
   API_PID=$!
   echo "$API_PID" > "$PID_API"
-  log "✓ API reiniciada (PID $API_PID)"
+  log "✓ API iniciada (PID $API_PID)"
 
-  log -n "Aguardando API..."
+  printf "[BTV-DEPLOY] Aguardando API"
   for i in $(seq 1 20); do
     if curl -sf "http://localhost:$API_PORT/health" > /dev/null 2>&1; then
       log " OK (${i}s)"
-      break
+      return 0
     fi
     printf "."
     sleep 1
@@ -134,11 +133,17 @@ if [ "$API_CHANGED" -gt 0 ]; then
       log " TIMEOUT — verifique $API_LOG"
     fi
   done
+  log " TIMEOUT — verifique $API_LOG"
+}
+
+if [ "$API_CHANGED" -gt 0 ]; then
+  log "Código Python alterado ($API_CHANGED arquivos) — reiniciando API..."
+  _start_api
+elif [ "$API_ALIVE" = false ]; then
+  log "API não está rodando — iniciando..."
+  _start_api
 else
-  log "Código Python inalterado — API mantida."
-  if ! curl -sf "http://localhost:$API_PORT/health" > /dev/null 2>&1; then
-    log "AVISO: API não está respondendo na porta $API_PORT. Verifique $API_LOG"
-  fi
+  log "API OK (sem alterações, já rodando na porta $API_PORT)."
 fi
 
 # ── 6. Reiniciar binário Rust se existir e código alterado ───────────────────
