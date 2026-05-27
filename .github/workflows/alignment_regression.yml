@@ -3,12 +3,18 @@ name: alignment_regression
 on:
   push:
     paths:
-      - "data/policies/model_registry.yaml"
+      - "data/policies/**"
+      - "demo/dpo-ciso/schemas/**"
+      - "scripts/validate_policy_schema.py"
+      - "scripts/policy_signer.py"
       - "python/tests/unit/alignment/**"
       - ".github/workflows/alignment_regression.yml"
   pull_request:
     paths:
-      - "data/policies/model_registry.yaml"
+      - "data/policies/**"
+      - "demo/dpo-ciso/schemas/**"
+      - "scripts/validate_policy_schema.py"
+      - "scripts/policy_signer.py"
       - "python/tests/unit/alignment/**"
       - ".github/workflows/alignment_regression.yml"
   workflow_dispatch: {}
@@ -30,9 +36,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio pyyaml
+          pip install pytest pytest-asyncio pyyaml jsonschema
           if [ -f python/requirements.txt ]; then pip install -r python/requirements.txt; fi
           if [ -f python/requirements-dev.txt ]; then pip install -r python/requirements-dev.txt; fi
+
+      - name: Validate policy schema (all data/policies/**)
+        # Phase 0 of the Governance Console plan: every policy YAML must pass
+        # the JSON Schema at demo/dpo-ciso/schemas/policy.schema.json.
+        run: |
+          python scripts/validate_policy_schema.py $(git ls-files 'data/policies/**/*.yaml' 'data/policies/*.yaml')
 
       - name: Run alignment golden tests
         run: |
