@@ -39,3 +39,9 @@ jobs:
 
       - name: Validate VPS compose syntax
         run: docker compose -f ops/docker-compose.vps.yml config --quiet && echo "VPS compose OK"
+
+      - name: Validate VPS nginx config syntax
+        run: |
+          docker run --rm \
+            -v $(pwd)/ops/nginx/nginx.vps.conf:/etc/nginx/nginx.conf:ro \
+            nginx:alpine nginx -t && echo "nginx.vps.conf OK"
