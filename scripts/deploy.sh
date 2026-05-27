@@ -129,6 +129,9 @@ _start_api() {
     fi
     printf "."
     sleep 1
+    if [ "$i" -eq 20 ]; then
+      log " TIMEOUT — verifique $API_LOG"
+    fi
   done
   log " TIMEOUT — verifique $API_LOG"
 }
