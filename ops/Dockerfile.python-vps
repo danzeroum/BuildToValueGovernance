@@ -1,0 +1,26 @@
+# ═══════════════════════════════════════════════════════════════
+# BuildToValue — VPS Static File Server (sem CUDA, sem governance API)
+# Serve um site estático pré-compilado montado do host em /app.
+# Usado por: ops/docker-compose.vps.yml (docs-dev, demo-dev)
+# NÃO usar para: inferência GPU, governance API, ou CI E2E.
+# ═══════════════════════════════════════════════════════════════
+FROM python:3.11-slim
+
+RUN groupadd -r btv && useradd -r -g btv -d /app btv
+
+WORKDIR /app
+
+# Sem pip installs: python3 -m http.server faz parte da stdlib.
+# O volume montado pelo host em /app fornece todo o conteúdo estático.
+
+RUN chown btv:btv /app
+USER btv
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=5s \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"
+
+# SOMENTE DEV: python3 -m http.server não tem TLS, rate limiting, nem autenticação.
+# Para conteúdo público de produção, use nginx:alpine (ver docker-compose.vps.yml).
+CMD ["python3", "-m", "http.server", "8000", "--bind", "0.0.0.0"]
