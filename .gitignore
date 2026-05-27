@@ -56,3 +56,4 @@ venv/
 scripts/deploy.sh
 scripts/start.sh
 python/data/policies/
+site/

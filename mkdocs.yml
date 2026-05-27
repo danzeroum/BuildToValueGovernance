@@ -72,6 +72,24 @@ nav:
     - AutoGen: integrations/autogen.md
     - MCP Server: integrations/mcp.md
   - Compliance: compliance.md
+  - Portal do Desenvolvedor:
+    - Início: developer/index.md
+    - Conceitos:
+      - Anatomia da Evidência: developer/concepts/evidence-anatomy.md
+      - Fail-Secure: developer/concepts/fail-secure.md
+      - ContestabilityLoop: developer/concepts/contestability-loop.md
+    - Tutoriais:
+      - "01 — Tratando o Bloqueio": developer/tutorials/01-handle-failure.md
+      - "02 — Primeira Integração": developer/tutorials/02-first-integration.md
+      - "03 — Verificação com btv-cli": developer/tutorials/03-verify-evidence-cli.md
+      - "04 — Propor uma Política": developer/tutorials/04-propose-policy.md
+    - Compliance:
+      - Dimensionamento Econômico: developer/compliance/sizing-guide.md
+      - Mapa Regulatório: developer/compliance/regulatory-map.md
+    - Trilha de ADRs: developer/adr-trail/README.md
+    - Protocolo CAP: developer/cap-protocol.md
+    - Registro de Riscos: developer/RISK_REGISTER.md
+    - Referência Técnica (gerada): developer/reference/index.md
   - Changelog: changelog.md
 
 extra:

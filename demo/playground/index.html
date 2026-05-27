@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playground · BuildToValue</title>
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/btv.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <style>
+    .btv-playground { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
+    .btv-scenario-list { display: grid; gap: 0.75rem; margin: 1.5rem 0; }
+    .btv-scenario { padding: 1rem; border: 1px solid var(--btv-border, #ddd); border-radius: 8px; cursor: pointer; }
+    .btv-scenario:hover { background: var(--btv-surface-hover, #f5f5f5); }
+    .btv-result { margin-top: 1.5rem; padding: 1rem; border-radius: 8px; }
+    .btv-result.block { background: #fef2f2; border-left: 4px solid #dc2626; }
+    .btv-result.allow { background: #f0fdf4; border-left: 4px solid #16a34a; }
+    .btv-contestability { margin-top: 1rem; padding: 1rem; background: #fffbeb; border-left: 4px solid #d97706; border-radius: 6px; }
+    .btv-sim-badge { display: inline-block; padding: 0.25rem 0.5rem; background: #1f2937; color: #fbbf24; border-radius: 4px; font-size: 0.75rem; font-weight: bold; letter-spacing: 0.05em; }
+    pre { background: #f8f9fa; padding: 1rem; overflow-x: auto; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main class="btv-playground">
+    <h1>Playground BuildToValue</h1>
+    <p>
+      Execute cenários reais do gateway diretamente no navegador. Cada execução
+      produz uma evidência que pode ser inspecionada com
+      <a href="../../docs/developer/tutorials/03-verify-evidence-cli.md"><code>btv-cli verify</code></a>.
+    </p>
+
+    <section>
+      <h2>Cenários</h2>
+      <div class="btv-scenario-list" id="scenario-list">
+        <!-- preenchido via JS -->
+      </div>
+    </section>
+
+    <section id="result-section" hidden>
+      <h2>Resultado</h2>
+      <div id="result"></div>
+    </section>
+
+    <footer style="margin-top:3rem; font-size:0.875rem; color:#666;">
+      <p>
+        Conteúdo canônico em
+        <a href="https://github.com/danzeroum/BuildToValueGovernance">github.com/danzeroum/BuildToValueGovernance</a>.
+        Para invariantes técnicos, consulte a
+        <a href="../../docs/developer/reference/index.md">referência gerada</a>.
+      </p>
+    </footer>
+  </main>
+  <script src="./playground.js"></script>
+</body>
+</html>

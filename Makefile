@@ -10,7 +10,7 @@ PIP       = $(VENV)/bin/pip
 UVICORN   = $(VENV)/bin/uvicorn
 PYTEST    = $(VENV)/bin/pytest
 
-.PHONY: help build develop test e2e clean install quick dashboard benchmark setup run run-dev venv
+.PHONY: help build develop test e2e clean install quick dashboard benchmark setup run run-dev venv docs-reference docs-validate docs-build emulator-up emulator-down
 
 help:
 	@echo "BuildToValue Governance v0.1.0-alpha.1 - Orquestração Soberana"
@@ -121,3 +121,19 @@ arena-demo-cli:
 quick:
 	@echo "⚡ Teste rápido do Kernel..."
 	cd rust && cargo test --release -p buildtovalue-kernel
+
+# ─── Portal do Desenvolvedor ────────────────────────────────────────────────
+docs-reference: ## Gera docs/developer/reference/index.md a partir dos crates Rust
+	python3 scripts/autogen_reference.py
+
+docs-validate: ## Valida invariantes documentais (CI)
+	python3 scripts/validate_invariants.py
+
+docs-build: docs-reference docs-validate ## Build estrito do site MkDocs
+	mkdocs build --strict
+
+emulator-up: ## Sobe o emulador local do gateway+kernel (tag = git SHA)
+	docker compose -f ops/emulator/docker-compose.yml up --build -d
+
+emulator-down: ## Derruba o emulador local
+	docker compose -f ops/emulator/docker-compose.yml down
