@@ -29,6 +29,7 @@ on:
       - "ops/Dockerfile.rust-ci"
       - "ops/Dockerfile.python"
       - "ops/Dockerfile.python-quickstart"
+      - "ops/Dockerfile.python-vps"
       - "data/policies/quickstart/**"
       - ".github/workflows/e2e.yml"
   pull_request:
@@ -43,6 +44,7 @@ on:
       - "ops/Dockerfile.rust-ci"
       - "ops/Dockerfile.python"
       - "ops/Dockerfile.python-quickstart"
+      - "ops/Dockerfile.python-vps"
       - "data/policies/quickstart/**"
       - ".github/workflows/e2e.yml"
   workflow_dispatch:

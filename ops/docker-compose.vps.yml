@@ -1,0 +1,166 @@
+# ops/docker-compose.vps.yml
+# ═══════════════════════════════════════════════════════════════
+# BuildToValue Sovereign Trust OS — Orquestração VPS
+# República Algorítmica: Separação Topológica de Poderes DEV/PROD
+# ═══════════════════════════════════════════════════════════════
+# Duas redes isoladas:
+#   btv-prod-net — bridge pública, alcançável da internet via nginx-prod
+#   btv-dev-net  — internal: true, cega no nível do kernel Docker (sem gateway)
+#
+# ADR-009: Monolito Modular — isolamento por rede, não por VM
+# EthicalVerdict: ALLOW — estado declarativo, auditável, com limites impostos pelo kernel
+#
+# Uso operacional (executar na VPS como root ou no grupo docker):
+#   # Setup inicial (uma vez):
+#   sudo mkdir -p /var/www/buildtovalue/{docs,demo} /opt/btv/{docs,demo}
+#   sudo certbot --nginx -d buildtovalue.io
+#   sudo ln -s /etc/nginx/sites-available/btv.conf /etc/nginx/sites-enabled/
+#
+#   # Subir todos os serviços:
+#   docker compose -f ops/docker-compose.vps.yml up -d
+#
+#   # Subir apenas DEV (lab):
+#   docker compose -f ops/docker-compose.vps.yml up -d docs-dev demo-dev
+#
+#   # Deploy de docs atualizados:
+#   mkdocs build --site-dir /var/www/buildtovalue/docs --clean
+#
+#   # Acesso DEV via túnel SSH (na sua máquina local):
+#   ssh -L 9090:localhost:9090 -L 9091:localhost:9091 root@76.13.238.209 -N
+#   # → http://localhost:9090  (demo-dev)
+#   # → http://localhost:9091  (docs-dev)
+#
+#   # Ver logs:
+#   docker compose -f ops/docker-compose.vps.yml logs -f nginx-prod
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # PRODUÇÃO — conteúdo público servido via nginx-prod (TLS)
+  # Rede: btv-prod-net (bridge pública com acesso à internet)
+  # ─────────────────────────────────────────────────────────────
+
+  docs-prod:
+    image: nginx:alpine
+    networks:
+      - btv-prod-net
+    volumes:
+      - /var/www/buildtovalue/docs:/usr/share/nginx/html:ro
+    restart: always
+    mem_limit: 512m
+    cpus: "1.0"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  demo-prod:
+    image: nginx:alpine
+    networks:
+      - btv-prod-net
+    volumes:
+      - /var/www/buildtovalue/demo:/usr/share/nginx/html:ro
+    restart: always
+    mem_limit: 512m
+    cpus: "1.0"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx-prod:
+    image: nginx:alpine
+    # PRÉ-REQUISITO: O Nginx do host deve estar PARADO antes de subir este container.
+    # Conflito de porta 80/443 ocorre se o host-nginx estiver ativo simultaneamente.
+    # Para desativar: sudo systemctl stop nginx && sudo systemctl disable nginx
+    # Este container monta /etc/nginx/sites-enabled do host (read-only) como config.
+    networks:
+      - btv-prod-net
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/nginx/sites-enabled:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      docs-prod:
+        condition: service_healthy
+      demo-prod:
+        condition: service_healthy
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ─────────────────────────────────────────────────────────────
+  # DESENVOLVIMENTO — rede interna (internal: true), loopback apenas
+  # Rawls Blind Testing: kernel Docker remove o gateway padrão.
+  # Contêineres de DEV são topologicamente cegos — sem rota para a internet.
+  # Levinas: portas vinculadas estritamente a 127.0.0.1 da VPS.
+  # ─────────────────────────────────────────────────────────────
+
+  docs-dev:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.python-vps
+    networks:
+      - btv-dev-net
+    ports:
+      - "127.0.0.1:9091:8000"   # Levinas: acessível apenas por túnel SSH
+    volumes:
+      - /opt/btv/docs:/app:rw   # hot-reload: edita localmente, vê na hora
+    restart: on-failure:3       # Fail-Secure: desiste após 3 falhas, não loop infinito
+    mem_limit: 256m
+    cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  demo-dev:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.python-vps
+    networks:
+      - btv-dev-net
+    ports:
+      - "127.0.0.1:9090:8000"   # Levinas: acessível apenas por túnel SSH
+    volumes:
+      - /opt/btv/demo:/app:rw
+    restart: on-failure:3
+    mem_limit: 256m
+    cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  btv-prod-net:
+    driver: bridge
+    # Rede pública: contêineres têm acesso à internet e ao host
+
+  btv-dev-net:
+    driver: bridge
+    internal: true
+    # Cega no nível do kernel: Docker não cria rota de gateway.
+    # Sem esta flag, 'internal: true' não existiria — é uma primitiva Docker,
+    # não uma regra de firewall de camada 4. É imune a misconfigurações de ufw.
