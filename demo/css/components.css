@@ -361,6 +361,140 @@
 .persona-switch-btn:hover { color: var(--text); border-color: var(--accent); }
 .persona-switch-btn.active { background: rgba(56,139,253,.1); border-color: var(--accent); color: var(--accent); }
 
+/* ── Global Navbar (.nav) ──────────────────────────────────────────────────
+   Extraído dos persona-*.html para uso compartilhado.
+   Utilizado por: persona-dpo, persona-ciso, persona-eng, persona-gov,
+                  dpo-ciso/index (Governance Console).                       */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(10,13,19,0.75);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+[data-theme="light"] .nav { background: rgba(244,246,249,0.85); }
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--text);
+  text-decoration: none;
+}
+.nav-logo:hover { text-decoration: none; }
+
+.logo-mark {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--accent), #4ea1ff);
+  border-radius: 7px;
+  box-shadow: 0 0 24px rgba(79,152,163,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+  flex-shrink: 0;
+}
+
+.nav-tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.nav-mid {
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: 4px;
+}
+
+.nav-group {
+  display: flex;
+  gap: 2px;
+  padding: 0 4px;
+}
+.nav-group + .nav-group { border-left: 1px solid var(--border); }
+
+.nav-mid a {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 6px 11px;
+  border-radius: 100px;
+  white-space: nowrap;
+  transition: all .15s;
+  text-decoration: none;
+}
+.nav-mid a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+.nav-mid a.active { background: var(--accent); color: white; }
+
+.nav-right { display: flex; gap: 6px; }
+
+.nav-icon-btn {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all .15s;
+  cursor: pointer;
+  padding: 0;
+}
+.nav-icon-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: rgba(255,255,255,0.14);
+}
+
+.mobile-toggle { display: none; }
+
+.mobile-menu {
+  display: none;
+  position: fixed;
+  top: 62px; left: 0; right: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 28px;
+  z-index: 49;
+}
+.mobile-menu.open { display: block; }
+.mobile-menu .group-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  padding: 10px 0 6px;
+}
+.mobile-menu a {
+  display: block;
+  padding: 9px 10px;
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 14px;
+  text-decoration: none;
+}
+.mobile-menu a:hover { background: var(--surface-2); }
+
+@media (max-width: 1080px) {
+  .nav-mid, .nav-tag { display: none; }
+  .mobile-toggle { display: inline-flex; margin-left: auto; }
+}
+
 /* ── Scrollbars (webkit) ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
