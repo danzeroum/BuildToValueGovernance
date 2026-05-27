@@ -12,6 +12,7 @@ set -euo pipefail
 
 BTV_ROOT="/opt/btv"
 VENV="$BTV_ROOT/python/venv"
+MKDOCS_BIN="/opt/btv-mkdocs-venv/bin/mkdocs"
 TARGET_BRANCH="${1:-main}"
 
 # ── Portas ───────────────────────────────────────────────────────────────────

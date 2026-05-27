@@ -10,11 +10,26 @@
 window.ComplianceDashboard = (function () {
   let host, ctx;
 
+  // Normaliza appeals vindos do JSON estático:
+  // converte deadline_offset_hours → deadline (ISO string absoluto).
+  function normalizeAppeals(appeals) {
+    const now = Date.now();
+    return appeals.map(function (a) {
+      if (a.deadline) return a; // já normalizado
+      return Object.assign({}, a, {
+        deadline: new Date(now + (a.deadline_offset_hours || 0) * 3_600_000).toISOString(),
+      });
+    });
+  }
+
   async function loadData() {
     try {
       const res = await fetch('./scenarios/sector-health.json');
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      return await res.json();
+      const data = await res.json();
+      // Normalizar antes de retornar
+      data.appeals = normalizeAppeals(data.appeals || []);
+      return data;
     } catch (e) {
       // Fallback embarcado para servir o painel mesmo offline.
       return {
