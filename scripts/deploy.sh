@@ -11,6 +11,7 @@ set -e
 
 BTV_ROOT="/opt/btv"
 VENV="$BTV_ROOT/python/venv"
+MKDOCS_BIN="/opt/btv-mkdocs-venv/bin/mkdocs"
 TARGET_BRANCH="${1:-main}"
 API_PORT=8000
 FRONTEND_PORT=9090
@@ -162,7 +163,17 @@ cd "$BTV_ROOT"
 python3 scripts/autogen_reference.py >> "$DOCS_LOG" 2>&1 || \
   echo "[BTV-DEPLOY] AVISO: autogen_reference.py falhou — verifique $DOCS_LOG"
 
-nohup mkdocs serve --dev-addr 0.0.0.0:$DOCS_PORT \
+# Verificar se o venv de mkdocs existe; se não, criá-lo
+if [ ! -f "$MKDOCS_BIN" ]; then
+  echo "[BTV-DEPLOY] venv mkdocs não encontrado — criando em /opt/btv-mkdocs-venv..."
+  python3 -m venv /opt/btv-mkdocs-venv
+  /opt/btv-mkdocs-venv/bin/pip install -q mkdocs-material
+  echo "[BTV-DEPLOY] ✓ venv mkdocs criado com mkdocs-material."
+fi
+
+nohup "$MKDOCS_BIN" serve \
+  --dev-addr 0.0.0.0:$DOCS_PORT \
+  --config-file "$BTV_ROOT/mkdocs.yml" \
   >> "$DOCS_LOG" 2>&1 &
 
 DOCS_PID=$!
