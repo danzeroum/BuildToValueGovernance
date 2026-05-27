@@ -36,6 +36,41 @@ theme:
 plugins:
   - search
   - autorefs
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      languages:
+        - locale: pt
+          default: true
+          name: Português (BR)
+          build: true
+        - locale: en
+          name: English
+          build: true
+          nav_translations:
+            Início: Home
+            Quickstart: Quickstart
+            Conceitos: Concepts
+            Referência da API: API Reference
+            Integrações: Integrations
+            Visão geral: Overview
+            Compliance: Compliance
+            Changelog: Changelog
+            Portal do Desenvolvedor: Developer Portal
+            Tutoriais: Tutorials
+            "01 — Tratando o Bloqueio": "01 — Handling the Block"
+            "02 — Primeira Integração": "02 — First Integration"
+            "03 — Verificação com btv-cli": "03 — Verification with btv-cli"
+            "04 — Propor uma Política": "04 — Propose a Policy"
+            Anatomia da Evidência: Evidence Anatomy
+            Fail-Secure: Fail-Secure
+            ContestabilityLoop: ContestabilityLoop
+            Dimensionamento Econômico: Economic Sizing
+            Mapa Regulatório: Regulatory Map
+            Trilha de ADRs: ADR Trail
+            Protocolo CAP: CAP Protocol
+            Registro de Riscos: Risk Register
+            "Referência Técnica (gerada)": "Technical Reference (generated)"
 
 markdown_extensions:
   - admonition
@@ -93,6 +128,13 @@ nav:
   - Changelog: changelog.md
 
 extra:
+  alternate:
+    - name: Português (BR)
+      link: /
+      lang: pt
+    - name: English
+      link: /en/
+      lang: en
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/buildtovalue/buildtovalue

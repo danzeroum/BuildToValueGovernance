@@ -132,6 +132,9 @@ docs-validate: ## Valida invariantes documentais (CI)
 docs-build: docs-reference docs-validate ## Build estrito do site MkDocs
 	mkdocs build --strict
 
+docs-serve: docs-reference ## Serve o portal localmente em localhost:9091 (PT/EN)
+	mkdocs serve -a 0.0.0.0:9091
+
 emulator-up: ## Sobe o emulador local do gateway+kernel (tag = git SHA)
 	docker compose -f ops/emulator/docker-compose.yml up --build -d
 
