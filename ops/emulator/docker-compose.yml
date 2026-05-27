@@ -1,0 +1,15 @@
+# Emulador local para o Portal do Desenvolvedor.
+# A imagem é reconstruída a cada `make emulator-up` e taggeada com o git SHA,
+# garantindo sincronia com o kernel atual (R4 do RISK_REGISTER).
+
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: ops/emulator/Dockerfile
+    image: btv-emulator:${GIT_SHA:-latest}
+    ports:
+      - "8080:8080"
+    environment:
+      - BTV_EMULATOR_PORT=8080
+    restart: unless-stopped

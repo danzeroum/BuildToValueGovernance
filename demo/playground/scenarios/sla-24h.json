@@ -1,0 +1,16 @@
+{
+  "decision": "BLOCK",
+  "reason": "policy_violation:HIPAA_base",
+  "evidence_hash": "b3e2c9a8f4d1...truncado",
+  "verdict_id": "01HXYZABC123",
+  "simulated_time": true,
+  "contestability": {
+    "endpoint": "/v1/contest",
+    "sla_hours": 24,
+    "protocol": "ADR-0047",
+    "state": "MEDIATION",
+    "opened_at": "2026-05-27T10:00:00Z",
+    "deadline": "2026-05-28T10:00:00Z",
+    "remaining_simulated_seconds": 5
+  }
+}

@@ -1,0 +1,4 @@
+# index.md é gerado em build time por scripts/autogen_reference.py.
+# Versionado apenas no branch de deploy (gh-pages/stable), nunca em main.
+# Ver plano do Portal do Desenvolvedor (R11) e Analista 3 #5.
+index.md

@@ -1,0 +1,17 @@
+{
+  "decision": "BLOCK",
+  "reason": "policy_violation:HIPAA_base",
+  "evidence_hash": "b3e2c9a8f4d1...truncado",
+  "verdict_id": "01HXYZABC123",
+  "contestability": {
+    "endpoint": "/v1/contest",
+    "sla_hours": 24,
+    "protocol": "ADR-0047",
+    "state": "CONTEST_OPENED",
+    "opened_at": "2026-05-27T10:00:00Z"
+  },
+  "contest_payload": {
+    "user_argument": "Possuo consentimento explícito do titular em /consents/c-001",
+    "supporting_evidence_hash": "a1b2c3...truncado"
+  }
+}
