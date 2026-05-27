@@ -39,8 +39,24 @@ window.ComplianceDashboard = (function () {
     }));
   }
 
+  function gilliganTip(s) {
+    const isEn = ctx.lang() === 'en';
+    const tips = {
+      S1: isEn ? 'S1: >18h remaining — low urgency' : 'S1: >18h restantes — baixa urgência',
+      S2: isEn ? 'S2: 12–18h remaining — monitor' : 'S2: 12–18h restantes — monitorar',
+      S3: isEn ? 'S3: 6–12h remaining — elevated' : 'S3: 6–12h restantes — elevado',
+      S4: isEn ? 'S4: 2–6h remaining — high urgency' : 'S4: 2–6h restantes — alta urgência',
+      S5: isEn ? 'S5: <2h — auto-escalation triggered!' : 'S5: <2h — escalonamento automático!',
+      S6: isEn ? 'S6: Expired — SLA breached' : 'S6: Expirado — SLA violado',
+    };
+    return tips[s] || s;
+  }
+
   function render() {
     host.innerHTML = `
+      <div class="gov-anatomy">
+        <strong>${ctx.t('anatomy_title')}:</strong> ${ctx.t('anatomy_body')}
+      </div>
       <div class="gov-card">
         <h2 data-i18n="dash_title">${ctx.t('dash_title')}</h2>
         <p>${ctx.t('dash_intro')}</p>
@@ -87,7 +103,7 @@ window.ComplianceDashboard = (function () {
         <td>${a.reason}</td>
         <td>${ctx.formatRemaining(a.deadline)}</td>
         <td>${a.severity_shift ? '+1' : '—'}</td>
-        <td><span class="badge ${s.toLowerCase()}">${s}</span></td>
+        <td><span class="badge ${s.toLowerCase()}" title="${gilliganTip(s)}">${s}</span></td>
       </tr>`;
     }).join('');
     t.innerHTML = head + '<tbody>' + rows + '</tbody>';
