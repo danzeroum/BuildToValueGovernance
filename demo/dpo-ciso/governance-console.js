@@ -15,9 +15,42 @@
 window.GovernanceConsole = (function () {
   const I18N = {
     pt: {
-      tab_dashboard: 'Compliance Dashboard',
-      tab_audit: 'Audit Trail',
-      tab_editor: 'Policy Editor',
+      tab_dashboard: 'Painel de Conformidade · LGPD/AI Act',
+      tab_audit: 'Trilha Forense · Evidências Imutáveis',
+      tab_editor: 'Editor de Políticas · Controle de Risco',
+      // Hero contextual
+      hero_title: 'Governance Console',
+      hero_sub: 'Conformidade, Auditoria e Políticas em um só lugar — sem tocar o runtime em produção.',
+      hero_dpo_role: 'DPO · Proteção de Dados',
+      hero_dpo_desc: 'Monitora conformidade LGPD/AI Act em tempo real com evidência forense auditável. Gera FRIA com um clique.',
+      hero_ciso_role: 'CISO · Segurança da Informação',
+      hero_ciso_desc: 'Visualiza riscos, políticas ativas e trilha de auditoria imutável. Detecta quebras de SLA e anomalias.',
+      hero_cta: 'Entendido, continuar →',
+      // Banner
+      banner_link: 'Ver Ledger Real →',
+      banner_failsecure: 'Decisões reais usam BLAKE3 + HMAC-SHA256 e são irreversíveis por design (Fail-Secure).',
+      // Anatomy card
+      anatomy_title: 'O que você está vendo',
+      anatomy_body: 'Cada linha representa uma decisão tomada por um agente de IA. A coluna "Evidência" é um hash BLAKE3 — a impressão digital forense imutável dessa decisão. "Resultado" indica o que o Gatekeeper executou.',
+      // Footer nav
+      footer_back: '← Perfil DPO',
+      footer_current: 'Governance Console',
+      footer_next: 'Ledger Explorer →',
+      // Glossary
+      glossary_title: 'Glossário Técnico',
+      glossary_gilligan_term: 'Gilligan S1–S6',
+      glossary_gilligan_def: 'Algoritmo de classificação de apelações por ética do cuidado (ADR-072). S1 = >18h restantes, S6 = expirado.',
+      glossary_fria_term: 'FRIA',
+      glossary_fria_def: 'Avaliação de Impacto aos Direitos Fundamentais — exigida pelo EU AI Act para sistemas de alto risco.',
+      glossary_blake3_term: 'BLAKE3',
+      glossary_blake3_def: 'Função hash criptográfica que garante a imutabilidade do ledger. Irreversível por design.',
+      glossary_hmac_term: 'HMAC-SHA256',
+      glossary_hmac_def: 'Assinatura de integridade do EthicalVerdict. Prova que a decisão não foi adulterada após emissão.',
+      // Tooltips
+      badge_allow_tip: 'Ação permitida — sem restrições identificadas.',
+      badge_block_tip: 'Decisão bloqueada por violação de política — evidência forense gerada automaticamente.',
+      badge_educate_tip: 'Ação permitida com alerta pedagógico ao usuário.',
+      badge_redact_tip: 'Dados sensíveis redigidos antes do output — proteção LGPD/GDPR ativa.',
       // Dashboard
       dash_title: 'Compliance Dashboard',
       dash_intro: 'Leitura ao vivo de evidências do gateway. Os SLAs de contestação são classificados pelos cenários S1–S6 do algoritmo Gilligan (ADR-072).',
@@ -63,9 +96,43 @@ window.GovernanceConsole = (function () {
       sig_ok: 'Assinatura HMAC local calculada. Próximo passo: rode scripts/policy_signer.py com a chave da Ethics Committee.',
     },
     en: {
-      tab_dashboard: 'Compliance Dashboard',
-      tab_audit: 'Audit Trail',
-      tab_editor: 'Policy Editor',
+      tab_dashboard: 'Compliance Dashboard · LGPD/AI Act',
+      tab_audit: 'Forensic Trail · Immutable Evidence',
+      tab_editor: 'Policy Editor · Risk Control',
+      // Hero contextual
+      hero_title: 'Governance Console',
+      hero_sub: 'Compliance, Audit, and Policies in one place — without touching the production runtime.',
+      hero_dpo_role: 'DPO · Data Protection',
+      hero_dpo_desc: 'Monitors LGPD/AI Act compliance in real time with auditable forensic evidence. Generates FRIA in one click.',
+      hero_ciso_role: 'CISO · Information Security',
+      hero_ciso_desc: 'Visualizes risks, active policies, and an immutable audit trail. Detects SLA breaches and anomalies.',
+      hero_cta: 'Got it, continue →',
+      // Banner
+      banner_link: 'View Real Ledger →',
+      banner_failsecure: 'Real decisions use BLAKE3 + HMAC-SHA256 and are irreversible by design (Fail-Secure).',
+      // Anatomy card
+      anatomy_title: 'What you are seeing',
+      anatomy_body: 'Each row represents a decision made by an AI agent. The "Evidence" column is a BLAKE3 hash — the immutable forensic fingerprint of that decision. "Outcome" indicates what the Gatekeeper executed.',
+      // Footer nav
+      footer_back: '← DPO Profile',
+      footer_current: 'Governance Console',
+      footer_next: 'Ledger Explorer →',
+      // Glossary
+      glossary_title: 'Technical Glossary',
+      glossary_gilligan_term: 'Gilligan S1–S6',
+      glossary_gilligan_def: 'Appeal classification algorithm based on ethics of care (ADR-072). S1 = >18h remaining, S6 = expired.',
+      glossary_fria_term: 'FRIA',
+      glossary_fria_def: 'Fundamental Rights Impact Assessment — required by the EU AI Act for high-risk AI systems.',
+      glossary_blake3_term: 'BLAKE3',
+      glossary_blake3_def: 'Cryptographic hash function that ensures ledger immutability. Irreversible by design.',
+      glossary_hmac_term: 'HMAC-SHA256',
+      glossary_hmac_def: 'Integrity signature of the EthicalVerdict. Proves the decision was not tampered with after issuance.',
+      // Tooltips
+      badge_allow_tip: 'Action allowed — no restrictions identified.',
+      badge_block_tip: 'Decision blocked by policy violation — forensic evidence generated automatically.',
+      badge_educate_tip: 'Action allowed with pedagogical alert to the user.',
+      badge_redact_tip: 'Sensitive data redacted before output — active LGPD/GDPR protection.',
+      // Dashboard
       dash_title: 'Compliance Dashboard',
       dash_intro: 'Live read of gateway evidence. Appeal SLAs are classified by Gilligan S1–S6 scenarios (ADR-072).',
       dash_metric_decisions: 'Decisions today',

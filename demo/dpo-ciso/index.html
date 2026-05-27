@@ -8,92 +8,553 @@
   <link rel="stylesheet" href="../css/btv.css">
   <link rel="stylesheet" href="../css/components.css">
   <style>
+    /* ── Gov-specific overrides (mantidos para compatibilidade dos painéis) ─── */
     :root {
-      --gov-bg: #f8f9fb;
-      --gov-card: #fff;
-      --gov-border: #e1e4e8;
-      --gov-text: #24292f;
-      --gov-muted: #57606a;
-      --gov-accent: #6f42c1;
-      --gov-ok: #16a34a;
-      --gov-warn: #d97706;
-      --gov-danger: #dc2626;
+      --gov-bg: var(--bg);
+      --gov-card: var(--surface);
+      --gov-border: var(--border);
+      --gov-text: var(--text);
+      --gov-muted: var(--muted);
+      --gov-accent: var(--accent);
+      --gov-ok: var(--green);
+      --gov-warn: var(--yellow);
+      --gov-danger: var(--red);
       --gov-critical: #7f1d1d;
     }
-    body { background: var(--gov-bg); color: var(--gov-text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; }
-    header.gov-header { background: var(--gov-card); border-bottom: 1px solid var(--gov-border); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
-    header.gov-header h1 { margin: 0; font-size: 1.25rem; }
-    header.gov-header .lang { font-size: 0.875rem; color: var(--gov-muted); }
-    nav.gov-tabs { background: var(--gov-card); border-bottom: 1px solid var(--gov-border); padding: 0 2rem; display: flex; gap: 1.5rem; }
-    nav.gov-tabs button { background: none; border: none; padding: 1rem 0.25rem; font-size: 0.95rem; cursor: pointer; color: var(--gov-muted); border-bottom: 3px solid transparent; }
-    nav.gov-tabs button.active { color: var(--gov-accent); border-bottom-color: var(--gov-accent); font-weight: 600; }
-    main.gov-main { padding: 2rem; max-width: 1200px; margin: 0 auto; }
+    body { background: var(--bg); color: var(--text); margin: 0; font-family: var(--sans); }
+
+    /* ── Sim banner ─── */
+    .sim-banner {
+      background: #111827;
+      color: #fbbf24;
+      padding: 0.55rem 1.5rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .sim-banner .sim-detail {
+      font-weight: 400;
+      color: #d1d5db;
+      font-size: 0.75rem;
+    }
+    .sim-banner a {
+      color: #fbbf24;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      white-space: nowrap;
+    }
+
+    /* ── Hero contextual ─── */
+    .gov-hero {
+      border-bottom: 1px solid var(--border);
+      padding: 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .gov-hero-header {
+      margin-bottom: 1rem;
+    }
+    .gov-hero-header h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      margin: 0 0 0.35rem 0;
+      color: var(--text);
+    }
+    .gov-hero-header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .gov-hero-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    @media (max-width: 640px) {
+      .gov-hero-cards { grid-template-columns: 1fr; }
+    }
+    .gov-hero-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.1rem 1.25rem;
+    }
+    .gov-hero-card .role {
+      font-size: 0.68rem;
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+    .gov-hero-card .desc {
+      font-size: 0.875rem;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .gov-hero-dismiss {
+      display: flex;
+      justify-content: flex-end;
+    }
+    .gov-hero-dismiss button {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 0.4rem 1rem;
+      border-radius: var(--radius);
+      font-size: 0.825rem;
+      cursor: pointer;
+      font-family: var(--sans);
+    }
+    .gov-hero-dismiss button:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* ── Lang selector ─── */
+    .gov-lang-bar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0.6rem 2rem;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.825rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .gov-lang-bar select {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.25rem 0.5rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    /* ── Tabs ─── */
+    nav.gov-tabs {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      display: flex;
+      gap: 0.25rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    nav.gov-tabs button {
+      background: none;
+      border: none;
+      padding: 0.9rem 0.5rem;
+      font-size: 0.875rem;
+      cursor: pointer;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      font-family: var(--sans);
+      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    nav.gov-tabs button:hover { color: var(--text); }
+    nav.gov-tabs button.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ── Main ─── */
+    main.gov-main {
+      padding: 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
     .gov-panel { display: none; }
     .gov-panel.active { display: block; }
-    .gov-card { background: var(--gov-card); border: 1px solid var(--gov-border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
-    .gov-card h2, .gov-card h3 { margin-top: 0; }
+
+    /* ── Anatomy card ─── */
+    .gov-anatomy {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    .gov-anatomy strong { color: var(--text); }
+
+    /* ── Gov card ─── */
+    .gov-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .gov-card h2, .gov-card h3 { margin-top: 0; color: var(--text); }
     .gov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
-    .gov-metric { background: var(--gov-card); border: 1px solid var(--gov-border); border-radius: 8px; padding: 1rem; text-align: center; }
-    .gov-metric .num { font-size: 2rem; font-weight: 700; color: var(--gov-accent); }
-    .gov-metric .label { font-size: 0.75rem; color: var(--gov-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-    table.gov-table { width: 100%; border-collapse: collapse; background: var(--gov-card); }
-    table.gov-table th, table.gov-table td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--gov-border); font-size: 0.875rem; }
-    table.gov-table th { background: var(--gov-bg); font-weight: 600; color: var(--gov-muted); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; }
-    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; }
-    .badge.s1 { background: #dcfce7; color: var(--gov-ok); }
-    .badge.s2 { background: #fef9c3; color: #854d0e; }
-    .badge.s3 { background: #ffedd5; color: var(--gov-warn); }
-    .badge.s4 { background: #fee2e2; color: var(--gov-danger); }
-    .badge.s5 { background: var(--gov-danger); color: #fff; }
-    .badge.s6 { background: var(--gov-critical); color: #fff; }
-    .badge.allow { background: #dcfce7; color: var(--gov-ok); }
-    .badge.block { background: #fee2e2; color: var(--gov-danger); }
-    .badge.educate { background: #dbeafe; color: #1e40af; }
-    .badge.redact { background: #fef9c3; color: #854d0e; }
-    .sim-banner { background: #1f2937; color: #fbbf24; padding: 0.5rem 1rem; font-size: 0.8rem; font-weight: bold; letter-spacing: 0.05em; text-align: center; }
-    button.gov-btn { background: var(--gov-accent); color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; }
-    button.gov-btn:hover { background: #5a32a3; }
-    button.gov-btn.secondary { background: transparent; color: var(--gov-accent); border: 1px solid var(--gov-accent); }
+    .gov-metric {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+      text-align: center;
+    }
+    .gov-metric .num { font-size: 2rem; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+    .gov-metric .label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
+    table.gov-table { width: 100%; border-collapse: collapse; }
+    table.gov-table th, table.gov-table td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+    table.gov-table th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; }
+    table.gov-table tr:hover td { background: rgba(255,255,255,.02); }
+
+    /* ── Badges (locais, para os painéis) ─── */
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; font-family: var(--mono); }
+    .badge.s1 { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+    .badge.s2 { background: rgba(210,153,34,.12); color: var(--yellow); border: 1px solid rgba(210,153,34,.3); }
+    .badge.s3 { background: rgba(210,153,34,.2); color: #e6a617; border: 1px solid rgba(210,153,34,.4); }
+    .badge.s4 { background: rgba(248,81,73,.12); color: var(--red); border: 1px solid rgba(248,81,73,.3); }
+    .badge.s5 { background: var(--red); color: #fff; border: 1px solid var(--red); }
+    .badge.s6 { background: #7f1d1d; color: #fca5a5; border: 1px solid #991b1b; }
+    .badge.allow { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+    .badge.block { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid rgba(248,81,73,.3); }
+    .badge.educate { background: rgba(88,166,255,.15); color: var(--blue); border: 1px solid rgba(88,166,255,.3); }
+    .badge.redact { background: rgba(188,140,255,.15); color: var(--purple); border: 1px solid rgba(188,140,255,.3); }
+    [title] { cursor: help; }
+
+    /* ── Buttons ─── */
+    button.gov-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-family: var(--sans);
+    }
+    button.gov-btn:hover { background: var(--accent-hover); }
+    button.gov-btn.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+
+    /* ── Forms ─── */
     .form-row { margin-bottom: 1rem; }
-    .form-row label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.875rem; }
-    .form-row input, .form-row select, .form-row textarea { width: 100%; padding: 0.5rem; border: 1px solid var(--gov-border); border-radius: 4px; font-family: inherit; box-sizing: border-box; }
-    .form-row .hint { font-size: 0.75rem; color: var(--gov-muted); margin-top: 0.25rem; }
+    .form-row label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.875rem; color: var(--text); }
+    .form-row input, .form-row select, .form-row textarea {
+      width: 100%; padding: 0.5rem;
+      background: var(--surface-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      font-family: inherit; box-sizing: border-box;
+    }
+    .form-row input:focus, .form-row select:focus, .form-row textarea:focus {
+      outline: none; border-color: var(--accent);
+    }
+    .form-row .hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
     details.yaml-preview { margin-top: 1rem; }
-    details.yaml-preview summary { cursor: pointer; font-weight: 600; color: var(--gov-muted); }
-    pre { background: #f6f8fa; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.8rem; }
-    .flow-warning { background: #fffbeb; border-left: 4px solid var(--gov-warn); padding: 0.75rem 1rem; border-radius: 4px; margin: 1rem 0; font-size: 0.875rem; }
+    details.yaml-preview summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+    pre { background: var(--surface-2); color: var(--text); padding: 1rem; border-radius: var(--radius); overflow-x: auto; font-size: 0.8rem; font-family: var(--mono); border: 1px solid var(--border); }
+    .flow-warning { background: rgba(210,153,34,.08); border-left: 4px solid var(--yellow); padding: 0.75rem 1rem; border-radius: var(--radius); margin: 1rem 0; font-size: 0.875rem; color: var(--text); }
+
+    /* ── Footer nav ─── */
+    .gov-footer-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.5rem 0 0.5rem;
+      margin-top: 2rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+    .gov-footer-nav a { color: var(--accent); text-decoration: none; }
+    .gov-footer-nav a:hover { text-decoration: underline; }
+    .gov-footer-nav .gov-footer-center { color: var(--muted); font-size: 0.75rem; font-family: var(--mono); }
+
+    /* ── Glossary ─── */
+    .gov-glossary {
+      margin-top: 1.5rem;
+    }
+    .gov-glossary summary {
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-family: var(--mono);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      user-select: none;
+      padding: 0.5rem 0;
+    }
+    .gov-glossary summary:hover { color: var(--text); }
+    .gov-glossary-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.75rem;
+      font-size: 0.825rem;
+    }
+    .gov-glossary-table th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .gov-glossary-table td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .gov-glossary-table td:first-child { font-size: 1.1rem; width: 2.5rem; }
+    .gov-glossary-table td:nth-child(2) { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); white-space: nowrap; }
+    .gov-glossary-table td:nth-child(3) { color: var(--muted); line-height: 1.5; }
   </style>
 </head>
 <body>
-  <div class="sim-banner">[SIMULAÇÃO DIDÁTICA — ESTADO DO LEDGER NÃO AFETADO · DIDACTIC SIMULATION — LEDGER NOT AFFECTED]</div>
 
-  <header class="gov-header">
-    <h1>Governance Console · BuildToValue</h1>
-    <div class="lang">
-      <label for="lang-select">Idioma · Language:</label>
-      <select id="lang-select">
-        <option value="pt" selected>Português (BR)</option>
-        <option value="en">English</option>
-      </select>
+<!-- ── Simulation Banner ─────────────────────────────────────────────────── -->
+<div class="sim-banner" id="sim-banner">
+  <span>🔬 SIMULAÇÃO DIDÁTICA — Ledger não afetado</span>
+  <span class="sim-detail" id="banner-failsecure">Decisões reais usam BLAKE3 + HMAC-SHA256 e são irreversíveis por design (Fail-Secure).</span>
+  <a href="../ledger-explorer.html" id="banner-link">Ver Ledger Real →</a>
+</div>
+
+<!-- ── Global Nav ─────────────────────────────────────────────────────────── -->
+<nav class="nav">
+  <a href="../index.html" class="nav-logo">
+    <span class="logo-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 21l18 0M12 21l0 -10M5 21l0 -8M19 21l0 -8M3 11l9 -8l9 8"/></svg></span>
+    BuildToValue
+  </a>
+  <span class="nav-tag">Governance · DPO/CISO</span>
+  <div class="nav-mid">
+    <div class="nav-group"><a href="../index.html">Home</a><a href="../lab.html">Lab</a></div>
+    <div class="nav-group"><a href="../proxy-demo.html">Proxy</a><a href="../sanitizer-demo.html">Sanitizer</a><a href="../ledger-explorer.html">Ledger</a><a href="../dashboard.html">Dashboard</a></div>
+    <div class="nav-group"><a href="../persona-eng.html">Eng</a><a href="../persona-ciso.html">CISO</a><a href="../persona-dpo.html">DPO</a><a href="../persona-gov.html">Gov</a><a href="./index.html" class="active">Console</a></div>
+  </div>
+  <div class="nav-right">
+    <button class="nav-icon-btn" onclick="toggleTheme()" title="Alternar tema">
+      <svg id="t-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="t-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+    <button class="nav-icon-btn mobile-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('open')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+  </div>
+</nav>
+<div class="mobile-menu" id="mobile-menu">
+  <div class="group-label">Principal</div><a href="../index.html">Home</a><a href="../lab.html">Lab</a>
+  <div class="group-label">Demos</div><a href="../proxy-demo.html">Proxy</a><a href="../sanitizer-demo.html">Sanitizer</a><a href="../ledger-explorer.html">Ledger</a><a href="../dashboard.html">Dashboard</a>
+  <div class="group-label">Personas</div><a href="../persona-eng.html">Eng</a><a href="../persona-ciso.html">CISO</a><a href="../persona-dpo.html">DPO</a><a href="../persona-gov.html">Gov</a>
+  <div class="group-label">Console</div><a href="./index.html">Governance Console</a>
+</div>
+
+<!-- ── Hero Contextual ────────────────────────────────────────────────────── -->
+<div class="gov-hero" id="gov-hero">
+  <div class="gov-hero-header">
+    <h1 id="hero-title">Governance Console</h1>
+    <p id="hero-sub">Conformidade, Auditoria e Políticas em um só lugar — sem tocar o runtime em produção.</p>
+  </div>
+  <div class="gov-hero-cards">
+    <div class="gov-hero-card">
+      <div class="role" id="hero-dpo-role">DPO · Proteção de Dados</div>
+      <div class="desc" id="hero-dpo-desc">Monitora conformidade LGPD/AI Act em tempo real com evidência forense auditável. Gera FRIA com um clique.</div>
     </div>
-  </header>
+    <div class="gov-hero-card">
+      <div class="role" id="hero-ciso-role">CISO · Segurança da Informação</div>
+      <div class="desc" id="hero-ciso-desc">Visualiza riscos, políticas ativas e trilha de auditoria imutável. Detecta quebras de SLA e anomalias.</div>
+    </div>
+  </div>
+  <div class="gov-hero-dismiss">
+    <button id="hero-dismiss" onclick="dismissHero()">Entendido, continuar →</button>
+  </div>
+</div>
 
-  <nav class="gov-tabs" id="tabs">
-    <button data-tab="dashboard" class="active" data-i18n="tab_dashboard">Compliance Dashboard</button>
-    <button data-tab="audit" data-i18n="tab_audit">Audit Trail</button>
-    <button data-tab="editor" data-i18n="tab_editor">Policy Editor</button>
-  </nav>
+<!-- ── Language Selector ──────────────────────────────────────────────────── -->
+<div class="gov-lang-bar">
+  <label for="lang-select">Idioma · Language:</label>
+  <select id="lang-select">
+    <option value="pt" selected>Português (BR)</option>
+    <option value="en">English</option>
+  </select>
+</div>
 
-  <main class="gov-main">
-    <section id="panel-dashboard" class="gov-panel active"></section>
-    <section id="panel-audit" class="gov-panel"></section>
-    <section id="panel-editor" class="gov-panel"></section>
-  </main>
+<!-- ── Tab Navigation ────────────────────────────────────────────────────── -->
+<nav class="gov-tabs" id="tabs">
+  <button data-tab="dashboard" class="active" data-i18n="tab_dashboard">Painel de Conformidade · LGPD/AI Act</button>
+  <button data-tab="audit" data-i18n="tab_audit">Trilha Forense · Evidências Imutáveis</button>
+  <button data-tab="editor" data-i18n="tab_editor">Editor de Políticas · Controle de Risco</button>
+</nav>
 
-  <script src="./governance-console.js"></script>
-  <script src="./panels/compliance-dashboard.js"></script>
-  <script src="./panels/audit-trail.js"></script>
-  <script src="./panels/policy-editor.js"></script>
-  <script>GovernanceConsole.boot();</script>
+<!-- ── Main Panels ────────────────────────────────────────────────────────── -->
+<main class="gov-main">
+  <section id="panel-dashboard" class="gov-panel active"></section>
+  <section id="panel-audit" class="gov-panel"></section>
+  <section id="panel-editor" class="gov-panel"></section>
+
+  <!-- ── Footer Navigation ──────────────────────────────────────────────── -->
+  <div class="gov-footer-nav">
+    <a href="../persona-dpo.html" id="footer-back">← Perfil DPO</a>
+    <span class="gov-footer-center" id="footer-current">Governance Console</span>
+    <a href="../ledger-explorer.html" id="footer-next">Ledger Explorer →</a>
+  </div>
+
+  <!-- ── Glossário Visual ───────────────────────────────────────────────── -->
+  <details class="gov-glossary">
+    <summary id="glossary-title">Glossário Técnico</summary>
+    <table class="gov-glossary-table">
+      <thead>
+        <tr><th></th><th>Termo</th><th>Significado</th></tr>
+      </thead>
+      <tbody id="glossary-body">
+        <tr>
+          <td>⚖️</td>
+          <td id="g-gilligan-term">Gilligan S1–S6</td>
+          <td id="g-gilligan-def">Algoritmo de classificação de apelações por ética do cuidado (ADR-072). S1 = &gt;18h restantes, S6 = expirado.</td>
+        </tr>
+        <tr>
+          <td>📋</td>
+          <td id="g-fria-term">FRIA</td>
+          <td id="g-fria-def">Avaliação de Impacto aos Direitos Fundamentais — exigida pelo EU AI Act para sistemas de alto risco.</td>
+        </tr>
+        <tr>
+          <td>🔒</td>
+          <td id="g-blake3-term">BLAKE3</td>
+          <td id="g-blake3-def">Função hash criptográfica que garante a imutabilidade do ledger. Irreversível por design.</td>
+        </tr>
+        <tr>
+          <td>🔐</td>
+          <td id="g-hmac-term">HMAC-SHA256</td>
+          <td id="g-hmac-def">Assinatura de integridade do EthicalVerdict. Prova que a decisão não foi adulterada após emissão.</td>
+        </tr>
+      </tbody>
+    </table>
+  </details>
+</main>
+
+<script src="../js/theme.js"></script>
+<script src="./governance-console.js"></script>
+<script src="./panels/compliance-dashboard.js"></script>
+<script src="./panels/audit-trail.js"></script>
+<script src="./panels/policy-editor.js"></script>
+<script>
+  // Hero dismiss (persiste em localStorage)
+  function dismissHero() {
+    document.getElementById('gov-hero').style.display = 'none';
+    try { localStorage.setItem('btv-gov-hero-dismissed', '1'); } catch(e) {}
+  }
+  (function() {
+    try {
+      if (localStorage.getItem('btv-gov-hero-dismissed') === '1') {
+        var h = document.getElementById('gov-hero');
+        if (h) h.style.display = 'none';
+      }
+    } catch(e) {}
+  })();
+
+  GovernanceConsole.boot();
+
+  // Enrich UI with i18n after boot
+  (function updateStaticI18n() {
+    var gc = window.GovernanceConsole;
+    if (!gc) return;
+    var t = gc.t.bind ? gc.t : function(k){ return k; };
+
+    // Banner
+    var bf = document.getElementById('banner-failsecure');
+    if (bf) bf.textContent = t('banner_failsecure');
+    var bl = document.getElementById('banner-link');
+    if (bl) bl.textContent = t('banner_link');
+
+    // Hero
+    var hs = document.getElementById('hero-sub');
+    if (hs) hs.textContent = t('hero_sub');
+    var hdr = document.getElementById('hero-dpo-role');
+    if (hdr) hdr.textContent = t('hero_dpo_role');
+    var hdd = document.getElementById('hero-dpo-desc');
+    if (hdd) hdd.textContent = t('hero_dpo_desc');
+    var hcr = document.getElementById('hero-ciso-role');
+    if (hcr) hcr.textContent = t('hero_ciso_role');
+    var hcd = document.getElementById('hero-ciso-desc');
+    if (hcd) hcd.textContent = t('hero_ciso_desc');
+    var hdis = document.getElementById('hero-dismiss');
+    if (hdis) hdis.textContent = t('hero_cta');
+
+    // Footer
+    var fb = document.getElementById('footer-back');
+    if (fb) fb.textContent = t('footer_back');
+    var fn = document.getElementById('footer-next');
+    if (fn) fn.textContent = t('footer_next');
+
+    // Glossary
+    var gt = document.getElementById('glossary-title');
+    if (gt) gt.textContent = t('glossary_title');
+    var mapping = [
+      ['g-gilligan-term','glossary_gilligan_term'],['g-gilligan-def','glossary_gilligan_def'],
+      ['g-fria-term','glossary_fria_term'],['g-fria-def','glossary_fria_def'],
+      ['g-blake3-term','glossary_blake3_term'],['g-blake3-def','glossary_blake3_def'],
+      ['g-hmac-term','glossary_hmac_term'],['g-hmac-def','glossary_hmac_def'],
+    ];
+    mapping.forEach(function(pair) {
+      var el = document.getElementById(pair[0]);
+      if (el) el.textContent = t(pair[1]);
+    });
+  })();
+
+  // Re-run static i18n on language change
+  var origLangSelect = document.getElementById('lang-select');
+  if (origLangSelect) {
+    origLangSelect.addEventListener('change', function() {
+      setTimeout(function() {
+        // Re-trigger static i18n after GovernanceConsole.setLang runs
+        var scripts = document.querySelectorAll('script');
+        // Call the same update function via GovernanceConsole
+        var t = window.GovernanceConsole.t;
+
+        var bf = document.getElementById('banner-failsecure');
+        if (bf) bf.textContent = t('banner_failsecure');
+        var bl = document.getElementById('banner-link');
+        if (bl) bl.textContent = t('banner_link');
+
+        var hs = document.getElementById('hero-sub');
+        if (hs) hs.textContent = t('hero_sub');
+        var hdr = document.getElementById('hero-dpo-role');
+        if (hdr) hdr.textContent = t('hero_dpo_role');
+        var hdd = document.getElementById('hero-dpo-desc');
+        if (hdd) hdd.textContent = t('hero_dpo_desc');
+        var hcr = document.getElementById('hero-ciso-role');
+        if (hcr) hcr.textContent = t('hero_ciso_role');
+        var hcd = document.getElementById('hero-ciso-desc');
+        if (hcd) hcd.textContent = t('hero_ciso_desc');
+        var hdis = document.getElementById('hero-dismiss');
+        if (hdis) hdis.textContent = t('hero_cta');
+
+        var fb = document.getElementById('footer-back');
+        if (fb) fb.textContent = t('footer_back');
+        var fn = document.getElementById('footer-next');
+        if (fn) fn.textContent = t('footer_next');
+
+        var gt = document.getElementById('glossary-title');
+        if (gt) gt.textContent = t('glossary_title');
+        var mapping = [
+          ['g-gilligan-term','glossary_gilligan_term'],['g-gilligan-def','glossary_gilligan_def'],
+          ['g-fria-term','glossary_fria_term'],['g-fria-def','glossary_fria_def'],
+          ['g-blake3-term','glossary_blake3_term'],['g-blake3-def','glossary_blake3_def'],
+          ['g-hmac-term','glossary_hmac_term'],['g-hmac-def','glossary_hmac_def'],
+        ];
+        mapping.forEach(function(pair) {
+          var el = document.getElementById(pair[0]);
+          if (el) el.textContent = t(pair[1]);
+        });
+      }, 50);
+    });
+  }
+</script>
 </body>
 </html>
