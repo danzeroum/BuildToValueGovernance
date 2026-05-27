@@ -14,7 +14,12 @@
   --inspect:   #79c0ff;
   --report:    #e3b341;
   --refuse:    #f85149;
-  --accent:    #388bfd;
+
+  /* Identidade BTV — Teal Forense (substitui azul GitHub genérico #388bfd) */
+  --accent:            #4f98a3;
+  --accent-hover:      #3b7b85;
+  --accent-focus-ring: rgba(79,152,163,.20);
+
   --text:      #e6edf3;
   --muted:     #7d8590;
   --green:     #3fb950;
@@ -28,6 +33,15 @@
   --radius-lg: 10px;
   --shadow:    0 4px 24px rgba(0,0,0,0.5);
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+
+  /* ── República Algorítmica — Aliases Estruturais ────────────────────────
+     Conway's Law visual: interface espelha o Monolito Modular (ADR-009).
+     Aliases puros sobre tokens técnicos auditados. Zero novos seletores.
+     WCAG: contraste herdado de cada token base (validado em theme.css).    */
+  --legislative: var(--accent);   /* Policy-as-Code, Fatos Técnicos (Rust)  */
+  --executive:   var(--educate);  /* Contestability, Execução / SLA 24h      */
+  --judicial:    var(--allow);    /* Homologação Ética, explain_decision()    */
+  --audit:       var(--redact);   /* Ledger Imutável, HMAC-SHA256            */
 
   /* Legacy aliases for backwards compat */
   --bg2: var(--surface);
@@ -204,7 +218,7 @@ img { max-width: 100%; height: auto; }
 }
 .btn:disabled { opacity: .5; cursor: not-allowed; pointer-events: none; }
 .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn-primary:hover { background: #2f7cf4; text-decoration: none; color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); text-decoration: none; color: #fff; }
 .btn-outline { background: transparent; color: var(--text); border-color: var(--border); }
 .btn-outline:hover { background: var(--surface-2); text-decoration: none; }
 .btn-danger  { background: var(--red); color: #fff; border-color: var(--red); }
@@ -230,7 +244,7 @@ input, select, textarea {
   transition: border-color .15s;
   min-height: 36px;
 }
-input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,139,253,.15); }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-focus-ring); }
 textarea { font-family: var(--mono); font-size: 12px; resize: vertical; min-height: 80px; line-height: 1.5; }
 select option { background: var(--surface); }
 input[type="checkbox"] { width: auto; min-height: auto; cursor: pointer; }
@@ -345,7 +359,7 @@ tr:hover td { background: rgba(255,255,255,.02); }
 .persona-card:hover {
   border-color: var(--accent);
   transform: translateY(-3px);
-  box-shadow: 0 8px 32px rgba(56,139,253,.2);
+  box-shadow: 0 8px 32px var(--accent-focus-ring);
   text-decoration: none;
   color: var(--text);
 }
