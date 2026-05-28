@@ -224,6 +224,7 @@ fn decode_tenant_claims(token: &str, jwt_secret: &Option<Vec<u8>>) -> Result<Btv
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
