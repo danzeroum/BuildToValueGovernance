@@ -130,25 +130,41 @@ Hard Block reservado para composição **Rawls Critical AND Jonas Critical** —
 evidência simultânea de desvio demográfico e populacional sinaliza falha
 sistêmica do modelo, não caso isolado.
 
-### D5 — Ring buffer por tenant com `Mutex` interno ao `TenantCacheBlock`
+### D5 — Estado por tenant em estrutura paralela ao Rawls
+
+`JonasMonitor` mantém `RwLock<HashMap<String, TenantJonasState>>` —
+estrutura **paralela** ao `RawlsMonitor`, não compartilhada. Justificativa:
+
+- `RawlsCounters` (já mergeado em ADR-0086) só armazena agregados u64
+  e não carrega `Mutex`/`AtomicU64`. Mesclá-los no mesmo HashMap exigiria
+  refactor da implementação Rawls já em produção, o que não justifica
+  o ganho.
+- A contenção que os reviewers temiam vem de ter um único `RwLock`
+  global cobrindo dois domínios distintos. Manter monitores separados
+  com locks independentes preserva o mesmo benefício de granularidade
+  por tenant — múltiplos tenants podem escrever no Jonas sem bloquear
+  o Rawls e vice-versa.
 
 ```rust
-// ADR-0086 já define TenantCacheBlock no statistics::rawls. Jonas adiciona:
-pub struct JonasState {
-    /// Scores recentes; FIFO 10k. Mutex interno ao bloco permite
-    /// que múltiplos tenants escrevam simultaneamente sem contenção
-    /// global no HashMap.
+pub struct TenantJonasState {
+    /// Scores recentes; FIFO 10k (D6). Mutex granular por tenant.
     buffer: Mutex<VecDeque<f64>>,
-    /// Contador atômico de transações desde o último cálculo.
-    tx_since_last_compute: AtomicU64,
+    /// Transações desde o último compute_psi (D6).
+    tx_since_compute: AtomicU64,
     /// Última métrica calculada — eventual consistency permitida.
     last_metrics: Mutex<Option<DriftMetrics>>,
+    /// Baseline imutável (Arc para clone barato; carregado no boot).
+    baseline: Arc<JonasBaseline>,
 }
 ```
 
-Granularidade por tenant evita o problema documentado pelos reviewers:
-um único `RwLock<HashMap>` global forçaria *write lock* exclusivo a cada
-transação, serializando tenants distintos.
+`TenantJonasState` deliberadamente **não deriva `Clone`** — `Mutex` e
+`AtomicU64` impossibilitam clonagem segura. Acesso é sempre via
+referência através do `RwLock` do `HashMap`.
+
+Mesclagem opcional em um `TenantCacheBlock` único pode ser feita em
+ADR futuro quando houver evidência de overhead mensurável (>1% no
+SLA p99). Até lá, separação é mais simples e equivalente em performance.
 
 ### D6 — Cálculo síncrono a cada 500 transações no buffer
 

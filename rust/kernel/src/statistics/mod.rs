@@ -6,8 +6,9 @@
 pub mod char_ratio;
 pub mod entropy;
 pub mod zscore;
-pub mod rawls; // ADR-0086: Disparate Impact Monitor
-pub mod jonas; // ADR-0087: Population Stability Drift Monitor
+pub mod rawls;         // ADR-0086: Disparate Impact Monitor
+pub mod jonas;         // ADR-0087: Population Stability Drift Monitor (engine)
+pub mod jonas_monitor; // ADR-0087: state + baseline loader (Commits 3 & 4)
 
 pub use char_ratio::CharRatioAnalyzer;
 pub use entropy::EntropyCalculator;
@@ -20,6 +21,9 @@ pub use jonas::{
     compute_psi, histogram_from_scores, DriftAlert, DriftMetrics, PsiError,
     JONAS_BUFFER_CAPACITY, JONAS_COMPUTE_INTERVAL, JONAS_CRITICAL_THRESHOLD,
     JONAS_MIN_SAMPLES, JONAS_WARNING_THRESHOLD,
+};
+pub use jonas_monitor::{
+    BaselineError, JonasBaseline, JonasBaselineLoader, JonasMonitor, TenantJonasState,
 };
 
 // Re-exports para uso externo
