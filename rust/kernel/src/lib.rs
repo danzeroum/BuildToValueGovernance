@@ -7,6 +7,7 @@ pub mod batch;
 pub mod compliance;
 pub mod core;
 pub mod deobfuscator;
+pub mod ethics_plugin;
 pub mod evidence;
 pub mod gatekeeper;
 pub mod interceptor;
