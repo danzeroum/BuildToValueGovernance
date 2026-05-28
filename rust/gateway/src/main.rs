@@ -7,6 +7,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod routes;
 mod middleware;
 mod state;
+mod fairness_mode;
 
 use state::AppState;
 
