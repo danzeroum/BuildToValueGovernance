@@ -9,6 +9,7 @@ mod middleware;
 mod state;
 mod fairness_mode;
 mod tenant_status;
+mod policy_loader;
 
 use state::AppState;
 

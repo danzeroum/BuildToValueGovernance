@@ -29,7 +29,8 @@ hmac = "0.12"
 sha2 = "0.10"
 hex = { workspace = true }
 lazy_static = "1.5.0"
+serde_yaml = { workspace = true }
 
 [dev-dependencies]
 axum-test = "15"
-serde_yaml = { workspace = true }
+tempfile = { workspace = true }
