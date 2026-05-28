@@ -103,6 +103,16 @@ impl FairnessModeRegistry {
             .unwrap_or_default()
     }
 
+    /// Remove o tenant do registry. Idempotente — `false` se não havia
+    /// entry. Usado pelo `AppState::evict_tenant()` (ADR-0089 §D3).
+    /// Fail-safe em lock poison.
+    pub fn remove(&self, tenant_id: &str) -> bool {
+        let Ok(mut guard) = self.modes.write() else {
+            return false;
+        };
+        guard.remove(tenant_id).is_some()
+    }
+
     /// Número de tenants com modo declarado. Útil para métricas de boot.
     /// `#[allow(dead_code)]` mantido: usado apenas em lib tests; o caller
     /// de produção será um endpoint de telemetria (ADR-0089).

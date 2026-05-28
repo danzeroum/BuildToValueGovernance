@@ -792,6 +792,7 @@ dependencies = [
  "blake3",
  "buildtovalue-kernel",
  "chrono",
+ "criterion",
  "futures",
  "hex",
  "hmac",
@@ -804,6 +805,8 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "subtle",
+ "tempfile",
  "tokio",
  "tower 0.4.13",
  "tower-http 0.5.2",
@@ -811,6 +814,7 @@ dependencies = [
  "tracing-subscriber",
  "ulid",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
