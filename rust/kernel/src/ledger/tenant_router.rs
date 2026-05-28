@@ -124,6 +124,15 @@ impl TenantStorageRouter {
         self.cache.read().await.len()
     }
 
+    /// Remove o tenant do cache. Idempotente — `false` se não havia entrada.
+    /// O drop do `Arc<DurableLedger>` libera recursos em memória; o arquivo
+    /// em disco permanece (cleanup de disco é responsabilidade operacional,
+    /// não runtime). Ver ADR-0089 §D3.
+    pub async fn evict_tenant(&self, tenant_id: &str) -> bool {
+        let mut guard = self.cache.write().await;
+        guard.remove(tenant_id).is_some()
+    }
+
     /// Caminho absoluto do arquivo de ledger para o tenant dado.
     /// Apenas para uso interno e testes — não valida `tenant_id`.
     fn ledger_path(&self, tenant_id: &str) -> PathBuf {
@@ -262,5 +271,38 @@ mod tests {
         // graciosamente em ambos). Nunca um número intermediário não-determinístico.
         let active = router.active_tenant_count().await;
         assert!(active == 0 || active == 2, "expected 0 or 2 active tenants, got {active}");
+    }
+
+    // ── ADR-0089 §D3 — evict_tenant ───────────────────────────────
+
+    #[tokio::test]
+    async fn evict_tenant_removes_from_cache_idempotent() {
+        let tmp = TempDir::new().unwrap();
+        let router = make_router(&tmp);
+        let _ = router.route("acme").await;
+        // Independente do sucesso do DurableLedger init, evict deve ser noop
+        // quando não há entry — e remoção quando há.
+        let count_before = router.active_tenant_count().await;
+        let removed = router.evict_tenant("acme").await;
+        let count_after = router.active_tenant_count().await;
+        // Se entry existia, removed=true E count diminuiu em 1.
+        // Se não existia (init falhou), removed=false E count inalterado.
+        if count_before > 0 {
+            assert!(removed);
+            assert_eq!(count_after, count_before - 1);
+        } else {
+            assert!(!removed);
+            assert_eq!(count_after, 0);
+        }
+
+        // Segunda chamada é idempotente.
+        assert!(!router.evict_tenant("acme").await);
+    }
+
+    #[tokio::test]
+    async fn evict_tenant_ghost_is_noop() {
+        let tmp = TempDir::new().unwrap();
+        let router = make_router(&tmp);
+        assert!(!router.evict_tenant("never-routed").await);
     }
 }

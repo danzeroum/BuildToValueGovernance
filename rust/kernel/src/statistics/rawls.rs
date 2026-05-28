@@ -226,6 +226,32 @@ impl RawlsMonitor {
     pub fn threshold(&self) -> f64 {
         self.threshold
     }
+
+    /// Remove o estado do tenant. Idempotente. Fail-safe em lock poison
+    /// (retorna false). Ver ADR-0089 §D3.
+    pub fn remove_tenant(&self, tenant_id: &str) -> bool {
+        let Ok(mut guard) = self.counters.write() else {
+            return false;
+        };
+        guard.remove(tenant_id).is_some()
+    }
+}
+
+impl crate::statistics::reloadable::ReloadableGuardrail for RawlsMonitor {
+    /// Rawls não tem baseline YAML — threshold é compile-time
+    /// (`DEFAULT_DIR_THRESHOLD`). Retorna `NotApplicable`; gateway trata
+    /// como noop OK.
+    fn reload_baseline(
+        &self,
+        _tenant_id: &str,
+        _yaml_content: &str,
+    ) -> Result<(), crate::statistics::reloadable::ReloadError> {
+        Err(crate::statistics::reloadable::ReloadError::NotApplicable)
+    }
+
+    fn remove_tenant(&self, tenant_id: &str) -> bool {
+        RawlsMonitor::remove_tenant(self, tenant_id)
+    }
 }
 
 #[cfg(test)]
@@ -367,5 +393,50 @@ mod tests {
     fn monitor_default_uses_eighty_percent_threshold() {
         let monitor = RawlsMonitor::default();
         assert!((monitor.threshold() - DEFAULT_DIR_THRESHOLD).abs() < 1e-9);
+    }
+
+    // ── ADR-0089 — remove_tenant + ReloadableGuardrail ────────────
+
+    #[test]
+    fn remove_tenant_clears_state_for_only_that_tenant() {
+        let monitor = RawlsMonitor::default();
+        for _ in 0..40 {
+            monitor.record("a", GroupClass::Privileged, OutcomeBucket::Favorable);
+            monitor.record("a", GroupClass::Unprivileged, OutcomeBucket::Favorable);
+            monitor.record("b", GroupClass::Privileged, OutcomeBucket::Favorable);
+            monitor.record("b", GroupClass::Unprivileged, OutcomeBucket::Favorable);
+        }
+        assert!(monitor.metrics("a").is_some());
+        assert!(monitor.metrics("b").is_some());
+
+        let removed = monitor.remove_tenant("a");
+        assert!(removed, "remove_tenant deve retornar true para tenant existente");
+        assert!(monitor.metrics("a").is_none(), "tenant a deve estar removido");
+        assert!(monitor.metrics("b").is_some(), "tenant b NÃO deve ser afetado");
+    }
+
+    #[test]
+    fn remove_tenant_is_idempotent() {
+        let monitor = RawlsMonitor::default();
+        assert!(!monitor.remove_tenant("ghost"));
+        assert!(!monitor.remove_tenant("ghost"));
+    }
+
+    #[test]
+    fn reload_baseline_returns_not_applicable_for_rawls() {
+        use crate::statistics::reloadable::{ReloadError, ReloadableGuardrail};
+        let monitor = RawlsMonitor::default();
+        let result = <RawlsMonitor as ReloadableGuardrail>::reload_baseline(
+            &monitor, "any-tenant", "any: yaml",
+        );
+        assert_eq!(result, Err(ReloadError::NotApplicable));
+    }
+
+    #[test]
+    fn rawls_implements_reloadable_via_dyn_dispatch() {
+        use crate::statistics::reloadable::ReloadableGuardrail;
+        let monitor: Box<dyn ReloadableGuardrail> = Box::new(RawlsMonitor::default());
+        // remove_tenant via trait deve funcionar (true se algo removido).
+        assert!(!monitor.remove_tenant("ghost"));
     }
 }
