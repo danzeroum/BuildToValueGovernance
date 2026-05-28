@@ -1,13 +1,13 @@
 # Índice Mestre de ADRs — BuildToValue Governance
 
-**Versão do Índice:** v4.1.0  
+**Versão do Índice:** v4.1.1  
 **Data de Consolidação:** 2026-05-28  
-**HEAD de Referência:** `0f2b72873ff0da6efd0d4e150a7a18affa46488e`  
+**HEAD de Referência:** `83b006c0e80cc421d0838dfeb2a4d1a8563e1691`  
 **Total de ADRs Catalogados:** 81 (numerações 0001–0081; colisões de numeração explicitadas)  
 **Mantenedor:** AI Squad — Arquiteta (Opus) + Reviewer (Opus)  
 **Classificação:** Documentação Arquitetural — Fonte Primária de Rastreabilidade
 
-> **Nota de Integridade:** Este índice mapeia exclusivamente arquivos físicos confirmados no disco do repositório contra o HEAD `0f2b728`. Nenhuma entrada aponta para slug fictício ou arquivo inexistente. Qualquer divergência futura entre este índice e o estado do disco constitui um gatilho de não-conformidade de documentação (*documentation drift*) e deve ser tratada como incidente de rastreabilidade.
+> **Nota de Integridade:** Este índice mapeia exclusivamente arquivos físicos confirmados no disco do repositório. Nenhuma entrada aponta para slug fictício ou arquivo inexistente. Qualquer divergência futura entre este índice e o estado do disco constitui um gatilho de não-conformidade de documentação (*documentation drift*) e deve ser tratada como incidente de rastreabilidade.
 
 ---
 
@@ -172,7 +172,7 @@
 
 ---
 
-## Grupo K — Desduplicações Multi-Tenant (0076–0081)
+## Grupo K — Deduplicações Multi-Tenant (0076–0081)
 
 > Estes ADRs foram gerados no commit `07c32c6` como especializações isoladas de funcionalidades que anteriormente colidiam em numerações duplas (0044-B, 0046-B, 0047-B, 0048-B, 0057-B, 0060-B). Cada entrada abaixo representa a versão canônica e definitiva da feature em numeração própria, com rastreabilidade completa à sua origem.
 
@@ -233,8 +233,8 @@ Este artefato foi sucedido pela especificação canônica no ADR 0081.
 | ID | Título | Arquivo | Responsável |
 |:---|:---|:---|:---:|
 | BTV-RUN-008 | Retenção, Custódia e Cripto-Shredding | [docs/runbooks/BTV-RUN-008.md](../runbooks/BTV-RUN-008.md) | DPO / SecOps / SRE |
-| BTV-RUN-009 | *(reservado — a ser criado)* | — | — |
-| BTV-RUN-010 | *(reservado — a ser criado)* | — | — |
+| BTV-RUN-009 | Auditoria de Integridade Criptográfica e Verificação Forense | [docs/runbooks/BTV-RUN-009.md](../runbooks/BTV-RUN-009.md) | SecOps / SRE / Core Security |
+| BTV-RUN-010 | Resposta a Incidentes de Poluição Cruzada entre Tenants (E120) | [docs/runbooks/BTV-RUN-010.md](../runbooks/BTV-RUN-010.md) | CSIRT / SecOps / SRE |
 
 ---
 
@@ -245,3 +245,4 @@ Este artefato foi sucedido pela especificação canônica no ADR 0081.
 | v1.0.0 | 2026-01-01 | — | Criação inicial |
 | v4.0.0 | 2026-05-27 | `07c32c6` | Adição dos ADRs 0073–0081 (commit de deduplicação multi-tenant) |
 | v4.1.0 | 2026-05-28 | `0f2b728` | Reconstrução total: correção de slugs fantasmas Grupo K, errata forense 0044/0045/0072, expurgo de 3 arquivos zumbis (`ADR-043`, `ADR-051`, `TBD`), inclusão de documentos auxiliares e seção de runbooks operacionais |
+| v4.1.1 | 2026-05-28 | `83b006c` | Correção de drift inverso: BTV-RUN-010 já existia no disco (não estava pendente); BTV-RUN-009 materializado; entradas da seção Runbooks agora refletem o estado real de `docs/runbooks/` |
