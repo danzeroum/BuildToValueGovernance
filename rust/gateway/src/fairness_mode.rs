@@ -45,15 +45,11 @@ pub enum FairnessMode {
 impl FairnessMode {
     /// `true` se o modo permite que rationale e governance_errors do
     /// motor cheguem ao `ExplainDecision` (ainda que sem alterar action).
-    /// `#[allow(dead_code)]` documentado: caller é o Commit 5.
-    #[allow(dead_code)]
     pub fn populates_explain(&self) -> bool {
         matches!(self, Self::Shadow | Self::Enforced)
     }
 
     /// `true` se o modo aplica a ação composta na resposta HTTP.
-    /// `#[allow(dead_code)]` documentado: caller é o Commit 5.
-    #[allow(dead_code)]
     pub fn enforces_action(&self) -> bool {
         matches!(self, Self::Enforced)
     }
@@ -74,10 +70,6 @@ impl Default for FairnessModeRegistry {
     }
 }
 
-/// `#[allow(dead_code)]` no impl: métodos consumidos por `AppState` (commit 4
-/// lib tests) e `decide_handler` (Commit 5). Sem caller direto no binário até
-/// o wiring final — análogo ao `EthicalError` constructors no kernel.
-#[allow(dead_code)]
 impl FairnessModeRegistry {
     pub fn new() -> Self {
         Self {
@@ -87,6 +79,9 @@ impl FairnessModeRegistry {
 
     /// Registra ou substitui o modo para um tenant. Chamado no boot do
     /// gateway uma vez por tenant declarado em `policies/`.
+    /// `#[allow(dead_code)]` mantido: chamado por lib tests e (futuro) por
+    /// loader de policies/ (ADR-0089). Bin atual não invoca diretamente.
+    #[allow(dead_code)]
     pub fn install(&self, tenant_id: &str, mode: FairnessMode) {
         let Ok(mut guard) = self.modes.write() else {
             return;
@@ -109,6 +104,9 @@ impl FairnessModeRegistry {
     }
 
     /// Número de tenants com modo declarado. Útil para métricas de boot.
+    /// `#[allow(dead_code)]` mantido: usado apenas em lib tests; o caller
+    /// de produção será um endpoint de telemetria (ADR-0089).
+    #[allow(dead_code)]
     pub fn declared_tenant_count(&self) -> usize {
         self.modes.read().map(|g| g.len()).unwrap_or(0)
     }

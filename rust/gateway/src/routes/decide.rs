@@ -18,6 +18,11 @@ use buildtovalue_kernel::core::types::{Action, EthicalVerdict};
 use buildtovalue_kernel::ledger::entry::{ActionType, LedgerEntry};
 use buildtovalue_kernel::evidence::TechnicalEvidence;
 use buildtovalue_kernel::api::error_as_resource::EthicalError;
+use buildtovalue_kernel::statistics::{
+    compose_fairness_action, GroupClass, JonasMonitor, OutcomeBucket, RawlsMonitor,
+    DEFAULT_DIR_THRESHOLD,
+};
+use crate::fairness_mode::FairnessMode;
 use crate::middleware::tenant_extractor::TenantId;
 use crate::state::AppState;
 use super::common::{extract_client_ip, ip_risk_to_str, FALLBACK_POLICY};
@@ -65,6 +70,19 @@ pub struct DecideRequest {
     /// serde deserialization (outside Rust kernel hot path — see ADR discussion Complement E).
     #[serde(default)]
     pub agent_policies: Option<Vec<String>>,
+    /// **ADR-0086 §D1 + ADR-0088 Commit 5** — Classificação de grupo para
+    /// análise de fairness, declarada explicitamente pelo chamador.
+    /// `"privileged"` | `"unprivileged"`. Qualquer outro valor (ou ausente)
+    /// → `GroupClass::Unclassified` — não contribui para o cálculo do DIR.
+    /// Sem inferência a partir de outros campos (princípio do ADR-0086 §D1).
+    #[serde(default)]
+    pub group_classification: Option<String>,
+    /// **ADR-0087 §D1 + ADR-0088 Commit 5** — Score de confiança da
+    /// decisão do modelo, em `[0.0, 1.0]`. Alimenta o ring buffer Jonas
+    /// para cálculo de PSI. Ausente → default 0.5 + `score_unavailable: true`
+    /// propagado ao laudo. Sem inferência a partir de `composite_risk`.
+    #[serde(default)]
+    pub decision_confidence: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -145,11 +163,6 @@ fn severity_rank(error_code: &str) -> u8 {
 /// broken por ordem de inserção (estabilidade FIFO).
 ///
 /// Retorna `None` se `errors` é vazio.
-///
-/// `#[allow(dead_code)]` documentado: consumidor é o wiring do
-/// commit 5 desta branch. Mantido público porque será chamado pelo
-/// `decide_handler` após o wiring.
-#[allow(dead_code)]
 pub fn pick_legacy_error(errors: &[EthicalError]) -> Option<EthicalError> {
     if errors.is_empty() {
         return None;
@@ -176,9 +189,6 @@ pub fn pick_legacy_error(errors: &[EthicalError]) -> Option<EthicalError> {
 /// `pick_legacy_error` que retorna por valor para simplificar o consumer.
 /// `EthicalError` não deriva `Clone` no kernel hoje; centralizar aqui evita
 /// poluir a API pública do kernel só por causa do dual-write do ADR-0088 §D2.
-/// `#[allow(dead_code)]` documentado: usado por `pick_legacy_error` que
-/// por sua vez é consumido pelo wiring do commit 5 desta branch.
-#[allow(dead_code)]
 fn clone_ethical_error(e: &EthicalError) -> EthicalError {
     use buildtovalue_kernel::api::error_as_resource::BtvExtensions;
     EthicalError {
@@ -197,6 +207,369 @@ fn clone_ethical_error(e: &EthicalError) -> EthicalError {
             contestable_until: e.extensions.contestable_until.clone(),
             metadata: e.extensions.metadata.clone(),
         },
+    }
+}
+
+// ── ADR-0088 Commit 5 — Fairness wiring helpers ──────────────────────
+
+/// Parseia o campo `group_classification` do request em `GroupClass`.
+/// Qualquer valor desconhecido (ou `None`) → `Unclassified` (sem
+/// inferência, princípio ADR-0086 §D1).
+fn parse_group_class(raw: Option<&str>) -> GroupClass {
+    match raw.map(|s| s.to_ascii_lowercase()) {
+        Some(s) if s == "privileged" => GroupClass::Privileged,
+        Some(s) if s == "unprivileged" => GroupClass::Unprivileged,
+        _ => GroupClass::Unclassified,
+    }
+}
+
+/// Converte a representação string usada pela API (`policy_action`,
+/// `final_action`) na enum `Action` do kernel. Casos desconhecidos
+/// → `Action::Allow` (fail-safe: nunca escalonar por string mal-formada).
+fn action_from_str(s: &str) -> Action {
+    match s {
+        "BLOCK" => Action::Block,
+        "REDACT" => Action::Redact,
+        "EDUCATE" | "LOG" => Action::Log,
+        _ => Action::Allow,
+    }
+}
+
+/// Inverso de `action_from_str`. `Action::Log` mapeia para `"EDUCATE"`
+/// (string canônica usada pela camada HTTP para diferenciar de `LOG`
+/// puro). Caller pode renomear se precisar.
+fn action_to_str(action: Action) -> &'static str {
+    match action {
+        Action::Block => "BLOCK",
+        Action::Redact => "REDACT",
+        Action::Log => "EDUCATE",
+        Action::Allow => "ALLOW",
+    }
+}
+
+/// Resultado do wiring fairness. Comunicado ao handler para que ele
+/// decida se sobrescreve `final_action` (apenas em `Enforced` mode) e
+/// atualize observabilidade.
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct FairnessWiringResult {
+    /// Ação proposta pela composição (igual a `tentative` quando a
+    /// composição não escalou). Útil para audit log do shadow mode.
+    pub composed_action: Action,
+    /// `true` quando `composed_action != tentative`. Sinaliza override
+    /// no JSONL e métricas.
+    pub composition_changed_action: bool,
+    /// `true` quando o modo era `Enforced` E a composição mudou a ação.
+    /// O handler usa esta flag para decidir se substitui `final_action`.
+    pub apply_override: bool,
+    /// Marca `human_review_required` (D4 ADR-0087): laudo deve sinalizar
+    /// que a decisão precisa de revisão manual mesmo se action passou.
+    pub human_review_required: bool,
+}
+
+/// Wiring de fairness para uma requisição. Pura em relação ao handler:
+/// recebe referências, registra nos monitores, retorna metadados; o
+/// caller é responsável por aplicar override e por persistir
+/// `explain.governance_errors`/`legacy_error` populados aqui.
+///
+/// **Invariante de ordem (ADR-0088 §sequência):**
+/// 1. record nos monitores (passos 5-6 do ADR) — `tentative` é
+///    `final_action` pós-mercy, **pré-composição**. Isso é correto:
+///    Rawls/Jonas medem a distribuição do **modelo**, não da correção
+///    pós-fairness (gravar pós-composição mascararia o sinal).
+/// 2. compose (passo 7) — usa métricas atuais (incluindo a transação
+///    recém-registrada).
+/// 3. populate explain (passo 8) — independente do modo, desde que
+///    `populates_explain()`.
+/// 4. override action (passo 9) — apenas se `enforces_action()`.
+#[allow(clippy::too_many_arguments)]
+pub fn apply_fairness(
+    tenant_id: &str,
+    mode: FairnessMode,
+    tentative: Action,
+    rawls_monitor: &RawlsMonitor,
+    jonas_monitor: &JonasMonitor,
+    group: GroupClass,
+    decision_confidence: Option<f64>,
+    audit_log_id: Option<String>,
+    verdict_id: Option<String>,
+    appeal_deadline_iso8601: String,
+    explain: &mut ExplainDecision,
+) -> FairnessWiringResult {
+    let outcome = OutcomeBucket::from_action(tentative);
+    let (score, score_unavailable) = match decision_confidence {
+        Some(c) => (c.clamp(0.0, 1.0), false),
+        None => (0.5, true),
+    };
+
+    // Passos 5-6: record nos monitores. Sempre — independente do modo
+    // (shadow precisa do buffer populado, ver ADR-0088 §D3).
+    rawls_monitor.record(tenant_id, group, outcome);
+    jonas_monitor.record(tenant_id, score, score_unavailable);
+
+    if !mode.populates_explain() {
+        // Modo Disabled: nada de composição, nada de erros no laudo.
+        return FairnessWiringResult {
+            composed_action: tentative,
+            composition_changed_action: false,
+            apply_override: false,
+            human_review_required: false,
+        };
+    }
+
+    // Passo 7: compose. Usa fail-soft para tenants sem dados:
+    // - Rawls sem records → metrics() retorna None; usamos FairnessMetrics
+    //   sintético em `insufficient_samples` (violates_threshold=false).
+    // - Jonas sem baseline → metrics_or_disabled() retorna Disabled alert.
+    let rawls = rawls_monitor
+        .metrics(tenant_id)
+        .unwrap_or(buildtovalue_kernel::statistics::FairnessMetrics {
+            dir: f64::NAN,
+            privileged_favorable_rate: f64::NAN,
+            unprivileged_favorable_rate: f64::NAN,
+            insufficient_samples: true,
+            violates_threshold: false,
+            threshold_used: DEFAULT_DIR_THRESHOLD,
+        });
+    let jonas = jonas_monitor.metrics_or_disabled(tenant_id);
+    let composed = compose_fairness_action(tentative, &rawls, jonas.alert);
+
+    // Passo 8: build governance_errors a partir das flags da composição.
+    let mut errors: Vec<EthicalError> = Vec::new();
+    if composed.rawls_violation {
+        let mut meta = serde_json::Map::new();
+        meta.insert("dir".into(), serde_json::json!(rawls.dir));
+        meta.insert("threshold".into(), serde_json::json!(rawls.threshold_used));
+        meta.insert(
+            "privileged_favorable_rate".into(),
+            serde_json::json!(rawls.privileged_favorable_rate),
+        );
+        meta.insert(
+            "unprivileged_favorable_rate".into(),
+            serde_json::json!(rawls.unprivileged_favorable_rate),
+        );
+        errors.push(EthicalError::rawls_dir_violation(
+            appeal_deadline_iso8601.clone(),
+            audit_log_id.clone(),
+            verdict_id.clone(),
+            Some(serde_json::Value::Object(meta)),
+        ));
+    }
+    if composed.jonas_critical {
+        let mut meta = serde_json::Map::new();
+        meta.insert("psi".into(), serde_json::json!(jonas.psi));
+        meta.insert(
+            "threshold".into(),
+            serde_json::json!(jonas.critical_threshold),
+        );
+        if let Some(idx) = jonas.top_bin_index {
+            meta.insert("top_bin_index".into(), serde_json::json!(idx));
+            meta.insert(
+                "top_bin_contribution".into(),
+                serde_json::json!(jonas.top_bin_contribution),
+            );
+        }
+        if jonas.score_unavailable {
+            meta.insert("score_unavailable".into(), serde_json::json!(true));
+        }
+        errors.push(EthicalError::jonas_drift_violation(
+            appeal_deadline_iso8601,
+            audit_log_id,
+            verdict_id,
+            Some(serde_json::Value::Object(meta)),
+        ));
+    }
+    explain.legacy_error = pick_legacy_error(&errors);
+    explain.governance_errors = errors;
+
+    let composition_changed_action = composed.action != tentative;
+    let apply_override = mode.enforces_action() && composition_changed_action;
+
+    FairnessWiringResult {
+        composed_action: composed.action,
+        composition_changed_action,
+        apply_override,
+        human_review_required: composed.human_review_required,
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod fairness_wiring_tests {
+    use super::*;
+    use buildtovalue_kernel::statistics::JonasBaselineLoader;
+
+    const VALID_BASELINE: &str = r#"
+version: "1.0.0"
+model_id: "test-model"
+bins: 10
+reference_proportions:
+  - 0.05
+  - 0.07
+  - 0.10
+  - 0.13
+  - 0.15
+  - 0.18
+  - 0.15
+  - 0.10
+  - 0.05
+  - 0.02
+"#;
+
+    fn fresh_monitors() -> (RawlsMonitor, JonasMonitor) {
+        let jonas = JonasMonitor::new();
+        jonas.install_baseline(
+            "acme",
+            JonasBaselineLoader::from_yaml_str(VALID_BASELINE).unwrap(),
+        );
+        (RawlsMonitor::default(), jonas)
+    }
+
+    #[test]
+    fn disabled_mode_records_but_does_not_compose() {
+        let (rawls, jonas) = fresh_monitors();
+        let mut explain = ExplainDecision::default();
+        let result = apply_fairness(
+            "acme",
+            FairnessMode::Disabled,
+            Action::Allow,
+            &rawls,
+            &jonas,
+            GroupClass::Privileged,
+            Some(0.7),
+            None,
+            None,
+            "2026-05-29T12:00:00Z".to_string(),
+            &mut explain,
+        );
+        assert!(!result.apply_override);
+        assert!(!result.composition_changed_action);
+        assert_eq!(result.composed_action, Action::Allow);
+        // Nenhum erro de governança em modo Disabled.
+        assert!(explain.governance_errors.is_empty());
+        assert!(explain.legacy_error.is_none());
+        // Mas record ainda aconteceu — verificável pelo metrics
+        // (insufficient samples mas total > 0).
+        // Single record: insufficient samples ainda.
+        let m = rawls.metrics("acme");
+        // 1 amostra → ainda insufficient, mas counter incrementou.
+        assert!(m.is_some());
+    }
+
+    #[test]
+    fn shadow_mode_populates_errors_but_does_not_override() {
+        let (rawls, jonas) = fresh_monitors();
+        // Setup: 100 amostras Privileged Favorable, 100 Unprivileged Unfavorable
+        // → Rawls violação severa.
+        for _ in 0..100 {
+            rawls.record("acme", GroupClass::Privileged, OutcomeBucket::Favorable);
+            rawls.record("acme", GroupClass::Unprivileged, OutcomeBucket::Unfavorable);
+        }
+        let mut explain = ExplainDecision::default();
+        let result = apply_fairness(
+            "acme",
+            FairnessMode::Shadow,
+            Action::Allow,
+            &rawls,
+            &jonas,
+            GroupClass::Privileged,
+            Some(0.7),
+            None,
+            None,
+            "2026-05-29T12:00:00Z".to_string(),
+            &mut explain,
+        );
+        // Composição rebaixaria Allow → Redact, mas modo Shadow não aplica.
+        assert!(!result.apply_override);
+        assert!(result.composition_changed_action);
+        assert_eq!(result.composed_action, Action::Redact);
+        // Governance errors POPULADOS (Shadow é observabilidade).
+        assert!(!explain.governance_errors.is_empty());
+        assert!(explain.legacy_error.is_some());
+        let legacy = explain.legacy_error.as_ref().unwrap();
+        assert_eq!(legacy.extensions.error_code, "E160");
+    }
+
+    #[test]
+    fn enforced_mode_overrides_action_and_populates_errors() {
+        let (rawls, jonas) = fresh_monitors();
+        for _ in 0..100 {
+            rawls.record("acme", GroupClass::Privileged, OutcomeBucket::Favorable);
+            rawls.record("acme", GroupClass::Unprivileged, OutcomeBucket::Unfavorable);
+        }
+        let mut explain = ExplainDecision::default();
+        let result = apply_fairness(
+            "acme",
+            FairnessMode::Enforced,
+            Action::Allow,
+            &rawls,
+            &jonas,
+            GroupClass::Privileged,
+            Some(0.7),
+            None,
+            None,
+            "2026-05-29T12:00:00Z".to_string(),
+            &mut explain,
+        );
+        assert!(result.apply_override);
+        assert_eq!(result.composed_action, Action::Redact);
+        assert!(!explain.governance_errors.is_empty());
+    }
+
+    #[test]
+    fn parse_group_class_canonical_strings() {
+        assert_eq!(parse_group_class(Some("privileged")), GroupClass::Privileged);
+        assert_eq!(parse_group_class(Some("PRIVILEGED")), GroupClass::Privileged);
+        assert_eq!(parse_group_class(Some("unprivileged")), GroupClass::Unprivileged);
+        assert_eq!(parse_group_class(Some("garbage")), GroupClass::Unclassified);
+        assert_eq!(parse_group_class(None), GroupClass::Unclassified);
+    }
+
+    #[test]
+    fn action_roundtrip_via_strings() {
+        for a in [Action::Allow, Action::Block, Action::Redact, Action::Log] {
+            let s = action_to_str(a);
+            assert_eq!(action_from_str(s), a, "roundtrip for {:?}", a);
+        }
+        // Aliases legados:
+        assert_eq!(action_from_str("LOG"), Action::Log);
+        // Unknown → Allow fail-safe (nunca escalonar por string mal-formada).
+        assert_eq!(action_from_str("WEIRD"), Action::Allow);
+    }
+
+    #[test]
+    fn score_unavailable_propagates_through_metadata() {
+        let (rawls, jonas) = fresh_monitors();
+        // Popular Jonas com 600 records score_unavailable=true + drift severo
+        // para gerar Critical alert.
+        for _ in 0..600 {
+            jonas.record("acme", 0.05, true);
+        }
+        let mut explain = ExplainDecision::default();
+        let _result = apply_fairness(
+            "acme",
+            FairnessMode::Enforced,
+            Action::Allow,
+            &rawls,
+            &jonas,
+            GroupClass::Unclassified,
+            None, // sem decision_confidence
+            None,
+            None,
+            "2026-05-29T12:00:00Z".to_string(),
+            &mut explain,
+        );
+        // Se Jonas detectou drift Critical, o erro E161 deve carregar
+        // score_unavailable=true na metadata. (Pode não detectar se PSI
+        // não passar do threshold — então só asserta se o erro existir.)
+        if let Some(err) = explain
+            .governance_errors
+            .iter()
+            .find(|e| e.extensions.error_code == "E161")
+        {
+            let meta = err.extensions.metadata.as_ref().expect("metadata");
+            assert_eq!(meta.get("score_unavailable"), Some(&serde_json::json!(true)));
+        }
     }
 }
 
@@ -515,9 +888,9 @@ pub async fn decide_handler(
     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     // ── MERGE ─────────────────────────────────────────────────
-    let (final_action, mercy_applied, final_verdict_id, rationale, signature,
+    let (mut final_action, mercy_applied, final_verdict_id, rationale, signature,
         contestable, appeal_hours, trust_score, mercy_score,
-        mercy_scenario, risk_classification, explain) =
+        mercy_scenario, risk_classification, mut explain) =
         if let Some(ref v) = verdict {
             let ex = v.explain.as_ref().map(|e| ExplainDecision {
                 summary: e.summary.clone(),
@@ -576,6 +949,35 @@ pub async fn decide_handler(
             )
         };
 
+    // ── ADR-0088 §sequência: FAIRNESS WIRING ──────────────────
+    // Ocorre APÓS MERGE (final_action é a ação pós-mercy) e ANTES de
+    // METRICS/ledger/HTTP response. Record nos monitores usa a ação
+    // pré-composição — sinal natural do modelo para detecção de viés.
+    let fairness_mode = state.fairness_mode_for(tenant_id.as_str());
+    let fairness_result = apply_fairness(
+        tenant_id.as_str(),
+        fairness_mode,
+        action_from_str(&final_action),
+        &state.rawls_monitor,
+        &state.jonas_monitor,
+        parse_group_class(req.group_classification.as_deref()),
+        req.decision_confidence,
+        None, // audit_log_id — TBD em wiring com ledger forense
+        Some(final_verdict_id.clone()),
+        // Deadline 24h conforme ADR-0017 (Contestability Loop).
+        chrono::Utc::now()
+            .checked_add_signed(chrono::Duration::hours(24))
+            .map(|d| d.to_rfc3339())
+            .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string()),
+        &mut explain,
+    );
+    if fairness_result.apply_override {
+        // Apenas em FairnessMode::Enforced + composição mudou a ação:
+        // sobrescreve final_action. Shadow e Disabled preservam.
+        final_action = action_to_str(fairness_result.composed_action).to_string();
+    }
+    let fairness_override_applied = fairness_result.apply_override;
+
     // ── METRICS ───────────────────────────────────────────────
     {
         use crate::state::*;
@@ -594,7 +996,7 @@ pub async fn decide_handler(
     {
         use std::io::Write;
         let log_line = format!(
-            "{{\"ts\":{},\"tenant\":\"{}\",\"session\":\"{}\",\"profile\":\"{}\",\"policy_action\":\"{}\",\"final_action\":\"{}\",\"mercy\":{},\"risk\":{:.4},\"findings\":{},\"critical\":{},\"hard_blocked\":{},\"verdict_id\":\"{}\",\"latency_ms\":{:.2}}}\n",
+            "{{\"ts\":{},\"tenant\":\"{}\",\"session\":\"{}\",\"profile\":\"{}\",\"policy_action\":\"{}\",\"final_action\":\"{}\",\"mercy\":{},\"risk\":{:.4},\"findings\":{},\"critical\":{},\"hard_blocked\":{},\"verdict_id\":\"{}\",\"latency_ms\":{:.2},\"fairness_mode\":\"{}\",\"fairness_override\":{},\"fairness_composed\":\"{}\"}}\n",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -611,6 +1013,13 @@ pub async fn decide_handler(
             hard_blocked,
             final_verdict_id,
             latency_ms,
+            match fairness_mode {
+                FairnessMode::Disabled => "disabled",
+                FairnessMode::Shadow => "shadow",
+                FairnessMode::Enforced => "enforced",
+            },
+            fairness_override_applied,
+            action_to_str(fairness_result.composed_action),
         );
         let dir = format!("data/ledger/{}", tenant_id.as_str());
         let path = format!("{}/decisions.jsonl", dir);

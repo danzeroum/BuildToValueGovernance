@@ -189,9 +189,6 @@ pub struct AppState {
     /// ADR-0086 + ADR-0088: monitor de fairness Rawls (DIR). Compartilhado
     /// via outer `Arc<AppState>` do main.rs — sem `Arc` interno por D1
     /// do ADR-0088 (síncrono, sem `tokio::spawn`).
-    /// `#[allow(dead_code)]` documentado: lido pelo wiring do Commit 5
-    /// no decide_handler. Lib tests deste mesmo Commit 4 já o exercitam.
-    #[allow(dead_code)]
     pub rawls_monitor: RawlsMonitor,
     /// ADR-0087 + ADR-0088: monitor de drift populacional Jonas (PSI).
     /// Storage-agnóstico: baselines precisam ser instalados explicitamente
@@ -199,14 +196,10 @@ pub struct AppState {
     /// loading (walk em `policies/*/drift_baseline.yaml`) é out-of-scope
     /// deste ADR — endpoint `/internal/v1/reload-policy` planejado para
     /// ADR-0089.
-    /// `#[allow(dead_code)]` documentado: ver `rawls_monitor`.
-    #[allow(dead_code)]
     pub jonas_monitor: JonasMonitor,
     /// ADR-0088 §D3: registry de modo de execução fairness por tenant.
     /// `Disabled` é o default fail-safe para tenants não declarados —
     /// explicit opt-in (operador instala modo via `install()` no boot).
-    /// `#[allow(dead_code)]` documentado: ver `rawls_monitor`.
-    #[allow(dead_code)]
     pub fairness_modes: FairnessModeRegistry,
 }
 
@@ -290,8 +283,6 @@ impl AppState {
     /// uma vez por requisição, evitando duas leituras do `RwLock` no hot
     /// path quando `populates_explain()` e `enforces_action()` são
     /// consultados separadamente.
-    /// `#[allow(dead_code)]` documentado: caller é o Commit 5.
-    #[allow(dead_code)]
     pub fn fairness_mode_for(&self, tenant_id: &str) -> crate::fairness_mode::FairnessMode {
         self.fairness_modes.mode_for(tenant_id)
     }
