@@ -121,6 +121,28 @@ impl DurableLedger {
     // -----------------------------------------------------------------
 
     pub fn append(&self, mut entry: LedgerEntry, evidence: &TechnicalEvidence) -> Result<u64> {
+        self.append_internal(&mut entry, evidence, None)
+    }
+
+    /// Append com assinatura HMAC do operador (ADR-0083: TEK por tenant).
+    /// O `signing_key` é injetado em `finalize_with_key` ao invés do default
+    /// zero-key, garantindo que o `verdict_id` seja verificável apenas com a
+    /// chave do tenant correspondente.
+    pub fn append_with_key(
+        &self,
+        mut entry: LedgerEntry,
+        evidence: &TechnicalEvidence,
+        signing_key: &[u8],
+    ) -> Result<u64> {
+        self.append_internal(&mut entry, evidence, Some(signing_key))
+    }
+
+    fn append_internal(
+        &self,
+        entry: &mut LedgerEntry,
+        evidence: &TechnicalEvidence,
+        signing_key: Option<&[u8]>,
+    ) -> Result<u64> {
         let mut last_id = self.last_entry_id.write()
             .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
         *last_id += 1;
@@ -130,11 +152,19 @@ impl DurableLedger {
             .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
         entry.previous_hash = *last_hash;
 
-        entry.finalize();
+        // INVARIANTE: `signing_key = None` preserva o comportamento legado
+        // de `append()` byte-a-byte — `entry.finalize()` usa zero-key por
+        // spec (ver `LedgerEntry::finalize` em entry.rs). Caller pré-ADR-0083
+        // (ex: ffi/bridge/mod.rs) continua produzindo verdict_id verificável
+        // com a mesma chave-zero, mantendo a cadeia de auditoria existente.
+        match signing_key {
+            Some(key) => entry.finalize_with_key(key),
+            None => entry.finalize(),
+        }
 
         self.wal.append(evidence)?;
-        self.write_to_disk(&entry)?;
-        let _ = self.remote_tx.send(entry);
+        self.write_to_disk(entry)?;
+        let _ = self.remote_tx.send(*entry);
 
         let mut last_hash_write = self.last_entry_hash.write()
             .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;

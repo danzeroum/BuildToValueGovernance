@@ -96,6 +96,29 @@ validação, estado compartilhado). O handler pode começar a usar
 
 ---
 
+## Breaking Changes (consumidores externos do JSONL)
+
+⚠️ O caminho do ledger JSONL muda de:
+
+```
+data/ledger/decisions.jsonl
+```
+
+para:
+
+```
+data/ledger/{tenant_id}/decisions.jsonl
+```
+
+Clientes que leem o JSONL diretamente (scripts de auditoria, testes de
+integração externos, dashboards customizados) **devem ser atualizados
+antes do merge** para `main`. Para retro-compatibilidade durante
+migração, basta varrer `data/ledger/*/decisions.jsonl` em ordem de
+modificação. O tenant `default` agrega o tráfego pré-ADR-0083.
+
+O ledger binário (`DurableLedger`) também migra para
+`{BTV_TENANT_DATA_DIR}/{tenant_id}/ledger.db` (padrão `/data/tenants`).
+
 ## Referências
 
 - ADR-0083 — Multi-Tenancy Isolation (TenantStorageRouter + TenantKeyDeriver)

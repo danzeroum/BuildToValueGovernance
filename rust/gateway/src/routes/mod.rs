@@ -41,6 +41,7 @@ use crate::state::AppState;
 use crate::middleware::rate_limit::RateLimitLayer;
 use crate::middleware::auth::ApiKeyLayer;
 use crate::middleware::trace_propagation::trace_propagation;
+use crate::middleware::tenant_extractor::TenantExtractorLayer;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     let cors = CorsLayer::new()
@@ -85,6 +86,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         )
 
         // ── Layers (ordem preservada) ─────────────────────────
+        // ADR-0084: TenantExtractor APÓS ApiKey (auth deve passar antes da
+        // extração de tenant). Layers no Axum executam na ordem inversa de
+        // declaração, então ApiKey é declarado depois para rodar primeiro.
+        .layer(TenantExtractorLayer::from_env())
         .layer(ApiKeyLayer::from_env())
         .layer(RateLimitLayer::from_env())
         .layer(middleware::from_fn(trace_propagation))
