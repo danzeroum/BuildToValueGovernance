@@ -4,8 +4,9 @@
 //! v2.3.1: extract_client_ip, ip_risk_to_str, FALLBACK_POLICY moved to common.rs.
 
 use axum::{
-    extract::State,
-    http::{HeaderMap, StatusCode},
+    extract::{Extension, State},
+    http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
+    response::IntoResponse,
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -13,6 +14,10 @@ use std::sync::Arc;
 use std::time::Instant;
 use ulid::Ulid;
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
+use buildtovalue_kernel::core::types::{Action, EthicalVerdict};
+use buildtovalue_kernel::ledger::entry::{ActionType, LedgerEntry};
+use buildtovalue_kernel::evidence::TechnicalEvidence;
+use crate::middleware::tenant_extractor::TenantId;
 use crate::state::AppState;
 use super::common::{extract_client_ip, ip_risk_to_str, FALLBACK_POLICY};
 
@@ -169,12 +174,19 @@ struct GovernanceExplain {
 
 pub async fn decide_handler(
     State(state): State<Arc<AppState>>,
+    Extension(tenant_id): Extension<TenantId>,
     headers: HeaderMap,
     Json(req): Json<DecideRequest>,
-) -> Result<Json<DecideResponse>, StatusCode> {
+) -> Result<axum::response::Response, StatusCode> {
     let start = Instant::now();
 
     let verdict_id = format!("VRD-{}", Ulid::new());
+
+    // ── ADR-0083: derivar TEK do tenant ANTES de qualquer acesso ao ledger.
+    // Se a derivação falhar (HKDF interno), retornar 500 — não vaza ledger.
+    let tek = state.tenant_deriver
+        .derive(tenant_id.as_str())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let client_ip = extract_client_ip(&headers);
     let ip_class = state.ip_classifier.classify(&client_ip);
@@ -184,9 +196,14 @@ pub async fn decide_handler(
     let jurisdiction_bitmask = parse_jurisdiction_bitmask(&headers);
 
     // ── EXECUTIVO ─────────────────────────────────────────────
+    // ADR-0083: `evidence` é movido para o escopo externo via tupla para
+    // que possa ser apendado no ledger isolado do tenant após o Mutex
+    // do Gatekeeper ser liberado.
     let (finding_count, critical_count, composite_risk, policy_action,
         hard_blocked, hard_block_term, matched_policies, max_finding_confidence,
-        entropy, total_chars, blake3_hash, drift_level) = {
+        entropy, total_chars, blake3_hash, drift_level, evidence): (
+        u32, u32, f32, String, bool, _, _, f32, f32, u32, String, String, TechnicalEvidence,
+    ) = {
         let mut gk = state.gatekeeper.lock()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -252,6 +269,7 @@ pub async fn decide_handler(
             evidence.stats.total_chars,
             format!("{:016x}", evidence.original_request_hash),
             drift_str,
+            evidence,
         )
     };
 
@@ -371,15 +389,16 @@ pub async fn decide_handler(
     let _ = hard_block_term;
     let _ = max_finding_confidence;
 
-    // ── AUDITIVO: Ledger JSONL ────────────────────────────────
+    // ── AUDITIVO: Ledger JSONL (dev tooling, agora por tenant) ────
     {
         use std::io::Write;
         let log_line = format!(
-            "{{\"ts\":{},\"session\":\"{}\",\"profile\":\"{}\",\"policy_action\":\"{}\",\"final_action\":\"{}\",\"mercy\":{},\"risk\":{:.4},\"findings\":{},\"critical\":{},\"hard_blocked\":{},\"verdict_id\":\"{}\",\"latency_ms\":{:.2}}}\n",
+            "{{\"ts\":{},\"tenant\":\"{}\",\"session\":\"{}\",\"profile\":\"{}\",\"policy_action\":\"{}\",\"final_action\":\"{}\",\"mercy\":{},\"risk\":{:.4},\"findings\":{},\"critical\":{},\"hard_blocked\":{},\"verdict_id\":\"{}\",\"latency_ms\":{:.2}}}\n",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis(),
+            tenant_id.as_str(),
             req.session_id.as_deref().unwrap_or("0"),
             req.profile.as_deref().unwrap_or("default"),
             policy_action,
@@ -392,17 +411,57 @@ pub async fn decide_handler(
             final_verdict_id,
             latency_ms,
         );
-        let _ = std::fs::create_dir_all("data/ledger");
+        let dir = format!("data/ledger/{}", tenant_id.as_str());
+        let path = format!("{}/decisions.jsonl", dir);
+        let _ = std::fs::create_dir_all(&dir);
         if let Ok(mut f) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open("data/ledger/decisions.jsonl")
+            .open(&path)
         {
             let _ = f.write_all(log_line.as_bytes());
         }
     }
 
-    Ok(Json(DecideResponse {
+    // ── ADR-0083: persistir binary LedgerEntry no ledger isolado do tenant.
+    // Falhas de I/O no ledger NÃO devem bloquear a resposta (apenas logam),
+    // pois a decisão já foi tomada e o JSONL acima já serve como fallback.
+    let (entry_id, decision_id_u128) = build_and_append_tenant_entry(
+        &state,
+        tenant_id.as_str(),
+        tek.as_ref(),
+        &evidence,
+        &policy_action,
+        &final_action,
+    )
+    .await
+    .unwrap_or((0, evidence.audit_trail_id));
+
+    let _ = entry_id;
+
+    // ── ADR-0084: headers de auditoria na resposta HTTP.
+    let mut response_headers = HeaderMap::new();
+    // X-BTV-Decision-Id: liga resposta à entrada do ledger forense (UUID v7).
+    if let Ok(val) = HeaderValue::from_str(&format!("{:032x}", decision_id_u128)) {
+        response_headers.insert(HeaderName::from_static("x-btv-decision-id"), val);
+    }
+    // X-BTV-Verdict-Signature: HMAC-SHA256(TEK, verdict_id) — autenticidade.
+    let sig_payload = final_verdict_id.as_bytes();
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    if let Ok(mut mac) = <Hmac<Sha256>>::new_from_slice(tek.as_ref()) {
+        mac.update(sig_payload);
+        let sig_hex = hex::encode(mac.finalize().into_bytes());
+        if let Ok(val) = HeaderValue::from_str(&format!("hmac-sha256={sig_hex}")) {
+            response_headers.insert(HeaderName::from_static("x-btv-verdict-signature"), val);
+        }
+    }
+    response_headers.insert(
+        HeaderName::from_static("x-btv-sampling-mode"),
+        HeaderValue::from_static("full"),
+    );
+
+    let body = Json(DecideResponse {
         action: final_action,
         original_action: policy_action,
         mercy_applied,
@@ -426,5 +485,68 @@ pub async fn decide_handler(
         ip_risk: ip_risk_str,
         ip_jurisdiction,
         drift_level,
-    }))
+    });
+
+    Ok((response_headers, body).into_response())
+}
+
+/// Constrói um `LedgerEntry` a partir da decisão e o persiste no ledger
+/// isolado do tenant via `DurableLedger::append_with_key`. Retorna
+/// `(entry_id, audit_trail_id)`. Em caso de falha de I/O do ledger,
+/// retorna `Err(())` para o caller decidir fallback (decisão não bloqueia).
+async fn build_and_append_tenant_entry(
+    state: &Arc<AppState>,
+    tenant_id: &str,
+    tek: &[u8],
+    evidence: &TechnicalEvidence,
+    policy_action: &str,
+    final_action: &str,
+) -> Result<(u64, u128), ()> {
+    let ledger = state.tenant_router.route(tenant_id).await.map_err(|e| {
+        tracing::warn!("tenant_router.route failed for '{tenant_id}': {e}");
+    })?;
+
+    let action_enum = match policy_action {
+        "BLOCK"   => Action::Block,
+        "REDACT"  => Action::Redact,
+        "EDUCATE" => Action::Log,
+        "LOG"     => Action::Log,
+        _         => Action::Allow,
+    };
+    let verdict_enum = match final_action {
+        "BLOCK"   => EthicalVerdict::Block,
+        "REDACT"  => EthicalVerdict::Redact,
+        "EDUCATE" => EthicalVerdict::Educate,
+        "REPORT"  => EthicalVerdict::Report,
+        "ALLOW"   => EthicalVerdict::Allow,
+        _         => EthicalVerdict::Pending,
+    };
+
+    let mut entry = LedgerEntry {
+        audit_trail_id: evidence.audit_trail_id,
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0),
+        action: ActionType::from(action_enum),
+        ethical_verdict: verdict_enum,
+        ..LedgerEntry::default()
+    };
+    entry.risk_level = if evidence.composite_risk >= 80.0 {
+        buildtovalue_kernel::core::types::RiskLevel::Critical
+    } else if evidence.composite_risk >= 60.0 {
+        buildtovalue_kernel::core::types::RiskLevel::High
+    } else if evidence.composite_risk >= 30.0 {
+        buildtovalue_kernel::core::types::RiskLevel::Low
+    } else {
+        buildtovalue_kernel::core::types::RiskLevel::Safe
+    };
+
+    let entry_id = ledger
+        .append_with_key(entry, evidence, tek)
+        .map_err(|e| {
+            tracing::warn!("ledger.append_with_key failed for '{tenant_id}': {e}");
+        })?;
+
+    Ok((entry_id, evidence.audit_trail_id))
 }
