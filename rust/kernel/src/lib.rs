@@ -7,6 +7,7 @@ pub mod batch;
 pub mod compliance;
 pub mod core;
 pub mod deobfuscator;
+pub mod ethics_plugin;
 pub mod evidence;
 pub mod gatekeeper;
 pub mod interceptor;
@@ -46,6 +47,7 @@ pub mod security {
     pub mod session_guard;
     pub mod skill_registry;
     pub mod signing;
+    pub mod tenant_key;        // ADR-0083: TEK derivation via HKDF
     pub mod model_integrity;   // ADR-051 Fase 1
     pub mod oblivious_cache;   // ADR-038
     pub mod timing_guard;      // ADR-038: constant-time validation

@@ -211,8 +211,24 @@ from buildtovalue.exceptions import (
 
 ---
 
+### Ética da API (RFC 7807, headers de auditoria e versionamento)
+
+Toda resposta de erro do BTV usa **`Content-Type: application/problem+json`** (RFC 7807). Toda resposta de decisão (ALLOW ou BLOCK) inclui os seguintes headers:
+
+| Header | Significado |
+|---|---|
+| `X-BTV-Decision-Id` | UUID v7 ligando a resposta à entrada imutável do ledger forense |
+| `X-BTV-Verdict-Signature` | `hmac-sha256=<hex>` — autenticidade contra proxies reversos |
+| `X-BTV-Sampling-Mode` | `full` ou `integrity` — modo do Speed Layer (Lambda Governance) |
+
+Para o contrato completo (estrutura RFC 7807, política de versionamento e deprecação, ciclo de 90 dias, regras de evolução de schema), ver **[API Ethics Guide](./API_ETHICS_GUIDE.md)** e **[ADR-0082](./adr/0082-api-evolution-deprecation-policy.md)**.
+
+---
+
 ### Próximos passos / Relacionados
 
+- [API Ethics Guide](./API_ETHICS_GUIDE.md)
+- [Ethics Plugin Example](./ETHICS_PLUGIN_EXAMPLE.md)
 - [Quickstart](./quickstart.md)
 - [Conceitos](./concepts.md)
 - [Integrações](./integrations/index.md)
