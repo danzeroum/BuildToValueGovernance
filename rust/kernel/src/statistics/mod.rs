@@ -10,6 +10,7 @@ pub mod rawls;         // ADR-0086: Disparate Impact Monitor
 pub mod jonas;         // ADR-0087: Population Stability Drift Monitor (engine)
 pub mod jonas_monitor;        // ADR-0087: state + baseline loader (Commits 3 & 4)
 pub mod fairness_composition; // ADR-0087: Rawls + Jonas composition (Commit 6)
+pub mod reloadable;           // ADR-0089: trait reload + remove_tenant
 
 pub use char_ratio::CharRatioAnalyzer;
 pub use entropy::EntropyCalculator;
@@ -27,6 +28,7 @@ pub use jonas_monitor::{
     BaselineError, JonasBaseline, JonasBaselineLoader, JonasMonitor, TenantJonasState,
 };
 pub use fairness_composition::{compose_fairness_action, FairnessDecision};
+pub use reloadable::{ReloadError, ReloadableGuardrail};
 
 // Re-exports para uso externo
 pub use crate::core::types::InputStatistics;

@@ -260,6 +260,37 @@ impl JonasMonitor {
     pub fn metrics_or_disabled(&self, tenant_id: &str) -> DriftMetrics {
         self.metrics(tenant_id).unwrap_or_else(DriftMetrics::disabled)
     }
+
+    /// Remove o estado do tenant (buffer + métricas + baseline).
+    /// Idempotente. Fail-safe em lock poison (retorna false).
+    /// Ver ADR-0089 §D3.
+    pub fn remove_tenant(&self, tenant_id: &str) -> bool {
+        let Ok(mut guard) = self.tenants.write() else {
+            return false;
+        };
+        guard.remove(tenant_id).is_some()
+    }
+}
+
+impl crate::statistics::reloadable::ReloadableGuardrail for JonasMonitor {
+    /// Parse YAML via `JonasBaselineLoader` e instala — substitui baseline
+    /// existente para o tenant, conforme `install_baseline()`.
+    /// `yaml_content` vem do gateway que leu `policies/{tenant_id}/drift_baseline.yaml`.
+    fn reload_baseline(
+        &self,
+        tenant_id: &str,
+        yaml_content: &str,
+    ) -> Result<(), crate::statistics::reloadable::ReloadError> {
+        use crate::statistics::reloadable::ReloadError;
+        let baseline = JonasBaselineLoader::from_yaml_str(yaml_content)
+            .map_err(|e| ReloadError::InvalidYaml(e.to_string()))?;
+        self.install_baseline(tenant_id, baseline);
+        Ok(())
+    }
+
+    fn remove_tenant(&self, tenant_id: &str) -> bool {
+        JonasMonitor::remove_tenant(self, tenant_id)
+    }
 }
 
 #[cfg(test)]
@@ -469,5 +500,79 @@ reference_proportions: [1.5, -0.5]
             .expect("tenant present")
             .expect("psi");
         assert!(m.window_size <= JONAS_BUFFER_CAPACITY);
+    }
+
+    // ── ADR-0089 — remove_tenant + reload via trait ───────────────
+
+    #[test]
+    fn remove_tenant_clears_state_and_is_isolated() {
+        let monitor = JonasMonitor::new();
+        monitor.install_baseline("a", make_baseline());
+        monitor.install_baseline("b", make_baseline());
+        for _ in 0..600 {
+            monitor.record("a", 0.05, false);
+            monitor.record("b", 0.05, false);
+        }
+        let _ = monitor.force_recompute("a", false);
+        let _ = monitor.force_recompute("b", false);
+        assert!(monitor.metrics("a").is_some());
+        assert!(monitor.metrics("b").is_some());
+
+        let removed = monitor.remove_tenant("a");
+        assert!(removed);
+        assert!(monitor.metrics("a").is_none());
+        assert!(
+            monitor.metrics("b").is_some(),
+            "tenant b deve permanecer intacto"
+        );
+    }
+
+    #[test]
+    fn remove_tenant_idempotent_in_jonas() {
+        let monitor = JonasMonitor::new();
+        assert!(!monitor.remove_tenant("ghost"));
+    }
+
+    #[test]
+    fn reload_baseline_via_trait_installs_then_records_work() {
+        use crate::statistics::reloadable::ReloadableGuardrail;
+        let monitor = JonasMonitor::new();
+        // Antes do reload: tenant não tem baseline.
+        monitor.record("acme", 0.5, false);
+        assert!(monitor.metrics("acme").is_none());
+
+        let result = <JonasMonitor as ReloadableGuardrail>::reload_baseline(
+            &monitor, "acme", VALID_YAML,
+        );
+        assert!(result.is_ok());
+        // Após reload, install_baseline foi chamado — buffer foi resetado.
+        // Novos records contribuem para um cálculo válido.
+        for _ in 0..600 {
+            monitor.record("acme", 0.5, false);
+        }
+        let m = monitor
+            .force_recompute("acme", false)
+            .expect("acme present")
+            .expect("psi");
+        assert!(m.psi.is_finite());
+    }
+
+    #[test]
+    fn reload_baseline_with_invalid_yaml_returns_error() {
+        use crate::statistics::reloadable::{ReloadError, ReloadableGuardrail};
+        let monitor = JonasMonitor::new();
+        let result = <JonasMonitor as ReloadableGuardrail>::reload_baseline(
+            &monitor, "tenant", "::not yaml::",
+        );
+        assert!(matches!(result, Err(ReloadError::InvalidYaml(_))));
+    }
+
+    #[test]
+    fn jonas_implements_reloadable_via_dyn_dispatch() {
+        use crate::statistics::reloadable::ReloadableGuardrail;
+        let monitor: Box<dyn ReloadableGuardrail> = Box::new(JonasMonitor::new());
+        assert!(!monitor.remove_tenant("ghost"));
+        let r = monitor.reload_baseline("acme", VALID_YAML);
+        assert!(r.is_ok());
     }
 }
