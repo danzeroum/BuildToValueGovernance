@@ -1,13 +1,17 @@
-# ADR-016: Ethical Context Engine v4.0
+# ADR 0016 — Ethical Context Engine v4
 
-**Status:** 🔒 Planejado (v1.8)
-**Crate:** `btv-governance` (Python)
+**Status:** ⚠️ Obsoleto  
+**Data de obsolescência:** 2026-05-28  
+**Substituído por:** ADR 0038 — Ethical Context Engine v4 (especificação canônica)
 
-## Decisão
-Formalizar o pipeline de decisão ética em Python:
-1. **Rawls (Equidade):** Blind test do input.
-2. **Levinas (Cuidado):** Verifica vulnerabilidade do usuário.
-3. **Jonas (Proporcionalidade):** Custo da ação vs Risco.
-4. **Gilligan (Misericórdia):** Aplica o ADR-003 se incerteza for alta.
+---
 
-Obrigatório uso de `explain_decision()` retornando rationale legível.
+## Nota de Auditoria
+
+Este stub (491 bytes) foi criado no Grupo B como placeholder para o Ethical Context Engine, o subsistema de análise de contexto ético da República Algorítmica. Auditoria forense de 2026-05-28 identificou que o escopo foi completamente e extensivamente materializado em:
+
+- [ADR 0038](0038-ethical-context-engine-v4.md) (**40.133 bytes**) — o maior ADR do repositório, com especificação completa do engine, fundamentos filosóficos (Rawls, Levinas, Gilligan, Jonas), contratos de interface e critérios de avaliação ética.
+
+O ADR 0038 constitui a especificação canônica e definitiva deste subsistema. Reescrever este stub produziria um quinto artefato de responsabilidade algorítmica — padrão classificado como "fóssil documental" no laudo de coerência de 2026-05-28.
+
+**Ação:** Este arquivo é mantido como registro histórico com status Obsoleto. Toda referência deve apontar para [ADR 0038](0038-ethical-context-engine-v4.md).
