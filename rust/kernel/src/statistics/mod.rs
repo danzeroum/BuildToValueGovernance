@@ -7,6 +7,7 @@ pub mod char_ratio;
 pub mod entropy;
 pub mod zscore;
 pub mod rawls; // ADR-0086: Disparate Impact Monitor
+pub mod jonas; // ADR-0087: Population Stability Drift Monitor
 
 pub use char_ratio::CharRatioAnalyzer;
 pub use entropy::EntropyCalculator;
@@ -14,6 +15,11 @@ pub use zscore::ZScoreCalculator;
 pub use rawls::{
     compute_dir, FairnessMetrics, GroupClass, OutcomeBucket, RawlsCounters,
     RawlsMonitor, DEFAULT_DIR_THRESHOLD, RAWLS_MIN_SAMPLES_PER_GROUP, RAWLS_WINDOW_SIZE,
+};
+pub use jonas::{
+    compute_psi, histogram_from_scores, DriftAlert, DriftMetrics, PsiError,
+    JONAS_BUFFER_CAPACITY, JONAS_COMPUTE_INTERVAL, JONAS_CRITICAL_THRESHOLD,
+    JONAS_MIN_SAMPLES, JONAS_WARNING_THRESHOLD,
 };
 
 // Re-exports para uso externo
