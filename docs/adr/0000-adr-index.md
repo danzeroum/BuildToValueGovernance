@@ -1,330 +1,247 @@
-[BuildToValue](../../README.md) › [Documentação](../README.md) › [Trilha Engenheiro](../for-engineers.md) › **Índice de ADRs**
+# Índice Mestre de ADRs — BuildToValue Governance
 
-![Engenheiro](https://img.shields.io/badge/Trilha-Engenheiro-1f6feb)
+**Versão do Índice:** v4.1.0  
+**Data de Consolidação:** 2026-05-28  
+**HEAD de Referência:** `0f2b72873ff0da6efd0d4e150a7a18affa46488e`  
+**Total de ADRs Catalogados:** 81 (numerações 0001–0081; colisões de numeração explicitadas)  
+**Mantenedor:** AI Squad — Arquiteta (Opus) + Reviewer (Opus)  
+**Classificação:** Documentação Arquitetural — Fonte Primária de Rastreabilidade
 
-<!-- audience: engineer -->
+> **Nota de Integridade:** Este índice mapeia exclusivamente arquivos físicos confirmados no disco do repositório contra o HEAD `0f2b728`. Nenhuma entrada aponta para slug fictício ou arquivo inexistente. Qualquer divergência futura entre este índice e o estado do disco constitui um gatilho de não-conformidade de documentação (*documentation drift*) e deve ser tratada como incidente de rastreabilidade.
 
 ---
 
-Aqui está o arquivo completo atualizado:
-
-***
-
-# ADR-0000: Architecture Decision Record Index
-
-**Status:** 🟢 ATIVO (Documento Vivo)
-**Última Atualização:** 09 de março de 2026
-**Escopo:** BuildToValue v1.0 → v3.0
-
-***
-
-## 📖 Como usar este Índice
-
-Este catálogo documenta todas as decisões arquiteturais significativas (ADRs) tomadas no projeto.
-
-* **Status:** ✅ Ativo (Vigente), 🚧 Em Implementação, 🔒 Planejado (Futuro), ⛔ Obsoleto (Histórico), 🔮 Visão (sem spec detalhada ainda).
-* **Versão:** Indica em qual release a decisão foi ou será implementada.
-
-> **Nota para Desenvolvedores:**
-> Antes de iniciar qualquer feature, verifique se existe um ADR correspondente.
-> Se o código desviar do ADR, o Pull Request será rejeitado. Para propor
-> mudanças, crie um novo ADR e submeta para aprovação do Staff Engineer.
-
-***
-
-## 🏗️ Grupo A: Fundamentos Arquiteturais (Core)
-
-*Decisões estruturais que definem "o que é" o sistema.*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0001** | **Hybrid Architecture** | ✅ Ativo | v1.0 | [Ver Detalhes](./0001-hybrid-architecture.md) | Rust (Fatos) + Python (Valores). Ponte via PyO3. |
-| **0002** | **Evidence Protocol v1.0** | ⛔ Obsoleto | v1.0 | [Ver Detalhes](./0002-evidence-protocol-v1-obsolete.md) | Tentativa inicial com heap allocation (falhou). Substituído por ADR-0005. |
-| **0003** | **Mercy Algorithm** | ✅ Ativo | v1.0 | [Ver Detalhes](./0003-mercy-algorithm.md) | Lógica de Gilligan: Contexto > Regra Rígida. mercy_score > 0.5 → EDUCATE. |
-| **0004** | **Immutable Ledger** | ✅ Ativo | v1.0 | [Ver Detalhes](./0004-immutable-ledger.md) | BLAKE3 Chain multi-camada (WAL→Disk→Remote). NATS JetStream na v3.0. |
-| **0005** | **Evidence Protocol v2.1** | ✅ Ativo | v1.5 | [Ver Detalhes](./0005-evidence-protocol-v2-fixed-size.md) | Struct fixo de 9596 bytes. Zero-heap no hot path. Ring buffer FIFO. |
-| **0006** | **Policy-as-Code** | ✅ Ativo | v1.0 | [Ver Detalhes](./0006-policy-as-code.md) | YAML versionado com herança hierárquica. Blind Policy Testing (≥95%). |
-| **0007** | **Trust Score Algorithm** | ✅ Ativo | v2.0 | [Ver Detalhes](./0007-trust-score-algorithm.md) | Algoritmo multifatorial: base + history + appeals + decay + consistency. |
-| **0008** | **Timing Mitigation** | ✅ Ativo | v1.0 | [Ver Detalhes](./0008-side-channel-timing-mitigation.md) | Constant-time validators. ORAM blacklist lookup. T-test p=0.67. |
-| **0009** | **Modular Monolith** | ✅ Ativo | v3.0 | [Ver Detalhes](./0009-modular-monolith-pivot.md) | Estrutura v2.2 preservada. `rust/gateway/` único crate novo (v1.9+). |
-
-***
-
-## 🧠 Grupo B: Governança & Transparência (v1.5 – v1.8)
-
-*Decisões sobre ética, explicabilidade e confiança.*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0010** | **Bias Declaration Mandate** | 🚧 Impl. | v1.5 | [Ver Detalhes](./0010-bias-declaration-mandate.md) | Todo `Validator` deve declarar FPR/FNR (Jonas). `bias_declaration()` obrigatório no trait. |
-| **0016** | **Ethical Context Engine v4** | ✅ Futuro | v1.8 | [Ver Detalhes](./0016-ethical-context-engine-v4.md) | Pipeline ético completo (Rawls→Levinas→Jonas→Gilligan). `explain_decision()` obrigatório. |
-| **0036** | **Red-team Formal e Bias Guardian** | ✅ Planejado | v1.7.0 | [Ver Detalhes](./0036-redteam-bias-guardian.md) | Protocolo formal de red-team com cadência CI obrigatória. `BiasGuardian` Python verifica divergência FPR/FNR declarado vs medido. Thresholds: warning 5pp / block 15pp (FNR). Fecha loop de ADR-010. |
-| **0038** | **EthicalContextEngine v4.0 — Pipeline Filosófico Explícito** | ✅ Planejado | v1.8.0 | [Ver Detalhes](./0038-ethical-context-engine-v4.md) | 4 estágios nomeados: Rawls→Levinas→Jonas→Gilligan. `ExplainDecision` estruturado (EU AI Act Art. 13). `pipeline_trace` auditável. Integração AppealEngine. Substitui esboço ADR-016. |
-| **0039** | **TrustScoreCalculator v2.0** | ✅ Planejado | v1.8.0 | [Ver Detalhes](./0039-trust-score-calculator-v2.md) | Fórmula 5 componentes (ADR-007) com TrustStore Protocol (InMemory\|SQLite\|Redis-ready). Fix decay overflow. `adjust()` para AppealEngine (+0.1/−0.05). `TrustExplain` estruturado. Substitui esboço ADR-007. |
-
-***
-
-## 🛡️ Grupo C: Segurança & Detecção Avançada (v1.6 – v2.2)
-
-*Decisões para combater evasão, ataques e vazamento de dados.*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0011** | **Policy Engine Design** | ✅ Futuro | v1.6 | [Ver Detalhes](./0011-policy-engine.md) | Compilação de YAML para Runtime Rust (phf). Lookup O(1) para Hard Blocks. |
-| **0012** | **Output Guard** | ✅ Futuro | v1.6 | [Ver Detalhes](./0012-output-guard.md) | Sanitização de PII nas respostas da IA antes de entregar ao usuário. |
-| **0013** | **Deobfuscator Chain v2** | ✅ Futuro | v1.6 | [Ver Detalhes](./0013-deobfuscator-chaining-v2.md) | Loop de decodificação (max 3 níveis) anti-evasão. CRITICAL_RISK após 3 tentativas. |
-| **0014** | **IP & Session Drift** | ✅ Futuro | v1.7 | [Ver Detalhes](./0014-ip-classifier-session-drift.md) | Classificação de origem (Tor/VPN). Cosseno de similaridade → IdentityChallenge. |
-| **0015** | **Interceptor Hooks** | ✅ Futuro | v1.7 | [Ver Detalhes](./0015-interceptor-hooks.md) | Traits `RequestInterceptor`/`ResponseInterceptor`. Chain of Responsibility + fail-secure. |
-| **0028** | **Heuristic Prompt Injection Detector** | ✅ Ativo | v2.2 | [Ver Detalhes](./0028-heuristic-prompt-injection-detector.md) | Detecção heurística de prompt injection sem ML. Padrões PTBR + EN. Integra Gate 3 de RAG. |
-
-***
-
-## 🔮 Grupo D: Visão de Longo Prazo
-
-*Conceitos aprovados sem especificação técnica detalhada ou com ADR formal em andamento.*
-
-| ID | Título | Status | Alvo | Resumo |
-|:---|:---:|:---:|:---:|:---|
-| **0027** | **Local SLM Strategy** | 🔒 Futuro | v2.1 | Phi-4 Mini local via `btv-slm` (mmap, CPU-only). ADR formal criado. Ver Grupo H. |
-| **---** | **Angular Dashboard** | 🔮 Visão | v3.0+ | Interface Enterprise para gestão de políticas e contestabilidade. |
-| **---** | **NATS JetStream** | 🔮 Visão | v1.9+ | Logs duráveis e mensageria assíncrona. Alternativa ao S3 (ver ADR-004 Emenda v3.0). |
-
-***
-
-## 🏛️ Grupo E: Governance (v1.8)
-
-*Contestabilidade, appeals e ciclo de feedback ético.*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0017** | **Contestability Loop** | ✅ Ativo | v1.8 | [Ver Detalhes](./0017-contestability-loop.md) | Appeals HTTP: submit, status, resolve. SLA 24h. Levinas. Trust score feedback. |
-| **0037** | **Contestability Loop — AppealEngine v2.0 + SLA 24h Enforcement** | 🔒 Planejado | v1.8.0 | [Ver Detalhes](./0037-contestability-loop-appeal-engine.md) | Judiciário de segundo grau. HMAC verify antes de aceitar appeal. SLAMonitor worker ativo (Jonas). Trust bidirecional: +0.1 aceito / −0.05 rejeitado (Gilligan). Toda appeal no Ledger. Substitui esboço ADR-017. |
-
-***
-
-## 🌐 Grupo F: API & Observability (v1.9 – v2.0)
-
-*Gateway, métricas, endpoints públicos e notificações.*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0018** | **Axum Gateway** | ✅ Ativo | v1.9 | [Ver Detalhes](./0018-axum-gateway.md) | Gateway HTTP Rust. Orquestra kernel + governance. Latência 6–18ms observada. |
-| **0019** | **Observability** | ✅ Ativo | v1.9 | [Ver Detalhes](./0019-observability.md) | Prometheus + Grafana. 7 famílias de métricas. Scrape 5s. |
-| **0023** | **Appeals HTTP Endpoint** | ✅ Ativo | v2.0 | [Ver Detalhes](./0023-appeals-http-endpoint.md) | Expõe ContestabilityLoop via 5 endpoints REST. LGPD Art. 20 + EU AI Act Art. 86. |
-| **0025** | **Ledger Query API** | ✅ Ativo | v2.1 | [Ver Detalhes](./0025-ledger-query-api.md) | API de consulta ao DurableLedger por `evidence_id`, janela temporal e `agent_id`. |
-| **0026** | **Webhook Notifications** | ✅ Futuro | v2.1 | [Ver Detalhes](./0026-webhook-notifications.md) | Notificações push para eventos de BLOCK, appeal e deploy. Payload HMAC-assinado. |
-| **0040** | **Axum Gateway v2.0 — Extensões República Algorítmica** | ✅ Planejado | v1.9.0 | [Ver Detalhes](./0040-axum-gateway-v2-extensions.md) | +3 rotas: /v1/decide, /v1/appeals (proxy), /health/bias. Rate limit per-tenant (BLAKE3 hash). X-BTV-Jurisdiction → jurisdiction_bitmask. Estende ADR-018. |
-| **0041** | **Observability v2.0 — Métricas da República Algorítmica** | ✅ Planejado | v1.9.0 | [Ver Detalhes](./0041-observability-v2-republic-metrics.md) | +17 métricas: pipeline filosófico por estágio, SLA compliance rate, BiasDeclaration divergência em tempo real, mercy scenarios. 5 alerting rules. Dashboard Grafana 4 poderes. Estende ADR-019. |
-
-***
-
-## 🧠 Grupo G: Intelligence & Compliance (v2.0 – v2.1)
-
-*Inteligência de ameaças, plugins de compliance e dashboards.*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0020** | **Intelligence Hub** | ✅ Ativo | v2.0 | [Ver Detalhes](./0020-intelligence-hub.md) | Threat feed MISP/STIX. SQLite + BLAKE2b. Endpoints ingest/query/stats. |
-| **0021** | **Compliance Plugins** | ✅ Ativo | v2.0 | [Ver Detalhes](./0021-compliance-plugins.md) | Plugin architecture. LGPD (Art. 6, 18, 20, 46, 48) + EU AI Act (Art. 5, 9, 13, 14, 15). |
-| **0022** | **Streamlit Dashboard** | ✅ Ativo | v2.0 | [Ver Detalhes](./0022-streamlit-dashboard.md) | MVP visual. 6 pages. Democratiza acesso. Angular Enterprise planejado para v3.0+. |
-| **0024** | **Threat→Policy Bridge** | ✅ Ativo | v2.1 | [Ver Detalhes](./0024-threat-policy-bridge.md) | MispIngestor→ThreatClassifier→PolicyGenerator. `enabled: false` + human-in-the-loop obrigatório. |
-
-***
-
-## 🤖 Grupo H: Local Intelligence (v2.1)
-
-*Inferência local com modelos de linguagem leves, sem dependência de vendor.*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0027** | **Local SLM Strategy** | ✅ Futuro | v2.1 | [Ver Detalhes](./0027-local-slm-strategy.md) | Phi-4 Mini via `btv-slm` (mmap, CPU-only, zero GPU). Contexto de governança local sem vendor. Alternativa soberana ao vendor externo. |
-
-***
-
-## 🔗 Grupo I: Integrações de Agentes IA (v2.0+)
-
-*Contratos e perfis para integração de agentes externos com o BTV como PDP.*
-*Leia ADR-0029 (contrato canônico) antes de ler qualquer perfil de integração.*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0029** | **External Agent PDP** | 🔒 Proposto | v2.0 | [Ver Detalhes](./0029-external-agent-pdp.md) | Contrato canônico para qualquer agente externo usar o BTV como Policy Decision Point. `AgentDecisionRequest` / `VerdictEnvelope` / `ActionImpact`. Base de todos os perfis de integração. |
-| **0030** | **Chatbot — LLM Self-Hosted** | 🔒 Proposto | v2.0 | [Ver Detalhes](./0030-internal-chatbot-selfhosted-llm.md) | Perfil de integração BTV para chatbot com Llama 70B/vLLM. 5 gates: mensagem, indexação, RAG, training batch, LoRA deploy (`Irreversible`). Evidence LGPD. BiasDeclaration em treino. |
-| **0031** | **Chatbot — LLM Vendor Externo** | ✅ Proposto | v2.0 | [Ver Detalhes](./0031-external-chatbot-vendor-llm.md) | Delta do ADR-0030 para vendors externos (OpenAI, Anthropic, Google, Azure). Toda mensagem é `Irreversible`. `/v1/sanitize` obrigatório antes de cada envio. Gate de aprovação de vendor por `sector_id`. LGPD Art. 33. |
-
-***
-
-## 📐 Grupo J: v1.6 — Multilingual & Multi-tenant Foundation (ADR-0032 a ADR-0035)
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0032** | **ScanContextFlags** | 🚧 Impl. | v1.6.0 | [Ver Detalhes](./0032-scan-context-flags.md) | Substitui `_reserved: [u8; 64]` por struct nomeado de 64 bytes exatos. Fundação para language detection, jurisdição, capability mask e multi-tenant. |
-| **0033** | **PatternRegistry (Tier 0/1/2)** | ✅ Planejado | v1.6.0 | [Ver Detalhes](./0033-pattern-registry-tiers.md) | Substitui lazy_static por 3 tiers: Tier 0 hardcoded, Tier 1 build-time YAML, Tier 2 runtime ArcSwap. Epoch versionado para auditoria forense. |
-| **0034** | **Language Detection Strategy** | ✅ Planejado | v1.6.1 | [Ver Detalhes](./0034-language-detection-strategy.md) | whatlang-rs no Stage 1 do pipeline. Preenche `lang_bitmask` e `lang_scores` em ScanContextFlags. Threshold 0.75 + min 20 chars. Inputs ambíguos → undetermined → apenas Tier 0. |
-| **0035** | **Multi-jurisdiction PII Validators** | ✅ Planejado | v1.7.0 | [Ver Detalhes](./0035-multi-jurisdiction-pii-validators.md) | NHS Number (Mod 11), EU VAT (DE/FR/IT/ES/PT), IBAN (Mod 97). Dispatcher por `jurisdiction_bitmask`. Novos `ValidatorModule` entries. |
-
-***
-
-## 🔐 Grupo K: v2.2 — Model Integrity Governance (ADR-0042, ADR-0049, ADR-0051)
-
-*Verificação de integridade de modelos AI: cadeia Python SHA-256 fast-path → Rust BLAKE3 full-path. Implementado em commit `8ee8994`, março 2026. 39 testes Python, 0 regressões.*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0042** | **PolicyEngine — Model Integrity typed accessors** | ✅ Ativo | v2.2 | [Ver Detalhes](./0042-policy-engine-model-integrity.md) | `ModelIntegrityConfig` + `AbliterationConfig` frozen dataclasses. `abliteration_threshold` clamped `[min, max]`. `manifest_path_for(model_id)`. `data/policies/security/model_integrity.yaml` (Policy-as-Code ADR-006). rglob YAML discovery. |
-| **0049** | **IntegrityVerifier** | ✅ Ativo | v2.2 | [Ver Detalhes](./0049-integrity-verifier.md) | Orquestra 4 estágios: `ManifestHashVerifier` (SHA-256) → blacklist `is_known_abliterated()` → whitelist `get_model_info()` → `AbliterationDetector`. `verify()` bool fail-secure. Cadeia de responsabilidade Python→Rust (Jonas). |
-| **0051** | **AbliterationDetector Fase 2** | ✅ Ativo | v2.2 | [Ver Detalhes](./0051-abliteration-detector-phase2.md) | 8 probes calibradas: 5 HARMFUL + 3 BENIGN. Refusal detection via NLP regex (12 padrões). `probe_timeout_ms` enfor­çado via `threading.Thread + queue.Queue` (cross-platform, sem `signal.alarm`). Timeout = recusa implícita (Jonas: fail-secure). Rawls: todas as probes idênticas para todos os modelos (blind). |
-
-> **Nota de lacuna intencional:** ADR-0043 a ADR-0048 e ADR-0050 estão reservados para ADRs intermediários identificados durante a implementação de v2.2 (ex.: `model_integrity.yaml` schema, `ManifestVerificationResult` contract). Serão formalizados no próximo ciclo de documentação.
-
-***
-
-## 🚀 Grupo L: v3.0 — SaaS Deployment (ADR-0059, ADR-0060)
-
-*Gateway como serviço gerenciado. Zero instalação para o cliente: `OPENAI_BASE_URL=https://buildtovalue-gateway.fly.dev/v1/proxy`. ADR-0059 formaliza a fronteira Rust/Python; ADR-0060 documenta a escolha Fly.io sobre Cloudflare Workers e K8s gerenciado.*
-
-| ID | Título | Status | Versão | Link | Resumo |
-|:---|:---|:---:|:---:|:---|:---|
-| **0059** | **Rust/Python Boundary** | ✅ Ativo | v3.0 | [Ver Detalhes](./0059-rust-python-boundary.md) | Formaliza plano de controle Rust (crypto, routing, proxy, tipos afins) vs plano analítico Python (LLMs, ML, contestability). `common.rs` como ponto DRY. Dual auth: BTV `x-api-key` (gateway) + LLM provider `Authorization` (forwarded). |
-| **0060** | **SaaS Deployment — Fly.io** | ✅ Ativo | v3.0 | [Ver Detalhes](./0060-saas-deployment.md) | Fly.io sobre Cloudflare Workers (WASM incompatível com binário Rust standalone) e K8s gerenciado (overhead operacional). `primary_region = "gru"` (São Paulo) — LGPD Art. 44. `PORT` env var configurável. `force_https = true`. `fly.toml` na raiz do repo. |
-
-***
-
-## 📐 Mapa de Dependências entre ADRs
-
-```
-ADR-0001 (Hybrid)
-  └─► ADR-0005 (Evidence v2.1) ──► ADR-0010 (BiasDeclaration)
-  └─► ADR-0009 (Monolito)     ──► ADR-0018 (Axum Gateway)
-                                        └─► ADR-0019 (Observability)
-                                        └─► ADR-0023 (Appeals HTTP)
-                                        └─► ADR-0025 (Ledger Query)
-                                        └─► ADR-0026 (Webhooks)
-
-ADR-0004 (Ledger) ──► ADR-0025 (Ledger Query)
-                  ──► ADR-0029/0030/0031 (evidence_id forense)
-
-ADR-0006 (Policy-as-Code)
-  └─► ADR-0011 (Policy Engine Rust)
-  └─► ADR-0024 (Threat→Policy Bridge)
-  └─► ADR-0029/0030/0031 (YAML por sector_id)
-  └─► ADR-0042 (model_integrity.yaml — Policy-as-Code para modelos AI)
-
-ADR-0017 (Contestability)
-  └─► ADR-0023 (Appeals HTTP)
-  └─► ADR-0029/0030/0031 (contestable: true, SLA 24h)
-
-ADR-0020 (Intelligence Hub)
-  └─► ADR-0024 (Threat→Policy Bridge)
-  └─► ADR-0028 (Heuristic Detector — padrões do feed)
-
-ADR-0028 (Heuristic Detector)
-  └─► ADR-0029 (Gate 3 RAG — anti-injection)
-  └─► ADR-0030 (Gate 3 RAG interno)
-  └─► ADR-0031 (Gate 4 RAG externo — padrões adicionais PTBR)
-
-ADR-0029 (External Agent PDP — contrato canônico)
-  └─► ADR-0030 (Chatbot LLM Interna)
-  └─► ADR-0031 (Chatbot LLM Externa)
-
-ADR-0042 (PolicyEngine Model Integrity)     ← Policy-as-Code (ADR-0006)
-  └─► ADR-0049 (IntegrityVerifier)
-        └─► ManifestHashVerifier (SHA-256 fast-path)
-        └─► AbliterationDetector (ADR-0051)
-        └─► Rust kernel BLAKE3 weights (ADR-0005, v2.3)
-  └─► ADR-0051 (AbliterationDetector Fase 2)
-        └─► probe_timeout_ms (threading + queue, cross-platform)
-        └─► ADR-0010 (BiasDeclaration — refusal calibration)
-
-ADR-0018 (Axum Gateway)
-  └─► ADR-0059 (Rust/Python Boundary — common.rs DRY)
-        └─► ADR-0060 (SaaS Deployment — Fly.io)
-              └─► fly.toml (primary_region=gru, force_https, PORT env var)
-              └─► ops/k8s/ (Enterprise on-premise path preservado)
-```
-
-***
-
-## 📁 Arquivos de Integração Associados
-
-Os ADRs do Grupo I possuem documentos de referência de implementação em `docs/integrations/` (perfis prontos para copy-paste):
-
-| Perfil | ADR | Arquivo | Descrição |
-|:---|:---:|:---|:---|
-| Chatbot LLM Interna | 0030 | `docs/integrations/chatbot-internal-llm.md` | Implementação completa dos 5 gates, Angular + Rust + Python, Docker Compose dev, políticas YAML. |
-| Chatbot LLM Externa | 0031 | `docs/integrations/chatbot-external-llm.md` | Delta completo: 4 gates, catálogo de vendors, políticas por sector_id, evidência LGPD Art. 33. |
-
-***
-
-## 📋 Políticas YAML Versionadas por Perfil
-
-| Arquivo | ADR | Finalidade |
-|:---|:---:|:---|
-| `data/policies/base.yaml` | 0006 | Regras raiz — herança global |
-| `data/policies/general.yaml` | 0006 | Perfil geral (agentes sem sector_id) |
-| `data/policies/medical-agent.yaml` | 0006 | Override para setor saúde |
-| `data/policies/auto-generated/` | 0024 | Policies geradas pelo Threat→Policy Bridge (todas `enabled: false`) |
-| `data/policies/chatbot-internal-message.yaml` | 0030 | Mensagens com PII/CONFIDENTIAL no chatbot interno |
-| `data/policies/chatbot-rag-injection.yaml` | 0030 | Anti-injection nos chunks RAG (chatbot interno) |
-| `data/policies/chatbot-lora-deploy.yaml` | 0030 | Threshold de qualidade para deploy de LoRA |
-| `data/policies/chatbot-lora-deploy-health.yaml` | 0030 | Override para sector_id: health (refusal ≥ 90%) |
-| `data/policies/chatbot-vendor-approval.yaml` | 0031 | Quais vendors são aprovados por sector_id |
-| `data/policies/chatbot-vendor-send.yaml` | 0031 | Regras por mensagem enviada a vendor externo |
-| `data/policies/chatbot-vendor-response.yaml` | 0031 | Padrões de exfiltração na resposta do vendor |
-| `data/policies/chatbot-rag-external.yaml` | 0031 | Anti-injection para RAG em prompts externos |
-| **`data/policies/security/model_integrity.yaml`** | **0042** | **Integridade de modelos AI: hash manifest, abliteration threshold, probe_timeout_ms** |
-
-***
-
-## 📝 Legenda de Status
+## Legenda de Status
 
 | Símbolo | Significado |
 |:---:|:---|
-| ✅ | **Ativo:** Decisão tomada, implementada e em vigor. Código deve seguir estritamente. |
-| ⛔ | **Obsoleto:** Decisão revogada ou substituída. Mantida apenas para histórico. |
-| 🚧 | **Em Implementação:** Decisão aprovada, trabalho em andamento na versão atual. |
-| 🔒 | **Planejado / Proposto:** Aprovado para versão futura ou proposto aguardando implementação. Não implementar agora, mas não bloquear. |
-| 🔮 | **Visão:** Conceito aprovado, sem especificação técnica detalhada ainda. |
-
-***
-
-## 📊 Estatísticas do Índice
-
-| Métrica | Valor |
-|:---|:---:|
-| Total de ADRs | 46 |
-| ✅ Ativos | 23 |
-| 🚧 Em Implementação | 2 |
-| 🔒 Planejados / Propostos | 13 |
-| ⛔ Obsoletos | 1 |
-| 🔮 Visão (sem ADR formal) | 2 |
-| Testes (governance Python) | 39 |
-| Última entrada | ADR-0060 |
-| Próximo disponível | ADR-0061 |
-
-***
-
-## O que foi atualizado
-
-| Seção | Mudança |
-|:---|:---|
-| **Cabeçalho** | Data atualizada para 09/03/2026 |
-| **Grupo K** | ✨ **Novo** — Model Integrity Governance: ADR-042, ADR-049, ADR-051 (✅ Ativo v2.2) |
-| **Nota de lacuna** | Reserva intencional ADR-043–048 e ADR-050 documentada |
-| **Mapa de dependências** | Adicionada cadeia `ADR-0042 → ADR-0049 → ADR-0051 → Rust BLAKE3` |
-| **Políticas YAML** | Adicionado `data/policies/security/model_integrity.yaml` (ADR-0042) |
-| **Grupo L** | ✨ **Novo** — SaaS Deployment: ADR-0059 (Rust/Python Boundary), ADR-0060 (Fly.io) (✅ Ativo v3.0) |
-| **Mapa de dependências** | Adicionada cadeia `ADR-0018 → ADR-0059 → ADR-0060 → fly.toml` |
-| **Estatísticas** | Total 46 (+2), Ativos 23 (+2), Última entrada ADR-0060, Próximo ADR-0061 |
+| ✅ Aceito | Decisão homologada, em vigor na base de código |
+| 🔒 Rascunho | Proposta em elaboração, não vinculante |
+| ⚠️ Obsoleto | Supersedido por ADR posterior; mantido para histórico |
 
 ---
 
-### Próximos passos / Relacionados
+## Grupo A — Fundamentos Arquiteturais (0001–0010)
 
-- [Conceitos](../concepts.md)
-- [Arquitetura (Atlas)](../ARCHITECTURE_ATLAS.md)
-- [Release Gates](../RELEASE_GATES.md)
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0001 | Arquitetura Híbrida Rust/Python — Monolito Modular | [0001-hybrid-architecture.md](0001-hybrid-architecture.md) | ✅ Aceito |
+| 0002 | Evidence Protocol v1 | [0002-evidence-protocol-v1-obsolete.md](0002-evidence-protocol-v1-obsolete.md) | ⚠️ Obsoleto |
+| 0003 | Algoritmo de Misericórdia (Mercy Algorithm v1) | [0003-mercy-algorithm.md](0003-mercy-algorithm.md) | ✅ Aceito |
+| 0004 | Ledger Imutável — Cadeia de Hashes BLAKE3 | [0004-immutable-ledger.md](0004-immutable-ledger.md) | ✅ Aceito |
+| 0005 | Evidence Protocol v2 — Tamanho Fixo Canônico | [0005-evidence-protocol-v2-fixed-size.md](0005-evidence-protocol-v2-fixed-size.md) | ✅ Aceito |
+| 0006 | Policy-as-Code — Legislativo da República Algorítmica | [0006-policy-as-code.md](0006-policy-as-code.md) | ✅ Aceito |
+| 0007 | Algoritmo de Trust Score v1 | [0007-trust-score-algorithm.md](0007-trust-score-algorithm.md) | ✅ Aceito |
+| 0008 | Mitigação de Side-Channel por Timing | [0008-side-channel-timing-mitigation.md](0008-side-channel-timing-mitigation.md) | ✅ Aceito |
+| 0009 | Pivô para Monolito Modular | [0009-modular-monolith-pivot.md](0009-modular-monolith-pivot.md) | ✅ Aceito |
+| 0010 | Mandato de BiasDeclaration | [0010-bias-declaration-mandate.md](0010-bias-declaration-mandate.md) | ✅ Aceito |
 
 ---
 
-<sub>[↑ Hub](../README.md) · [Trilha Engenheiro](../for-engineers.md) · [Trilha DPO/CISO](../for-dpo-ciso.md) · [Links de Referência](../reference-links.md)</sub>
+## Grupo B — Componentes do Kernel v1 (0011–0020)
+
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0011 | Policy Engine — Núcleo v1 | [0011-policy-engine.md](0011-policy-engine.md) | ✅ Aceito |
+| 0012 | Output Guard | [0012-output-guard.md](0012-output-guard.md) | ✅ Aceito |
+| 0013 | Deobfuscator Chaining v2 | [0013-deobfuscator-chaining-v2.md](0013-deobfuscator-chaining-v2.md) | ✅ Aceito |
+| 0014 | IP Classifier e Session Drift v1 | [0014-ip-classifier-session-drift.md](0014-ip-classifier-session-drift.md) | ✅ Aceito |
+| 0015 | Interceptor Hooks — JVM Bridge | [0015-interceptor-hooks.md](0015-interceptor-hooks.md) | ✅ Aceito |
+| 0016 | Ethical Context Engine v4 (stub) | [0016-ethical-context-engine-v4.md](0016-ethical-context-engine-v4.md) | ✅ Aceito |
+| 0017 | Contestability Loop v1 | [0017-contestability-loop.md](0017-contestability-loop.md) | ✅ Aceito |
+| 0018 | Axum Gateway v1 | [0018-axum-gateway.md](0018-axum-gateway.md) | ✅ Aceito |
+| 0019 | Observabilidade v1 | [0019-observability.md](0019-observability.md) | ✅ Aceito |
+| 0020 | Intelligence Hub | [0020-intelligence-hub.md](0020-intelligence-hub.md) | ✅ Aceito |
+
+---
+
+## Grupo C — Camada Python e Interface (0021–0030)
+
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0021 | Compliance Plugins | [0021-compliance-plugins.md](0021-compliance-plugins.md) | ✅ Aceito |
+| 0022 | Dashboard Streamlit | [0022-streamlit-dashboard.md](0022-streamlit-dashboard.md) | ✅ Aceito |
+| 0023 | Appeals HTTP Endpoint | [0023-appeals-http-endpoint.md](0023-appeals-http-endpoint.md) | ✅ Aceito |
+| 0024 | Threat-Policy Bridge | [0024-threat-policy-bridge.md](0024-threat-policy-bridge.md) | ✅ Aceito |
+| 0025 | Ledger Query API | [0025-ledger-query-api.md](0025-ledger-query-api.md) | ✅ Aceito |
+| 0026 | Webhook Notifications | [0026-webhook-notifications.md](0026-webhook-notifications.md) | ✅ Aceito |
+| 0027 | Estratégia Local SLM | [0027-local-slm-strategy.md](0027-local-slm-strategy.md) | ✅ Aceito |
+| 0028 | Heuristic Prompt Injection Detector | [0028-heuristic-prompt-injection-detector.md](0028-heuristic-prompt-injection-detector.md) | ✅ Aceito |
+| 0029 | External Agent PDP | [0029-external-agent-pdp.md](0029-external-agent-pdp.md) | ✅ Aceito |
+| 0030 | Internal Chatbot — Self-hosted LLM | [0030-internal-chatbot-selfhosted-llm.md](0030-internal-chatbot-selfhosted-llm.md) | ✅ Aceito |
+
+---
+
+## Grupo D — Chatbots, Scanning e Pattern Registry (0031–0040)
+
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0031 | External Chatbot — Vendor LLM | [0031-external-chatbot-vendor-llm.md](0031-external-chatbot-vendor-llm.md) | ✅ Aceito |
+| 0032 | Scan Context Flags | [0032-scan-context-flags.md](0032-scan-context-flags.md) | ✅ Aceito |
+| 0033 | Pattern Registry — Tiers | [0033-pattern-registry-tiers.md](0033-pattern-registry-tiers.md) | ✅ Aceito |
+| 0034 | Estratégia de Detecção de Linguagem | [0034-language-detection-strategy.md](0034-language-detection-strategy.md) | ✅ Aceito |
+| 0035 | Validadores PII Multi-Jurisdição | [0035-multi-jurisdiction-pii-validators.md](0035-multi-jurisdiction-pii-validators.md) | ✅ Aceito |
+| 0036 | Red Team Bias Guardian | [0036-redteam-bias-guardian.md](0036-redteam-bias-guardian.md) | ✅ Aceito |
+| 0037 | Contestability Loop — Appeal Engine | [0037-contestability-loop-appeal-engine.md](0037-contestability-loop-appeal-engine.md) | ✅ Aceito |
+| 0038 | Ethical Context Engine v4 (full) | [0038-ethical-context-engine-v4.md](0038-ethical-context-engine-v4.md) | ✅ Aceito |
+| 0039 | Trust Score Calculator v2 | [0039-trust-score-calculator-v2.md](0039-trust-score-calculator-v2.md) | ✅ Aceito |
+| 0040 | Axum Gateway v2 — Extensions | [0040-axum-gateway-v2-extensions.md](0040-axum-gateway-v2-extensions.md) | ✅ Aceito |
+
+---
+
+## Grupo E — República Algorítmica v2 (0041–0050)
+
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0041 | Observabilidade v2 — Republic Metrics | [0041-observability-v2-republic-metrics.md](0041-observability-v2-republic-metrics.md) | ✅ Aceito |
+| 0042 | Policy-as-Code v2 — BlindEvaluator e PolicyTester | [0042-policy-as-code-v2.md](0042-policy-as-code-v2.md) | ✅ Aceito |
+| 0043 | Unified Verdict Identity | [0043-unified-verdict-identity.md](0043-unified-verdict-identity.md) | ✅ Aceito |
+| 0044 | Invariante de Tamanho da Evidência Técnica (Canonical Size) | [0044-technical-evidence-size-canonical.md](0044-technical-evidence-size-canonical.md) | ✅ Aceito |
+| 0044 | Gateway Context Enrichment — IP Classifier e Session Drift (v1) | [0044-gateway-context-enrichment-ip-classifier-session-drift.md](0044-gateway-context-enrichment-ip-classifier-session-drift.md) [²] | ✅ Aceito |
+| 0045 | Schema de Política v2 — Campos Obrigatórios do Modelo de Ameaças | [0045-policy-dchema-v2-threat-model-required-fields.md](0045-policy-dchema-v2-threat-model-required-fields.md) [¹] | ✅ Aceito |
+| 0046 | Hybrid Alignment Session Sensitivity Accumulator | [0046-hybrid-alignment-session-sensitivity-accumulator.md](0046-hybrid-alignment-session-sensitivity-accumulator.md) | ✅ Aceito |
+| 0046 | ML Prompt Injection Layer (v1) | [0046-ml-prompt-injection-layer.md](0046-ml-prompt-injection-layer.md) [⁴] | ✅ Aceito |
+| 0047 | Contestability — Protocolo Estruturado de Mediação (v1) | [0047-contestability-structured-mediation-protocol.md](0047-contestability-structured-mediation-protocol.md) | ✅ Aceito |
+| 0047 | Semantic PII NER (v1) | [0047-semantic-pii-ner.md](0047-semantic-pii-ner.md) [⁵] | ✅ Aceito |
+| 0048 | Compliance as Code (v1) | [0048-compliance-as-code.md](0048-compliance-as-code.md) | ✅ Aceito |
+| 0048 | Transactional Effect Buffering (v1) | [0048-transactional-effect-buffering.md](0048-transactional-effect-buffering.md) [⁶] | ✅ Aceito |
+| 0049 | Chain-of-Thought Opacity Controlled | [0049-cot-opacity-controlled.md](0049-cot-opacity-controlled.md) | ✅ Aceito |
+| 0050 | Multi-Run Consensus Validator | [0050-multi-run-consensus-validator.md](0050-multi-run-consensus-validator.md) | ✅ Aceito |
+
+---
+
+## Grupo F — Detecção de Integridade e Armazenamento Forense (0051–0060)
+
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0051 | Model Integrity — Abliteration Detection (Fase 1) | [0051-model-integrity-abliteration-detection.md](0051-model-integrity-abliteration-detection.md) | ✅ Aceito |
+| 0052 | Forensic Audit Storage | [0052-forensic-audit-storage.md](0052-forensic-audit-storage.md) | ✅ Aceito |
+| 0053 | Visual Reasoning Guard | [0053-visual-reasoning-guard.md](0053-visual-reasoning-guard.md) | ✅ Aceito |
+| 0054 | Agentic Layer | [0054-agentic-layer.md](0054-agentic-layer.md) | ✅ Aceito |
+| 0055 | Policy Elicitor | [0055-policy-elicitor.md](0055-policy-elicitor.md) | ✅ Aceito |
+| 0056 | Negotiation Engine | [0056-negotiation-engine.md](0056-negotiation-engine.md) | ✅ Aceito |
+| 0057 | Grant Decision Adapter (v1) | [0057-grant-decision-adapter.md](0057-grant-decision-adapter.md) | ✅ Aceito |
+| 0057 | Protocol Designer (v1) | [0057-protocol-designer.md](0057-protocol-designer.md) [⁷] | ✅ Aceito |
+| 0058 | Arena Reporter | [0058-arena-reporter.md](0058-arena-reporter.md) | ✅ Aceito |
+| 0059 | Fronteira Rust/Python — Contrato de Boundary | [0059-rust-python-boundary.md](0059-rust-python-boundary.md) | ✅ Aceito |
+| 0060 | BiasDeclaration — Constructor Enforced | [0060-bias-declaration-enforced-constructor.md](0060-bias-declaration-enforced-constructor.md) | ✅ Aceito |
+| 0060 | SaaS Deployment — Fly.io (v1) | [0060-saas-deployment.md](0060-saas-deployment.md) [⁸] | ✅ Aceito |
+
+---
+
+## Grupo G — Decisões de Bloqueio e Verificação (0061–0065)
+
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0061 | Decision Block — Razão de Deadlock em Veredicto | [0061-decision-block-deadlock-reason.md](0061-decision-block-deadlock-reason.md) | ✅ Aceito |
+| 0062 | Appeal Record — Verificação Off-Chain | [0062-appeal-record-off-chain-verification.md](0062-appeal-record-off-chain-verification.md) | ✅ Aceito |
+| 0063 | Invariante de Tamanho da TechnicalEvidence (9596 bytes) | [0063-technical-evidence-size-invariant.md](0063-technical-evidence-size-invariant.md) | ✅ Aceito |
+| 0064 | Policy Reload com Assinatura Ed25519 | [0064-policy-reload-ed25519.md](0064-policy-reload-ed25519.md) | ✅ Aceito |
+| 0065 | Gateway Context Enrichment — IP Classifier e Session Drift (v2) | [0065-gateway-context-enrichment-ip-classifier-session-drift.md](0065-gateway-context-enrichment-ip-classifier-session-drift.md) | ✅ Aceito |
+
+---
+
+## Grupo H — Alinhamento Híbrido e Mediação (0066–0070)
+
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0066 | Hybrid Alignment Session Sensitivity Accumulator (v2) | [0066-hybrid-alignment-session-sensitivity-accumulator.md](0066-hybrid-alignment-session-sensitivity-accumulator.md) | ✅ Aceito |
+| 0067 | Contestability — Protocolo Estruturado de Mediação (v2) | [0067-contestability-structured-mediation-protocol.md](0067-contestability-structured-mediation-protocol.md) | ✅ Aceito |
+| 0068 | Transactional Effect Buffering (v2) | [0068-transactional-effect-buffering.md](0068-transactional-effect-buffering.md) | ✅ Aceito |
+| 0069 | Protocol Designer (v2) | [0069-protocol-designer.md](0069-protocol-designer.md) | ✅ Aceito |
+| 0070 | SaaS Deployment — Fly.io (v2) | [0070-saas-deployment.md](0070-saas-deployment.md) | ✅ Aceito |
+
+---
+
+## Grupo I — Filosofia, Ética Operacional e Mercy SLA (0071–0072)
+
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0071 | Preservação do Vocabulário Filosófico do BTV | [0071-philosophical-vocabulary-preservation.md](0071-philosophical-vocabulary-preservation.md) | ✅ Aceito |
+| 0072 | Algoritmo de Misericórdia e SLA do Estágio Gilligan | [0072-gilligan-sla-mercy-algorithm.md](0072-gilligan-sla-mercy-algorithm.md) [³] | ✅ Aceito |
+
+---
+
+## Grupo J — Grant Decision e Model Integrity v2 (0073–0075)
+
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0073 | Grant Decision Adapter (v2 — canônico) | [0073-grant-decision-adapter.md](0073-grant-decision-adapter.md) | ✅ Aceito |
+| 0074 | Model Integrity — Abliteration Detection v2 | [0074-model-integrity-abliteration-detection-v2.md](0074-model-integrity-abliteration-detection-v2.md) | ✅ Aceito |
+| 0075 | Grant Decision Adapter — Rascunho de Extensão | [0075-grant-decision-adapter-draft.md](0075-grant-decision-adapter-draft.md) | 🔒 Rascunho |
+
+---
+
+## Grupo K — Desduplicações Multi-Tenant (0076–0081)
+
+> Estes ADRs foram gerados no commit `07c32c6` como especializações isoladas de funcionalidades que anteriormente colidiam em numerações duplas (0044-B, 0046-B, 0047-B, 0048-B, 0057-B, 0060-B). Cada entrada abaixo representa a versão canônica e definitiva da feature em numeração própria, com rastreabilidade completa à sua origem.
+
+| ID | Título | Arquivo | Status |
+|:---|:---|:---|:---:|
+| 0076 | Gateway Context Enrichment — IP Classifier e Session Drift (canônico multi-tenant) | [0076-gateway-context-enrichment-ip-classifier-session-drift.md](0076-gateway-context-enrichment-ip-classifier-session-drift.md) | ✅ Aceito |
+| 0077 | ML Prompt Injection Layer (canônico) | [0077-ml-prompt-injection-layer.md](0077-ml-prompt-injection-layer.md) | ✅ Aceito |
+| 0078 | Semantic PII NER (canônico) | [0078-semantic-pii-ner.md](0078-semantic-pii-ner.md) | ✅ Aceito |
+| 0079 | Compliance as Code (canônico) | [0079-compliance-as-code.md](0079-compliance-as-code.md) | ✅ Aceito |
+| 0080 | Protocol Designer (canônico) | [0080-protocol-designer.md](0080-protocol-designer.md) | ✅ Aceito |
+| 0081 | SaaS Deployment — Fly.io (canônico) | [0081-saas-deployment.md](0081-saas-deployment.md) | ✅ Aceito |
+
+---
+
+## Notas de Errata Forense e Rastreabilidade
+
+**[¹] Errata Forense — ADR 0045:**  
+O slug físico contém um desvio ortográfico original (`dchema` em lugar de `schema`). O nome do arquivo foi mantido inalterado para preservar a integridade do SHA de blob criptográfico `00683653` mapeado em esteiras de auditoria ativa. A correção do nome está pendente de formalização no ADR 0082 (Errata de Slugs), que documentará o rename com rastreabilidade de SHA origem → destino.
+
+**[²] Rastreabilidade — ADR 0044-B (Gateway Context Enrichment v1):**  
+Este artefato foi sucedido em escopo e isolamento multi-tenant pela especificação desduplicada e expandida contida no ADR 0076. A entrada dupla em 0044 preserva a rastreabilidade histórica da decisão original.
+
+**[³] Localização — ADR 0072 (Gilligan SLA Mercy Algorithm):**  
+Disponível em versão traduzida complementar para auditoria internacional em [0072-gilligan-sla-mercy-algorithm.en.md](0072-gilligan-sla-mercy-algorithm.en.md). O arquivo `.md` pt-BR é o canônico; o `.en.md` é suplementar.
+
+**[⁴] Rastreabilidade — ADR 0046-B (ML Prompt Injection Layer v1):**  
+Este artefato foi sucedido pela especificação canônica multi-tenant no ADR 0077.
+
+**[⁵] Rastreabilidade — ADR 0047-B (Semantic PII NER v1):**  
+Este artefato foi sucedido pela especificação canônica no ADR 0078.
+
+**[⁶] Rastreabilidade — ADR 0048-B (Transactional Effect Buffering v1):**  
+Versão v2 expandida registrada no ADR 0068.
+
+**[⁷] Rastreabilidade — ADR 0057-B (Protocol Designer v1):**  
+Este artefato foi sucedido pela especificação canônica no ADR 0080.
+
+**[⁸] Rastreabilidade — ADR 0060-B (SaaS Deployment v1):**  
+Este artefato foi sucedido pela especificação canônica no ADR 0081.
+
+---
+
+## Documentos Auxiliares
+
+> Arquivos que não seguem o padrão `NNNN-slug.md` mas integram o corpus de governança arquitetural do repositório.
+
+| Arquivo | Descrição | Idioma |
+|:---|:---|:---:|
+| [reserved_metadata_layout.md](reserved_metadata_layout.md) | Layout de metadados reservados para cabeçalhos de ADR | pt-BR |
+| [reserved_metadata_layout.en.md](reserved_metadata_layout.en.md) | Layout de metadados reservados (versão internacional) | en |
+
+---
+
+## Runbooks Operacionais
+
+> Procedimentos de contingência vinculados à arquitetura BTV. Mantidos em `docs/runbooks/` e indexados aqui para rastreabilidade entre decisões arquiteturais e resposta operacional.
+
+| ID | Título | Arquivo | Responsável |
+|:---|:---|:---|:---:|
+| BTV-RUN-008 | Retenção, Custódia e Cripto-Shredding | [docs/runbooks/BTV-RUN-008.md](../runbooks/BTV-RUN-008.md) | DPO / SecOps / SRE |
+| BTV-RUN-009 | *(reservado — a ser criado)* | — | — |
+| BTV-RUN-010 | *(reservado — a ser criado)* | — | — |
+
+---
+
+## Registro de Revisões deste Índice
+
+| Versão | Data | HEAD | Alteração |
+|:---|:---|:---|:---|
+| v1.0.0 | 2026-01-01 | — | Criação inicial |
+| v4.0.0 | 2026-05-27 | `07c32c6` | Adição dos ADRs 0073–0081 (commit de deduplicação multi-tenant) |
+| v4.1.0 | 2026-05-28 | `0f2b728` | Reconstrução total: correção de slugs fantasmas Grupo K, errata forense 0044/0045/0072, expurgo de 3 arquivos zumbis (`ADR-043`, `ADR-051`, `TBD`), inclusão de documentos auxiliares e seção de runbooks operacionais |
