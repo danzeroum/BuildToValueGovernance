@@ -51,6 +51,15 @@ de 10k req/s por tenant.
 
 ### D2 — `governance_errors: Vec<EthicalError>` com `#[serde(default)]` + `legacy_error: Option<EthicalError>`
 
+> **⚠️ v1alpha — schema instável até ADR-0090.** O contrato definido
+> nesta seção é classificado **v1alpha** durante a janela de validação
+> de performance do pipeline (ADR-0090 + eventual ADR-0091). Campos
+> novos podem ser adicionados como `Option<T>` + `#[serde(default)]`
+> conforme ADR-0082 (adição não-quebrante). Parceiros Java
+> (ADR-0085) integrando antes da estabilização devem prefixar
+> consumidores com `v1alpha`. Trânsito para `v1` estável ocorre após
+> decisão binária do D1 do ADR-0090.
+
 **Decisão**: estender `ExplainDecision` com dois campos coexistentes:
 
 ```rust
