@@ -147,6 +147,63 @@ impl EthicalError {
         }
     }
 
+    /// E160 — Anomalia de Equidade (ADR-0086, Rawls DIR).
+    /// Contestável: a regra dos 4/5 admite revisão por contexto regulatório.
+    /// `metadata` permite incluir DIR observado, threshold, e contagens por grupo.
+    pub fn rawls_dir_violation(
+        deadline_iso8601: String,
+        audit_log_id: Option<String>,
+        verdict_id: Option<String>,
+        metadata: Option<serde_json::Value>,
+    ) -> Self {
+        Self {
+            type_uri: "https://docs.buildtovalue.org/errors/E160",
+            title: "Anomalia de Equidade — DIR abaixo do threshold",
+            status: 451,
+            detail: "Distribuição de outcomes viola a regra dos 4/5 (DIR < 0.80) no tenant. Decisão rebaixada conforme ADR-0086 §D5.".to_string(),
+            instance: None,
+            extensions: BtvExtensions {
+                error_code: "E160",
+                ethical_ground: "Distribuição de outcomes viola a regra dos 4/5 (DIR < 0.80)",
+                adr_reference: "https://docs.buildtovalue.org/adrs/0086-rawls-disparate-impact-monitor".to_string(),
+                verdict_id,
+                audit_log_id,
+                appeal_url: "/api/v1/appeals",
+                contestable_until: Some(deadline_iso8601),
+                metadata,
+            },
+        }
+    }
+
+    /// E161 — Anomalia de Drift Populacional (ADR-0087, Jonas PSI).
+    /// Contestável: PSI alto pode refletir mudança legítima na população,
+    /// que o DPO pode reaprovar via novo baseline.
+    /// `metadata` permite incluir PSI, top_bin_index e top_bin_contribution.
+    pub fn jonas_drift_violation(
+        deadline_iso8601: String,
+        audit_log_id: Option<String>,
+        verdict_id: Option<String>,
+        metadata: Option<serde_json::Value>,
+    ) -> Self {
+        Self {
+            type_uri: "https://docs.buildtovalue.org/errors/E161",
+            title: "Anomalia de Drift Populacional — PSI acima do threshold",
+            status: 451,
+            detail: "Distribuição observada diverge significativamente do baseline aprovado (PSI ≥ 0.25). Decisão rebaixada conforme ADR-0087 §D4.".to_string(),
+            instance: None,
+            extensions: BtvExtensions {
+                error_code: "E161",
+                ethical_ground: "Distribuição observada diverge do baseline aprovado pelo DPO (PSI ≥ 0.25)",
+                adr_reference: "https://docs.buildtovalue.org/adrs/0087-jonas-psi-engine".to_string(),
+                verdict_id,
+                audit_log_id,
+                appeal_url: "/api/v1/appeals",
+                contestable_until: Some(deadline_iso8601),
+                metadata,
+            },
+        }
+    }
+
     /// E429 — Tenant excedeu Z-Score de frequência (Early Guard self-preservation).
     /// Erro de infraestrutura: não contestável.
     pub fn rate_limit_z_score(audit_log_id: Option<String>) -> Self {
@@ -327,5 +384,51 @@ mod tests {
     #[test]
     fn content_type_constant_is_rfc7807() {
         assert_eq!(PROBLEM_JSON_CONTENT_TYPE, "application/problem+json");
+    }
+
+    #[test]
+    fn rawls_dir_violation_is_451_and_carries_metadata() {
+        let meta = serde_json::json!({
+            "dir": 0.55,
+            "threshold": 0.80,
+            "privileged_favorable_rate": 0.9,
+            "unprivileged_favorable_rate": 0.5,
+        });
+        let err = EthicalError::rawls_dir_violation(
+            "2026-05-29T12:00:00Z".to_string(),
+            Some("01927c4f-7e23-7a1b-9c4f-1f8e4c8a9d12".to_string()),
+            Some("VRD-rawls-1".to_string()),
+            Some(meta),
+        );
+        let json = serde_json::to_string(&err).expect("serialize");
+        assert!(json.contains("\"status\":451"));
+        assert!(json.contains("\"error_code\":\"E160\""));
+        assert!(json.contains("\"contestable_until\":\"2026-05-29T12:00:00Z\""));
+        assert!(json.contains("0086-rawls-disparate-impact-monitor"));
+        assert!(json.contains("\"dir\":0.55"));
+        assert_no_internal_leak(&json);
+    }
+
+    #[test]
+    fn jonas_drift_violation_is_451_and_carries_metadata() {
+        let meta = serde_json::json!({
+            "psi": 0.31,
+            "threshold": 0.25,
+            "top_bin_index": 3,
+            "top_bin_contribution": 0.12,
+        });
+        let err = EthicalError::jonas_drift_violation(
+            "2026-05-29T12:00:00Z".to_string(),
+            Some("01927c4f-7e23-7a1b-9c4f-1f8e4c8a9d12".to_string()),
+            Some("VRD-jonas-1".to_string()),
+            Some(meta),
+        );
+        let json = serde_json::to_string(&err).expect("serialize");
+        assert!(json.contains("\"status\":451"));
+        assert!(json.contains("\"error_code\":\"E161\""));
+        assert!(json.contains("0087-jonas-psi-engine"));
+        assert!(json.contains("\"psi\":0.31"));
+        assert!(json.contains("\"top_bin_index\":3"));
+        assert_no_internal_leak(&json);
     }
 }
