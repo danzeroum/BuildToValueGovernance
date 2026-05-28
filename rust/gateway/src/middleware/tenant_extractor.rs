@@ -127,18 +127,20 @@ where
                     req.extensions_mut().insert(TenantId(tid));
                     inner.call(req).await
                 }
-                Err(response) => Ok(response),
+                Err(response) => Ok(*response),
             }
         })
     }
 }
 
 /// Extrai e valida `tenant_id` da requisição.
-/// Retorna `Ok(tenant_id)` em sucesso ou `Err(Response)` com E131 em falha.
+/// Retorna `Ok(tenant_id)` em sucesso ou `Err(Box<Response>)` com E131 em falha.
+/// O Err é boxado porque `Response<Body>` é grande (≥128 bytes); clippy lint
+/// `result_large_err` exige boxing para evitar inflar a stack frame do caller.
 fn extract_tenant_from_request(
     req: &Request<Body>,
     jwt_secret: &Option<Vec<u8>>,
-) -> Result<String, Response<Body>> {
+) -> Result<String, Box<Response<Body>>> {
     let bearer_token = req
         .headers()
         .get("authorization")
@@ -163,7 +165,7 @@ fn extract_tenant_from_request(
     };
 
     // Valida o tenant_id extraído antes de qualquer acesso ao router.
-    if let Err(_) = validate_tenant_id(&tenant_id) {
+    if validate_tenant_id(&tenant_id).is_err() {
         let instance = req.uri().path().to_string();
         let err = EthicalError::tenant_isolation_violation(
             tenant_id.clone(),
@@ -182,7 +184,7 @@ fn extract_tenant_from_request(
             .body(Body::from(body))
             .unwrap_or_else(|_| Response::new(Body::empty()));
 
-        return Err(response);
+        return Err(Box::new(response));
     }
 
     Ok(tenant_id)
