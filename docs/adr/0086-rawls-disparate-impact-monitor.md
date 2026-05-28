@@ -70,6 +70,24 @@ Decisão para v1:
   ficam em ADR futuro (Fase 2). v1 é volátil; aceito para validação
   do motor antes de produção.
 
+**Implicações operacionais da volatilidade (v1):**
+- Restart do gateway zera todos os contadores por tenant.
+- Após restart, `compute_dir()` retorna `insufficient_samples = true`
+  até a janela reencher (≥30 amostras por grupo) — janela típica de
+  ~minutos em tráfego de produção, ~horas em ambientes de baixo QPS.
+- Implicação regulatória: durante o período de re-aquecimento, decisões
+  passam sem verificação DIR. O modo `monitor` (default) limita o
+  impacto — apenas a telemetria é interrompida; o `enforce_mode` não
+  rebaixa ações. Em modo `hard_enforce` (não-default), considerar
+  janela de carência via flag de boot.
+- Migração para persistência (Fase 2): o ADR futuro deve preservar a
+  semântica `insufficient_samples` na hidratação do snapshot — não
+  contar amostras stale (TTL configurável) como válidas para DIR.
+
+**Mitigação interim (sem código adicional):** documentar no runbook de
+ops que reinícios planejados devem ocorrer fora da janela de auditoria
+crítica, ou ser coordenados com o DPO do tenant.
+
 A alternativa de adicionar SQLite ao ledger é deliberadamente
 **fora de escopo** — exige ADR separado (multi-tenancy storage v2).
 
