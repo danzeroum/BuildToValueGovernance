@@ -792,6 +792,7 @@ dependencies = [
  "blake3",
  "buildtovalue-kernel",
  "chrono",
+ "criterion",
  "futures",
  "hex",
  "hmac",
