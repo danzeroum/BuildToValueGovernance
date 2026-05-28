@@ -165,11 +165,63 @@ fn bench_compose_fairness_action_happy(c: &mut Criterion) {
     });
 }
 
+/// **ADR-0090 D4 — Cenário B-concurrent (thundering herd).**
+///
+/// Critério oficial de validação do D1 do ADR-0088. Simula 32 threads
+/// (sobrescrição típica do Tokio multi-thread runtime) escrevendo em
+/// 16 tenants distintos, todos atingindo `JONAS_COMPUTE_INTERVAL` na
+/// mesma janela. Mede o tail-latency causado pela contenção do
+/// `RwLock<HashMap<tenant, TenantJonasState>>` quando dezenas de
+/// tenants disparam recompute concorrentemente.
+///
+/// Hipótese a falsificar: a contenção do RwLock global não vira gargalo
+/// dominante. Se P99(este bench) > P99(A_baseline) + 5ms, ADR-0091
+/// (perf hardening) deve ser aberto.
+const N_TENANTS: usize = 16;
+const N_THREADS: usize = 32;
+
+fn bench_state_with_n_tenants(n: usize) -> Arc<AppState> {
+    let state = Arc::new(AppState::new());
+    let baseline_template = JonasBaselineLoader::from_yaml_str(BASELINE_YAML)
+        .expect("baseline parse");
+    for i in 0..n {
+        let tenant = format!("bench-{i}");
+        state.fairness_modes.install(&tenant, FairnessMode::Enforced);
+        state.jonas_monitor.install_baseline(&tenant, baseline_template.clone());
+    }
+    state
+}
+
+fn bench_concurrent_boundary(c: &mut Criterion) {
+    let state = bench_state_with_n_tenants(N_TENANTS);
+    c.bench_function("B_concurrent_thundering_herd", |b| {
+        b.iter(|| {
+            let handles: Vec<_> = (0..N_THREADS)
+                .map(|t| {
+                    let state = Arc::clone(&state);
+                    std::thread::spawn(move || {
+                        for i in 0..JONAS_COMPUTE_INTERVAL {
+                            let tenant_idx = (t + i as usize) % N_TENANTS;
+                            let tenant = format!("bench-{tenant_idx}");
+                            let score = ((i as f64) % 10.0) / 10.0 + 0.05;
+                            state.jonas_monitor.record(&tenant, score, false);
+                        }
+                    })
+                })
+                .collect();
+            for h in handles {
+                h.join().expect("thread panicked");
+            }
+        });
+    });
+}
+
 criterion_group!(
     benches,
     bench_mode_for_disabled,
     bench_record_steady_state,
     bench_record_at_compute_boundary,
+    bench_concurrent_boundary,
     bench_compose_fairness_action,
     bench_compose_fairness_action_happy,
 );
