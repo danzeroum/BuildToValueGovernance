@@ -978,6 +978,51 @@ pub async fn decide_handler(
     }
     let fairness_override_applied = fairness_result.apply_override;
 
+    // ── AUDIT EMIT (audit-sink-local Commit 5) ────────────────
+    // Emissão não-bloqueante: `try_emit` faz `try_send` no canal bounded
+    // e dropa com métrica sob backpressure (nunca bloqueia o hot path —
+    // SLA do Core Banking > completude da auditoria).
+    {
+        use crate::audit::event::FairnessAuditEvent;
+        let mut event = FairnessAuditEvent::new(
+            tenant_id.as_str().to_string(),
+            final_verdict_id.clone(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0),
+            fairness_mode,
+            state.tenant_statuses.status_for(tenant_id.as_str()),
+        );
+        event.tentative_action = policy_action.clone();
+        event.applied_action = final_action.clone();
+        event.composed_action = action_to_str(fairness_result.composed_action).to_string();
+        event.composition_changed_action = fairness_result.composition_changed_action;
+        event.apply_override = fairness_override_applied;
+        event.rawls_violation = explain
+            .governance_errors
+            .iter()
+            .any(|e| e.extensions.error_code == "E160");
+        event.jonas_critical = explain
+            .governance_errors
+            .iter()
+            .any(|e| e.extensions.error_code == "E161");
+        event.jonas_warning = false;
+        event.hard_block =
+            fairness_result.composed_action == Action::Block && fairness_override_applied;
+        event.human_review_required = fairness_result.human_review_required;
+        event.governance_error_codes = explain
+            .governance_errors
+            .iter()
+            .map(|e| e.extensions.error_code.to_string())
+            .collect();
+        event.legacy_error_code = explain
+            .legacy_error
+            .as_ref()
+            .map(|e| e.extensions.error_code.to_string());
+        state.audit_tx.try_emit(event);
+    }
+
     // ── METRICS ───────────────────────────────────────────────
     {
         use crate::state::*;

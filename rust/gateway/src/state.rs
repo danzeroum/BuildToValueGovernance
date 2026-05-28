@@ -7,8 +7,11 @@ use buildtovalue_kernel::statistics::{JonasMonitor, RawlsMonitor};
 use buildtovalue_kernel::keys::try_kernel_mac_key;
 use crate::fairness_mode::FairnessModeRegistry;
 use crate::tenant_status::TenantStatusRegistry;
+use crate::audit::drainer::{spawn_drainer, AuditChannel};
+use crate::audit::sink::{AuditSink, JsonlAuditSink, MultiAuditSink, StdoutAuditSink};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use tokio::task::JoinHandle;
 use prometheus::{
     opts, register_histogram, register_int_counter, register_int_counter_vec,
     Histogram, HistogramOpts, IntCounter, IntCounterVec,
@@ -210,6 +213,19 @@ pub struct AppState {
     /// Resolvido de `BTV_POLICIES_DIR` em `AppState::new()` (uma vez,
     /// sem races em testes paralelos).
     pub policies_dir: PathBuf,
+    /// audit-sink-local §D2 — diretório raiz dos JSONL de auditoria.
+    /// Resolvido de `BTV_AUDIT_DIR` em `AppState::new()` (uma vez, sem
+    /// races em testes paralelos), mesma disciplina de `policies_dir`.
+    pub audit_dir: PathBuf,
+    /// audit-sink-local §D4 — handle de emissão não-bloqueante para o
+    /// drainer (MPSC bounded + `try_send`). `Clone` barato; consumido no
+    /// hot path do `decide_handler`.
+    pub audit_tx: AuditChannel,
+    /// Handle do drainer task. Mantido vivo enquanto o `AppState` existir
+    /// (drop fecha o canal → drainer encerra). Reservado para shutdown
+    /// gracioso (drain-on-SIGTERM, fase futura).
+    #[allow(dead_code)]
+    _audit_handle: Arc<JoinHandle<()>>,
 }
 
 impl Default for AppState {
@@ -259,6 +275,13 @@ impl AppState {
             buildtovalue_kernel::ledger::remote::S3Config::default(),
         );
 
+        // audit-sink-local Commit 5: canal de auditoria + drainer.
+        // Sink default = JSONL per-tenant + stdout estruturado (tee).
+        // `spawn_drainer` cria o task consumidor único (MPSC bounded).
+        let audit_dir = resolve_audit_dir();
+        let sink: Arc<dyn AuditSink> = build_default_audit_sink(&audit_dir);
+        let (audit_tx, audit_handle) = spawn_drainer(sink);
+
         Self {
             gatekeeper: Mutex::new(Gatekeeper::new()),
             ip_classifier: IpClassifier::new(),
@@ -285,6 +308,9 @@ impl AppState {
             fairness_modes: FairnessModeRegistry::default(),
             tenant_statuses: TenantStatusRegistry::default(),
             policies_dir: resolve_policies_dir(),
+            audit_dir: audit_dir.clone(),
+            audit_tx,
+            _audit_handle: Arc::new(audit_handle),
         }
     }
 
@@ -295,6 +321,20 @@ impl AppState {
     pub fn with_policies_dir(policies_dir: PathBuf) -> Self {
         let mut s = Self::new();
         s.policies_dir = policies_dir;
+        s
+    }
+
+    /// Constructor para testes que injeta `audit_dir` arbitrário, recriando
+    /// sink+drainer apontados para o diretório de teste. Mesma disciplina
+    /// anti-race de `with_policies_dir`. Demais campos seguem `new()`.
+    #[allow(dead_code)]
+    pub fn with_audit_dir(audit_dir: PathBuf) -> Self {
+        let mut s = Self::new();
+        let sink: Arc<dyn AuditSink> = build_default_audit_sink(&audit_dir);
+        let (audit_tx, audit_handle) = spawn_drainer(sink);
+        s.audit_dir = audit_dir;
+        s.audit_tx = audit_tx;
+        s._audit_handle = Arc::new(audit_handle);
         s
     }
 }
@@ -310,6 +350,28 @@ fn resolve_policies_dir() -> PathBuf {
     } else {
         PathBuf::from("./policies")
     }
+}
+
+/// audit-sink-local §D2 — resolução de `BTV_AUDIT_DIR`. Default em prod:
+/// `/var/log/btv/audit`. Default em dev: `./data/audit`.
+fn resolve_audit_dir() -> PathBuf {
+    if let Ok(s) = std::env::var("BTV_AUDIT_DIR") {
+        return PathBuf::from(s);
+    }
+    if std::env::var("BTV_ENV").as_deref() == Ok("production") {
+        PathBuf::from("/var/log/btv/audit")
+    } else {
+        PathBuf::from("./data/audit")
+    }
+}
+
+/// Sink default do gateway: tee JSONL per-tenant + stdout estruturado.
+/// Recebe `&Path` (não `&PathBuf`) para evitar `clippy::ptr_arg`;
+/// `JsonlAuditSink::new` consome um `PathBuf` owned via `to_path_buf`.
+fn build_default_audit_sink(audit_dir: &std::path::Path) -> Arc<dyn AuditSink> {
+    let jsonl: Arc<dyn AuditSink> = Arc::new(JsonlAuditSink::new(audit_dir.to_path_buf()));
+    let stdout: Arc<dyn AuditSink> = Arc::new(StdoutAuditSink);
+    Arc::new(MultiAuditSink::new(vec![jsonl, stdout]))
 }
 
 /// Resultado de `AppState::evict_tenant` — bools por componente para
@@ -372,8 +434,10 @@ mod tests {
         AppState::new()
     }
 
-    #[test]
-    fn fresh_state_has_default_fairness_components() {
+    // `AppState::new()` spawna o drainer de auditoria (`tokio::spawn`),
+    // exigindo um runtime ativo — daí `#[tokio::test]` nestes unit tests.
+    #[tokio::test]
+    async fn fresh_state_has_default_fairness_components() {
         let s = fresh_state();
         assert_eq!(s.fairness_modes.declared_tenant_count(), 0);
         assert_eq!(s.fairness_mode_for("any-tenant"), FairnessMode::Disabled);
@@ -383,8 +447,8 @@ mod tests {
         assert!(s.rawls_monitor.metrics("any-tenant").is_none());
     }
 
-    #[test]
-    fn rawls_monitor_records_per_tenant_via_appstate() {
+    #[tokio::test]
+    async fn rawls_monitor_records_per_tenant_via_appstate() {
         let s = fresh_state();
         for _ in 0..40 {
             s.rawls_monitor
@@ -397,8 +461,8 @@ mod tests {
         assert!(!m.insufficient_samples);
     }
 
-    #[test]
-    fn jonas_monitor_install_and_record_via_appstate() {
+    #[tokio::test]
+    async fn jonas_monitor_install_and_record_via_appstate() {
         let s = fresh_state();
         let baseline_yaml = r#"
 version: "1.0.0"
@@ -426,8 +490,8 @@ reference_proportions:
         assert!(m.psi.is_finite());
     }
 
-    #[test]
-    fn fairness_mode_for_returns_disabled_unless_installed() {
+    #[tokio::test]
+    async fn fairness_mode_for_returns_disabled_unless_installed() {
         let s = fresh_state();
         assert_eq!(s.fairness_mode_for("ghost"), FairnessMode::Disabled);
 
@@ -439,8 +503,8 @@ reference_proportions:
         assert_eq!(s.fairness_mode_for("ghost"), FairnessMode::Disabled);
     }
 
-    #[test]
-    fn monitors_isolate_tenants() {
+    #[tokio::test]
+    async fn monitors_isolate_tenants() {
         let s = fresh_state();
         // Tenant A: paridade.
         for _ in 0..40 {
