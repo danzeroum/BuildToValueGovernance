@@ -30,7 +30,6 @@ data/
     ├── base.yaml             <-- Config global
     └── default.yaml          <-- Fallback
 
-´´´
 ---
 ```
 
