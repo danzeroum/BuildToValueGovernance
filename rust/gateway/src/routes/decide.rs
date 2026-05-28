@@ -426,6 +426,12 @@ pub async fn decide_handler(
     // ── ADR-0083: persistir binary LedgerEntry no ledger isolado do tenant.
     // Falhas de I/O no ledger NÃO devem bloquear a resposta (apenas logam),
     // pois a decisão já foi tomada e o JSONL acima já serve como fallback.
+    //
+    // INVARIANTE: `evidence` saiu do Mutex<Gatekeeper> imutável e não é
+    // modificada entre a liberação do lock e este append. Apenas leituras
+    // de campos ocorreram nos blocos intermediários (governance request,
+    // metrics, JSONL). Nenhuma transformação intermediária — a evidence
+    // persistida no ledger é byte-idêntica à computada pelo Gatekeeper.
     let (entry_id, decision_id_u128) = build_and_append_tenant_entry(
         &state,
         tenant_id.as_str(),

@@ -152,6 +152,11 @@ impl DurableLedger {
             .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
         entry.previous_hash = *last_hash;
 
+        // INVARIANTE: `signing_key = None` preserva o comportamento legado
+        // de `append()` byte-a-byte — `entry.finalize()` usa zero-key por
+        // spec (ver `LedgerEntry::finalize` em entry.rs). Caller pré-ADR-0083
+        // (ex: ffi/bridge/mod.rs) continua produzindo verdict_id verificável
+        // com a mesma chave-zero, mantendo a cadeia de auditoria existente.
         match signing_key {
             Some(key) => entry.finalize_with_key(key),
             None => entry.finalize(),
