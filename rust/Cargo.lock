@@ -788,6 +788,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "axum",
  "axum-test",
+ "base64",
  "blake3",
  "buildtovalue-kernel",
  "chrono",

@@ -1,6 +1,10 @@
 use buildtovalue_kernel::gatekeeper::Gatekeeper;
 use buildtovalue_kernel::network::{IpClassifier, JurisdictionMapper};
 use buildtovalue_kernel::session_guard::SessionTracker;
+use buildtovalue_kernel::ledger::TenantStorageRouter;
+use buildtovalue_kernel::security::tenant_key::TenantKeyDeriver;
+use buildtovalue_kernel::keys::try_kernel_mac_key;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use prometheus::{
     opts, register_histogram, register_int_counter, register_int_counter_vec,
@@ -176,6 +180,10 @@ pub struct AppState {
     pub session_tracker: Mutex<SessionTracker>, // ADR-044: stateful, por sessao
     pub http_client: reqwest::Client,
     pub start_time: std::time::Instant,
+    /// ADR-0083: router de ledger por tenant (lazy, thread-safe).
+    pub tenant_router: TenantStorageRouter,
+    /// ADR-0083: derivador de TEK por tenant via HKDF-SHA256.
+    pub tenant_deriver: TenantKeyDeriver,
 }
 
 impl Default for AppState {
@@ -208,6 +216,23 @@ impl AppState {
         lazy_static::initialize(&PROXY_BLOCKED_TOTAL);
         lazy_static::initialize(&PROXY_FORWARD_LATENCY_MS);
 
+        // ADR-0083: base path for per-tenant ledger files.
+        let tenant_data_dir: PathBuf = std::env::var("BTV_TENANT_DATA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/data/tenants"));
+
+        // TenantKeyDeriver uses the kernel MAC key (MKK) if already initialized
+        // (production flow via main()); falls back to a dev sentinel otherwise
+        // (integration tests that construct AppState directly).
+        const DEV_SENTINEL: &[u8] = b"btv-dev-key-do-not-use-in-production";
+        let tenant_deriver = TenantKeyDeriver::new(
+            try_kernel_mac_key().unwrap_or(DEV_SENTINEL),
+        );
+        let tenant_router = TenantStorageRouter::new(
+            tenant_data_dir,
+            buildtovalue_kernel::ledger::remote::S3Config::default(),
+        );
+
         Self {
             gatekeeper: Mutex::new(Gatekeeper::new()),
             ip_classifier: IpClassifier::new(),
@@ -221,6 +246,8 @@ impl AppState {
                 .build()
                 .expect("BTV boot invariant: reqwest default builder must succeed"),
             start_time: std::time::Instant::now(),
+            tenant_router,
+            tenant_deriver,
         }
     }
 }
