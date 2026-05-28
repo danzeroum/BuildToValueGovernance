@@ -5,7 +5,6 @@
 <!-- audience: internal -->
 
 ```
----
 data/
 ├── infrastructure/           <-- Configurações Técnicas
 │   └── monitoring/
@@ -30,8 +29,8 @@ data/
     ├── base.yaml             <-- Config global
     └── default.yaml          <-- Fallback
 
----
 ```
+---
 
 ### Próximos passos / Relacionados
 
