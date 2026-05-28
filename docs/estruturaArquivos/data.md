@@ -4,8 +4,8 @@
 
 <!-- audience: internal -->
 
+```
 ---
-´´´
 data/
 ├── infrastructure/           <-- Configurações Técnicas
 │   └── monitoring/
@@ -32,7 +32,7 @@ data/
 
 ´´´
 ---
-
+```
 
 ### Próximos passos / Relacionados
 
