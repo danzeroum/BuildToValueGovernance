@@ -1,8 +1,8 @@
 # Índice Mestre de ADRs — BuildToValue Governance
 
-**Versão do Índice:** v4.2.1  
+**Versão do Índice:** v4.2.2  
 **Data de Consolidação:** 2026-05-28  
-**HEAD de Referência:** `8be7068ec88e358bf7dcf50fe538682f1fc7b122`  
+**HEAD de Referência:** `5147a985af82cc30dd4ed0257535626dfc5d7e75`  
 **Total de ADRs Catalogados:** 81 (numerações 0001–0081; colisões de numeração explicitadas)  
 **Mantenedor:** AI Squad — Arquiteta (Opus) + Reviewer (Opus)  
 **Classificação:** Documentação Arquitetural — Fonte Primária de Rastreabilidade
@@ -41,12 +41,12 @@
 
 ## Grupo B — Componentes do Kernel v1 (0011–0020)
 
-> **Nota de Auditoria (2026-05-28):** Os ADRs 0012–0016 foram identificados por auditoria forense de densidade de conteúdo como stubs. Os arquivos existem fisicamente no disco, mas contêm apenas cabeçalhos Markdown sem decisão arquitetural substanciada. O 0015 está em estado de arquivo vazio. A expansão destes cinco ADRs constitui débito técnico de documentação registrado e priorizado para sprint futura. O ADR 0011 foi materializado em 2026-05-28 (ver nota [⁹]).
+> **Nota de Auditoria (2026-05-28):** ADRs 0013–0016 identificados por auditoria forense como stubs. Os arquivos existem fisicamente mas contêm apenas cabeçalhos placeholder sem decisão arquitetural substanciada (0015 em estado de arquivo vazio). ADRs 0011 e 0012 materializados nesta sprint (ver notas [⁹] e [¹⁰]). Débito técnico remanescente: 4 stubs (0013–0016).
 
 | ID | Título | Arquivo | Status |
 |:---|:---|:---|:---:|
 | 0011 | Policy Engine — Núcleo v1 | [0011-policy-engine.md](0011-policy-engine.md) | ✅ Aceito [⁹] |
-| 0012 | Output Guard | [0012-output-guard.md](0012-output-guard.md) | ⚠️ Stub |
+| 0012 | Output Guard — Barreira de Saída do Kernel v4.0 | [0012-output-guard.md](0012-output-guard.md) | ✅ Aceito [¹⁰] |
 | 0013 | Deobfuscator Chaining v2 | [0013-deobfuscator-chaining-v2.md](0013-deobfuscator-chaining-v2.md) | ⚠️ Stub |
 | 0014 | IP Classifier e Session Drift v1 | [0014-ip-classifier-session-drift.md](0014-ip-classifier-session-drift.md) | ⚠️ Stub |
 | 0015 | Interceptor Hooks — JVM Bridge | [0015-interceptor-hooks.md](0015-interceptor-hooks.md) | ⚠️ Stub |
@@ -217,7 +217,10 @@ Este artefato foi sucedido pela especificação canônica no ADR 0080.
 Este artefato foi sucedido pela especificação canônica no ADR 0081.
 
 **[⁹] Materialização — ADR 0011 (Policy Engine — Núcleo v1):**  
-Evoluído de `⚠️ Stub` para `✅ Aceito` em 2026-05-28. Conteúdo arquitetural completo registrado após auditoria forense que confirmou a suíte de validação em [`rust/kernel/tests/contextual_decisions.rs`](../../rust/kernel/tests/contextual_decisions.rs) — SHA `4d477554`, 8.852 bytes, verificado no HEAD `8be7068`. Débito técnico parcialmente liquidado: restam 5 stubs ativos (0012–0016).
+Evoluído de `⚠️ Stub` para `✅ Aceito` em 2026-05-28. Conteúdo arquitetural completo registrado após auditoria forense que confirmou a suíte de validação em [`rust/kernel/tests/contextual_decisions.rs`](../../rust/kernel/tests/contextual_decisions.rs) — SHA `4d477554`, 8.852 bytes, verificado no HEAD `8be7068`.
+
+**[¹⁰] Materialização — ADR 0012 (Output Guard — Barreira de Saída do Kernel v4.0):**  
+Evoluído de `⚠️ Stub` (v1.6 era chatbot) para `✅ Aceito` em 2026-05-28. Reescrita total: escopo reorientado de varredor de PII em respostas LLM para barreira de saída do enclave de governança transacional FFI Rust/JVM. Auditoria forense confirmou 16.442 bytes de implementação real em `rust/kernel/src/output_guard/` (SHA `ff011ff3` + `68230793` + `92282e3b`). Contrato de validação vinculado a [`rust/kernel/tests/gatekeeper_pipeline.rs`](../../rust/kernel/tests/gatekeeper_pipeline.rs) — SHA `74beccf4`, 5.613 bytes. Débito técnico remanescente: 4 stubs (ADRs 0013–0016).
 
 ---
 
@@ -234,8 +237,6 @@ Evoluído de `⚠️ Stub` para `✅ Aceito` em 2026-05-28. Conteúdo arquitetur
 
 ## Runbooks Operacionais
 
-> Procedimentos de contingência vinculados à arquitetura BTV. Mantidos em `docs/runbooks/` e indexados aqui para rastreabilidade entre decisões arquiteturais e resposta operacional.
-
 | ID | Título | Arquivo | Status | Responsável |
 |:---|:---|:---|:---:|:---:|
 | BTV-RUN-008 | Retenção, Custódia e Cripto-Shredding | [docs/runbooks/BTV-RUN-008.md](../runbooks/BTV-RUN-008.md) | ✅ Ativo | DPO / SecOps / SRE |
@@ -246,15 +247,13 @@ Evoluído de `⚠️ Stub` para `✅ Aceito` em 2026-05-28. Conteúdo arquitetur
 
 ## 🗂️ Histórico de Depreciação e Supersessão (Archive)
 
-> Artefatos custodiados em `docs/adr/archive/`. Estes arquivos foram expurgados da numeração ativa por obsolescência, duplicação de conteúdo ou status de rascunho não promovido. São mantidos para rastreabilidade forense completa e auditoria histórica. Nenhum linter de link deve considerar a ausência destes arquivos no índice ativo como não-conformidade.
-
 | Arquivo | Motivo de Arquivamento | Status |
 |:---|:---|:---:|
-| [archive/0002-evidence-protocol-v1-obsolete.md](archive/0002-evidence-protocol-v1-obsolete.md) | Versão v1 do Evidence Protocol. Supersedida pelo ADR 0005 (Evidence Protocol v2 — Tamanho Fixo Canônico). Mantida para rastreabilidade de decisão. | ⚠️ Obsoleto |
-| [archive/ADR-043-grant-decision-adapter.md](archive/ADR-043-grant-decision-adapter.md) | Rascunho zumbi com slug de numeração não-canônica (`ADR-NNN`). Conteúdo absorvido e formalizado no ADR 0057 e posteriormente no ADR 0073 (canônico). | ⚠️ Obsoleto |
-| [archive/ADR-051.md](archive/ADR-051.md) | Rascunho zumbi com slug de numeração não-canônica. Conteúdo formalizado no ADR 0074 (Model Integrity — Abliteration Detection v2). | ⚠️ Obsoleto |
-| [archive/TBD-grant-decision-adapter.md](archive/TBD-grant-decision-adapter.md) | Rascunho sem numeração atribuída (`TBD`). Conteúdo absorvido pelo ADR 0073. Mantido como evidência de iteração de design. | ⚠️ Obsoleto |
-| [archive/README.md](archive/README.md) | Descritor de navegação interno do diretório archive/. Não é um ADR; serve como guia de orientação para auditores que acessam o diretório diretamente. | 📄 Auxiliar |
+| [archive/0002-evidence-protocol-v1-obsolete.md](archive/0002-evidence-protocol-v1-obsolete.md) | Versão v1 do Evidence Protocol. Supersedida pelo ADR 0005. | ⚠️ Obsoleto |
+| [archive/ADR-043-grant-decision-adapter.md](archive/ADR-043-grant-decision-adapter.md) | Rascunho zumbi absorvido pelo ADR 0073. | ⚠️ Obsoleto |
+| [archive/ADR-051.md](archive/ADR-051.md) | Rascunho zumbi formalizado no ADR 0074. | ⚠️ Obsoleto |
+| [archive/TBD-grant-decision-adapter.md](archive/TBD-grant-decision-adapter.md) | Rascunho sem numeração absorvido pelo ADR 0073. | ⚠️ Obsoleto |
+| [archive/README.md](archive/README.md) | Descritor de navegação do archive/. | 📄 Auxiliar |
 
 ---
 
@@ -263,8 +262,9 @@ Evoluído de `⚠️ Stub` para `✅ Aceito` em 2026-05-28. Conteúdo arquitetur
 | Versão | Data | HEAD | Alteração |
 |:---|:---|:---|:---|
 | v1.0.0 | 2026-01-01 | — | Criação inicial |
-| v4.0.0 | 2026-05-27 | `07c32c6` | Adição dos ADRs 0073–0081 (commit de deduplicação multi-tenant) |
-| v4.1.0 | 2026-05-28 | `0f2b728` | Reconstrução total: correção de slugs fantasmas Grupo K, errata forense 0044/0045/0072, expurgo de 3 arquivos zumbis (`ADR-043`, `ADR-051`, `TBD`), inclusão de documentos auxiliares e seção de runbooks operacionais |
-| v4.1.1 | 2026-05-28 | `83b006c` | Correção de drift inverso: BTV-RUN-010 já existia no disco (não estava pendente); BTV-RUN-009 materializado; entradas da seção Runbooks agora refletem o estado real de `docs/runbooks/` |
-| v4.2.0 | 2026-05-28 | `24c9190` | Auditoria forense retroativa completa: ADRs 0011–0016 retificados para status ⚠️ Stub; seção '🗂️ Histórico de Depreciação e Supersessão (Archive)' adicionada com os 5 artefatos reais de `docs/adr/archive/` catalogados; coluna Status adicionada à tabela de Runbooks; legenda expandida com símbolo Stub. Débito técnico documental zerado em totalidade forense. |
-| v4.2.1 | 2026-05-28 | `8be7068` | ADR 0011 materializado — promovido de ⚠️ Stub para ✅ Aceito. Nota [⁹] adicionada vinculando decisão ao arquivo de testes físico `rust/kernel/tests/contextual_decisions.rs` (SHA `4d477554`, 8.852 bytes). Débito técnico remanescente: 5 stubs (ADRs 0012–0016). |
+| v4.0.0 | 2026-05-27 | `07c32c6` | Adição dos ADRs 0073–0081 |
+| v4.1.0 | 2026-05-28 | `0f2b728` | Reconstrução total: slugs, errata forense, expurgo de zumbis |
+| v4.1.1 | 2026-05-28 | `83b006c` | Correção de drift inverso: runbooks reais catalogados |
+| v4.2.0 | 2026-05-28 | `24c9190` | Auditoria forense retroativa: 0011–0016 retificados para Stub; archive catalogado |
+| v4.2.1 | 2026-05-28 | `e5a5c92` | ADR 0011 materializado — Policy Engine. 5 stubs remanescentes. |
+| v4.2.2 | 2026-05-28 | `5147a98` | ADR 0012 materializado — Output Guard v4.0 (reescrita total de escopo). 4 stubs remanescentes (0013–0016). |
