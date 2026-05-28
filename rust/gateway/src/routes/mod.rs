@@ -29,6 +29,7 @@ pub mod appeals;      // ADR-040
 pub mod health_bias;  // ADR-040
 pub mod trust;        // ADR-040
 pub mod proxy;        // Fase 2: proxy HTTP transparente (ADR-0059)
+pub mod internal;     // ADR-0089 §D2: reload-policy + evict
 
 use std::sync::Arc;
 use axum::{Router, routing::{any, get, post}, middleware};
@@ -42,6 +43,7 @@ use crate::middleware::rate_limit::RateLimitLayer;
 use crate::middleware::auth::ApiKeyLayer;
 use crate::middleware::trace_propagation::trace_propagation;
 use crate::middleware::tenant_extractor::TenantExtractorLayer;
+use crate::middleware::internal_auth::InternalAuthLayer;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     let cors = CorsLayer::new()
@@ -49,7 +51,23 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    // ── ADR-0089 §D2 — Endpoints internos autenticados ─────────────
+    // Sub-router separado para que InternalAuthLayer atinja APENAS
+    // /internal/v1/*, sem afetar ApiKeyLayer das demais rotas.
+    let internal_router = axum::Router::new()
+        .route(
+            "/internal/v1/reload-policy/:tenant_id",
+            axum::routing::post(internal::reload_policy_handler),
+        )
+        .route(
+            "/internal/v1/tenants/:tenant_id",
+            axum::routing::delete(internal::evict_tenant_handler),
+        )
+        .layer(InternalAuthLayer::from_env())
+        .with_state(Arc::clone(&state));
+
     Router::new()
+        .merge(internal_router)
         // ── Rotas v1.9 (inalteradas) ──────────────────────────
         .route("/v1/validate",              post(validate::validate_handler))
         .route("/v1/sanitize",              post(sanitize::sanitize_handler))

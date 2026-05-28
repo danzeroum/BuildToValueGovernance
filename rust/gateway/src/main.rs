@@ -10,6 +10,8 @@ mod state;
 mod fairness_mode;
 mod tenant_status;
 mod policy_loader;
+// nota: routes::internal e middleware::internal_auth são compilados
+// via mod routes; / mod middleware; — não precisam ser top-level.
 
 use state::AppState;
 

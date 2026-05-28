@@ -6,6 +6,7 @@ use buildtovalue_kernel::security::tenant_key::TenantKeyDeriver;
 use buildtovalue_kernel::statistics::{JonasMonitor, RawlsMonitor};
 use buildtovalue_kernel::keys::try_kernel_mac_key;
 use crate::fairness_mode::FairnessModeRegistry;
+use crate::tenant_status::TenantStatusRegistry;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use prometheus::{
@@ -201,6 +202,14 @@ pub struct AppState {
     /// `Disabled` é o default fail-safe para tenants não declarados —
     /// explicit opt-in (operador instala modo via `install()` no boot).
     pub fairness_modes: FairnessModeRegistry,
+    /// ADR-0089 §D1 — estado runtime por tenant (Initializing/Active/Degraded).
+    /// Default `Active` para tenants sem entry (decisão documentada no
+    /// header do módulo `tenant_status`).
+    pub tenant_statuses: TenantStatusRegistry,
+    /// ADR-0089 §D2 — diretório raiz das policies fairness por tenant.
+    /// Resolvido de `BTV_POLICIES_DIR` em `AppState::new()` (uma vez,
+    /// sem races em testes paralelos).
+    pub policies_dir: PathBuf,
 }
 
 impl Default for AppState {
@@ -274,7 +283,51 @@ impl AppState {
             rawls_monitor: RawlsMonitor::default(),
             jonas_monitor: JonasMonitor::default(),
             fairness_modes: FairnessModeRegistry::default(),
+            tenant_statuses: TenantStatusRegistry::default(),
+            policies_dir: resolve_policies_dir(),
         }
+    }
+
+    /// Constructor para testes que injeta `policies_dir` arbitrário.
+    /// Evita race em `std::env::set_var` quando testes paralelos
+    /// configuram diretórios diferentes. Demais campos seguem `new()`.
+    #[allow(dead_code)]
+    pub fn with_policies_dir(policies_dir: PathBuf) -> Self {
+        let mut s = Self::new();
+        s.policies_dir = policies_dir;
+        s
+    }
+}
+
+/// ADR-0089 §D2 — resolução de `BTV_POLICIES_DIR`. Default em prod:
+/// `/etc/btv/policies`. Default em dev: `./policies`.
+fn resolve_policies_dir() -> PathBuf {
+    if let Ok(s) = std::env::var("BTV_POLICIES_DIR") {
+        return PathBuf::from(s);
+    }
+    if std::env::var("BTV_ENV").as_deref() == Ok("production") {
+        PathBuf::from("/etc/btv/policies")
+    } else {
+        PathBuf::from("./policies")
+    }
+}
+
+/// Resultado de `AppState::evict_tenant` — bools por componente para
+/// resposta HTTP do endpoint DELETE `/internal/v1/tenants/{tenant_id}`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EvictionReport {
+    pub router: bool,
+    pub jonas: bool,
+    pub rawls: bool,
+    pub fairness_mode: bool,
+    pub status: bool,
+}
+
+impl EvictionReport {
+    /// `true` se algo foi removido em qualquer componente.
+    #[allow(dead_code)]
+    pub fn any(&self) -> bool {
+        self.router || self.jonas || self.rawls || self.fairness_mode || self.status
     }
 }
 
@@ -285,6 +338,24 @@ impl AppState {
     /// consultados separadamente.
     pub fn fairness_mode_for(&self, tenant_id: &str) -> crate::fairness_mode::FairnessMode {
         self.fairness_modes.mode_for(tenant_id)
+    }
+
+    /// ADR-0089 §D3 — Eager cleanup orquestrado em 5 componentes,
+    /// nesta ordem: `TenantStorageRouter` (drop `Arc<DurableLedger>`),
+    /// `JonasMonitor`, `RawlsMonitor`, `FairnessModeRegistry`,
+    /// `TenantStatusRegistry`.
+    ///
+    /// Sem cancelamento de tasks: D1 ADR-0088 mantém síncrono — não há
+    /// background tasks por tenant para cancelar. Idempotente em tenant
+    /// inexistente.
+    pub async fn evict_tenant(&self, tenant_id: &str) -> EvictionReport {
+        EvictionReport {
+            router: self.tenant_router.evict_tenant(tenant_id).await,
+            jonas: self.jonas_monitor.remove_tenant(tenant_id),
+            rawls: self.rawls_monitor.remove_tenant(tenant_id),
+            fairness_mode: self.fairness_modes.remove(tenant_id),
+            status: self.tenant_statuses.remove(tenant_id),
+        }
     }
 }
 

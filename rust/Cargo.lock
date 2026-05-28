@@ -804,6 +804,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "subtle",
  "tempfile",
  "tokio",
  "tower 0.4.13",
@@ -812,6 +813,7 @@ dependencies = [
  "tracing-subscriber",
  "ulid",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
