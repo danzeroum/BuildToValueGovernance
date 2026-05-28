@@ -116,6 +116,37 @@ impl EthicalError {
         }
     }
 
+    /// E131 — Tenant Isolation Boundary Violation (ADR-0083).
+    /// JWT `tenant_id` não corresponde ao canal de roteamento. Contestável.
+    pub fn tenant_isolation_violation(
+        jwt_tenant_id: String,
+        routing_tenant_id: &str,
+        audit_log_id: Option<String>,
+    ) -> Self {
+        Self {
+            type_uri: "https://docs.buildtovalue.org/errors/E131",
+            title: "Tenant Isolation Boundary Violation",
+            status: 403,
+            detail: format!(
+                "JWT tenant_id '{}' não corresponde ao canal de roteamento '{}'. \
+                 Acesso negado — ADR-0083 §D3.",
+                jwt_tenant_id, routing_tenant_id
+            ),
+            instance: None,
+            extensions: BtvExtensions {
+                error_code: "E131",
+                ethical_ground: "Isolamento de tenant violado — possível escalada de privilégio",
+                adr_reference: "https://docs.buildtovalue.org/adrs/0083-multi-tenancy-isolation"
+                    .to_string(),
+                verdict_id: None,
+                audit_log_id,
+                appeal_url: "/api/v1/appeals",
+                contestable_until: None,
+                metadata: None,
+            },
+        }
+    }
+
     /// E429 — Tenant excedeu Z-Score de frequência (Early Guard self-preservation).
     /// Erro de infraestrutura: não contestável.
     pub fn rate_limit_z_score(audit_log_id: Option<String>) -> Self {

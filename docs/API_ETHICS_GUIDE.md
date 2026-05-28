@@ -65,6 +65,14 @@ Definido normativamente no **ADR-0082**. Resumo:
 | `X-BTV-Verdict-Signature` | `hmac-sha256=<hex>` | Autenticidade contra proxies reversos (primitiva `security::signing`) |
 | `X-BTV-Sampling-Mode` | `full` \| `integrity` | Modo do Speed Layer aplicado (Lambda Governance) |
 
+> **Nota sobre chaves de assinatura**: `X-BTV-Verdict-Signature` usa a chave do
+> `SigningKeyManager` (injetada pelo Gatekeeper via `BTV_HMAC_KEY`). A assinatura
+> das entradas do ledger forense (`LedgerEntry.finalize_with_key`) usa uma chave
+> **separada**, passada explicitamente pelo Gatekeeper. Em produção, ambas devem
+> ser chaves distintas e rotacionadas independentemente — confundi-las viola o
+> princípio de separação de propósito. Documentar as chaves e seus propósitos no
+> runbook de operações.
+
 ### 5.2 Em respostas sujeitas a rate limit
 
 | Header | Valor |
