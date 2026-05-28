@@ -33,9 +33,16 @@ impl TenantId {
 struct BtvClaims {
     /// Tenant que emitiu o token. Ausente → "default".
     tenant_id: Option<String>,
-    /// Expiration (validado pelo jsonwebtoken automaticamente).
+    /// Expiration. Validação de expiração é feita pelo `jsonwebtoken` via
+    /// `Validation::validate_exp` quando há `BTV_JWT_SECRET`; o campo é mantido
+    /// no payload bruto para integridade forense do JWT (auditoria pode validar
+    /// `exp` independentemente do crate).
+    #[allow(dead_code)]
     exp: Option<u64>,
-    /// Subject (logging apenas, não usado para decisão).
+    /// Subject — reservado para telemetria de identidade ativa (SecOps).
+    /// Não usado em decisão de tenant para evitar acoplamento entre identity
+    /// e tenancy.
+    #[allow(dead_code)]
     sub: Option<String>,
 }
 
