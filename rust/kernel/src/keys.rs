@@ -125,6 +125,14 @@ pub fn kernel_mac_key() -> &'static [u8] {
         .as_slice()
 }
 
+/// Retorna a chave MAC se já inicializada, ou `None` se `init_kernel_mac_key()`
+/// ainda não foi chamado. Usar apenas em contextos onde a ausência é aceitável
+/// (testes de integração, health checks sem ledger). Em handlers de decisão,
+/// prefer `kernel_mac_key()` que falha-rápido com mensagem clara.
+pub fn try_kernel_mac_key() -> Option<&'static [u8]> {
+    KERNEL_MAC_KEY.get().map(|k| k.as_slice())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
