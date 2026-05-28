@@ -1,8 +1,8 @@
 # Índice Mestre de ADRs — BuildToValue Governance
 
-**Versão do Índice:** v4.2.0  
+**Versão do Índice:** v4.2.1  
 **Data de Consolidação:** 2026-05-28  
-**HEAD de Referência:** `24c9190b4fbb430012bb67c666e9129fc7c85b05`  
+**HEAD de Referência:** `8be7068ec88e358bf7dcf50fe538682f1fc7b122`  
 **Total de ADRs Catalogados:** 81 (numerações 0001–0081; colisões de numeração explicitadas)  
 **Mantenedor:** AI Squad — Arquiteta (Opus) + Reviewer (Opus)  
 **Classificação:** Documentação Arquitetural — Fonte Primária de Rastreabilidade
@@ -41,11 +41,11 @@
 
 ## Grupo B — Componentes do Kernel v1 (0011–0020)
 
-> ⚠️ **Nota de Auditoria (2026-05-28):** Os ADRs 0011–0016 foram identificados por auditoria forense de densidade de conteúdo como stubs. Os arquivos existem fisicamente no disco, mas contêm apenas cabeçalhos Markdown sem decisão arquitetural substanciada. O 0015 está em estado de arquivo vazio. A expansão destes seis ADRs constitui débito técnico de documentação registrado e priorizado para sprint futura.
+> **Nota de Auditoria (2026-05-28):** Os ADRs 0012–0016 foram identificados por auditoria forense de densidade de conteúdo como stubs. Os arquivos existem fisicamente no disco, mas contêm apenas cabeçalhos Markdown sem decisão arquitetural substanciada. O 0015 está em estado de arquivo vazio. A expansão destes cinco ADRs constitui débito técnico de documentação registrado e priorizado para sprint futura. O ADR 0011 foi materializado em 2026-05-28 (ver nota [⁹]).
 
 | ID | Título | Arquivo | Status |
 |:---|:---|:---|:---:|
-| 0011 | Policy Engine — Núcleo v1 | [0011-policy-engine.md](0011-policy-engine.md) | ⚠️ Stub |
+| 0011 | Policy Engine — Núcleo v1 | [0011-policy-engine.md](0011-policy-engine.md) | ✅ Aceito [⁹] |
 | 0012 | Output Guard | [0012-output-guard.md](0012-output-guard.md) | ⚠️ Stub |
 | 0013 | Deobfuscator Chaining v2 | [0013-deobfuscator-chaining-v2.md](0013-deobfuscator-chaining-v2.md) | ⚠️ Stub |
 | 0014 | IP Classifier e Session Drift v1 | [0014-ip-classifier-session-drift.md](0014-ip-classifier-session-drift.md) | ⚠️ Stub |
@@ -216,6 +216,9 @@ Este artefato foi sucedido pela especificação canônica no ADR 0080.
 **[⁸] Rastreabilidade — ADR 0060-B (SaaS Deployment v1):**  
 Este artefato foi sucedido pela especificação canônica no ADR 0081.
 
+**[⁹] Materialização — ADR 0011 (Policy Engine — Núcleo v1):**  
+Evoluído de `⚠️ Stub` para `✅ Aceito` em 2026-05-28. Conteúdo arquitetural completo registrado após auditoria forense que confirmou a suíte de validação em [`rust/kernel/tests/contextual_decisions.rs`](../../rust/kernel/tests/contextual_decisions.rs) — SHA `4d477554`, 8.852 bytes, verificado no HEAD `8be7068`. Débito técnico parcialmente liquidado: restam 5 stubs ativos (0012–0016).
+
 ---
 
 ## Documentos Auxiliares
@@ -263,4 +266,5 @@ Este artefato foi sucedido pela especificação canônica no ADR 0081.
 | v4.0.0 | 2026-05-27 | `07c32c6` | Adição dos ADRs 0073–0081 (commit de deduplicação multi-tenant) |
 | v4.1.0 | 2026-05-28 | `0f2b728` | Reconstrução total: correção de slugs fantasmas Grupo K, errata forense 0044/0045/0072, expurgo de 3 arquivos zumbis (`ADR-043`, `ADR-051`, `TBD`), inclusão de documentos auxiliares e seção de runbooks operacionais |
 | v4.1.1 | 2026-05-28 | `83b006c` | Correção de drift inverso: BTV-RUN-010 já existia no disco (não estava pendente); BTV-RUN-009 materializado; entradas da seção Runbooks agora refletem o estado real de `docs/runbooks/` |
-| v4.2.0 | 2026-05-28 | `24c9190` | Auditoria forense retroativa completa: ADRs 0011–0016 retificados para status ⚠️ Stub (densidade de conteúdo insuficiente detectada); seção '🗂️ Histórico de Depreciação e Supersessão (Archive)' adicionada com os 5 artefatos reais de `docs/adr/archive/` catalogados; coluna Status adicionada à tabela de Runbooks; legenda expandida com símbolo Stub. Débito técnico documental zerado em totalidade forense. |
+| v4.2.0 | 2026-05-28 | `24c9190` | Auditoria forense retroativa completa: ADRs 0011–0016 retificados para status ⚠️ Stub; seção '🗂️ Histórico de Depreciação e Supersessão (Archive)' adicionada com os 5 artefatos reais de `docs/adr/archive/` catalogados; coluna Status adicionada à tabela de Runbooks; legenda expandida com símbolo Stub. Débito técnico documental zerado em totalidade forense. |
+| v4.2.1 | 2026-05-28 | `8be7068` | ADR 0011 materializado — promovido de ⚠️ Stub para ✅ Aceito. Nota [⁹] adicionada vinculando decisão ao arquivo de testes físico `rust/kernel/tests/contextual_decisions.rs` (SHA `4d477554`, 8.852 bytes). Débito técnico remanescente: 5 stubs (ADRs 0012–0016). |
