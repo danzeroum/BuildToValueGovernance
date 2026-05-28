@@ -3,7 +3,9 @@ use buildtovalue_kernel::network::{IpClassifier, JurisdictionMapper};
 use buildtovalue_kernel::session_guard::SessionTracker;
 use buildtovalue_kernel::ledger::TenantStorageRouter;
 use buildtovalue_kernel::security::tenant_key::TenantKeyDeriver;
+use buildtovalue_kernel::statistics::{JonasMonitor, RawlsMonitor};
 use buildtovalue_kernel::keys::try_kernel_mac_key;
+use crate::fairness_mode::FairnessModeRegistry;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use prometheus::{
@@ -184,6 +186,28 @@ pub struct AppState {
     pub tenant_router: TenantStorageRouter,
     /// ADR-0083: derivador de TEK por tenant via HKDF-SHA256.
     pub tenant_deriver: TenantKeyDeriver,
+    /// ADR-0086 + ADR-0088: monitor de fairness Rawls (DIR). Compartilhado
+    /// via outer `Arc<AppState>` do main.rs — sem `Arc` interno por D1
+    /// do ADR-0088 (síncrono, sem `tokio::spawn`).
+    /// `#[allow(dead_code)]` documentado: lido pelo wiring do Commit 5
+    /// no decide_handler. Lib tests deste mesmo Commit 4 já o exercitam.
+    #[allow(dead_code)]
+    pub rawls_monitor: RawlsMonitor,
+    /// ADR-0087 + ADR-0088: monitor de drift populacional Jonas (PSI).
+    /// Storage-agnóstico: baselines precisam ser instalados explicitamente
+    /// via `install_baseline()` no boot (operador) ou em testes. Filesystem
+    /// loading (walk em `policies/*/drift_baseline.yaml`) é out-of-scope
+    /// deste ADR — endpoint `/internal/v1/reload-policy` planejado para
+    /// ADR-0089.
+    /// `#[allow(dead_code)]` documentado: ver `rawls_monitor`.
+    #[allow(dead_code)]
+    pub jonas_monitor: JonasMonitor,
+    /// ADR-0088 §D3: registry de modo de execução fairness por tenant.
+    /// `Disabled` é o default fail-safe para tenants não declarados —
+    /// explicit opt-in (operador instala modo via `install()` no boot).
+    /// `#[allow(dead_code)]` documentado: ver `rawls_monitor`.
+    #[allow(dead_code)]
+    pub fairness_modes: FairnessModeRegistry,
 }
 
 impl Default for AppState {
@@ -248,6 +272,131 @@ impl AppState {
             start_time: std::time::Instant::now(),
             tenant_router,
             tenant_deriver,
+            // ADR-0088 Commit 4: monitores fairness + registry de modo.
+            // Default::default() é equivalente a constructors vazios
+            // (sem baselines, sem modos declarados). Operador é responsável
+            // por install_baseline + install_mode no boot via leitura de
+            // policies/*. Em testes, AppState::new() já fornece estado
+            // limpo; testes que exercitam fairness instalam manualmente.
+            rawls_monitor: RawlsMonitor::default(),
+            jonas_monitor: JonasMonitor::default(),
+            fairness_modes: FairnessModeRegistry::default(),
         }
+    }
+}
+
+impl AppState {
+    /// Helper para o decide_handler (Commit 5): resolve o modo do tenant
+    /// uma vez por requisição, evitando duas leituras do `RwLock` no hot
+    /// path quando `populates_explain()` e `enforces_action()` são
+    /// consultados separadamente.
+    /// `#[allow(dead_code)]` documentado: caller é o Commit 5.
+    #[allow(dead_code)]
+    pub fn fairness_mode_for(&self, tenant_id: &str) -> crate::fairness_mode::FairnessMode {
+        self.fairness_modes.mode_for(tenant_id)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::fairness_mode::FairnessMode;
+    use buildtovalue_kernel::statistics::{
+        GroupClass, JonasBaselineLoader, OutcomeBucket,
+    };
+
+    fn fresh_state() -> AppState {
+        AppState::new()
+    }
+
+    #[test]
+    fn fresh_state_has_default_fairness_components() {
+        let s = fresh_state();
+        assert_eq!(s.fairness_modes.declared_tenant_count(), 0);
+        assert_eq!(s.fairness_mode_for("any-tenant"), FairnessMode::Disabled);
+        // Sem baseline instalado → metrics() retorna None.
+        assert!(s.jonas_monitor.metrics("any-tenant").is_none());
+        // Sem records → metrics() retorna None (consistente com ADR-0086).
+        assert!(s.rawls_monitor.metrics("any-tenant").is_none());
+    }
+
+    #[test]
+    fn rawls_monitor_records_per_tenant_via_appstate() {
+        let s = fresh_state();
+        for _ in 0..40 {
+            s.rawls_monitor
+                .record("acme", GroupClass::Privileged, OutcomeBucket::Favorable);
+            s.rawls_monitor
+                .record("acme", GroupClass::Unprivileged, OutcomeBucket::Favorable);
+        }
+        let m = s.rawls_monitor.metrics("acme").expect("metrics installed");
+        assert!(!m.violates_threshold);
+        assert!(!m.insufficient_samples);
+    }
+
+    #[test]
+    fn jonas_monitor_install_and_record_via_appstate() {
+        let s = fresh_state();
+        let baseline_yaml = r#"
+version: "1.0.0"
+model_id: "test-model"
+bins: 10
+reference_proportions:
+  - 0.05
+  - 0.07
+  - 0.10
+  - 0.13
+  - 0.15
+  - 0.18
+  - 0.15
+  - 0.10
+  - 0.05
+  - 0.02
+"#;
+        let baseline = JonasBaselineLoader::from_yaml_str(baseline_yaml).expect("parse");
+        s.jonas_monitor.install_baseline("acme", baseline);
+        for _ in 0..600 {
+            s.jonas_monitor.record("acme", 0.05, false);
+        }
+        // Após JONAS_COMPUTE_INTERVAL transações, metrics está populado.
+        let m = s.jonas_monitor.metrics("acme").expect("metrics computed");
+        assert!(m.psi.is_finite());
+    }
+
+    #[test]
+    fn fairness_mode_for_returns_disabled_unless_installed() {
+        let s = fresh_state();
+        assert_eq!(s.fairness_mode_for("ghost"), FairnessMode::Disabled);
+
+        s.fairness_modes.install("acme", FairnessMode::Enforced);
+        s.fairness_modes.install("globex-shadow", FairnessMode::Shadow);
+
+        assert_eq!(s.fairness_mode_for("acme"), FairnessMode::Enforced);
+        assert_eq!(s.fairness_mode_for("globex-shadow"), FairnessMode::Shadow);
+        assert_eq!(s.fairness_mode_for("ghost"), FairnessMode::Disabled);
+    }
+
+    #[test]
+    fn monitors_isolate_tenants() {
+        let s = fresh_state();
+        // Tenant A: paridade.
+        for _ in 0..40 {
+            s.rawls_monitor
+                .record("a", GroupClass::Privileged, OutcomeBucket::Favorable);
+            s.rawls_monitor
+                .record("a", GroupClass::Unprivileged, OutcomeBucket::Favorable);
+        }
+        // Tenant B: disparate impact severo.
+        for _ in 0..40 {
+            s.rawls_monitor
+                .record("b", GroupClass::Privileged, OutcomeBucket::Favorable);
+            s.rawls_monitor
+                .record("b", GroupClass::Unprivileged, OutcomeBucket::Unfavorable);
+        }
+        let a = s.rawls_monitor.metrics("a").expect("a");
+        let b = s.rawls_monitor.metrics("b").expect("b");
+        assert!(!a.violates_threshold, "tenant a deve estar OK");
+        assert!(b.violates_threshold, "tenant b deve violar");
     }
 }

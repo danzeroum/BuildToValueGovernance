@@ -1,13 +1,5 @@
 //! Fairness execution mode per tenant (ADR-0088 §D3).
 //!
-//! NOTE on `dead_code`: o módulo é definido neste commit (Commit 3) mas
-//! consumido apenas a partir do Commit 4 (wiring no `AppState`). Atributo
-//! `#[allow(dead_code)]` documenta a intenção e evita falha no
-//! `RUSTFLAGS="-D warnings"` da Workspace Integrity até que o caller
-//! exista. Remover após Commit 4.
-#![allow(dead_code)]
-
-//!
 //! Shadow mode é **nível de execução**, não feature flag — distinção
 //! importante:
 //!
@@ -53,11 +45,15 @@ pub enum FairnessMode {
 impl FairnessMode {
     /// `true` se o modo permite que rationale e governance_errors do
     /// motor cheguem ao `ExplainDecision` (ainda que sem alterar action).
+    /// `#[allow(dead_code)]` documentado: caller é o Commit 5.
+    #[allow(dead_code)]
     pub fn populates_explain(&self) -> bool {
         matches!(self, Self::Shadow | Self::Enforced)
     }
 
     /// `true` se o modo aplica a ação composta na resposta HTTP.
+    /// `#[allow(dead_code)]` documentado: caller é o Commit 5.
+    #[allow(dead_code)]
     pub fn enforces_action(&self) -> bool {
         matches!(self, Self::Enforced)
     }
@@ -78,6 +74,10 @@ impl Default for FairnessModeRegistry {
     }
 }
 
+/// `#[allow(dead_code)]` no impl: métodos consumidos por `AppState` (commit 4
+/// lib tests) e `decide_handler` (Commit 5). Sem caller direto no binário até
+/// o wiring final — análogo ao `EthicalError` constructors no kernel.
+#[allow(dead_code)]
 impl FairnessModeRegistry {
     pub fn new() -> Self {
         Self {
