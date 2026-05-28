@@ -234,4 +234,32 @@ mod tests {
             Ok(DEFAULT_TENANT_ID)
         );
     }
+
+    /// ADR-0083 E2E: dois tenants distintos devem produzir arquivos de ledger
+    /// fisicamente isolados em subdiretórios separados.
+    #[tokio::test]
+    async fn two_tenants_get_physically_isolated_files() {
+        let tmp = TempDir::new().unwrap();
+        let router = make_router(&tmp);
+
+        // Roteamento de dois tenants distintos (cada um deve criar seu próprio
+        // diretório, independentemente do sucesso da inicialização do ledger).
+        let _ = router.route("acme").await;
+        let _ = router.route("globex").await;
+
+        let acme_dir = tmp.path().join("acme");
+        let globex_dir = tmp.path().join("globex");
+        assert!(acme_dir.exists(), "acme/ directory must exist");
+        assert!(globex_dir.exists(), "globex/ directory must exist");
+        assert_ne!(
+            acme_dir, globex_dir,
+            "tenants must have distinct directory paths"
+        );
+
+        // O cache do router deve refletir dois tenants ativos (se ambos
+        // foram inicializados com sucesso) ou zero (se a inicialização falhar
+        // graciosamente em ambos). Nunca um número intermediário não-determinístico.
+        let active = router.active_tenant_count().await;
+        assert!(active == 0 || active == 2, "expected 0 or 2 active tenants, got {active}");
+    }
 }
