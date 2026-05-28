@@ -17,6 +17,7 @@ use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 use buildtovalue_kernel::core::types::{Action, EthicalVerdict};
 use buildtovalue_kernel::ledger::entry::{ActionType, LedgerEntry};
 use buildtovalue_kernel::evidence::TechnicalEvidence;
+use buildtovalue_kernel::api::error_as_resource::EthicalError;
 use crate::middleware::tenant_extractor::TenantId;
 use crate::state::AppState;
 use super::common::{extract_client_ip, ip_risk_to_str, FALLBACK_POLICY};
@@ -93,7 +94,13 @@ pub struct DecideResponse {
     pub drift_level: String,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+/// `ExplainDecision` é o laudo serializado no campo `explain` da resposta
+/// HTTP de `/v1/decide`. `Serialize` apenas — o caminho de deserialização
+/// real vem do Python governance via `GovernanceExplain` (struct distinta
+/// abaixo). Adicionar `Deserialize` aqui exigiria `EthicalError: Deserialize`,
+/// que por sua vez exigiria `Cow<'static, str>` em vários campos do kernel —
+/// custo arquitetural alto para um derive que não tem caller.
+#[derive(Serialize, Default)]
 pub struct ExplainDecision {
     pub summary: String,
     pub rawls_rationale: String,
@@ -103,6 +110,194 @@ pub struct ExplainDecision {
     pub trust_score: f32,
     pub mercy_score: f32,
     pub pipeline_stages: Vec<String>,
+
+    /// **ADR-0088 §D2** — Erro singular legado preservado para FFI Java
+    /// 1.x. Populado a partir de `governance_errors` por precedência de
+    /// status code (ver `pick_legacy_error`). `None` quando nenhum erro
+    /// de governança foi emitido.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_error: Option<EthicalError>,
+
+    /// **ADR-0088 §D2** — Vetor completo de erros de governança (Rawls,
+    /// Jonas, etc). Adição não-quebrante: clientes 1.x ignoram, clientes
+    /// 2.x leem aqui. Vazio quando nenhum motor de fairness violou.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub governance_errors: Vec<EthicalError>,
+}
+
+/// Mapeia o código de erro do BTV em um rank de severidade semântica.
+/// Status HTTP **não** é proxy adequado: 403 (BLOCK semântico) é mais
+/// severo que 451 (REDACT semântico) apesar de numericamente menor.
+fn severity_rank(error_code: &str) -> u8 {
+    match error_code {
+        "E131" => 100, // Tenant isolation — Hard Block, escalação máxima
+        "E130" => 90,  // Policy violation — Block
+        "E160" | "E161" => 50, // Fairness (Rawls/Jonas) — Redact
+        "E120" => 30,  // BiasDeclaration ausente — erro de contrato
+        "E429" => 20,  // Rate limit — infraestrutura
+        _ => 10,       // Default para códigos desconhecidos
+    }
+}
+
+/// Seleciona qual `EthicalError` populará `legacy_error` a partir do vetor
+/// `governance_errors`. ADR-0088 §D2: precedência por **severidade semântica
+/// do error_code** (BLOCK > REDACT > rate-limit > validation), com ties
+/// broken por ordem de inserção (estabilidade FIFO).
+///
+/// Retorna `None` se `errors` é vazio.
+///
+/// `#[allow(dead_code)]` documentado: consumidor é o wiring do
+/// commit 5 desta branch. Mantido público porque será chamado pelo
+/// `decide_handler` após o wiring.
+#[allow(dead_code)]
+pub fn pick_legacy_error(errors: &[EthicalError]) -> Option<EthicalError> {
+    if errors.is_empty() {
+        return None;
+    }
+    // Maior severity_rank vence; em empate de rank, o primeiro inserido
+    // (menor índice) vence — `Reverse(idx)` no max_by_key inverte para
+    // que o menor índice produza o maior key tuple.
+    let best_idx = errors
+        .iter()
+        .enumerate()
+        .max_by_key(|(idx, e)| (severity_rank(e.extensions.error_code), std::cmp::Reverse(*idx)))?
+        .0;
+    // Reconstrói clonando manualmente — EthicalError não deriva Clone
+    // (BtvExtensions::metadata é serde_json::Value que clona, mas o
+    // struct top-level não está marcado). Caminho minimalista: copy via
+    // serde round-trip via JSON é overkill; em vez disso, derivamos
+    // Clone para EthicalError + BtvExtensions no kernel (commit subsequente
+    // se necessário). Aqui usamos índice; o caller materializa o clone
+    // através do Vec original quando precisa.
+    errors.get(best_idx).map(clone_ethical_error)
+}
+
+/// Helper interno para clonar um `EthicalError`. Justificado pelo helper
+/// `pick_legacy_error` que retorna por valor para simplificar o consumer.
+/// `EthicalError` não deriva `Clone` no kernel hoje; centralizar aqui evita
+/// poluir a API pública do kernel só por causa do dual-write do ADR-0088 §D2.
+/// `#[allow(dead_code)]` documentado: usado por `pick_legacy_error` que
+/// por sua vez é consumido pelo wiring do commit 5 desta branch.
+#[allow(dead_code)]
+fn clone_ethical_error(e: &EthicalError) -> EthicalError {
+    use buildtovalue_kernel::api::error_as_resource::BtvExtensions;
+    EthicalError {
+        type_uri: e.type_uri,
+        title: e.title,
+        status: e.status,
+        detail: e.detail.clone(),
+        instance: e.instance.clone(),
+        extensions: BtvExtensions {
+            error_code: e.extensions.error_code,
+            ethical_ground: e.extensions.ethical_ground,
+            adr_reference: e.extensions.adr_reference.clone(),
+            verdict_id: e.extensions.verdict_id.clone(),
+            audit_log_id: e.extensions.audit_log_id.clone(),
+            appeal_url: e.extensions.appeal_url,
+            contestable_until: e.extensions.contestable_until.clone(),
+            metadata: e.extensions.metadata.clone(),
+        },
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod explain_decision_tests {
+    use super::*;
+
+    fn rawls_451() -> EthicalError {
+        EthicalError::rawls_dir_violation(
+            "2026-05-29T12:00:00Z".to_string(),
+            None,
+            None,
+            None,
+        )
+    }
+    fn jonas_451() -> EthicalError {
+        EthicalError::jonas_drift_violation(
+            "2026-05-29T12:00:00Z".to_string(),
+            None,
+            None,
+            None,
+        )
+    }
+    fn tenant_403() -> EthicalError {
+        EthicalError::tenant_isolation_violation(
+            "wrong-tenant".to_string(),
+            "correct-tenant",
+            None,
+        )
+    }
+
+    #[test]
+    fn empty_errors_yields_no_legacy() {
+        assert!(pick_legacy_error(&[]).is_none());
+    }
+
+    #[test]
+    fn single_error_becomes_legacy() {
+        let errs = vec![rawls_451()];
+        let chosen = pick_legacy_error(&errs).expect("one error");
+        assert_eq!(chosen.status, 451);
+        assert_eq!(chosen.extensions.error_code, "E160");
+    }
+
+    #[test]
+    fn block_semantic_wins_over_redact_semantic() {
+        // E160 (451, Redact semântico) + E131 (403, Hard Block semântico)
+        // → E131 vence porque BLOCK > REDACT na escala de severidade.
+        // Status numérico não é proxy: 403 < 451 numericamente, mas
+        // semanticamente é mais severo. Ver `severity_rank`.
+        let errs = vec![rawls_451(), tenant_403()];
+        let chosen = pick_legacy_error(&errs).expect("two errors");
+        assert_eq!(chosen.extensions.error_code, "E131");
+        assert_eq!(chosen.status, 403);
+    }
+
+    #[test]
+    fn tie_at_same_status_keeps_first_inserted() {
+        // E160 + E161 ambos 451 → E160 vence (inserido primeiro).
+        let errs = vec![rawls_451(), jonas_451()];
+        let chosen = pick_legacy_error(&errs).expect("two errors");
+        assert_eq!(chosen.status, 451);
+        assert_eq!(
+            chosen.extensions.error_code, "E160",
+            "tie deve favorecer ordem de inserção FIFO"
+        );
+    }
+
+    #[test]
+    fn tie_at_same_status_reverse_order_picks_jonas() {
+        // E161 + E160 ambos 451 → E161 vence (inserido primeiro agora).
+        let errs = vec![jonas_451(), rawls_451()];
+        let chosen = pick_legacy_error(&errs).expect("two errors");
+        assert_eq!(chosen.extensions.error_code, "E161");
+    }
+
+    #[test]
+    fn explain_serializes_empty_governance_errors_as_absent() {
+        // Default ExplainDecision com governance_errors vazio + legacy_error None:
+        // ambos os campos devem ser omitidos da serialização (skip_serializing_if).
+        let ex = ExplainDecision::default();
+        let json = serde_json::to_string(&ex).expect("serialize");
+        assert!(!json.contains("governance_errors"));
+        assert!(!json.contains("legacy_error"));
+    }
+
+    #[test]
+    fn explain_serializes_with_populated_errors() {
+        let errs = vec![rawls_451()];
+        let legacy = pick_legacy_error(&errs);
+        let ex = ExplainDecision {
+            governance_errors: errs,
+            legacy_error: legacy,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&ex).expect("serialize");
+        assert!(json.contains("\"legacy_error\""));
+        assert!(json.contains("\"governance_errors\""));
+        assert!(json.contains("\"error_code\":\"E160\""));
+    }
 }
 
 // ── INTERNAL ─────────────────────────────────────────────────
@@ -333,6 +528,10 @@ pub async fn decide_handler(
                 pipeline_stages: e.pipeline_trace.clone(),
                 trust_score: v.trust_score,
                 mercy_score: v.mercy_score,
+                // ADR-0088 §D2: campos novos default — populados em commit 5
+                // (wiring de Rawls + Jonas no decide_handler).
+                legacy_error: None,
+                governance_errors: Vec::new(),
             }).unwrap_or_default();
             (
                 v.action.clone(),
@@ -358,6 +557,8 @@ pub async fn decide_handler(
                 pipeline_stages: vec!["kernel".to_string(), "policy".to_string()],
                 trust_score: 0.0,
                 mercy_score: 0.0,
+                legacy_error: None,
+                governance_errors: Vec::new(),
             };
             (
                 policy_action.clone(),
