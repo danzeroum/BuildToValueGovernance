@@ -85,6 +85,20 @@ reference_proportions:
    como `baseline_hash` — emitido em `ExplainDecision.stages.jonas.baseline_hash`
    para que mudanças assinadas pelo DPO sejam rastreáveis na cadeia de auditoria.
 
+**Limitação de Fase 1 (audit-only):** o `baseline_hash` é computado e
+propagado, mas o loader **não verifica** contra um `expected_sha256` em
+configuração externa. Tampering silencioso do YAML produz um novo hash
+mas não bloqueia o carregamento. Reservado para Fase 2 (hardening):
+- Novo campo `expected_sha256` em `policies/{tenant}/drift_baseline.yaml`
+  ou em `tenant_config.yaml` separado, assinado fora-de-banda.
+- Mismatch → `BaselineError::IntegrityMismatch` + erro RFC 7807 **E162**
+  reservado.
+- Verificação ativa transforma o hash de evidência forense passiva em
+  fronteira de admissão.
+
+Operadores que dependem de integridade ativa hoje devem validar o YAML
+antes do deploy (CI/CD com `sha256sum` versus referência aprovada).
+
 **Sem fallback para janela observada.** YAML ausente ou inválido →
 Jonas desativado para o tenant (`tracing::error!` + `DriftAlert::Disabled`).
 Filosofia Jonas: baseline sem aprovação humana viola responsabilidade

@@ -246,6 +246,22 @@ mod tests {
     }
 
     #[test]
+    fn rawls_violates_jonas_warning_yields_redact() {
+        // Documenta a regra: violação Rawls combinada com Warning Jonas
+        // não escala para BLOCK — apenas Critical em ambos faz Hard Block.
+        // Análogo (no modelo binário do Rawls) ao caso "warning + critical"
+        // sugerido em revisões anteriores.
+        let d = compose_fairness_action(Action::Allow, &rawls_violates(), DriftAlert::Warning);
+        assert_eq!(d.action, Action::Redact);
+        assert!(d.rawls_violation);
+        assert!(d.jonas_warning);
+        assert!(!d.jonas_critical);
+        assert!(!d.hard_block, "Warning + Rawls não compõe Hard Block");
+        assert!(d.downgraded);
+        assert!(!d.human_review_required, "Warning sozinho não exige revisão humana");
+    }
+
+    #[test]
     fn redact_tentative_passes_through_when_only_jonas_critical() {
         // Redact + Jonas Critical sem Rawls Violation: mantém Redact, sinaliza human_review.
         let d = compose_fairness_action(Action::Redact, &rawls_ok(), DriftAlert::Critical);
