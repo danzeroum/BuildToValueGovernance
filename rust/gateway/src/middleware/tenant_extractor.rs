@@ -33,9 +33,16 @@ impl TenantId {
 struct BtvClaims {
     /// Tenant que emitiu o token. Ausente → "default".
     tenant_id: Option<String>,
-    /// Expiration (validado pelo jsonwebtoken automaticamente).
+    /// Expiration. Validação de expiração é feita pelo `jsonwebtoken` via
+    /// `Validation::validate_exp` quando há `BTV_JWT_SECRET`; o campo é mantido
+    /// no payload bruto para integridade forense do JWT (auditoria pode validar
+    /// `exp` independentemente do crate).
+    #[allow(dead_code)]
     exp: Option<u64>,
-    /// Subject (logging apenas, não usado para decisão).
+    /// Subject — reservado para telemetria de identidade ativa (SecOps).
+    /// Não usado em decisão de tenant para evitar acoplamento entre identity
+    /// e tenancy.
+    #[allow(dead_code)]
     sub: Option<String>,
 }
 
@@ -120,18 +127,20 @@ where
                     req.extensions_mut().insert(TenantId(tid));
                     inner.call(req).await
                 }
-                Err(response) => Ok(response),
+                Err(response) => Ok(*response),
             }
         })
     }
 }
 
 /// Extrai e valida `tenant_id` da requisição.
-/// Retorna `Ok(tenant_id)` em sucesso ou `Err(Response)` com E131 em falha.
+/// Retorna `Ok(tenant_id)` em sucesso ou `Err(Box<Response>)` com E131 em falha.
+/// O Err é boxado porque `Response<Body>` é grande (≥128 bytes); clippy lint
+/// `result_large_err` exige boxing para evitar inflar a stack frame do caller.
 fn extract_tenant_from_request(
     req: &Request<Body>,
     jwt_secret: &Option<Vec<u8>>,
-) -> Result<String, Response<Body>> {
+) -> Result<String, Box<Response<Body>>> {
     let bearer_token = req
         .headers()
         .get("authorization")
@@ -156,7 +165,7 @@ fn extract_tenant_from_request(
     };
 
     // Valida o tenant_id extraído antes de qualquer acesso ao router.
-    if let Err(_) = validate_tenant_id(&tenant_id) {
+    if validate_tenant_id(&tenant_id).is_err() {
         let instance = req.uri().path().to_string();
         let err = EthicalError::tenant_isolation_violation(
             tenant_id.clone(),
@@ -175,7 +184,7 @@ fn extract_tenant_from_request(
             .body(Body::from(body))
             .unwrap_or_else(|_| Response::new(Body::empty()));
 
-        return Err(response);
+        return Err(Box::new(response));
     }
 
     Ok(tenant_id)
@@ -217,6 +226,7 @@ fn decode_tenant_claims(token: &str, jwt_secret: &Option<Vec<u8>>) -> Result<Btv
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
