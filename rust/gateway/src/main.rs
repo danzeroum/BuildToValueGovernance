@@ -8,6 +8,7 @@ mod routes;
 mod middleware;
 mod state;
 mod fairness_mode;
+mod tenant_status;
 
 use state::AppState;
 
