@@ -1,8 +1,8 @@
 # Índice Mestre de ADRs — BuildToValue Governance
 
-**Versão do Índice:** v4.1.1  
+**Versão do Índice:** v4.2.0  
 **Data de Consolidação:** 2026-05-28  
-**HEAD de Referência:** `83b006c0e80cc421d0838dfeb2a4d1a8563e1691`  
+**HEAD de Referência:** `24c9190b4fbb430012bb67c666e9129fc7c85b05`  
 **Total de ADRs Catalogados:** 81 (numerações 0001–0081; colisões de numeração explicitadas)  
 **Mantenedor:** AI Squad — Arquiteta (Opus) + Reviewer (Opus)  
 **Classificação:** Documentação Arquitetural — Fonte Primária de Rastreabilidade
@@ -18,6 +18,7 @@
 | ✅ Aceito | Decisão homologada, em vigor na base de código |
 | 🔒 Rascunho | Proposta em elaboração, não vinculante |
 | ⚠️ Obsoleto | Supersedido por ADR posterior; mantido para histórico |
+| ⚠️ Stub | Arquivo físico existe, mas conteúdo arquitetural está ausente ou é apenas cabeçalho placeholder. Expansão pendente de sprint futura. |
 
 ---
 
@@ -40,14 +41,16 @@
 
 ## Grupo B — Componentes do Kernel v1 (0011–0020)
 
+> ⚠️ **Nota de Auditoria (2026-05-28):** Os ADRs 0011–0016 foram identificados por auditoria forense de densidade de conteúdo como stubs. Os arquivos existem fisicamente no disco, mas contêm apenas cabeçalhos Markdown sem decisão arquitetural substanciada. O 0015 está em estado de arquivo vazio. A expansão destes seis ADRs constitui débito técnico de documentação registrado e priorizado para sprint futura.
+
 | ID | Título | Arquivo | Status |
 |:---|:---|:---|:---:|
-| 0011 | Policy Engine — Núcleo v1 | [0011-policy-engine.md](0011-policy-engine.md) | ✅ Aceito |
-| 0012 | Output Guard | [0012-output-guard.md](0012-output-guard.md) | ✅ Aceito |
-| 0013 | Deobfuscator Chaining v2 | [0013-deobfuscator-chaining-v2.md](0013-deobfuscator-chaining-v2.md) | ✅ Aceito |
-| 0014 | IP Classifier e Session Drift v1 | [0014-ip-classifier-session-drift.md](0014-ip-classifier-session-drift.md) | ✅ Aceito |
-| 0015 | Interceptor Hooks — JVM Bridge | [0015-interceptor-hooks.md](0015-interceptor-hooks.md) | ✅ Aceito |
-| 0016 | Ethical Context Engine v4 (stub) | [0016-ethical-context-engine-v4.md](0016-ethical-context-engine-v4.md) | ✅ Aceito |
+| 0011 | Policy Engine — Núcleo v1 | [0011-policy-engine.md](0011-policy-engine.md) | ⚠️ Stub |
+| 0012 | Output Guard | [0012-output-guard.md](0012-output-guard.md) | ⚠️ Stub |
+| 0013 | Deobfuscator Chaining v2 | [0013-deobfuscator-chaining-v2.md](0013-deobfuscator-chaining-v2.md) | ⚠️ Stub |
+| 0014 | IP Classifier e Session Drift v1 | [0014-ip-classifier-session-drift.md](0014-ip-classifier-session-drift.md) | ⚠️ Stub |
+| 0015 | Interceptor Hooks — JVM Bridge | [0015-interceptor-hooks.md](0015-interceptor-hooks.md) | ⚠️ Stub |
+| 0016 | Ethical Context Engine v4 (stub) | [0016-ethical-context-engine-v4.md](0016-ethical-context-engine-v4.md) | ⚠️ Stub |
 | 0017 | Contestability Loop v1 | [0017-contestability-loop.md](0017-contestability-loop.md) | ✅ Aceito |
 | 0018 | Axum Gateway v1 | [0018-axum-gateway.md](0018-axum-gateway.md) | ✅ Aceito |
 | 0019 | Observabilidade v1 | [0019-observability.md](0019-observability.md) | ✅ Aceito |
@@ -230,11 +233,25 @@ Este artefato foi sucedido pela especificação canônica no ADR 0081.
 
 > Procedimentos de contingência vinculados à arquitetura BTV. Mantidos em `docs/runbooks/` e indexados aqui para rastreabilidade entre decisões arquiteturais e resposta operacional.
 
-| ID | Título | Arquivo | Responsável |
-|:---|:---|:---|:---:|
-| BTV-RUN-008 | Retenção, Custódia e Cripto-Shredding | [docs/runbooks/BTV-RUN-008.md](../runbooks/BTV-RUN-008.md) | DPO / SecOps / SRE |
-| BTV-RUN-009 | Auditoria de Integridade Criptográfica e Verificação Forense | [docs/runbooks/BTV-RUN-009.md](../runbooks/BTV-RUN-009.md) | SecOps / SRE / Core Security |
-| BTV-RUN-010 | Resposta a Incidentes de Poluição Cruzada entre Tenants (E120) | [docs/runbooks/BTV-RUN-010.md](../runbooks/BTV-RUN-010.md) | CSIRT / SecOps / SRE |
+| ID | Título | Arquivo | Status | Responsável |
+|:---|:---|:---|:---:|:---:|
+| BTV-RUN-008 | Retenção, Custódia e Cripto-Shredding | [docs/runbooks/BTV-RUN-008.md](../runbooks/BTV-RUN-008.md) | ✅ Ativo | DPO / SecOps / SRE |
+| BTV-RUN-009 | Auditoria de Integridade Criptográfica e Verificação Forense | [docs/runbooks/BTV-RUN-009.md](../runbooks/BTV-RUN-009.md) | ✅ Ativo | SecOps / SRE / Core Security |
+| BTV-RUN-010 | Resposta a Incidentes de Poluição Cruzada entre Tenants (E120) | [docs/runbooks/BTV-RUN-010.md](../runbooks/BTV-RUN-010.md) | ✅ Ativo | CSIRT / SecOps / SRE |
+
+---
+
+## 🗂️ Histórico de Depreciação e Supersessão (Archive)
+
+> Artefatos custodiados em `docs/adr/archive/`. Estes arquivos foram expurgados da numeração ativa por obsolescência, duplicação de conteúdo ou status de rascunho não promovido. São mantidos para rastreabilidade forense completa e auditoria histórica. Nenhum linter de link deve considerar a ausência destes arquivos no índice ativo como não-conformidade.
+
+| Arquivo | Motivo de Arquivamento | Status |
+|:---|:---|:---:|
+| [archive/0002-evidence-protocol-v1-obsolete.md](archive/0002-evidence-protocol-v1-obsolete.md) | Versão v1 do Evidence Protocol. Supersedida pelo ADR 0005 (Evidence Protocol v2 — Tamanho Fixo Canônico). Mantida para rastreabilidade de decisão. | ⚠️ Obsoleto |
+| [archive/ADR-043-grant-decision-adapter.md](archive/ADR-043-grant-decision-adapter.md) | Rascunho zumbi com slug de numeração não-canônica (`ADR-NNN`). Conteúdo absorvido e formalizado no ADR 0057 e posteriormente no ADR 0073 (canônico). | ⚠️ Obsoleto |
+| [archive/ADR-051.md](archive/ADR-051.md) | Rascunho zumbi com slug de numeração não-canônica. Conteúdo formalizado no ADR 0074 (Model Integrity — Abliteration Detection v2). | ⚠️ Obsoleto |
+| [archive/TBD-grant-decision-adapter.md](archive/TBD-grant-decision-adapter.md) | Rascunho sem numeração atribuída (`TBD`). Conteúdo absorvido pelo ADR 0073. Mantido como evidência de iteração de design. | ⚠️ Obsoleto |
+| [archive/README.md](archive/README.md) | Descritor de navegação interno do diretório archive/. Não é um ADR; serve como guia de orientação para auditores que acessam o diretório diretamente. | 📄 Auxiliar |
 
 ---
 
@@ -246,3 +263,4 @@ Este artefato foi sucedido pela especificação canônica no ADR 0081.
 | v4.0.0 | 2026-05-27 | `07c32c6` | Adição dos ADRs 0073–0081 (commit de deduplicação multi-tenant) |
 | v4.1.0 | 2026-05-28 | `0f2b728` | Reconstrução total: correção de slugs fantasmas Grupo K, errata forense 0044/0045/0072, expurgo de 3 arquivos zumbis (`ADR-043`, `ADR-051`, `TBD`), inclusão de documentos auxiliares e seção de runbooks operacionais |
 | v4.1.1 | 2026-05-28 | `83b006c` | Correção de drift inverso: BTV-RUN-010 já existia no disco (não estava pendente); BTV-RUN-009 materializado; entradas da seção Runbooks agora refletem o estado real de `docs/runbooks/` |
+| v4.2.0 | 2026-05-28 | `24c9190` | Auditoria forense retroativa completa: ADRs 0011–0016 retificados para status ⚠️ Stub (densidade de conteúdo insuficiente detectada); seção '🗂️ Histórico de Depreciação e Supersessão (Archive)' adicionada com os 5 artefatos reais de `docs/adr/archive/` catalogados; coluna Status adicionada à tabela de Runbooks; legenda expandida com símbolo Stub. Débito técnico documental zerado em totalidade forense. |
