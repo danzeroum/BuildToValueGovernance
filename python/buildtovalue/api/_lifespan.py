@@ -49,9 +49,9 @@ from buildtovalue.security import get_hmac_key, init_hmac_key
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     """Startup/shutdown lifecycle (replaces deprecated on_event)."""
     # Lazy: definidos em app.py — import no startup (após app.py carregar) evita
-    # o ciclo de import. app.py não exporta __all__, daí o attr-defined ignore.
+    # o ciclo de import (app.py importa `lifespan` deste módulo no topo).
     import buildtovalue.api.app as M
-    from buildtovalue.api.app import (  # type: ignore[attr-defined] # noqa: E402
+    from buildtovalue.api.app import (  # noqa: E402
         _load_slm_config,
         init_db,
         logger,
