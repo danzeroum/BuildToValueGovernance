@@ -126,6 +126,39 @@
   }
   @media (max-width:1080px) { .hero-kpis { grid-template-columns: 1fr 1fr 1fr; } }
   @media (max-width:680px) { .hero-kpis { grid-template-columns: 1fr 1fr; } }
+
+  /* anomaly banner */
+  .dash-anomaly { max-width: 1480px; margin: 14px auto 0; padding: 0 28px; }
+  .dash-anomaly-card {
+    background: linear-gradient(180deg, rgba(248,81,73,0.08), rgba(248,81,73,0.02));
+    border: 1px solid rgba(248,81,73,0.3); border-radius: 12px;
+    padding: 14px 18px; display: flex; align-items: center; gap: 14px;
+  }
+  .dash-anomaly-ico { width:36px; height:36px; border-radius:50%; background:rgba(248,81,73,0.15); color:var(--block); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .dash-anomaly-title { font-size:13.5px; font-weight:700; color:var(--text); margin-bottom:2px; }
+  .dash-anomaly-detail { font-size:12.5px; color:var(--muted); }
+  .dash-anomaly-detail b { color:var(--block); font-family:var(--mono); }
+  .dash-anomaly-cta { font-family:var(--mono); font-size:11.5px; color:var(--block); padding:7px 13px; border:1px solid var(--block); border-radius:7px; background:transparent; text-decoration:none; white-space:nowrap; }
+  .dash-anomaly-cta:hover { background:rgba(248,81,73,0.1); text-decoration:none; }
+
+  /* agent strip */
+  .agent-strip { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; padding:18px; }
+  @media (max-width:1080px){ .agent-strip{ grid-template-columns:1fr 1fr; } }
+  @media (max-width:560px){ .agent-strip{ grid-template-columns:1fr; } }
+  .as-card {
+    background:var(--bg-2); border:1px solid var(--border); border-radius:11px;
+    padding:14px 16px; text-decoration:none; color:inherit;
+    border-top:3px solid var(--ac); transition:all .18s; display:block;
+  }
+  .as-card:hover { transform:translateY(-3px); border-color:var(--ac); text-decoration:none; color:inherit; box-shadow:0 10px 26px rgba(0,0,0,0.22); }
+  .as-head { display:flex; align-items:center; gap:9px; margin-bottom:10px; }
+  .as-avatar { width:30px; height:30px; border-radius:8px; color:white; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:11px; font-weight:800; flex-shrink:0; }
+  .as-name { font-size:12.5px; font-weight:700; line-height:1.1; }
+  .as-bundle { font-family:var(--mono); font-size:9.5px; color:var(--muted); margin-top:1px; }
+  .as-block { display:flex; align-items:baseline; gap:6px; margin-bottom:8px; }
+  .as-block-val { font-family:var(--mono); font-size:22px; font-weight:800; }
+  .as-block-lbl { font-family:var(--mono); font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; }
+  .as-spark { width:100%; height:26px; display:block; }
   .hero-kpi {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 13px; padding: 18px 22px;
@@ -335,29 +368,30 @@
 <body>
 
 <nav class="nav">
-  <a href="index.html" class="nav-logo">
+  <a href="BuildToValue Landing.html" class="nav-logo">
     <span class="logo-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 21l18 0M12 21l0 -10M5 21l0 -8M19 21l0 -8M3 11l9 -8l9 8"/></svg></span>
     BuildToValue
   </a>
   <span class="nav-tag">Dashboard</span>
   <div class="nav-mid">
-    <div class="nav-group"><a href="index.html">Home</a><a href="lab.html">Lab</a></div>
-    <div class="nav-group"><a href="proxy-demo.html">Proxy</a><a href="sanitizer-demo.html">Sanitizer</a><a href="ledger-explorer.html">Ledger</a><a href="dashboard.html" class="active">Dashboard</a></div>
-    <div class="nav-group"><a href="persona-eng.html">Eng</a><a href="persona-ciso.html">CISO</a><a href="persona-dpo.html">DPO</a><a href="persona-gov.html">Gov</a><a href="dpo-ciso/index.html">Console</a></div>
+    <div class="nav-group"><a href="BuildToValue Landing.html">Home</a><a href="Fleet.html">Fleet</a><a href="Lab.html">Lab</a></div>
+    <div class="nav-group"><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html" class="active">Dashboard</a></div>
+    <div class="nav-group"><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a></div>
   </div>
   <div class="nav-right">
-    <button class="nav-icon-btn" onclick="window.location.href='index.html#top'" title="Tour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
-    <button class="nav-icon-btn" onclick="toggleTheme()">
+    <button class="nav-icon-btn" onclick="window.openGlobalSearch&&window.openGlobalSearch()" title="Pesquisar (Ctrl+K)" aria-label="Pesquisa global, atalho Control K"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+    <button class="nav-icon-btn" onclick="window.location.href='BuildToValue Landing.html#top'" title="Tour" aria-label="Voltar ao tour na Home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+    <button class="nav-icon-btn" onclick="toggleTheme()" aria-label="Alternar tema claro/escuro">
       <svg id="t-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       <svg id="t-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
     </button>
-    <button class="nav-icon-btn mobile-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('open')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+    <button class="nav-icon-btn mobile-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('open')" aria-label="Menu de navegação"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
   </div>
 </nav>
 <div class="mobile-menu" id="mobile-menu">
-  <div class="group-label">Principal</div><a href="index.html">Home</a><a href="lab.html">Lab</a>
-  <div class="group-label">Demos</div><a href="proxy-demo.html">Proxy</a><a href="sanitizer-demo.html">Sanitizer</a><a href="ledger-explorer.html">Ledger</a><a href="dashboard.html">Dashboard</a>
-  <div class="group-label">Personas</div><a href="persona-eng.html">Eng</a><a href="persona-ciso.html">CISO</a><a href="persona-dpo.html">DPO</a><a href="persona-gov.html">Gov</a><a href="dpo-ciso/index.html">Console</a>
+  <div class="group-label">Principal</div><a href="BuildToValue Landing.html">Home</a><a href="Fleet.html">Fleet</a><a href="Lab.html">Lab</a>
+  <div class="group-label">Demos</div><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a>
+  <div class="group-label">Personas</div><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a>
 </div>
 
 <div class="intro">
@@ -421,6 +455,28 @@
 
 <main class="main">
 
+  <!-- ANOMALY + AGENT STRIP -->
+  <div class="dash-anomaly" style="padding:0;margin-top:0">
+    <div class="dash-anomaly-card">
+      <div class="dash-anomaly-ico">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div style="flex:1">
+        <div class="dash-anomaly-title">Anomalia por agente · <span style="font-family:var(--mono);color:var(--block)">finbot-credit</span></div>
+        <div class="dash-anomaly-detail">BLOCK rate em <b>22.4%</b> nas últimas 24h vs histórico <b style="color:var(--allow)">2.8%</b>. Vetor predominante: <b>prompt injection</b>.</div>
+      </div>
+      <a class="dash-anomaly-cta" href="Fleet.html">Ver na Fleet →</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="title">Por agente <span class="acc">· top 5 por BLOCK rate (24h)</span></span>
+      <a href="Fleet.html" style="font-family:var(--mono);font-size:10.5px;color:var(--accent-2)">frota completa →</a>
+    </div>
+    <div class="agent-strip" id="agent-strip"></div>
+  </div>
+
   <!-- HEATMAP + TOP VECTORS -->
   <div class="row-2">
     <div class="card">
@@ -441,7 +497,7 @@
     <div class="card">
       <div class="card-head">
         <span class="title">Top vetores <span class="acc">· últimas 24h</span></span>
-        <a href="persona-ciso.html" style="font-family:var(--mono);font-size:10.5px;color:var(--accent-2)">ver detalhe →</a>
+        <a href="Persona CISO.html" style="font-family:var(--mono);font-size:10.5px;color:var(--accent-2)">ver detalhe →</a>
       </div>
       <div class="vec-list" id="vec-list"></div>
     </div>
@@ -454,7 +510,7 @@
     </div>
     <div class="personas-mini" style="padding: 18px;">
 
-      <a href="persona-eng.html" class="p-mini" style="--c:var(--eng);--cb:rgba(121,192,255,.1)">
+      <a href="Persona Eng.html" class="p-mini" style="--c:var(--eng);--cb:rgba(121,192,255,.1)">
         <div class="head">
           <div class="pico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M5 12H2M22 12h-3"/></svg></div>
           <div>
@@ -472,7 +528,7 @@
         </div>
       </a>
 
-      <a href="persona-ciso.html" class="p-mini" style="--c:var(--ciso);--cb:rgba(248,81,73,.1)">
+      <a href="Persona CISO.html" class="p-mini" style="--c:var(--ciso);--cb:rgba(248,81,73,.1)">
         <div class="head">
           <div class="pico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
           <div>
@@ -490,7 +546,7 @@
         </div>
       </a>
 
-      <a href="persona-dpo.html" class="p-mini" style="--c:var(--dpo);--cb:rgba(188,140,255,.1)">
+      <a href="Persona DPO.html" class="p-mini" style="--c:var(--dpo);--cb:rgba(188,140,255,.1)">
         <div class="head">
           <div class="pico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="18" rx="2"/><rect x="8" y="2" width="8" height="4"/><path d="M9 14l2 2 4-4"/></svg></div>
           <div>
@@ -508,7 +564,7 @@
         </div>
       </a>
 
-      <a href="persona-gov.html" class="p-mini" style="--c:var(--gov);--cb:rgba(210,153,34,.1)">
+      <a href="Persona Gov.html" class="p-mini" style="--c:var(--gov);--cb:rgba(210,153,34,.1)">
         <div class="head">
           <div class="pico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 21h18M5 21V10l7-5 7 5v11M9 21v-6h6v6"/></svg></div>
           <div>
@@ -557,7 +613,7 @@
   <div class="card">
     <div class="card-head">
       <span class="title">Conformidade por jurisdição</span>
-      <a href="persona-dpo.html" style="font-family:var(--mono);font-size:10.5px;color:var(--accent-2)">painel DPO →</a>
+      <a href="Persona DPO.html" style="font-family:var(--mono);font-size:10.5px;color:var(--accent-2)">painel DPO →</a>
     </div>
     <div class="compl-strip">
       <div class="compl-mini" style="--c:var(--allow)">
@@ -591,19 +647,19 @@
   <div class="card">
     <div class="card-head"><span class="title">Acesso rápido</span></div>
     <div class="quicklinks">
-      <a class="ql" href="lab.html">
+      <a class="ql" href="Lab.html">
         <div class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v2l4 11a3 3 0 0 1-3 4H8a3 3 0 0 1-3-4l4-11V3z"/></svg></div>
         <div><div class="ti">Laboratório</div><div class="ds">25+ cenários, veredicto ao vivo</div></div>
       </a>
-      <a class="ql" href="ledger-explorer.html">
+      <a class="ql" href="Ledger Explorer.html">
         <div class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/></svg></div>
         <div><div class="ti">Ledger Explorer</div><div class="ds">decisões imutáveis BLAKE3</div></div>
       </a>
-      <a class="ql" href="proxy-demo.html">
+      <a class="ql" href="Proxy Demo.html">
         <div class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h10M7 12h10M7 17h6"/></svg></div>
         <div><div class="ti">Proxy LLM</div><div class="ds">interceptação ao vivo</div></div>
       </a>
-      <a class="ql" href="sanitizer-demo.html">
+      <a class="ql" href="Sanitizer Demo.html">
         <div class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 3l-5 5L8 2 2 8l6 6-5 5h7v-7l6-6 5 5V3z"/></svg></div>
         <div><div class="ti">Sanitizer</div><div class="ds">PII redaction</div></div>
       </a>
@@ -686,6 +742,47 @@ const VECTORS = [
   { name:'Token Manipulation',count:  24, max: 250, c:'var(--educate)' },
   { name:'Social Eng. Idoso', count:  11, max: 250, c:'var(--block)' },
 ];
+
+// agent strip (top 5 por BLOCK rate)
+const STRIP_AGENTS = [
+  { id:'finbot-credit', name:'Credit Scoring', avatar:'FC', c:'#d29922', bundle:'financial', block:22.4 },
+  { id:'legal-assist',  name:'Legal Research', avatar:'LA', c:'#bc8cff', bundle:'legal',     block:5.2 },
+  { id:'hr-screener',   name:'Resume Screener',avatar:'HR', c:'#79c0ff', bundle:'hr',        block:3.8 },
+  { id:'billing-bot',   name:'Invoice Analyst',avatar:'BB', c:'#d29922', bundle:'financial', block:2.1 },
+  { id:'dev-copilot',   name:'Code Review',    avatar:'DC', c:'#79c0ff', bundle:'research',  block:1.8 },
+];
+
+function sparkPath(values, W=100, H=26) {
+  const pad=2, min=Math.min(...values), max=Math.max(...values), range=max-min||1;
+  const stepX=(W-pad*2)/(values.length-1);
+  let line='';
+  values.forEach((v,i)=>{ const x=pad+i*stepX; const y=pad+(1-(v-min)/range)*(H-pad*2); line+=(i===0?`M ${x.toFixed(1)} ${y.toFixed(1)}`:` L ${x.toFixed(1)} ${y.toFixed(1)}`); });
+  return line;
+}
+
+function renderAgentStrip() {
+  document.getElementById('agent-strip').innerHTML = STRIP_AGENTS.map(a => {
+    // anomalous agent trends up, others flat/low
+    const series = [];
+    let v = a.block > 10 ? 3 : a.block;
+    for (let i=0;i<14;i++){ v += a.block > 10 ? (i>8?1.8:0.3)*Math.random()*2 : (Math.random()-0.5)*1.2; v=Math.max(0.2,v); series.push(v); }
+    series.push(a.block);
+    const color = a.block > 10 ? 'var(--block)' : a.block > 4 ? 'var(--educate)' : 'var(--allow)';
+    return `<a class="as-card" href="Fleet.html" style="--ac:${a.c}">
+      <div class="as-head">
+        <div class="as-avatar" style="background:${a.c}">${a.avatar}</div>
+        <div><div class="as-name">${a.name}</div><div class="as-bundle">${a.bundle}</div></div>
+      </div>
+      <div class="as-block">
+        <span class="as-block-val" style="color:${color}">${a.block.toFixed(1)}%</span>
+        <span class="as-block-lbl">block 24h</span>
+      </div>
+      <svg class="as-spark" viewBox="0 0 100 26" preserveAspectRatio="none" style="color:${color}">
+        <path d="${sparkPath(series)}" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+    </a>`;
+  }).join('');
+}
 
 function renderVectors() {
   document.getElementById('vec-list').innerHTML = VECTORS.map(v => `
@@ -815,7 +912,9 @@ window.addEventListener('DOMContentLoaded', () => {
   renderVectors();
   renderTrust();
   renderActivity();
+  renderAgentStrip();
 });
 </script>
+<script src="search.js" defer></script>
 </body>
 </html>
