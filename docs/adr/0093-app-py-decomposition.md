@@ -52,6 +52,25 @@ dedicado e revisado isoladamente, consumindo estado **exclusivamente** via
   metadados de identidade), preservando o ambiente limpo de inferência ética
   quando `decide()` for futuramente isolado.
 
+## Fase 2 — execução incremental via shim provisório
+
+A migração para `app.state` é executada **incrementalmente** através de um shim
+provisório; **a remoção do shim é o critério de conclusão da Fase 2**. Os 9
+singletons têm **105 read-sites** em `app.py` — migrá-los num único PR sobre o
+hot path HMAC-assinado é risco desproporcional. Sequência atômica (suíte verde
+e commit por passo):
+
+- **Passo 1 (feito):** `lifespan` → `api/_lifespan.py`. O startup reinjeta os 11
+  singletons nos globals de `app.py` (`# ADR-0093-Phase2-shim: remove after Passo 4`),
+  deixando os 105 read-sites intactos. Símbolos de `app.py` acessados via import
+  preguiçoso (evita ciclo).
+- **Passo 2:** helpers sem estado → `api/_decide_helpers.py`.
+- **Passo 3:** rotas inline → `api/routes/*` uma a uma (menor→maior acoplamento),
+  convertendo os read-sites do router migrado para `request.app.state`/`Depends`.
+- **Passo 4:** `routes/decide.py` (`/v1/decide` + `/v1/multi-decide`) por último;
+  com todos os readers migrados, **o shim é removido** e os globals deixam de
+  existir — `app.py` atinge ~80 linhas.
+
 ## Limite inviolável
 
 `rust/kernel/` permanece intocado. A asserção de 9632 bytes de
