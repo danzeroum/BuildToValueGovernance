@@ -348,6 +348,7 @@ from buildtovalue.api.routes.fleet import router as fleet_router
 from buildtovalue.api.routes.metrics import router as metrics_router
 from buildtovalue.api.routes.health import router as health_router
 from buildtovalue.api.routes.appeals import router as appeals_router
+from buildtovalue.api.routes.compliance import router as compliance_router
 app.include_router(intelligence_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
@@ -358,6 +359,7 @@ app.include_router(fleet_router)
 app.include_router(metrics_router)
 app.include_router(health_router)
 app.include_router(appeals_router)
+app.include_router(compliance_router)
 
 # ═══════════════════════════════════════════════════════════════
 # Lab v3.0 — demo/ servido estaticamente same-origin (CORS estrito)
@@ -1165,12 +1167,15 @@ async def multi_decide(
 # ADR-0093 Phase 2 (Passo 3, router 2): /v1/appeals/* migrado para
 # routes/appeals.py (lê app.state.contestability_loop via Depends). Registrado abaixo.
 
-    else:
-        path = _doc_exporter.export_json(data=data, template_name=doc_type)
-        return {"status": "ok", "format": "json", "path": path}
-
 
 # ═══════════════════════════════════════════════════════════════
+# HEALTH & TRUST
+# ═══════════════════════════════════════════════════════════════
+
+# ADR-0093 Phase 2 (Passo 3, router 1): /health e /v1/trust migrados para
+# routes/health.py (leem app.state, não os globals). Registrado abaixo.
+
+
 # SLM METRICS — /v1/slm
 # ═══════════════════════════════════════════════════════════════
 
