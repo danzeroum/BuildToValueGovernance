@@ -25,3 +25,23 @@ not the markup, to preserve presentation integrity.
   `buffer_size` field exposed; the frontend validates the `signature` field for Fail-Secure.
 - The kernel signs with BLAKE3 keyed-hash (ADR-031b); the Python verdict envelope exposes
   `hmac_sha256` / `signature`.
+
+## Known limitations (registry — Sprint 4 backlog)
+
+**Sparse agent registry.** `GET /v1/fleet` discovers agent profiles from
+`data/policies/agents/`, but today only **`medical-agent.yaml`** is an actual agent
+profile — the remaining files (`pa_*.yaml`, `*_rules.yaml`, `capabilities.yaml`,
+`budget_limits.yaml`, `tool_call_policy.yaml`) are guard/policy configs, not fleet
+members. The endpoint therefore returns a **single real agent**.
+
+To keep the demo usable, `demo/fleet.html` falls back to its richer static roster when
+the API returns an empty/short list. This is a deliberate fallback, **not** a sign the
+registry is fully populated — the "real process" (1 agent) diverges from the "documented
+process" (≈8 agents in the mockups), and that gap is recorded here rather than masked.
+
+Likewise, fleet metrics (`blockRate`, `decisions24h`, `trust`) have **no per-agent
+historical source** wired yet; they default until a per-agent ledger feed exists.
+
+**Backlog (Sprint 4, post-merge):** populate a real agent registry (owner/model/
+jurisdictions/FRIA metadata + per-agent ledger aggregation) so `/v1/fleet` returns the
+full roster from live data instead of relying on the static fallback.
