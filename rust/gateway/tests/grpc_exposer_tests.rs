@@ -26,7 +26,8 @@ mod tests {
 
     const SECRET: &str = "test-internal-secret-key-32-bytes-minimum-aaa";
 
-    fn write_event(audit_dir: &std::path::Path, tenant: &str, verdict: &str) {
+    /// Escreve um evento (append) e devolve seu `event_id` (UUID v7).
+    fn write_event(audit_dir: &std::path::Path, tenant: &str, verdict: &str) -> String {
         let dir = audit_dir.join(tenant);
         std::fs::create_dir_all(&dir).unwrap();
         let mut e = FairnessAuditEvent::new(
@@ -38,10 +39,12 @@ mod tests {
         );
         e.applied_action = "REDACT".to_string();
         e.rawls_violation = true;
+        let event_id = e.event_id.clone();
         let line = serde_json::to_string(&e).unwrap();
         let path = dir.join("events.jsonl");
         let existing = std::fs::read_to_string(&path).unwrap_or_default();
         std::fs::write(&path, format!("{existing}{line}\n")).unwrap();
+        event_id
     }
 
     /// Sobe o servidor numa porta efêmera; devolve o endpoint `http://...`.
@@ -75,6 +78,7 @@ mod tests {
 
         let mut req = Request::new(pb::StreamRequest {
             tenant_id: "acme".to_string(),
+            resume_after_event_id: String::new(),
         });
         with_key(&mut req, SECRET);
 
@@ -104,6 +108,7 @@ mod tests {
 
         let mut req = Request::new(pb::StreamRequest {
             tenant_id: "acme".to_string(),
+            resume_after_event_id: String::new(),
         });
         with_key(&mut req, "wrong-key-which-is-also-32-bytes-long-xx");
 
@@ -123,6 +128,7 @@ mod tests {
         // Sem metadata x-btv-internal-key.
         let req = Request::new(pb::StreamRequest {
             tenant_id: String::new(),
+            resume_after_event_id: String::new(),
         });
 
         let err = client
@@ -130,5 +136,34 @@ mod tests {
             .await
             .expect_err("esperava rejeição de auth");
         assert_eq!(err.code(), tonic::Code::Unauthenticated);
+    }
+
+    #[tokio::test]
+    async fn resume_after_event_id_skips_already_seen(/* ADR-0092 §D3 */) {
+        // Dois eventos no JSONL; o cliente reconecta com o cursor = id do
+        // primeiro → o stream deve entregar o SEGUNDO evento primeiro.
+        let tmp = TempDir::new().unwrap();
+        let audit_dir = tmp.path().to_path_buf();
+        let first_id = write_event(&audit_dir, "acme", "VRD-1");
+        write_event(&audit_dir, "acme", "VRD-2");
+
+        let endpoint = spawn_server(audit_dir).await;
+        let mut client = AuditExposerClient::connect(endpoint).await.unwrap();
+
+        let mut req = Request::new(pb::StreamRequest {
+            tenant_id: "acme".to_string(),
+            resume_after_event_id: first_id,
+        });
+        with_key(&mut req, SECRET);
+
+        let mut stream = client.stream_audit_events(req).await.unwrap().into_inner();
+        let msg = tokio::time::timeout(Duration::from_secs(3), stream.message())
+            .await
+            .expect("timeout aguardando evento")
+            .expect("erro no stream")
+            .expect("stream encerrou sem evento");
+
+        // Pula VRD-1 (já visto); primeiro evento entregue é VRD-2.
+        assert_eq!(msg.verdict_id, "VRD-2", "cursor deve pular o evento já visto");
     }
 }
