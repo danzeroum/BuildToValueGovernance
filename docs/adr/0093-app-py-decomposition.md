@@ -64,7 +64,13 @@ e commit por passo):
   singletons nos globals de `app.py` (`# ADR-0093-Phase2-shim: remove after Passo 4`),
   deixando os 105 read-sites intactos. Símbolos de `app.py` acessados via import
   preguiçoso (evita ciclo).
-- **Passo 2:** helpers sem estado → `api/_decide_helpers.py`.
+- **Passo 2 (feito):** 6 helpers puros → `api/_decide_helpers.py`
+  (`_impact_label`, `_build_bias_declaration`, `sign_verdict`,
+  `_appeal_to_response`, `_resolve_domain`, `_resolve_role`). Nenhum lê
+  singletons; `sign_verdict` usa `buildtovalue.security.get_hmac_key` (módulo
+  externo, não singleton de `app.py`). `_load_slm_config` fica para o Passo 3
+  (concern de bootstrap/config; tipá-lo estritamente espalharia `object` no
+  construtor do SLM em `_lifespan.py`). `app.py` reimporta os 6 nomes.
 - **Passo 3:** rotas inline → `api/routes/*` uma a uma (menor→maior acoplamento),
   convertendo os read-sites do router migrado para `request.app.state`/`Depends`.
 - **Passo 4:** `routes/decide.py` (`/v1/decide` + `/v1/multi-decide`) por último;

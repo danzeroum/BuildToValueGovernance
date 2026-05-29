@@ -309,31 +309,16 @@ from buildtovalue.api._models import (  # noqa: E402
 )
 
 
-def _impact_label(risk: float) -> str:
-    """Jonas — mapeia risco ajustado para rótulo de impacto de longo prazo."""
-    if risk >= 0.7:
-        return "high"
-    if risk >= 0.4:
-        return "moderate"
-    return "low"
-
-
-def _build_bias_declaration(
-    *,
-    trust_score: float,
-    adjusted_risk: float,
-    mercy_applied: bool,
-    pii_redacted: bool,
-    explain: str,
-) -> BiasDeclaration:
-    """Monta a BiasDeclaration a partir de sinais já computados do veredicto."""
-    return BiasDeclaration(
-        equity_score=round(trust_score, 2),
-        pii_redacted=pii_redacted,
-        long_term_impact=_impact_label(adjusted_risk),
-        mercy_applied=mercy_applied,
-        explain=explain,
-    )
+# ADR-0093 Phase 2 (Passo 2): helpers sem estado extraídos para
+# api/_decide_helpers.py. Reimportados aqui para preservar os call-sites.
+from buildtovalue.api._decide_helpers import (  # noqa: E402
+    _appeal_to_response,
+    _build_bias_declaration,
+    _impact_label,
+    _resolve_domain,
+    _resolve_role,
+    sign_verdict,
+)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -372,50 +357,6 @@ def is_first_offense(session_id: Optional[str]) -> bool:
     if not session_id:
         return True
     return db_get_session(session_id)["offenses"] == 0
-
-
-def sign_verdict(verdict_id: str, action: str, risk: float) -> str:
-    # PR-4 (S-09): fetch the current key on every call so SIGHUP rotation
-    # via rotate_hmac_key() takes effect on the next /v1/decide hot-path
-    # request without a process restart.
-    payload = f"{verdict_id}:{action}:{risk:.4f}"
-    return hmac.new(get_hmac_key(), payload.encode(), hashlib.sha256).hexdigest()
-
-
-def _appeal_to_response(appeal) -> AppealResponse:
-    return AppealResponse(
-        appeal_id=appeal.appeal_id,
-        audit_trail_id=appeal.audit_trail_id,
-        user_id=appeal.user_id,
-        timestamp=appeal.timestamp,
-        reason=appeal.reason,
-        evidence_provided=appeal.evidence_provided,
-        status=appeal.status.value,
-        reviewer_notes=appeal.reviewer_notes,
-        resolution_timestamp=appeal.resolution_timestamp,
-        sla_deadline=appeal.sla_deadline,
-        is_overdue=appeal.is_overdue(),
-        evidence_hash=getattr(appeal, "evidence_hash", None),
-        grounds=getattr(appeal, "grounds", []) or [],
-        mediator_recommendation=getattr(appeal, "mediator_recommendation", None),
-    )
-
-
-def _resolve_domain(profile: Optional[str]) -> str:
-    mapping = {
-        "medical": "medical",
-        "healthcare": "medical",
-        "financial": "finance",
-        "legal": "legal",
-        "research": "research",
-        "education": "education",
-    }
-    return mapping.get(profile or "", "general")
-
-
-def _resolve_role(session_id: str) -> str:
-    """In prod: lookup from session DB. For now: anonymous."""
-    return "anonymous"
 
 
 def _load_slm_config() -> dict:
