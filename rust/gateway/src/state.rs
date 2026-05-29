@@ -222,9 +222,9 @@ pub struct AppState {
     /// hot path do `decide_handler`.
     pub audit_tx: AuditChannel,
     /// Handle do drainer task. Mantido vivo enquanto o `AppState` existir
-    /// (drop fecha o canal → drainer encerra). Reservado para shutdown
-    /// gracioso (drain-on-SIGTERM, fase futura).
-    #[allow(dead_code)]
+    /// (drop fecha o canal → drainer encerra). Consumido pelo shutdown
+    /// gracioso (drain-on-SIGTERM): `main` guarda um clone do `Arc` via
+    /// `audit_handle()` e o aguarda após os servidores pararem.
     _audit_handle: Arc<JoinHandle<()>>,
 }
 
@@ -312,6 +312,15 @@ impl AppState {
             audit_tx,
             _audit_handle: Arc::new(audit_handle),
         }
+    }
+
+    /// Clone barato do handle do drainer, para o shutdown gracioso em
+    /// `main`. `main` retém este `Arc` antes de mover o `AppState` para o
+    /// router; quando o router é droppado (servidores parados), a única
+    /// referência restante é esta → `Arc::try_unwrap` devolve o
+    /// `JoinHandle` para ser aguardado (drain-on-SIGTERM).
+    pub fn audit_handle(&self) -> Arc<JoinHandle<()>> {
+        Arc::clone(&self._audit_handle)
     }
 
     /// Constructor para testes que injeta `policies_dir` arbitrário.

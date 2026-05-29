@@ -121,10 +121,11 @@ impl AuditChannel {
 
 /// Spawn do drainer. Retorna `(AuditChannel, JoinHandle<()>)`.
 ///
-/// O `JoinHandle` vai para `AppState` para shutdown gracioso (commit
-/// futuro implementa drain on SIGTERM). Por agora, task vive até o
-/// processo morrer ou `AuditChannel` ser droppado em todos os locais
-/// (ponto que fecha o canal e termina o loop).
+/// O `JoinHandle` vai para `AppState` e é awaited no shutdown gracioso
+/// (drain-on-SIGTERM em `main.rs`): ao receber SIGTERM, os servidores
+/// param e o `AuditChannel` é droppado em todos os locais → o canal
+/// fecha → o loop drena os eventos restantes, chama `sink.flush_all()`
+/// e a task termina. `main` aguarda esse término com timeout.
 pub fn spawn_drainer(sink: Arc<dyn AuditSink>) -> (AuditChannel, tokio::task::JoinHandle<()>) {
     let (tx, mut rx) = mpsc::channel::<FairnessAuditEvent>(AUDIT_CHANNEL_CAPACITY);
     let handle = tokio::spawn(async move {
@@ -163,6 +164,12 @@ pub fn spawn_drainer(sink: Arc<dyn AuditSink>) -> (AuditChannel, tokio::task::Jo
             }
         }
         // Canal fechado (último Sender droppado) → shutdown gracioso.
+        // Flush final garante durabilidade dos eventos drenados antes do
+        // processo encerrar (drain-on-SIGTERM): sinks com buffer (JSONL)
+        // liberam writers pendentes; sinks sem buffer são no-op.
+        if let Err(e) = sink.flush_all() {
+            tracing::error!(error = %e, "audit drainer: flush_all falhou no shutdown");
+        }
         tracing::info!("audit drainer: canal fechado, encerrando");
     });
     (AuditChannel { sender: tx }, handle)
@@ -343,6 +350,40 @@ mod tests {
             result.is_ok(),
             "drainer não encerrou após canal fechado"
         );
+    }
+
+    // ── Caso 6: drain-on-SIGTERM — fechar o canal drena+flush a fila ──
+
+    #[tokio::test]
+    async fn drainer_drains_and_flushes_queued_events_on_close() {
+        // Simula o caminho de shutdown gracioso: eventos enfileirados,
+        // depois o último Sender é droppado → drainer drena tudo, chama
+        // flush_all e encerra. Aguardar o handle garante a fila vazia +
+        // flushed em disco (sem sleep arbitrário).
+        let tmp = TempDir::new().unwrap();
+        let jsonl = Arc::new(JsonlAuditSink::new(tmp.path().to_path_buf()));
+        let sink: Arc<dyn AuditSink> = Arc::clone(&jsonl) as Arc<dyn AuditSink>;
+        let (channel, handle) = spawn_drainer(sink);
+
+        let n = 20;
+        for i in 0..n {
+            channel.try_emit(sample_event(&format!("VRD-{i}")));
+        }
+
+        // Drop do único Sender → canal fecha → drainer drena restantes,
+        // flush_all, encerra. await com timeout prova término.
+        drop(channel);
+        let joined = tokio::time::timeout(Duration::from_secs(5), handle).await;
+        assert!(joined.is_ok(), "drainer não encerrou no drain gracioso");
+
+        // Todos os N eventos devem estar em disco (drenados + flushed),
+        // sem depender de flush_all manual no teste.
+        let content = std::fs::read_to_string(
+            tmp.path().join("acme").join("events.jsonl"),
+        )
+        .unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), n, "todos os eventos enfileirados devem ser drenados");
     }
 
     // ── Caso 5: AuditChannel é Clone (para AppState compartilhar) ──

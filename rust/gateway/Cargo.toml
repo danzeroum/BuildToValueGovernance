@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 buildtovalue-kernel = { path = "../kernel", features = ["observability"] }
 axum = { version = "0.7", features = ["json"] }
-tokio = { workspace = true, features = ["time", "net", "fs", "io-util"] }
+tokio = { workspace = true, features = ["time", "net", "fs", "io-util", "signal"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 tonic = "0.12"
 prost = "0.13"
