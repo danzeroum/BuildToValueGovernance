@@ -687,8 +687,10 @@ async def lifespan(application):
 
     if profiles_dir.exists():
         _profile_manager = ProfileManager(profiles_dir)
+        application.state.profile_manager = _profile_manager
         logger.info("ProfileManager initialized: %s", profiles_dir)
     else:
+        application.state.profile_manager = None
         logger.warning("Profiles dir not found: %s", profiles_dir)
 
     _sector_loader = SectorLoader()
@@ -769,12 +771,14 @@ from buildtovalue.api.routes.webhooks import router as webhooks_router
 from buildtovalue.api.routes.compliance_eval import router as compliance_eval_router
 from buildtovalue.api.routes.auth import router as auth_router
 from buildtovalue.api.routes.agent_decide import router as agent_decide_router
+from buildtovalue.api.routes.fleet import router as fleet_router
 app.include_router(intelligence_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
 app.include_router(compliance_eval_router)
 app.include_router(auth_router)
 app.include_router(agent_decide_router)
+app.include_router(fleet_router)
 
 # ═══════════════════════════════════════════════════════════════
 # Lab v3.0 — demo/ servido estaticamente same-origin (CORS estrito)
