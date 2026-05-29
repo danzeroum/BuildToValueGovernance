@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet · Frota de Agentes — BuildToValue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0d13; --bg-2:#0d1117; --surface:#141921; --surface-2:#1c222c; --surface-3:#262d39;
+    --border:rgba(255,255,255,0.07); --border-strong:rgba(255,255,255,0.14);
+    --text:#e6edf3; --muted:#8b95a3; --muted-2:#5a6470;
+    --accent:#388bfd; --accent-2:#79c0ff;
+    --allow:#3fb950; --block:#f85149; --educate:#d29922; --redact:#bc8cff;
+    --offline:#6B7280;
+    --mono:'JetBrains Mono',ui-monospace,monospace; --sans:'Inter',system-ui,sans-serif;
+  }
+  [data-theme="light"] {
+    --bg:#F4F6F9; --bg-2:#EEF1F5; --surface:#FFFFFF; --surface-2:#EEF1F5; --surface-3:#E2E8F0;
+    --border:rgba(15,23,42,0.10); --border-strong:rgba(15,23,42,0.18);
+    --text:#0F172A; --muted:#475569; --muted-2:#64748B;
+    --accent:#004BD6; --accent-2:#1D4ED8;
+    --allow:#059669; --block:#DC2626; --educate:#B45309; --redact:#7C3AED;
+    --offline:#94A3B8;
+  }
+  [data-theme="light"] .drawer-meta { background:#0B0F19; color:#E5E7EB; border-color:#243249; }
+  [data-theme="light"] .drawer-meta .k { color:#9CA3AF; } [data-theme="light"] .drawer-meta .v { color:#E5E7EB; }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.55; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  button { font-family: inherit; cursor: pointer; }
+
+  body::before {
+    content: ""; position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 600px 400px at 10% -10%, rgba(56,139,253,0.07), transparent 60%),
+      radial-gradient(ellipse 500px 300px at 90% 10%, rgba(63,185,80,0.04), transparent 60%);
+    pointer-events: none; z-index: 0;
+  }
+  main, .nav { position: relative; z-index: 1; }
+
+  /* nav */
+  .nav { display:flex; align-items:center; gap:14px; padding:14px 28px; border-bottom:1px solid var(--border); background:rgba(10,13,19,0.75); backdrop-filter:blur(10px); position:sticky; top:0; z-index:50; }
+  [data-theme="light"] .nav { background: rgba(244,246,249,0.85); }
+  .nav-logo { display:flex; align-items:center; gap:10px; font-weight:800; font-size:15px; color:var(--text); }
+  .nav-logo:hover { text-decoration:none; }
+  .logo-mark { width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; background:linear-gradient(135deg, var(--accent), #4ea1ff); border-radius:7px; box-shadow:0 0 24px rgba(56,139,253,0.35), inset 0 1px 0 rgba(255,255,255,0.2); }
+  .nav-tag { font-family:var(--mono); font-size:11px; color:var(--muted); padding:3px 8px; border:1px solid var(--border); border-radius:4px; background:var(--surface); }
+  .nav-mid { margin-left:auto; margin-right:auto; display:flex; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:100px; padding:4px; }
+  .nav-group { display:flex; gap:2px; padding:0 4px; }
+  .nav-group + .nav-group { border-left:1px solid var(--border); }
+  .nav-mid a { color:var(--muted); font-size:12.5px; font-weight:500; padding:6px 11px; border-radius:100px; white-space:nowrap; transition:all .15s; }
+  .nav-mid a:hover { color:var(--text); background:var(--surface-2); text-decoration:none; }
+  .nav-mid a.active { background:var(--accent); color:white; }
+  .nav-right { display:flex; gap:6px; }
+  .nav-icon-btn { width:34px; height:34px; border-radius:8px; background:var(--surface); border:1px solid var(--border); color:var(--muted); display:inline-flex; align-items:center; justify-content:center; transition:all .15s; }
+  .nav-icon-btn:hover { color:var(--text); background:var(--surface-2); border-color:var(--border-strong); }
+  .mobile-toggle { display:none; }
+  .mobile-menu { display:none; position:fixed; top:62px; left:0; right:0; background:var(--surface); border-bottom:1px solid var(--border); padding:14px 28px; z-index:49; }
+  .mobile-menu.open { display:block; }
+  .mobile-menu .group-label { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--muted); padding:10px 0 6px; }
+  .mobile-menu a { display:block; padding:9px 10px; border-radius:7px; color:var(--text); font-size:14px; }
+  @media (max-width:1180px) { .nav-mid, .nav-tag { display:none; } .mobile-toggle { display:inline-flex; margin-left:auto; } }
+
+  /* intro */
+  .intro { max-width: 1480px; margin: 0 auto; padding: 26px 28px 0; display: flex; align-items: center; gap: 18px; }
+  .pg-title { display: flex; align-items: center; gap: 14px; }
+  .pg-ico {
+    width: 52px; height: 52px; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(56,139,253,.18), rgba(56,139,253,.04));
+    border: 1px solid rgba(56,139,253,.35);
+    color: var(--accent-2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pg-eyebrow { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent-2); font-weight: 700; }
+  .pg-h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin-top: 1px; }
+  .pg-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+  .explainer {
+    margin-left: auto; max-width: 580px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px; border-radius: 8px;
+    font-size: 13px; color: var(--muted); line-height: 1.55;
+  }
+  .explainer b { color: var(--text); }
+  @media (max-width:1080px) { .intro { flex-wrap:wrap; gap: 14px; } .explainer { max-width: 100%; margin-left:0; } }
+
+  /* KPI strip */
+  .kpis { max-width: 1480px; margin: 18px auto 0; padding: 0 28px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  @media (max-width:1080px) { .kpis { grid-template-columns: 1fr 1fr 1fr; } }
+  @media (max-width:680px) { .kpis { grid-template-columns: 1fr 1fr; } }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 14px 18px; position: relative; }
+  .kpi .lbl { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 4px; }
+  .kpi .val { font-family: var(--mono); font-size: 26px; font-weight: 800; line-height: 1.1; }
+  .kpi .sub { font-size: 11px; color: var(--muted-2); margin-top: 4px; font-family: var(--mono); }
+  .kpi .breakdown { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .kpi .pill {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+    padding: 2px 9px; border-radius: 100px;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .kpi .pill .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .pill.online { background: rgba(63,185,80,.12); color: var(--allow); border: 1px solid rgba(63,185,80,.3); }
+  .pill.online .dot { background: var(--allow); box-shadow: 0 0 6px var(--allow); animation: p 1.6s infinite; }
+  .pill.degraded { background: rgba(210,153,34,.12); color: var(--educate); border: 1px solid rgba(210,153,34,.3); }
+  .pill.degraded .dot { background: var(--educate); }
+  .pill.offline { background: rgba(125,133,144,.12); color: var(--offline); border: 1px solid rgba(125,133,144,.3); }
+  .pill.offline .dot { background: var(--offline); }
+  @keyframes p { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
+
+  /* anomaly banner */
+  .anomaly {
+    max-width: 1480px; margin: 16px auto 0; padding: 0 28px;
+  }
+  .anomaly-card {
+    background: linear-gradient(180deg, rgba(248,81,73,0.08), rgba(248,81,73,0.02));
+    border: 1px solid rgba(248,81,73,0.3);
+    border-radius: 11px;
+    padding: 14px 18px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .anomaly-ico {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(248,81,73,0.15);
+    color: var(--block);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .anomaly-text { flex: 1; }
+  .anomaly-title { font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+  .anomaly-detail { font-size: 12.5px; color: var(--muted); }
+  .anomaly-detail b { color: var(--block); font-family: var(--mono); }
+  .anomaly-cta {
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--block); padding: 7px 13px;
+    border: 1px solid var(--block); border-radius: 7px;
+    background: transparent;
+  }
+  .anomaly-cta:hover { background: rgba(248,81,73,0.1); }
+
+  /* filters */
+  .filters {
+    max-width: 1480px; margin: 18px auto 0; padding: 0 28px;
+  }
+  .filter-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 18px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .search-input {
+    flex: 1; min-width: 240px;
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    border-radius: 9px; padding: 9px 14px 9px 36px;
+    color: var(--text); font-family: var(--mono); font-size: 12.5px;
+    outline: none; transition: border-color .15s;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b95a3' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 12px center;
+  }
+  .search-input:focus { border-color: var(--accent); }
+
+  .filter-group { display: flex; align-items: center; gap: 6px; }
+  .filter-group .lbl {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-right: 2px;
+  }
+  .filter-pill {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--muted); padding: 5px 11px; border-radius: 100px;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.03em; transition: all .12s;
+  }
+  .filter-pill:hover { color: var(--text); border-color: var(--border-strong); }
+  .filter-pill.on {
+    color: var(--accent-2); background: rgba(56,139,253,.1);
+    border-color: var(--accent);
+  }
+
+  /* main grid */
+  .main { max-width: 1480px; margin: 18px auto 0; padding: 0 28px 28px; }
+
+  /* fleet table card */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; overflow: hidden; }
+  .card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .card-head .title { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 600; }
+  .card-head .title .acc { color: var(--accent-2); }
+
+  /* agent row */
+  .fleet-table { width: 100%; border-collapse: collapse; }
+  .fleet-table thead th {
+    text-align: left; padding: 12px 18px;
+    font-family: var(--mono); font-size: 10px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-2);
+  }
+  .fleet-table thead th.num { text-align: right; }
+  .fleet-row {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background .12s;
+  }
+  .fleet-row:last-child { border-bottom: none; }
+  .fleet-row:hover { background: var(--surface-2); }
+  .fleet-row.selected { background: rgba(56,139,253,0.06); }
+  .fleet-row td { padding: 14px 18px; vertical-align: middle; }
+  .fleet-row td.num { text-align: right; }
+
+  .agent-ident {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .agent-avatar {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: var(--c, var(--surface-2)); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 12px; font-weight: 800;
+    flex-shrink: 0; letter-spacing: 0.02em;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .agent-name { font-size: 13.5px; font-weight: 700; line-height: 1.2; }
+  .agent-id { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 100px;
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .status-pill.online { background: rgba(63,185,80,.1); color: var(--allow); border: 1px solid rgba(63,185,80,.3); }
+  .status-pill.degraded { background: rgba(210,153,34,.1); color: var(--educate); border: 1px solid rgba(210,153,34,.3); }
+  .status-pill.offline { background: rgba(125,133,144,.1); color: var(--offline); border: 1px solid rgba(125,133,144,.3); }
+  .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 5px currentColor; }
+  .status-pill.online .dot { animation: p 1.6s infinite; }
+
+  .bundle-tag {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    padding: 3px 9px; border-radius: 6px;
+    background: var(--bg-2); border: 1px solid var(--border);
+    color: var(--text);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .bundle-tag .dt { width: 6px; height: 6px; border-radius: 50%; background: var(--bc, var(--muted)); }
+
+  .risk-tag {
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+    padding: 3px 9px; border-radius: 6px;
+    letter-spacing: 0.04em;
+  }
+  .risk-tag.high   { background: rgba(248,81,73,.1); color: var(--block);   border: 1px solid rgba(248,81,73,.3); }
+  .risk-tag.medium { background: rgba(210,153,34,.1); color: var(--educate); border: 1px solid rgba(210,153,34,.3); }
+  .risk-tag.low    { background: rgba(63,185,80,.1); color: var(--allow);   border: 1px solid rgba(63,185,80,.3); }
+  .risk-tag.minimal{ background: rgba(125,133,144,.1); color: var(--muted); border: 1px solid rgba(125,133,144,.3); }
+
+  .block-cell {
+    display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  }
+  .block-rate { font-family: var(--mono); font-size: 14px; font-weight: 800; }
+  .block-rate.zero { color: var(--muted-2); }
+  .block-rate.low  { color: var(--allow); }
+  .block-rate.med  { color: var(--educate); }
+  .block-rate.high { color: var(--block); }
+  .block-mini-bar { width: 60px; height: 5px; background: var(--surface-2); border-radius: 100px; overflow: hidden; }
+  .block-mini-fill { height: 100%; border-radius: 100px; }
+
+  .spark {
+    width: 90px; height: 30px;
+    display: block;
+  }
+  .spark path.area { fill: currentColor; opacity: 0.18; }
+  .spark path.line { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  .spark.green { color: var(--allow); }
+  .spark.yellow { color: var(--educate); }
+  .spark.red { color: var(--block); }
+
+  .owner { font-size: 12.5px; color: var(--text); }
+  .owner .org { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 1px; display: block; }
+
+  /* help tooltip */
+  .hlp {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--surface-3); color: var(--muted);
+    font-size: 9px; font-weight: 800; font-family: var(--sans);
+    cursor: help; margin-left: 4px; vertical-align: middle;
+    position: relative; text-transform: none; letter-spacing: 0;
+  }
+  .hlp:hover { background: var(--accent); color: white; }
+  .hlp:hover::after {
+    content: attr(data-help);
+    position: absolute; bottom: calc(100% + 8px); left: 50%;
+    transform: translateX(-50%);
+    width: 240px;
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 8px;
+    padding: 9px 12px; font-size: 11.5px; font-weight: 400;
+    line-height: 1.5; letter-spacing: 0;
+    z-index: 60; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    text-align: left; white-space: normal;
+  }
+  .hlp:hover::before {
+    content: ""; position: absolute; bottom: calc(100% + 2px); left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: var(--border-strong);
+    z-index: 60;
+  }
+  .drawer-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(3px);
+    z-index: 80;
+    display: none;
+    animation: fadeIn .2s ease;
+  }
+  .drawer-backdrop.open { display: block; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 580px; max-width: 92vw;
+    background: var(--bg);
+    border-left: 1px solid var(--border-strong);
+    z-index: 90;
+    transform: translateX(100%);
+    transition: transform .25s cubic-bezier(.4,0,.2,1);
+    display: flex; flex-direction: column;
+    box-shadow: -20px 0 60px rgba(0,0,0,0.4);
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer-head {
+    padding: 22px 24px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .drawer-head .avatar { width: 48px; height: 48px; border-radius: 12px; font-size: 14px; }
+  .drawer-close {
+    margin-left: auto;
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--muted); font-size: 16px;
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .drawer-close:hover { color: var(--text); }
+  .drawer-name { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+  .drawer-aid { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  .drawer-body { padding: 20px 24px 28px; overflow-y: auto; flex: 1; }
+
+  .drawer-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+  .drawer-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 11px 14px; }
+  .drawer-stat .lbl { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .drawer-stat .val { font-family: var(--mono); font-size: 18px; font-weight: 800; margin-top: 3px; }
+
+  .drawer-sec {
+    margin-bottom: 18px;
+  }
+  .drawer-sec .ti {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: 8px;
+  }
+  .drawer-meta {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 9px; padding: 12px 14px;
+    font-family: var(--mono); font-size: 11.5px;
+  }
+  .drawer-meta .row { display: flex; justify-content: space-between; padding: 5px 0; gap: 12px; border-bottom: 1px dashed var(--border); }
+  .drawer-meta .row:last-child { border-bottom: none; }
+  .drawer-meta .k { color: var(--muted); }
+  .drawer-meta .v { color: var(--text); text-align: right; word-break: break-all; max-width: 70%; }
+  .drawer-meta .v.green { color: var(--allow); }
+  .drawer-meta .v.red { color: var(--block); }
+
+  .recent-list {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 9px; overflow: hidden;
+  }
+  .recent-row {
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 10px; align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .recent-row:last-child { border-bottom: none; }
+  .recent-dot { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 5px currentColor; }
+  .recent-dot.ALLOW { background: var(--allow); color: var(--allow); }
+  .recent-dot.BLOCK { background: var(--block); color: var(--block); }
+  .recent-dot.EDUCATE { background: var(--educate); color: var(--educate); }
+  .recent-dot.REDACT { background: var(--redact); color: var(--redact); }
+  .recent-name { font-size: 12.5px; font-weight: 600; }
+  .recent-vec { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .recent-time { font-family: var(--mono); font-size: 10px; color: var(--muted-2); }
+
+  /* drawer actions */
+  .drawer-actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; border: 1px solid transparent; transition: all .15s; min-height: 36px; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #2f7cf4; text-decoration: none; color: white; }
+  .btn-outline { background: transparent; color: var(--text); border-color: var(--border-strong); }
+  .btn-outline:hover { background: var(--surface-2); text-decoration: none; color: var(--text); }
+
+  @media (max-width: 700px) {
+    .fleet-table th:nth-child(3),
+    .fleet-table td:nth-child(3),
+    .fleet-table th:nth-child(4),
+    .fleet-table td:nth-child(4) { display: none; }
+  }
+
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="BuildToValue Landing.html" class="nav-logo">
+    <span class="logo-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 21l18 0M12 21l0 -10M5 21l0 -8M19 21l0 -8M3 11l9 -8l9 8"/></svg></span>
+    BuildToValue
+  </a>
+  <span class="nav-tag">Fleet · frota</span>
+  <div class="nav-mid">
+    <div class="nav-group"><a href="BuildToValue Landing.html">Home</a><a href="Fleet.html" class="active">Fleet</a><a href="Lab.html">Lab</a></div>
+    <div class="nav-group"><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a></div>
+    <div class="nav-group"><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a></div>
+  </div>
+  <div class="nav-right">
+    <button class="nav-icon-btn" onclick="window.openGlobalSearch&&window.openGlobalSearch()" title="Pesquisar (Ctrl+K)" aria-label="Pesquisa global, atalho Control K"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+    <button class="nav-icon-btn" onclick="window.location.href='BuildToValue Landing.html#top'" title="Tour" aria-label="Voltar ao tour na Home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+    <button class="nav-icon-btn" onclick="toggleTheme()" aria-label="Alternar tema claro/escuro">
+      <svg id="t-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="t-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+    <button class="nav-icon-btn mobile-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('open')" aria-label="Menu de navegação"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+  </div>
+</nav>
+<div class="mobile-menu" id="mobile-menu">
+  <div class="group-label">Principal</div><a href="BuildToValue Landing.html">Home</a><a href="Fleet.html">Fleet</a><a href="Lab.html">Lab</a>
+  <div class="group-label">Demos</div><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a>
+  <div class="group-label">Personas</div><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a>
+</div>
+
+<div class="intro">
+  <div class="pg-title">
+    <div class="pg-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3"/><circle cx="5" cy="17" r="3"/><circle cx="19" cy="17" r="3"/><path d="M9.5 10.5l-3 4M14.5 10.5l3 4M8 17h8"/></svg></div>
+    <div>
+      <div class="pg-eyebrow">Frota de agentes</div>
+      <div class="pg-h1">Fleet</div>
+      <div class="pg-sub">10 agentes · 3 owners · 5 jurisdições</div>
+    </div>
+  </div>
+  <div class="explainer">
+    <b>Você governa muitos agentes.</b> Cada um tem dono, política, modelo e perfil de risco diferentes. Aqui você vê <b>todos numa só tela</b>, identifica anomalias e desce ao detalhe. Clique em qualquer agente para ver decisões recentes, FRIA e abrir no Lab.
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="kpis">
+  <div class="kpi">
+    <div class="lbl">Agentes governados</div>
+    <div class="val" id="kpi-total">10</div>
+    <div class="breakdown">
+      <span class="pill online"><span class="dot"></span>8 online</span>
+      <span class="pill degraded"><span class="dot"></span>1 degraded</span>
+      <span class="pill offline"><span class="dot"></span>1 offline</span>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Decisões (24h · frota)</div>
+    <div class="val" id="kpi-decisions">42 318</div>
+    <div class="sub">média 4 232/agente · +8.4% vs ontem</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Agentes de alto risco</div>
+    <div class="val" style="color:var(--block)" id="kpi-risk">3</div>
+    <div class="sub">classificação EU AI Act</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Agente top em BLOCK</div>
+    <div class="val" style="font-size:15px;line-height:1.4;padding-top:6px" id="kpi-top">finbot-credit</div>
+    <div class="sub" style="color:var(--block)">22.4% · ↑ anomalia</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">FRIAs assinadas</div>
+    <div class="val" id="kpi-fria">7<span style="color:var(--muted-2);font-size:18px"> /10</span></div>
+    <div class="sub">3 pendentes · revisão DPO</div>
+  </div>
+</div>
+
+<!-- Anomaly -->
+<div class="anomaly">
+  <div class="anomaly-card">
+    <div class="anomaly-ico">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <div class="anomaly-text">
+      <div class="anomaly-title">Anomalia detectada · agente <span style="color:var(--block);font-family:var(--mono)">finbot-credit</span></div>
+      <div class="anomaly-detail">Taxa de BLOCK em <b>22.4%</b> nas últimas 24h vs média histórica <b style="color:var(--allow)">2.8%</b>. Pico iniciado <b>há 4h32min</b>. Vetor predominante: <b>prompt injection</b>.</div>
+    </div>
+    <button class="anomaly-cta" onclick="openAgent('finbot-credit')">Investigar →</button>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="filters">
+  <div class="filter-card">
+    <input type="text" class="search-input" id="search" placeholder="Buscar por agent_id, nome, owner ou modelo…">
+
+    <div class="filter-group">
+      <span class="lbl">status</span>
+      <button class="filter-pill on" data-fkind="status" data-fval="all">Todos</button>
+      <button class="filter-pill" data-fkind="status" data-fval="online">Online</button>
+      <button class="filter-pill" data-fkind="status" data-fval="degraded">Degraded</button>
+      <button class="filter-pill" data-fkind="status" data-fval="offline">Offline</button>
+    </div>
+
+    <div class="filter-group">
+      <span class="lbl">risco</span>
+      <button class="filter-pill on" data-fkind="risk" data-fval="all">Todos</button>
+      <button class="filter-pill" data-fkind="risk" data-fval="high">Alto</button>
+      <button class="filter-pill" data-fkind="risk" data-fval="medium">Médio</button>
+      <button class="filter-pill" data-fkind="risk" data-fval="low">Baixo</button>
+    </div>
+  </div>
+</div>
+
+<!-- TABLE -->
+<main class="main">
+  <div class="card">
+    <div class="card-head">
+      <span class="title">Agentes <span class="acc">· clique para detalhes</span></span>
+      <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted-2)" id="row-count">10 visíveis</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="fleet-table">
+        <thead>
+          <tr>
+            <th>Agente</th>
+            <th>Status</th>
+            <th>Owner</th>
+            <th>Modelo</th>
+            <th>Política <span class="hlp" data-help="Bundle de política: conjunto de regras éticas e de compliance aplicado a este agente (medical, financial, hr, legal, education ou default). Define como o pipeline interpreta cada pedido.">?</span></th>
+            <th>Risco</th>
+            <th class="num">BLOCK 24h <span class="hlp" data-help="Percentual de decisões bloqueadas nas últimas 24h. Alto demais vs. o histórico do agente indica ataque, drift de modelo ou política mal calibrada.">?</span></th>
+            <th class="num">Trust · 24h</th>
+          </tr>
+        </thead>
+        <tbody id="fleet-body"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- DRAWER -->
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head" id="drawer-head"></div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const BUNDLES = {
+  medical:   { c:'#bc8cff', name:'medical' },
+  financial: { c:'#d29922', name:'financial' },
+  hr:        { c:'#79c0ff', name:'hr' },
+  legal:     { c:'#bc8cff', name:'legal' },
+  education: { c:'#3fb950', name:'education' },
+  research:  { c:'#79c0ff', name:'research' },
+  default:   { c:'#8b95a3', name:'default' },
+};
+
+const AGENTS = [
+  { id:'med-triage-01', name:'Medical Triage Bot', avatar:'MT', avatarC:'#7c3aed',
+    owner:'Hospital São Paulo', org:'hsp', model:'GPT-4 Turbo', bundle:'medical',
+    risk:'high', status:'online', blockRate:1.2, decisions24h:8120, trust:0.94,
+    fria:true, friaDate:'2026-04-12', jurisdictions:['LGPD','HIPAA','EU AI Act'],
+    capabilities:['triage','symptom_assessment'], description:'Pré-triagem clínica. Sempre exige supervisão humana antes de diagnóstico.' },
+
+  { id:'finbot-credit', name:'Credit Scoring', avatar:'FC', avatarC:'#d29922',
+    owner:'BancoPay', org:'bancopay', model:'Llama 3 70B', bundle:'financial',
+    risk:'high', status:'online', blockRate:22.4, decisions24h:5240, trust:0.41,
+    fria:true, friaDate:'2026-03-28', jurisdictions:['LGPD','EU AI Act','GDPR'],
+    capabilities:['credit_scoring'], description:'Decisões de crédito até R$50k. Acima disso, escalação humana.' },
+
+  { id:'hr-screener', name:'Resume Screener', avatar:'HR', avatarC:'#79c0ff',
+    owner:'TalentCorp', org:'talentcorp', model:'Claude 3.5 Sonnet', bundle:'hr',
+    risk:'high', status:'online', blockRate:3.8, decisions24h:1840, trust:0.87,
+    fria:true, friaDate:'2026-04-02', jurisdictions:['LGPD','EU AI Act','GDPR'],
+    capabilities:['resume_screening','ranking'], description:'Triagem de currículos. Bias guardian sempre ativo.' },
+
+  { id:'support-l1', name:'Support Tier 1', avatar:'S1', avatarC:'#3fb950',
+    owner:'Acme SaaS', org:'acme', model:'GPT-4o-mini', bundle:'default',
+    risk:'low', status:'online', blockRate:0.4, decisions24h:14820, trust:0.96,
+    fria:false, friaDate:null, jurisdictions:['LGPD','GDPR'],
+    capabilities:['answer_questions','escalation'], description:'Suporte de primeiro nível para perguntas frequentes.' },
+
+  { id:'legal-assist', name:'Legal Research', avatar:'LA', avatarC:'#bc8cff',
+    owner:'Pereira Advogados', org:'pereira', model:'Claude 3 Opus', bundle:'legal',
+    risk:'medium', status:'degraded', blockRate:5.2, decisions24h:412, trust:0.78,
+    fria:true, friaDate:'2026-04-08', jurisdictions:['LGPD','GDPR'],
+    capabilities:['legal_research','summarization'], description:'Pesquisa jurisprudencial. Latência elevada nas últimas 2h.' },
+
+  { id:'dev-copilot', name:'Code Review Bot', avatar:'DC', avatarC:'#79c0ff',
+    owner:'Internal Eng', org:'internal', model:'DeepSeek Coder', bundle:'research',
+    risk:'low', status:'online', blockRate:1.8, decisions24h:6420, trust:0.92,
+    fria:false, friaDate:null, jurisdictions:['LGPD'],
+    capabilities:['code_review','security_audit'], description:'Code review em PRs. Detecta credenciais hardcoded e CVEs.' },
+
+  { id:'edu-tutor', name:'Tutor Pedagógico', avatar:'ET', avatarC:'#3fb950',
+    owner:'ColégioX', org:'colegiox', model:'Gemini 1.5 Pro', bundle:'education',
+    risk:'medium', status:'online', blockRate:0.7, decisions24h:2940, trust:0.95,
+    fria:true, friaDate:'2026-04-15', jurisdictions:['LGPD','GDPR'],
+    capabilities:['tutoring','assessment'], description:'Tutoria adaptativa K-12. Mercy algorithm ativo (Gilligan).' },
+
+  { id:'content-mod', name:'Content Moderator', avatar:'CM', avatarC:'#f85149',
+    owner:'SocialApp', org:'socialapp', model:'Internal · Mistral', bundle:'default',
+    risk:'medium', status:'offline', blockRate:0, decisions24h:0, trust:0,
+    fria:true, friaDate:'2026-02-19', jurisdictions:['LGPD','GDPR','EU AI Act'],
+    capabilities:['content_moderation'], description:'Moderação de conteúdo. Desligado há 47min — investigar.' },
+
+  { id:'research-summ', name:'Research Summary', avatar:'RS', avatarC:'#79c0ff',
+    owner:'Internal R&D', org:'internal', model:'Claude 3.5 Sonnet', bundle:'research',
+    risk:'minimal', status:'online', blockRate:0.1, decisions24h:1240, trust:0.98,
+    fria:false, friaDate:null, jurisdictions:['LGPD'],
+    capabilities:['summarization'], description:'Resumos de papers acadêmicos. Risco mínimo.' },
+
+  { id:'billing-bot', name:'Invoice Analyst', avatar:'BB', avatarC:'#d29922',
+    owner:'Finance Team', org:'internal', model:'GPT-4', bundle:'financial',
+    risk:'medium', status:'online', blockRate:2.1, decisions24h:1280, trust:0.89,
+    fria:false, friaDate:null, jurisdictions:['LGPD','SOX'],
+    capabilities:['invoice_analysis','reconciliation'], description:'Análise de invoices. Conformidade SOX. FRIA pendente.' },
+];
+
+let filters = { status:'all', risk:'all' };
+let searchTerm = '';
+let selectedId = null;
+
+// generate sparkline path
+function spark(values) {
+  if (!values.length) return '';
+  const W = 90, H = 30, pad = 2;
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = max - min || 1;
+  const stepX = (W - pad*2) / (values.length - 1);
+  let line = '', area = '';
+  values.forEach((v, i) => {
+    const x = pad + i * stepX;
+    const y = pad + (1 - (v - min) / range) * (H - pad*2);
+    line += (i === 0 ? `M ${x.toFixed(1)} ${y.toFixed(1)}` : ` L ${x.toFixed(1)} ${y.toFixed(1)}`);
+    area += (i === 0 ? `M ${x.toFixed(1)} ${(H-pad).toFixed(1)} L ${x.toFixed(1)} ${y.toFixed(1)}` : ` L ${x.toFixed(1)} ${y.toFixed(1)}`);
+  });
+  area += ` L ${(W-pad).toFixed(1)} ${(H-pad).toFixed(1)} Z`;
+  return { line, area };
+}
+
+function genTrustSeries(currentTrust, n=24) {
+  const out = [];
+  let v = currentTrust + (Math.random() - 0.5) * 0.1;
+  for (let i = 0; i < n; i++) {
+    v += (Math.random() - 0.5) * 0.08;
+    v = Math.max(0.2, Math.min(1, v));
+    out.push(v);
+  }
+  out.push(currentTrust);
+  return out;
+}
+
+function blockBarClass(rate) {
+  if (rate === 0) return 'zero';
+  if (rate < 3) return 'low';
+  if (rate < 10) return 'med';
+  return 'high';
+}
+
+function ago(date) {
+  if (!date) return '—';
+  const t = new Date(date).getTime();
+  const d = Math.floor((Date.now() - t) / 86400000);
+  if (d < 1) return 'hoje';
+  if (d < 30) return `há ${d}d`;
+  return `há ${Math.floor(d/30)}mo`;
+}
+
+function filtered() {
+  return AGENTS.filter(a => {
+    if (filters.status !== 'all' && a.status !== filters.status) return false;
+    if (filters.risk !== 'all' && a.risk !== filters.risk) return false;
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      if (!a.id.toLowerCase().includes(s)
+        && !a.name.toLowerCase().includes(s)
+        && !a.owner.toLowerCase().includes(s)
+        && !a.model.toLowerCase().includes(s)) return false;
+    }
+    return true;
+  });
+}
+
+function renderFleet() {
+  const list = filtered();
+  document.getElementById('row-count').textContent = list.length + ' visível' + (list.length !== 1 ? 'is' : '');
+
+  if (!list.length) {
+    document.getElementById('fleet-body').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Nenhum agente corresponde aos filtros.</td></tr>';
+    return;
+  }
+
+  document.getElementById('fleet-body').innerHTML = list.map(a => {
+    const series = genTrustSeries(a.trust);
+    const sp = spark(series);
+    const trustCls = a.trust > 0.8 ? 'green' : a.trust > 0.5 ? 'yellow' : 'red';
+    const bundle = BUNDLES[a.bundle] || BUNDLES.default;
+    const blockCls = blockBarClass(a.blockRate);
+
+    return `<tr class="fleet-row ${selectedId === a.id ? 'selected' : ''}" onclick="openAgent('${a.id}')">
+      <td>
+        <div class="agent-ident">
+          <div class="agent-avatar" style="--c:${a.avatarC};background:${a.avatarC}">${a.avatar}</div>
+          <div>
+            <div class="agent-name">${a.name}</div>
+            <div class="agent-id">${a.id}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="status-pill ${a.status}"><span class="dot"></span>${a.status}</span></td>
+      <td><div class="owner">${a.owner}<span class="org">${a.org}</span></div></td>
+      <td><span class="mono" style="font-family:var(--mono);font-size:11.5px;color:var(--muted)">${a.model}</span></td>
+      <td><span class="bundle-tag"><span class="dt" style="background:${bundle.c}"></span>${bundle.name}</span></td>
+      <td><span class="risk-tag ${a.risk}">${a.risk === 'high' ? 'alto' : a.risk === 'medium' ? 'médio' : a.risk === 'low' ? 'baixo' : 'mínimo'}</span></td>
+      <td class="num">
+        <div class="block-cell">
+          <div class="block-mini-bar"><div class="block-mini-fill" style="width:${Math.min(a.blockRate * 3, 100)}%;background:${blockCls === 'high' ? 'var(--block)' : blockCls === 'med' ? 'var(--educate)' : blockCls === 'low' ? 'var(--allow)' : 'var(--muted-2)'}"></div></div>
+          <span class="block-rate ${blockCls}">${a.blockRate.toFixed(1)}%</span>
+        </div>
+      </td>
+      <td class="num" style="vertical-align:middle">
+        <svg class="spark ${trustCls}" viewBox="0 0 90 30" preserveAspectRatio="none">
+          <path class="area" d="${sp.area}"/>
+          <path class="line" d="${sp.line}"/>
+        </svg>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// filters
+document.querySelectorAll('.filter-pill').forEach(b => {
+  b.addEventListener('click', () => {
+    const kind = b.dataset.fkind;
+    document.querySelectorAll(`.filter-pill[data-fkind="${kind}"]`).forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    filters[kind] = b.dataset.fval;
+    renderFleet();
+  });
+});
+
+document.getElementById('search').addEventListener('input', (e) => {
+  searchTerm = e.target.value.trim();
+  renderFleet();
+});
+
+// DRAWER
+
+const RECENT_VECTORS_BY_RISK = {
+  high: ['prompt_injection','sql_injection','pii_exposure','jailbreak'],
+  medium: ['pii_exposure','prompt_injection','context_ambiguity'],
+  low: ['(benign)','(benign)','context_ambiguity'],
+  minimal: ['(benign)']
+};
+
+function makeRecent(a) {
+  const vectors = RECENT_VECTORS_BY_RISK[a.risk];
+  const list = [];
+  for (let i = 0; i < 6; i++) {
+    const v = vectors[Math.floor(Math.random() * vectors.length)];
+    const isAttack = !v.includes('benign');
+    const action = isAttack && Math.random() > 0.2 ? 'BLOCK' : v.includes('pii') ? 'REDACT' : 'ALLOW';
+    list.push({
+      action, vector: v,
+      mins: Math.floor(2 + Math.random() * 240 + i * 30),
+      risk: action === 'BLOCK' ? 0.78 + Math.random() * 0.2 : action === 'REDACT' ? 0.55 + Math.random() * 0.15 : 0.05 + Math.random() * 0.1
+    });
+  }
+  return list.sort((a, b) => a.mins - b.mins);
+}
+
+function openAgent(id) {
+  const a = AGENTS.find(x => x.id === id);
+  if (!a) return;
+  selectedId = id;
+  renderFleet();
+
+  const bundle = BUNDLES[a.bundle] || BUNDLES.default;
+  const recent = makeRecent(a);
+  const series = genTrustSeries(a.trust, 60);
+  const sp = spark(series);
+
+  document.getElementById('drawer-head').innerHTML = `
+    <div class="agent-avatar avatar" style="--c:${a.avatarC};background:${a.avatarC}">${a.avatar}</div>
+    <div>
+      <div class="drawer-name">${a.name}</div>
+      <div class="drawer-aid">${a.id} · ${a.owner}</div>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer()">×</button>
+  `;
+
+  const trustCls = a.trust > 0.8 ? 'green' : a.trust > 0.5 ? 'yellow' : 'red';
+  const trustColor = trustCls === 'green' ? 'var(--allow)' : trustCls === 'yellow' ? 'var(--educate)' : 'var(--block)';
+  const blockCls = blockBarClass(a.blockRate);
+  const blockColor = blockCls === 'high' ? 'var(--block)' : blockCls === 'med' ? 'var(--educate)' : blockCls === 'low' ? 'var(--allow)' : 'var(--muted-2)';
+
+  document.getElementById('drawer-body').innerHTML = `
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:12px 14px;margin-bottom:18px;font-size:13px;color:var(--muted);line-height:1.55">
+      ${a.description}
+    </div>
+
+    <div class="drawer-stats">
+      <div class="drawer-stat">
+        <div class="lbl">Status</div>
+        <div class="val"><span class="status-pill ${a.status}"><span class="dot"></span>${a.status}</span></div>
+      </div>
+      <div class="drawer-stat">
+        <div class="lbl">Risco</div>
+        <div class="val"><span class="risk-tag ${a.risk}">${a.risk === 'high' ? 'alto' : a.risk === 'medium' ? 'médio' : a.risk === 'low' ? 'baixo' : 'mín'}</span></div>
+      </div>
+      <div class="drawer-stat">
+        <div class="lbl">Decisões 24h</div>
+        <div class="val">${a.decisions24h.toLocaleString('pt-BR')}</div>
+      </div>
+      <div class="drawer-stat">
+        <div class="lbl">BLOCK 24h</div>
+        <div class="val" style="color:${blockColor}">${a.blockRate.toFixed(1)}%</div>
+      </div>
+      <div class="drawer-stat">
+        <div class="lbl">Trust atual</div>
+        <div class="val" style="color:${trustColor}">${a.trust.toFixed(2)}</div>
+      </div>
+      <div class="drawer-stat">
+        <div class="lbl">FRIA <span class="hlp" data-help="Fundamental Rights Impact Assessment — avaliação de impacto sobre direitos fundamentais exigida pelo EU AI Act (Art. 27) para sistemas de alto risco. Gerada por jurisdição e assinada.">?</span></div>
+        <div class="val" style="color:${a.fria ? 'var(--allow)' : 'var(--educate)'}">${a.fria ? '✓ ' + ago(a.friaDate) : 'pendente'}</div>
+      </div>
+    </div>
+
+    <div class="drawer-sec">
+      <div class="ti">Trust score · últimas 60 medições</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:14px">
+        <svg viewBox="0 0 90 30" preserveAspectRatio="none" style="width:100%;height:60px;color:${trustColor}">
+          <path d="${sp.area}" fill="currentColor" opacity="0.15"/>
+          <path d="${sp.line}" fill="none" stroke="currentColor" stroke-width="0.5"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="drawer-sec">
+      <div class="ti">Configuração</div>
+      <div class="drawer-meta">
+        <div class="row"><span class="k">agent_id</span><span class="v">${a.id}</span></div>
+        <div class="row"><span class="k">owner</span><span class="v">${a.owner} (${a.org})</span></div>
+        <div class="row"><span class="k">model</span><span class="v">${a.model}</span></div>
+        <div class="row"><span class="k">policy bundle</span><span class="v" style="color:${bundle.c}">${bundle.name}</span></div>
+        <div class="row"><span class="k">capabilities</span><span class="v">${a.capabilities.join(', ')}</span></div>
+        <div class="row"><span class="k">jurisdições</span><span class="v">${a.jurisdictions.join(' · ')}</span></div>
+        <div class="row"><span class="k">FRIA</span><span class="v ${a.fria ? 'green' : 'red'}">${a.fria ? 'assinada · ' + a.friaDate : 'pendente · revisão DPO'}</span></div>
+      </div>
+    </div>
+
+    <div class="drawer-sec">
+      <div class="ti">Decisões recentes · últimas 6</div>
+      <div class="recent-list">
+        ${recent.map(r => `<div class="recent-row">
+          <span class="recent-dot ${r.action}"></span>
+          <div>
+            <div class="recent-name">${r.action} · ${r.vector === '(benign)' ? 'baseline' : r.vector.replace(/_/g, ' ')}</div>
+            <div class="recent-vec">risk ${r.risk.toFixed(2)}</div>
+          </div>
+          <div class="recent-time">há ${r.mins < 60 ? r.mins + 'min' : Math.floor(r.mins/60) + 'h' + (r.mins % 60).toString().padStart(2,'0')}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="drawer-actions">
+      <a class="btn btn-primary" href="Lab.html">🔬 Abrir no Lab</a>
+      <a class="btn btn-outline" href="Ledger Explorer.html">📖 Ledger do agente</a>
+      ${!a.fria ? '<button class="btn btn-outline" style="color:var(--educate);border-color:rgba(210,153,34,.4)" onclick="alert(\'Em produção: abre formulário FRIA pré-preenchido com dados do agente, pronto para revisão do DPO.\')">📋 Gerar FRIA</button>' : ''}
+    </div>
+
+  `;
+
+  document.getElementById('drawer-backdrop').classList.add('open');
+  document.getElementById('drawer').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer-backdrop').classList.remove('open');
+  document.getElementById('drawer').classList.remove('open');
+  selectedId = null;
+  renderFleet();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+});
+
+// THEME
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('t-moon').style.display = theme === 'light' ? 'none' : '';
+  document.getElementById('t-sun').style.display = theme === 'light' ? '' : 'none';
+  localStorage.setItem('btv-theme', theme);
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  applyTheme(localStorage.getItem('btv-theme') || 'dark');
+  renderFleet();
+});
+</script>
+
+<script src="search.js" defer></script>
+</body>
+</html>
