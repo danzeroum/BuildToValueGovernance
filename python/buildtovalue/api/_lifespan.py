@@ -177,6 +177,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     else:
         _ner = None
         logger.info("NER detector disabled (SLM not loaded)")
+    application.state.ner = _ner
 
     from buildtovalue.api.auth import init_auth
     init_auth()  # type: ignore[no-untyped-call]  # auth.init_auth sem anotação

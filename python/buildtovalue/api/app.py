@@ -347,6 +347,7 @@ from buildtovalue.api.routes.health import router as health_router
 from buildtovalue.api.routes.appeals import router as appeals_router
 from buildtovalue.api.routes.compliance import router as compliance_router
 from buildtovalue.api.routes.agents import router as agents_router
+from buildtovalue.api.routes.slm_ner import router as slm_ner_router
 app.include_router(intelligence_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
@@ -359,6 +360,7 @@ app.include_router(health_router)
 app.include_router(appeals_router)
 app.include_router(compliance_router)
 app.include_router(agents_router)
+app.include_router(slm_ner_router)
 
 # ═══════════════════════════════════════════════════════════════
 # Lab v3.0 — demo/ servido estaticamente same-origin (CORS estrito)
@@ -1177,57 +1179,6 @@ async def multi_decide(
 # ADR-0093 Phase 2 (Passo 3, router 3): /v1/compliance/* (8 rotas) migrado para
 # routes/compliance.py. _risk_classifier via app.state.risk_classifier (Depends);
 # plugins/geradores module-level no router. Registrado abaixo.
-
-
-# ═══════════════════════════════════════════════════════════════
-# SLM METRICS — /v1/slm
-# ═══════════════════════════════════════════════════════════════
-
-@app.get("/v1/slm/metrics")
-def slm_metrics(_=Depends(require_api_key)):
-    if _slm is None:
-        return {"enabled": False, "message": "SLM not loaded"}
-    return {"enabled": True, **_slm.get_metrics()}
-
-
-@app.get("/v1/slm/bias")
-def slm_bias(_=Depends(require_api_key)):
-    if _slm is None:
-        return {"enabled": False, "message": "SLM not loaded"}
-    b = _slm.get_bias_declaration()
-    return {
-        "enabled": True,
-        "fpr": b.fpr, "fnr": b.fnr,
-        "calibration_date": b.calibration_date,
-        "sample_size": b.sample_size,
-        "model_id": b.model_id,
-        "limitations": b.limitations,
-        "affected_groups": b.affected_groups,
-    }
-
-
-# ═══════════════════════════════════════════════════════════════
-# NER SEMANTIC SCAN — /v1/scan/semantic (ADR-047)
-# ═══════════════════════════════════════════════════════════════
-
-@app.post("/v1/scan/semantic")
-def scan_semantic(req: dict, _=Depends(require_api_key)):
-    """Semantic PII detection via SLM NER (ADR-047)."""
-    if _ner is None:
-        raise HTTPException(status_code=503, detail="NER detector not available (SLM not loaded)")
-    text = req.get("text", "")
-    if not text or len(text) < 3:
-        raise HTTPException(status_code=400, detail="Text must be at least 3 characters")
-    result = _ner.detect(text)
-    return result.to_dict()
-
-
-@app.get("/v1/ner/metrics")
-def ner_metrics(_=Depends(require_api_key)):
-    """NER detector metrics (ADR-047)."""
-    if _ner is None:
-        return {"enabled": False, "message": "NER not loaded"}
-    return {"enabled": True, **_ner.get_metrics()}
 
 
 # ═══════════════════════════════════════════════════════════════
