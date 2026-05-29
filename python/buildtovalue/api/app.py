@@ -1371,7 +1371,11 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
     else:
         # No semantic threat categories after filtering — Python-side text
         # fallback for patterns the kernel doesn't model (XSS, credentials).
-        _BLOCK_TEXT = ["<script", "javascript:", "eval(", "senha:", "login: root",
+        # "eval(atob" (not bare "eval(") mirrors the kernel XSS signature: a
+        # plain eval() mention is benign (e.g. documentation) and must ALLOW,
+        # while eval(atob(...)) is the obfuscated-payload attack vector. Bare
+        # "eval(" here was a false positive on educational text (battery G6).
+        _BLOCK_TEXT = ["<script", "javascript:", "eval(atob", "senha:", "login: root",
                        "union select", "drop table", "drop database"]
         _EDUCATE_TEXT = [
             "ignore as instru", "desconsidere suas", "you are now unrestricted",
