@@ -77,6 +77,11 @@ e commit por passo):
   `api/_db.py` (typed, sem import reverso). Lifespan passa a expor também
   `contestability_loop`, `ethical_engine`, `slm` em `app.state` (aditivo; shim
   intacto). **Router 1 (feito):** `routes/health.py` ← `/health` + `/v1/trust`.
+  **Router 2 (feito):** `routes/appeals.py` ← `/v1/appeals/*` (5 rotas), lendo
+  `app.state.contestability_loop` via `Depends(get_contestability_loop)`
+  fail-secure (503). Acesso direto a `loop.appeals` mantido (atributo público;
+  TODO de encapsulamento registrado). Métricas tipadas via `cast` (get_metrics
+  devolve `Dict[str, object]`).
 - **Passo 4:** `routes/decide.py` (`/v1/decide` + `/v1/multi-decide`) por último;
   com todos os readers migrados, **o shim é removido** e os globals deixam de
   existir — `app.py` atinge ~80 linhas.

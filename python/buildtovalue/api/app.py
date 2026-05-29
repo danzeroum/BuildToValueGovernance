@@ -352,6 +352,7 @@ from buildtovalue.api.routes.agent_decide import router as agent_decide_router
 from buildtovalue.api.routes.fleet import router as fleet_router
 from buildtovalue.api.routes.metrics import router as metrics_router
 from buildtovalue.api.routes.health import router as health_router
+from buildtovalue.api.routes.appeals import router as appeals_router
 app.include_router(intelligence_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
@@ -361,6 +362,7 @@ app.include_router(agent_decide_router)
 app.include_router(fleet_router)
 app.include_router(metrics_router)
 app.include_router(health_router)
+app.include_router(appeals_router)
 
 # ═══════════════════════════════════════════════════════════════
 # Lab v3.0 — demo/ servido estaticamente same-origin (CORS estrito)
@@ -1165,79 +1167,8 @@ async def multi_decide(
 # APPEALS — /v1/appeals (ADR-017, Levinas)
 # ═══════════════════════════════════════════════════════════════
 
-@app.post("/v1/appeals", response_model=AppealResponse, status_code=201)
-def submit_appeal(req: AppealSubmitRequest):
-    try:
-        appeal = _contestability_loop.submit_appeal(
-            audit_trail_id=req.audit_trail_id,
-            user_id=req.user_id,
-            reason=req.reason,
-            evidence=req.evidence,
-        )
-        if req.evidence_hash:
-            appeal.evidence_hash = req.evidence_hash
-        if req.grounds:
-            appeal.grounds = req.grounds
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return _appeal_to_response(appeal)
-
-
-@app.get("/v1/appeals/metrics", response_model=AppealMetricsResponse)
-def appeals_metrics():
-    _contestability_loop.list_expired_appeals()
-    return AppealMetricsResponse(**_contestability_loop.get_metrics())
-
-
-@app.get("/v1/appeals/{appeal_id}", response_model=AppealResponse)
-def get_appeal(appeal_id: str):
-    appeal = _contestability_loop.get_appeal(appeal_id)
-    if appeal is None:
-        raise HTTPException(status_code=404, detail=f"Appeal not found: {appeal_id}")
-    return _appeal_to_response(appeal)
-
-
-@app.get("/v1/appeals", response_model=AppealListResponse)
-def list_appeals(status: Optional[str] = None, user_id: Optional[str] = None):
-    _contestability_loop.list_expired_appeals()
-    appeals = list(_contestability_loop.appeals.values())
-    if status:
-        try:
-            target_status = AppealStatus(status)
-            appeals = [a for a in appeals if a.status == target_status]
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
-    if user_id:
-        appeals = [a for a in appeals if a.user_id == user_id]
-    return AppealListResponse(
-        appeals=[_appeal_to_response(a) for a in appeals],
-        total=len(appeals),
-    )
-
-
-@app.post("/v1/appeals/{appeal_id}/resolve", response_model=AppealResponse)
-def resolve_appeal(appeal_id: str, req: AppealResolveRequest):
-    existing = _contestability_loop.get_appeal(appeal_id)
-    if existing is None:
-        raise HTTPException(
-            status_code=404, detail=f"Appeal not found: {appeal_id}"
-        )
-    if existing.status in (AppealStatus.ACCEPTED, AppealStatus.REJECTED):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Already resolved: {existing.status.value}",
-        )
-    try:
-        resolved = _contestability_loop.resolve_appeal(
-            appeal_id=appeal_id,
-            accepted=req.accepted,
-            reviewer_notes=req.reviewer_notes,
-            reviewer_id=req.reviewer_id,
-            mediator_recommendation=req.mediator_recommendation,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return _appeal_to_response(resolved)
+# ADR-0093 Phase 2 (Passo 3, router 2): /v1/appeals/* migrado para
+# routes/appeals.py (lê app.state.contestability_loop via Depends). Registrado abaixo.
 
 
 # ═══════════════════════════════════════════════════════════════
