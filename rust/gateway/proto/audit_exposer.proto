@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+// Contrato de wire do gRPC Audit Exposer (ADR-0091).
+//
+// Projeção 1:1 do `FairnessAuditEvent` v1alpha (Rust: gateway/src/audit/event.rs)
+// sobre gRPC. Consumidores (ex: ResilientAuditStreamConsumer em Java, ADR-0092)
+// dependem APENAS deste arquivo, não do crate Rust.
+//
+// Política de versionamento: qualquer mudança de semântica de campo existente
+// é breaking (major do contrato). Adição de campo novo com número de tag novo
+// é não-quebrante. O `schema_version` ("v1alpha") viaja no payload.
+package btv.audit.v1alpha;
+
+// Serviço de exposição do stream de auditoria de fairness.
+service AuditExposer {
+  // Server-streaming: emite cada FairnessDecision conforme aparece no JSONL
+  // local. Autenticado via metadata `x-btv-internal-key`.
+  rpc StreamAuditEvents(StreamRequest) returns (stream FairnessDecision);
+}
+
+message StreamRequest {
+  // Filtro por tenant. Vazio = stream de todos os tenants.
+  string tenant_id = 1;
+}
+
+// Espelha FairnessAuditEvent. Os enums Rust (FairnessMode, TenantStatus) são
+// achatados para string (ex: "shadow", "active") para estabilidade de wire.
+message FairnessDecision {
+  string schema_version = 1;
+  string event_id = 2;            // UUID v7 — utilizável como cursor
+  uint64 ts_unix_ms = 3;          // epoch millis (u128 Rust → u64, saturado)
+  string tenant_id = 4;
+  string verdict_id = 5;
+
+  string fairness_mode = 6;       // "disabled" | "shadow" | "enforced"
+  string tenant_status = 7;       // "active" | "initializing" | "degraded"
+
+  string tentative_action = 8;
+  string applied_action = 9;
+  string composed_action = 10;
+
+  bool composition_changed_action = 11;
+  bool apply_override = 12;
+  bool rawls_violation = 13;
+  bool jonas_critical = 14;
+  bool jonas_warning = 15;
+  bool hard_block = 16;
+  bool human_review_required = 17;
+
+  repeated string governance_error_codes = 18;
+  optional string legacy_error_code = 19;
+}

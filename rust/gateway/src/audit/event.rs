@@ -8,12 +8,6 @@
 //! **Distinto de `LedgerEntry`** (ADR-0083) — esse é o registro forense
 //! binário hash-chained no kernel. `FairnessAuditEvent` é o evento
 //! humano-legível que SIEM consome.
-//!
-//! NOTE on `dead_code`: o struct é introduzido neste commit. Consumidor
-//! produção é o `decide_handler` em commit posterior desta sprint. Lib
-//! tests aqui já exercitam serde + construção. `#![allow(dead_code)]`
-//! removido após o wire final.
-#![allow(dead_code)]
 
 use crate::fairness_mode::FairnessMode;
 use crate::tenant_status::TenantStatus;
