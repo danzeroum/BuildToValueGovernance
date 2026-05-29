@@ -12,7 +12,6 @@ Changelog v2.3 (Sprint 5, Gaps 10/12/14/19):
 """
 
 import asyncio
-import hashlib
 import hmac
 import logging
 import os
@@ -26,7 +25,6 @@ from typing import List, Optional
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
 from enum import Enum
 
 from contextlib import asynccontextmanager
@@ -187,7 +185,7 @@ def _run_rag_guard(
 # HMAC KEY (Gap #10 — env var, fail-secure in production)
 # ═══════════════════════════════════════════════════════════════
 
-from buildtovalue.security import get_hmac_key, init_hmac_key, sqlite_connect_wal
+from buildtovalue.security import get_hmac_key, init_hmac_key
 
 
 _risk_classifier: Optional[RiskClassifier] = RiskClassifier()
@@ -202,7 +200,6 @@ DB_PATH = os.environ.get("BTV_DB_PATH", "data/trust.db")
 # ADR-0093 Phase 2 (Passo 3): camada SQLite extraída para api/_db.py.
 # Reimportada aqui para preservar os call-sites internos e o lifespan.
 from buildtovalue.api._db import (  # noqa: E402
-    DB_PATH,
     db_get_session,
     db_update_session,
     db_update_session_state,
@@ -349,6 +346,7 @@ from buildtovalue.api.routes.metrics import router as metrics_router
 from buildtovalue.api.routes.health import router as health_router
 from buildtovalue.api.routes.appeals import router as appeals_router
 from buildtovalue.api.routes.compliance import router as compliance_router
+from buildtovalue.api.routes.agents import router as agents_router
 app.include_router(intelligence_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
@@ -360,6 +358,7 @@ app.include_router(metrics_router)
 app.include_router(health_router)
 app.include_router(appeals_router)
 app.include_router(compliance_router)
+app.include_router(agents_router)
 
 # ═══════════════════════════════════════════════════════════════
 # Lab v3.0 — demo/ servido estaticamente same-origin (CORS estrito)
@@ -1288,292 +1287,3 @@ def intelligence_stats(_=Depends(require_api_key)):
     return get_stats()
 
 
-# ═══════════════════════════════════════════════════════════════
-# C3 — Agent Public Key Registration (cold path — management)
-# C10 — IdentityAnchorPolicy integration
-# ═══════════════════════════════════════════════════════════════
-
-class AgentRegisterRequest(BaseModel):
-    public_key_hex: str = Field(..., min_length=64, max_length=64, description="Ed25519 public key (32 bytes hex)")
-    registration_proof: Optional[str] = Field(None, description="Identity proof for anti-Sybil (C10)")
-
-
-def _load_identity_anchor_policy() -> dict:
-    import yaml
-    candidates = [
-        Path(os.environ.get("BTV_POLICY_DIR", "data/policies")) / "core" / "identity_anchor.yaml",
-        Path(__file__).resolve().parent.parent.parent.parent / "data" / "policies" / "core" / "identity_anchor.yaml",
-    ]
-    for p in candidates:
-        try:
-            if p.exists():
-                with open(p) as f:
-                    return yaml.safe_load(f) or {}
-        except Exception:
-            pass
-    return {"require_identity_anchor": False}
-
-
-@app.post("/v1/agents/{agent_id}/register", status_code=201)
-def agent_register(agent_id: str, req: AgentRegisterRequest, _=Depends(require_api_key)):
-    """Register an Ed25519 public key for an agent (C3)."""
-    # C10: identity anchor enforcement
-    policy = _load_identity_anchor_policy()
-    if policy.get("require_identity_anchor", False) and not req.registration_proof:
-        raise HTTPException(status_code=403, detail="registration_proof required (identity_anchor policy)")
-
-    try:
-        bytes.fromhex(req.public_key_hex)
-    except ValueError:
-        raise HTTPException(status_code=422, detail="public_key_hex must be valid hex")
-
-    key_fingerprint = hashlib.sha256(bytes.fromhex(req.public_key_hex)).hexdigest()[:16]
-    registered_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-
-    conn = sqlite_connect_wal(DB_PATH)
-    try:
-        conn.execute(
-            "INSERT OR REPLACE INTO agent_pubkeys (agent_id, public_key_hex, registered_at, revoked_at, registration_proof) "
-            "VALUES (?, ?, ?, NULL, ?)",
-            (agent_id, req.public_key_hex, registered_at, req.registration_proof),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    return {"agent_id": agent_id, "registered_at": registered_at, "key_fingerprint": key_fingerprint}
-
-
-@app.get("/v1/agents/{agent_id}/pubkey")
-def agent_get_pubkey(agent_id: str, _=Depends(require_api_key)):
-    """Retrieve registered public key for an agent (C3)."""
-    conn = sqlite_connect_wal(DB_PATH)
-    row = conn.execute(
-        "SELECT public_key_hex, registered_at, revoked_at FROM agent_pubkeys WHERE agent_id = ?",
-        (agent_id,),
-    ).fetchone()
-    conn.close()
-
-    if not row:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not registered")
-    if row[2]:
-        raise HTTPException(status_code=410, detail=f"Agent {agent_id} key revoked at {row[2]}")
-
-    return {"agent_id": agent_id, "public_key_hex": row[0], "registered_at": row[1]}
-
-
-@app.delete("/v1/agents/{agent_id}/revoke")
-def agent_revoke(agent_id: str, _=Depends(require_api_key)):
-    """Revoke the public key of an agent (C3)."""
-    revoked_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    conn = sqlite_connect_wal(DB_PATH)
-    cur = conn.execute(
-        "UPDATE agent_pubkeys SET revoked_at = ? WHERE agent_id = ? AND revoked_at IS NULL",
-        (revoked_at, agent_id),
-    )
-    conn.commit()
-    conn.close()
-
-    if cur.rowcount == 0:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found or already revoked")
-
-    return {"agent_id": agent_id, "revoked_at": revoked_at}
-
-
-# ═══════════════════════════════════════════════════════════════
-# C34 — OracleTrustGate endpoints (Cenário 34: Boato Digital P2P)
-# Seguindo padrão /v1/agents/{id}/register e /v1/agents/{id}/revoke
-# ═══════════════════════════════════════════════════════════════
-
-class OracleRegisterRequest(BaseModel):
-    hmac_key_hex: str       # chave HMAC do oráculo (hex)
-    valid_until_iso: str    # data de expiração UTC ISO 8601
-    description: str = ""
-
-
-class OracleRevokeRequest(BaseModel):
-    reason: str = "Revogação solicitada via API"
-
-
-_ORACLE_REGISTRY_STORE: dict = {}  # oracle_id → {hmac_key_hex, valid_until, revoked}
-
-
-@app.post("/v1/oracles/{oracle_id}/register", status_code=201)
-def oracle_register(
-    oracle_id: str,
-    req: OracleRegisterRequest,
-    _=Depends(require_api_key),
-):
-    """Registra chave HMAC de um oráculo regulatório (Cenário 34).
-
-    Segue padrão de /v1/agents/{id}/register.
-    """
-    registered_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    _ORACLE_REGISTRY_STORE[oracle_id] = {
-        "oracle_id": oracle_id,
-        "hmac_key_hex": req.hmac_key_hex,
-        "valid_until_iso": req.valid_until_iso,
-        "description": req.description,
-        "registered_at": registered_at,
-        "revoked": False,
-    }
-    logger.info("Oracle registrado: oracle_id=%s", oracle_id)
-    return {
-        "oracle_id": oracle_id,
-        "registered_at": registered_at,
-        "valid_until_iso": req.valid_until_iso,
-    }
-
-
-@app.post("/v1/oracles/{oracle_id}/revoke", status_code=200)
-def oracle_revoke(
-    oracle_id: str,
-    req: OracleRevokeRequest,
-    _=Depends(require_api_key),
-):
-    """Revoga chave HMAC de um oráculo regulatório (Cenário 34).
-
-    Persiste rastreabilidade no ledger (Gap 3).
-    Segue padrão de /v1/agents/{id}/revoke.
-    """
-    entry = _ORACLE_REGISTRY_STORE.get(oracle_id)
-    if entry is None or entry.get("revoked", False):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Oracle '{oracle_id}' não encontrado ou já revogado",
-        )
-
-    entry["revoked"] = True
-    revoked_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    entry["revoked_at"] = revoked_at
-    entry["revocation_reason"] = req.reason
-
-    # Persiste rastreabilidade no DurableLedger global (se disponível)
-    try:
-        if hasattr(app.state, "durable_ledger") and app.state.durable_ledger is not None:
-            app.state.durable_ledger.append({
-                "type": "oracle_revocation_api",
-                "oracle_id": oracle_id,
-                "revoked_at_iso": revoked_at,
-                "reason": req.reason,
-                "explain_decision": (
-                    f"Oráculo '{oracle_id}' revogado via API em {revoked_at}. "
-                    f"Motivo: {req.reason}"
-                ),
-            })
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Falha ao registrar revogação no ledger: %s", exc)
-
-    logger.info("Oracle revogado: oracle_id=%s reason=%s", oracle_id, req.reason)
-    return {"oracle_id": oracle_id, "revoked_at": revoked_at}
-
-
-# ═══════════════════════════════════════════════════════════════
-# C6 — CrossAgentCorrelator endpoints
-# ═══════════════════════════════════════════════════════════════
-
-class A2ACorrelateRequest(BaseModel):
-    agent_id: str
-    action: str
-
-
-class A2AScanRequest(BaseModel):
-    src: str
-    dst: str
-    payload: str
-
-
-class A2ACollusionRequest(BaseModel):
-    agent_actions: dict  # {agent_id: action}
-
-
-@app.post("/v1/a2a/correlate")
-def a2a_correlate(req: A2ACorrelateRequest, _=Depends(require_api_key)):
-    """Check agent action for conflicts (C6 — CrossAgentCorrelator)."""
-    if _cross_agent is None:
-        raise HTTPException(status_code=503, detail="CrossAgentCorrelator not initialized")
-    result = _cross_agent.correlate(req.agent_id, req.action)
-    return {
-        "allowed": result.allowed,
-        "conflict": result.conflict,
-        "circuit_state": result.circuit_state.value if hasattr(result.circuit_state, "value") else str(result.circuit_state),
-        "explain": result.explain,
-    }
-
-
-@app.post("/v1/a2a/scan")
-def a2a_scan(req: A2AScanRequest, _=Depends(require_api_key)):
-    """Scan an agent-to-agent payload for injection patterns (C6)."""
-    if _cross_agent is None:
-        raise HTTPException(status_code=503, detail="CrossAgentCorrelator not initialized")
-    result = _cross_agent.scan_a2a_payload(req.src, req.dst, req.payload)
-    # Auto-trigger collusion detection after scan (C6 — internal, no separate endpoint abuse)
-    collusion = _cross_agent.detect_collusion({req.src: req.payload[:64], req.dst: req.payload[:64]})
-    return {
-        "allowed": result.allowed if hasattr(result, "allowed") else True,
-        "explain": result.explain if hasattr(result, "explain") else "",
-        "collusion_detected": not collusion.get("allowed", True) if isinstance(collusion, dict) else False,
-    }
-
-
-# ═══════════════════════════════════════════════════════════════
-# C6 — DelegationLedger endpoints
-# ═══════════════════════════════════════════════════════════════
-
-class DelegationRecordRequest(BaseModel):
-    parent_agent: str
-    child_agent: str
-    scope: str
-    capabilities: Optional[List[str]] = None
-
-
-class DelegationRevokeRequest(BaseModel):
-    record_id: str
-
-
-@app.post("/v1/delegation/record", status_code=201)
-def delegation_record(req: DelegationRecordRequest, _=Depends(require_api_key)):
-    """Record a new agent delegation (C6 — DelegationLedger)."""
-    if _delegation_ledger is None:
-        raise HTTPException(status_code=503, detail="DelegationLedger not initialized")
-    try:
-        rec = _delegation_ledger.record_delegation(
-            req.parent_agent, req.child_agent, req.scope, req.capabilities
-        )
-        return {
-            "record_id": rec.record_id,
-            "parent_agent": rec.parent_agent,
-            "child_agent": rec.child_agent,
-            "scope": rec.scope,
-            "created_at": rec.created_at,
-            "chain_hash": rec.chain_hash,
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-
-@app.get("/v1/delegation/{agent_id}/chain")
-def delegation_chain(agent_id: str, _=Depends(require_api_key)):
-    """Verify the delegation chain for an agent (C6)."""
-    if _delegation_ledger is None:
-        raise HTTPException(status_code=503, detail="DelegationLedger not initialized")
-    result = _delegation_ledger.verify_chain(agent_id)
-    return {
-        "agent_id": agent_id,
-        "valid": result.valid,
-        "depth": result.depth,
-        "chain": result.chain,
-        "explain": result.explain,
-    }
-
-
-@app.post("/v1/delegation/{agent_id}/revoke")
-def delegation_revoke(agent_id: str, req: DelegationRevokeRequest, _=Depends(require_api_key)):
-    """Revoke a delegation record (C6)."""
-    if _delegation_ledger is None:
-        raise HTTPException(status_code=503, detail="DelegationLedger not initialized")
-    try:
-        _delegation_ledger.revoke_delegation(req.record_id)
-        return {"record_id": req.record_id, "revoked": True}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
