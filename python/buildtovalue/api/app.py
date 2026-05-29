@@ -772,6 +772,7 @@ from buildtovalue.api.routes.compliance_eval import router as compliance_eval_ro
 from buildtovalue.api.routes.auth import router as auth_router
 from buildtovalue.api.routes.agent_decide import router as agent_decide_router
 from buildtovalue.api.routes.fleet import router as fleet_router
+from buildtovalue.api.routes.metrics import router as metrics_router
 app.include_router(intelligence_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
@@ -779,6 +780,7 @@ app.include_router(compliance_eval_router)
 app.include_router(auth_router)
 app.include_router(agent_decide_router)
 app.include_router(fleet_router)
+app.include_router(metrics_router)
 
 # ═══════════════════════════════════════════════════════════════
 # Lab v3.0 — demo/ servido estaticamente same-origin (CORS estrito)
