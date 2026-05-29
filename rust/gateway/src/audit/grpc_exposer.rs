@@ -136,7 +136,9 @@ impl AuditExposer for GrpcAuditExposer {
         &self,
         request: Request<pb::StreamRequest>,
     ) -> Result<Response<Self::StreamAuditEventsStream>, Status> {
-        let tenant_filter = request.into_inner().tenant_id;
+        let req = request.into_inner();
+        let tenant_filter = req.tenant_id;
+        let resume_after = req.resume_after_event_id;
         let audit_dir = self.audit_dir.clone();
         let (tx, rx) = tokio::sync::mpsc::channel(STREAM_CHANNEL_CAPACITY);
 
@@ -149,10 +151,25 @@ impl AuditExposer for GrpcAuditExposer {
 
                 let files = discover_files(&audit_dir, &tenant_filter).await;
                 for path in files {
-                    let offset = offsets.entry(path.clone()).or_insert(0);
-                    match read_new_events(&path, *offset).await {
+                    // Primeira vez que vemos este arquivo: se há cursor de
+                    // retomada (ADR-0092 §D3), busca o offset logo após o
+                    // evento do cursor; senão começa do início. Custo O(n) da
+                    // busca incorre uma única vez por arquivo.
+                    let offset = match offsets.get(&path) {
+                        Some(o) => *o,
+                        None => {
+                            let init = if resume_after.is_empty() {
+                                0
+                            } else {
+                                seek_after_event_id(&path, &resume_after).await
+                            };
+                            offsets.insert(path.clone(), init);
+                            init
+                        }
+                    };
+                    match read_new_events(&path, offset).await {
                         Ok((events, new_offset)) => {
-                            *offset = new_offset;
+                            offsets.insert(path.clone(), new_offset);
                             for ev in events {
                                 let tenant = ev.tenant_id.clone();
                                 let proto = event_to_proto(&ev);
@@ -229,6 +246,43 @@ async fn read_new_events(
         }
     }
     Ok((events, offset + consumed as u64))
+}
+
+/// Cursor de retomada (ADR-0092 §D3): varre `path` do início procurando a
+/// linha cujo evento tem `event_id == target` e devolve o offset de bytes
+/// logo após essa linha (ponto de retomada do tail).
+///
+/// Não encontrado (cursor de tenant distinto, arquivo rotacionado, ou
+/// arquivo recém-criado) → devolve `0`: o arquivo é tailado desde o início.
+/// A entrega é **at-least-once**; o consumidor deduplica por `event_id`.
+/// Só conta linhas completas (terminadas em `\n`); uma linha parcial no fim
+/// interrompe a busca. Busca linear O(tamanho do arquivo), executada uma
+/// única vez por arquivo (rotação é responsabilidade de ops — ADR-0091 §D5).
+async fn seek_after_event_id(path: &std::path::Path, target: &str) -> u64 {
+    let Ok(mut file) = tokio::fs::File::open(path).await else {
+        return 0; // arquivo ainda não existe → tail desde o início quando surgir
+    };
+    let mut buf = Vec::new();
+    if file.read_to_end(&mut buf).await.is_err() {
+        return 0;
+    }
+    let mut pos: u64 = 0;
+    for line in buf.split_inclusive(|&b| b == b'\n') {
+        if line.last() != Some(&b'\n') {
+            break; // linha parcial no fim — para antes dela
+        }
+        pos += line.len() as u64;
+        let content = &line[..line.len() - 1];
+        if content.is_empty() {
+            continue;
+        }
+        if let Ok(ev) = serde_json::from_slice::<FairnessAuditEvent>(content) {
+            if ev.event_id == target {
+                return pos; // offset logo após a linha do cursor
+            }
+        }
+    }
+    0 // cursor não encontrado → retoma do início (at-least-once)
 }
 
 /// Interceptor de auth gRPC — espelha `InternalAuthLayer` (ADR-0089 §D2).
@@ -349,5 +403,61 @@ mod tests {
         let (events2, offset2) = read_new_events(&path, offset).await.unwrap();
         assert!(events2.is_empty());
         assert_eq!(offset2, offset);
+    }
+
+    /// Escreve `n` eventos completos e devolve (path, event_ids na ordem).
+    async fn write_events(dir: &std::path::Path, n: usize) -> (PathBuf, Vec<String>) {
+        let path = dir.join("events.jsonl");
+        let mut ids = Vec::with_capacity(n);
+        let mut body = String::new();
+        for i in 0..n {
+            let mut e = sample("acme");
+            e.verdict_id = format!("VRD-{i}");
+            ids.push(e.event_id.clone());
+            body.push_str(&serde_json::to_string(&e).unwrap());
+            body.push('\n');
+        }
+        tokio::fs::write(&path, body).await.unwrap();
+        (path, ids)
+    }
+
+    #[tokio::test]
+    async fn seek_after_event_id_resumes_after_cursor() {
+        // 10 eventos; retoma após o 5º (índice 4) → recebe os eventos 6..=10.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (path, ids) = write_events(tmp.path(), 10).await;
+
+        let offset = seek_after_event_id(&path, &ids[4]).await;
+        assert!(offset > 0, "cursor encontrado deve dar offset > 0");
+
+        let (events, _) = read_new_events(&path, offset).await.unwrap();
+        assert_eq!(events.len(), 5, "deve retomar nos 5 eventos após o cursor");
+        assert_eq!(events[0].event_id, ids[5], "primeiro evento é o seguinte ao cursor");
+        assert_eq!(events[4].event_id, ids[9]);
+    }
+
+    #[tokio::test]
+    async fn seek_after_event_id_not_found_replays_from_start() {
+        // Cursor ausente (tenant distinto / rotação) → offset 0 = at-least-once.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (path, _ids) = write_events(tmp.path(), 3).await;
+
+        let offset = seek_after_event_id(&path, "00000000-0000-0000-0000-000000000000").await;
+        assert_eq!(offset, 0, "cursor não encontrado → retoma do início");
+
+        let (events, _) = read_new_events(&path, offset).await.unwrap();
+        assert_eq!(events.len(), 3, "todos os eventos são reentregues");
+    }
+
+    #[tokio::test]
+    async fn seek_after_last_event_yields_end_offset() {
+        // Retomar após o último evento → offset no fim → nada novo até chegar
+        // um evento posterior (sem replay).
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (path, ids) = write_events(tmp.path(), 4).await;
+
+        let offset = seek_after_event_id(&path, &ids[3]).await;
+        let (events, _) = read_new_events(&path, offset).await.unwrap();
+        assert!(events.is_empty(), "nada após o último evento");
     }
 }
