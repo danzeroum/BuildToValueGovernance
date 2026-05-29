@@ -279,7 +279,34 @@
   .owner { font-size: 12.5px; color: var(--text); }
   .owner .org { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 1px; display: block; }
 
-  /* DRAWER */
+  /* help tooltip */
+  .hlp {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--surface-3); color: var(--muted);
+    font-size: 9px; font-weight: 800; font-family: var(--sans);
+    cursor: help; margin-left: 4px; vertical-align: middle;
+    position: relative; text-transform: none; letter-spacing: 0;
+  }
+  .hlp:hover { background: var(--accent); color: white; }
+  .hlp:hover::after {
+    content: attr(data-help);
+    position: absolute; bottom: calc(100% + 8px); left: 50%;
+    transform: translateX(-50%);
+    width: 240px;
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 8px;
+    padding: 9px 12px; font-size: 11.5px; font-weight: 400;
+    line-height: 1.5; letter-spacing: 0;
+    z-index: 60; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    text-align: left; white-space: normal;
+  }
+  .hlp:hover::before {
+    content: ""; position: absolute; bottom: calc(100% + 2px); left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: var(--border-strong);
+    z-index: 60;
+  }
   .drawer-backdrop {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.55);
@@ -387,29 +414,30 @@
 <body>
 
 <nav class="nav">
-  <a href="index.html" class="nav-logo">
+  <a href="BuildToValue Landing.html" class="nav-logo">
     <span class="logo-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 21l18 0M12 21l0 -10M5 21l0 -8M19 21l0 -8M3 11l9 -8l9 8"/></svg></span>
     BuildToValue
   </a>
   <span class="nav-tag">Fleet · frota</span>
   <div class="nav-mid">
-    <div class="nav-group"><a href="index.html">Home</a><a href="fleet.html" class="active">Fleet</a><a href="lab.html">Lab</a></div>
-    <div class="nav-group"><a href="proxy-demo.html">Proxy</a><a href="sanitizer-demo.html">Sanitizer</a><a href="ledger-explorer.html">Ledger</a><a href="dashboard.html">Dashboard</a></div>
-    <div class="nav-group"><a href="persona-eng.html">Eng</a><a href="persona-ciso.html">CISO</a><a href="persona-dpo.html">DPO</a><a href="persona-gov.html">Gov</a><a href="dpo-ciso/index.html">Console</a></div>
+    <div class="nav-group"><a href="BuildToValue Landing.html">Home</a><a href="Fleet.html" class="active">Fleet</a><a href="Lab.html">Lab</a></div>
+    <div class="nav-group"><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a></div>
+    <div class="nav-group"><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a></div>
   </div>
   <div class="nav-right">
-    <button class="nav-icon-btn" onclick="window.location.href='index.html#top'" title="Tour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
-    <button class="nav-icon-btn" onclick="toggleTheme()">
+    <button class="nav-icon-btn" onclick="window.openGlobalSearch&&window.openGlobalSearch()" title="Pesquisar (Ctrl+K)" aria-label="Pesquisa global, atalho Control K"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+    <button class="nav-icon-btn" onclick="window.location.href='BuildToValue Landing.html#top'" title="Tour" aria-label="Voltar ao tour na Home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+    <button class="nav-icon-btn" onclick="toggleTheme()" aria-label="Alternar tema claro/escuro">
       <svg id="t-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       <svg id="t-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
     </button>
-    <button class="nav-icon-btn mobile-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('open')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+    <button class="nav-icon-btn mobile-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('open')" aria-label="Menu de navegação"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
   </div>
 </nav>
 <div class="mobile-menu" id="mobile-menu">
-  <div class="group-label">Principal</div><a href="index.html">Home</a><a href="fleet.html">Fleet</a><a href="lab.html">Lab</a>
-  <div class="group-label">Demos</div><a href="proxy-demo.html">Proxy</a><a href="sanitizer-demo.html">Sanitizer</a><a href="ledger-explorer.html">Ledger</a><a href="dashboard.html">Dashboard</a>
-  <div class="group-label">Personas</div><a href="persona-eng.html">Eng</a><a href="persona-ciso.html">CISO</a><a href="persona-dpo.html">DPO</a><a href="persona-gov.html">Gov</a><a href="dpo-ciso/index.html">Console</a>
+  <div class="group-label">Principal</div><a href="BuildToValue Landing.html">Home</a><a href="Fleet.html">Fleet</a><a href="Lab.html">Lab</a>
+  <div class="group-label">Demos</div><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a>
+  <div class="group-label">Personas</div><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a>
 </div>
 
 <div class="intro">
@@ -511,9 +539,9 @@
             <th>Status</th>
             <th>Owner</th>
             <th>Modelo</th>
-            <th>Política</th>
+            <th>Política <span class="hlp" data-help="Bundle de política: conjunto de regras éticas e de compliance aplicado a este agente (medical, financial, hr, legal, education ou default). Define como o pipeline interpreta cada pedido.">?</span></th>
             <th>Risco</th>
-            <th class="num">BLOCK 24h</th>
+            <th class="num">BLOCK 24h <span class="hlp" data-help="Percentual de decisões bloqueadas nas últimas 24h. Alto demais vs. o histórico do agente indica ataque, drift de modelo ou política mal calibrada.">?</span></th>
             <th class="num">Trust · 24h</th>
           </tr>
         </thead>
@@ -811,7 +839,7 @@ function openAgent(id) {
         <div class="val" style="color:${trustColor}">${a.trust.toFixed(2)}</div>
       </div>
       <div class="drawer-stat">
-        <div class="lbl">FRIA</div>
+        <div class="lbl">FRIA <span class="hlp" data-help="Fundamental Rights Impact Assessment — avaliação de impacto sobre direitos fundamentais exigida pelo EU AI Act (Art. 27) para sistemas de alto risco. Gerada por jurisdição e assinada.">?</span></div>
         <div class="val" style="color:${a.fria ? 'var(--allow)' : 'var(--educate)'}">${a.fria ? '✓ ' + ago(a.friaDate) : 'pendente'}</div>
       </div>
     </div>
@@ -854,8 +882,8 @@ function openAgent(id) {
     </div>
 
     <div class="drawer-actions">
-      <a class="btn btn-primary" href="lab.html">🔬 Abrir no Lab</a>
-      <a class="btn btn-outline" href="ledger-explorer.html">📖 Ledger do agente</a>
+      <a class="btn btn-primary" href="Lab.html">🔬 Abrir no Lab</a>
+      <a class="btn btn-outline" href="Ledger Explorer.html">📖 Ledger do agente</a>
       ${!a.fria ? '<button class="btn btn-outline" style="color:var(--educate);border-color:rgba(210,153,34,.4)" onclick="alert(\'Em produção: abre formulário FRIA pré-preenchido com dados do agente, pronto para revisão do DPO.\')">📋 Gerar FRIA</button>' : ''}
     </div>
 
@@ -893,5 +921,6 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+<script src="search.js" defer></script>
 </body>
 </html>
