@@ -85,8 +85,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         sla_hours=24,
         db_path=os.environ.get("BTV_APPEALS_DB"),
     )
+    application.state.contestability_loop = _contestability_loop
     # S-09: signing_key_fn — SIGHUP rotation propaga sem restart.
     _ethical_engine = EthicalContextEngine(signing_key_fn=get_hmac_key)
+    application.state.ethical_engine = _ethical_engine
 
     _sensitivity_accumulator = SessionSensitivityAccumulator()
     application.state.sensitivity_accumulator = _sensitivity_accumulator
@@ -159,6 +161,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             _slm = None
     else:
         logger.info("SLM disabled (slm.enabled=false or config missing)")
+    application.state.slm = _slm
 
     # ADR-047: NER detector — reutiliza SLM para extração semântica de PII
     _ner: Optional[NERDetector]

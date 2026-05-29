@@ -71,8 +71,12 @@ e commit por passo):
   externo, não singleton de `app.py`). `_load_slm_config` fica para o Passo 3
   (concern de bootstrap/config; tipá-lo estritamente espalharia `object` no
   construtor do SLM em `_lifespan.py`). `app.py` reimporta os 6 nomes.
-- **Passo 3:** rotas inline → `api/routes/*` uma a uma (menor→maior acoplamento),
-  convertendo os read-sites do router migrado para `request.app.state`/`Depends`.
+- **Passo 3 (em curso):** rotas inline → `api/routes/*` uma a uma (menor→maior
+  acoplamento), convertendo os read-sites do router migrado para
+  `request.app.state`/`Depends`. Enabler: camada SQLite extraída para
+  `api/_db.py` (typed, sem import reverso). Lifespan passa a expor também
+  `contestability_loop`, `ethical_engine`, `slm` em `app.state` (aditivo; shim
+  intacto). **Router 1 (feito):** `routes/health.py` ← `/health` + `/v1/trust`.
 - **Passo 4:** `routes/decide.py` (`/v1/decide` + `/v1/multi-decide`) por último;
   com todos os readers migrados, **o shim é removido** e os globals deixam de
   existir — `app.py` atinge ~80 linhas.

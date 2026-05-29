@@ -201,87 +201,15 @@ _risk_classifier: Optional[RiskClassifier] = RiskClassifier()
 DB_PATH = os.environ.get("BTV_DB_PATH", "data/trust.db")
 
 
-def init_db():
-    conn = sqlite_connect_wal(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            session_id TEXT PRIMARY KEY,
-            trust_score REAL NOT NULL DEFAULT 0.5,
-            offenses INTEGER NOT NULL DEFAULT 0,
-            total_requests INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-    """)
-    # Colunas v1.9: post-penalty analysis (ADR-039)
-    for _col in [
-        "ALTER TABLE sessions ADD COLUMN last_entropy REAL NOT NULL DEFAULT 0.0",
-        "ALTER TABLE sessions ADD COLUMN last_action TEXT NOT NULL DEFAULT ''",
-    ]:
-        try:
-            conn.execute(_col)
-        except Exception:
-            pass
-    # C3: agent public keys table
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS agent_pubkeys (
-            agent_id TEXT PRIMARY KEY,
-            public_key_hex TEXT NOT NULL,
-            registered_at TEXT NOT NULL DEFAULT (datetime('now')),
-            revoked_at TEXT,
-            registration_proof TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-
-def db_get_session(session_id: str) -> dict:
-    conn = sqlite_connect_wal(DB_PATH)
-    row = conn.execute(
-        "SELECT trust_score, offenses, total_requests, last_entropy, last_action "
-        "FROM sessions WHERE session_id = ?",
-        (session_id,),
-    ).fetchone()
-    conn.close()
-    if row:
-        return {"trust_score": row[0], "offenses": row[1], "total_requests": row[2],
-                "last_entropy": row[3], "last_action": row[4]}
-    return {"trust_score": 0.5, "offenses": 0, "total_requests": 0,
-            "last_entropy": 0.0, "last_action": ""}
-
-
-def db_update_session_state(session_id: str, last_entropy: float, last_action: str):
-    """Persiste last_entropy e last_action (ADR-039 post-penalty analysis)."""
-    conn = sqlite_connect_wal(DB_PATH)
-    conn.execute(
-        "UPDATE sessions SET last_entropy=?, last_action=? WHERE session_id=?",
-        (last_entropy, last_action, session_id),
-    )
-    conn.commit()
-    conn.close()
-
-def db_update_session(session_id: str, trust_score: float, offense_delta: int):
-    conn = sqlite_connect_wal(DB_PATH)
-    existing = conn.execute(
-        "SELECT session_id FROM sessions WHERE session_id = ?",
-        (session_id,),
-    ).fetchone()
-    if existing:
-        conn.execute(
-            "UPDATE sessions SET trust_score = ?, offenses = offenses + ?, "
-            "total_requests = total_requests + 1, updated_at = datetime('now') "
-            "WHERE session_id = ?",
-            (trust_score, offense_delta, session_id),
-        )
-    else:
-        conn.execute(
-            "INSERT INTO sessions (session_id, trust_score, offenses, total_requests) "
-            "VALUES (?, ?, ?, 1)",
-            (session_id, trust_score, offense_delta),
-        )
-    conn.commit()
-    conn.close()
+# ADR-0093 Phase 2 (Passo 3): camada SQLite extraída para api/_db.py.
+# Reimportada aqui para preservar os call-sites internos e o lifespan.
+from buildtovalue.api._db import (  # noqa: E402
+    DB_PATH,
+    db_get_session,
+    db_update_session,
+    db_update_session_state,
+    init_db,
+)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -423,6 +351,7 @@ from buildtovalue.api.routes.auth import router as auth_router
 from buildtovalue.api.routes.agent_decide import router as agent_decide_router
 from buildtovalue.api.routes.fleet import router as fleet_router
 from buildtovalue.api.routes.metrics import router as metrics_router
+from buildtovalue.api.routes.health import router as health_router
 app.include_router(intelligence_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
@@ -431,6 +360,7 @@ app.include_router(auth_router)
 app.include_router(agent_decide_router)
 app.include_router(fleet_router)
 app.include_router(metrics_router)
+app.include_router(health_router)
 
 # ═══════════════════════════════════════════════════════════════
 # Lab v3.0 — demo/ servido estaticamente same-origin (CORS estrito)
@@ -1314,34 +1244,8 @@ def resolve_appeal(appeal_id: str, req: AppealResolveRequest):
 # HEALTH & TRUST
 # ═══════════════════════════════════════════════════════════════
 
-@app.get("/health")
-def health():
-    conn = sqlite_connect_wal(DB_PATH)
-    sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-    conn.close()
-    return {
-        "status": "healthy",
-        "service": "btv-governance",
-        "version": "2.3.0",
-        "sessions_tracked": sessions,
-        "persistence": "sqlite",
-        "slm_loaded": _slm is not None and _slm.is_loaded,
-        "ethical_engine": _ethical_engine is not None,
-        "trust_calculator_singleton": _trust_calculator is not None,
-        "goal_drift_sentinel": _goal_drift_sentinel is not None,
-        "appeals_pending": len(_contestability_loop.list_pending_appeals()) if _contestability_loop else 0,
-    }
-
-
-@app.get("/v1/trust/{session_id}")
-def get_trust(session_id: str, _=Depends(require_api_key)):
-    session = db_get_session(session_id)
-    return {
-        "session_id": session_id,
-        "trust_score": session["trust_score"],
-        "offenses": session["offenses"],
-        "total_requests": session["total_requests"],
-    }
+# ADR-0093 Phase 2 (Passo 3, router 1): /health e /v1/trust migrados para
+# routes/health.py (leem app.state, não os globals). Registrado abaixo.
 
 
 # ═══════════════════════════════════════════════════════════════
