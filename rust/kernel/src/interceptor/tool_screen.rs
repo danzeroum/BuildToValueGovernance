@@ -26,7 +26,10 @@ const DANGEROUS_PATTERNS: &[&str] = &[
     "/etc/passwd",
     "/etc/shadow",
     "sudo su",
-    "eval(",
+    // "eval(atob" (not bare "eval(") mirrors the XSS validator's signature:
+    // bare eval() appears in benign documentation/prose (false positive), while
+    // eval(atob(...)) is the obfuscated-payload RCE vector. See xss.rs.
+    "eval(atob",
     "exec(",
     "__import__(",
     "subprocess.call",
@@ -137,6 +140,25 @@ mod tests {
         let s = ToolScreen::new();
         let r = s.intercept_request("search(query='hello')");
         assert_eq!(r.action, InterceptAction::Continue);
+    }
+
+    #[test]
+    fn benign_eval_mention_passes() {
+        // Battery G6: educational prose mentioning eval() must not be screened
+        // as a dangerous tool call (bare "eval(" was a false positive).
+        assert_eq!(
+            screen().classify("In Python, eval() evaluates a string as code. Avoid using it unsafely."),
+            ToolScreenResult::Clean
+        );
+    }
+
+    #[test]
+    fn eval_atob_payload_detected() {
+        // The obfuscated-payload form remains screened as dangerous.
+        assert!(matches!(
+            screen().classify("eval(atob('Y29uc29sZS5sb2coJ2hhY2snKQ=='))"),
+            ToolScreenResult::Suspicious { .. }
+        ));
     }
 
     #[test]

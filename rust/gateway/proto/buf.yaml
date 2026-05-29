@@ -1,0 +1,11 @@
+# Módulo buf co-localizado com o contrato de wire do Audit Exposer (ADR-0091).
+# Escopo: apenas `audit_exposer.proto`. O check `buf breaking` (ADR-0092
+# §Consequências) roda no CI contra `main` para impedir contract drift que
+# quebraria o consumidor Java out-of-tree (btv-audit-consumer).
+version: v1
+breaking:
+  use:
+    - FILE
+lint:
+  use:
+    - DEFAULT
