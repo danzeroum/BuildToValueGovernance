@@ -32,11 +32,9 @@ from enum import Enum
 from contextlib import asynccontextmanager
 from buildtovalue.intelligence.slm_classifier import SLMClassifier, SLMContext
 from buildtovalue.intelligence.ner_detector import NERDetector
-from buildtovalue.compliance.plugin import ComplianceReport
-from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
-from buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
+# ADR-0093 Passo 3 r3: ComplianceReport/LGPDPlugin/EUAIActPlugin/FRIAGenerator
+# migrados para routes/compliance.py. RiskClassifier permanece (hot path).
 from buildtovalue.compliance.risk_classifier import RiskClassifier
-from buildtovalue.compliance.fria_generator import FRIAGenerator
 from buildtovalue.governance.output_validator import OutputSchemaValidator
 from buildtovalue.governance.contestability_loop import (
     ContestabilityLoop,

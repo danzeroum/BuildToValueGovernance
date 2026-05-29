@@ -60,6 +60,12 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     # S-01: initialize the HMAC key holder before any worker starts serving.
     init_hmac_key()
 
+    # ADR-0093 Phase 2 (Passo 3, router 3): expõe o _risk_classifier de escopo
+    # de módulo de app.py em app.state — MESMA instância usada pelo hot path
+    # _decide_compliance(). Router de compliance lê via Depends; consistência
+    # garantida (não cria instância nova). Aditivo; shim intacto.
+    application.state.risk_classifier = M._risk_classifier
+
     # PR-4: dedicated kernel executor before anything touches Rust.
     _KERNEL_EXECUTOR = ThreadPoolExecutor(
         max_workers=int(os.environ.get("BTV_KERNEL_WORKERS", "4")),

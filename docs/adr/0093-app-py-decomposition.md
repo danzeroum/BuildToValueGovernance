@@ -82,6 +82,15 @@ e commit por passo):
   fail-secure (503). Acesso direto a `loop.appeals` mantido (atributo público;
   TODO de encapsulamento registrado). Métricas tipadas via `cast` (get_metrics
   devolve `Dict[str, object]`).
+  **Router 3 (feito):** `routes/compliance.py` ← `/v1/compliance/*` (8 rotas).
+  Decisão de estado: `_risk_classifier` promovido a `app.state.risk_classifier`
+  (compartilhado com o hot path `_decide_compliance`; lido via
+  `Depends(get_risk_classifier)` — MESMA instância). `COMPLIANCE_PLUGINS`,
+  `_fria_generator`, `_ledger_analytics`, `_ropa_generator`, `_art20_generator`,
+  `_doc_exporter` → **module-level no router** (compliance-only, sem consumidor
+  externo). Rotas ROPA/Art20/Export ganharam modelos Pydantic tipados
+  (`ROPARequest`/`Art20Request`/`DocumentExportRequest`) em vez de `req: dict`.
+  Guard Fail-Secure (503) se `COMPLIANCE_PLUGINS` vazio.
 - **Passo 4:** `routes/decide.py` (`/v1/decide` + `/v1/multi-decide`) por último;
   com todos os readers migrados, **o shim é removido** e os globals deixam de
   existir — `app.py` atinge ~80 linhas.
