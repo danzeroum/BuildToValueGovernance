@@ -82,10 +82,21 @@ def _is_agent_profile(stem: str, data: Dict[str, object]) -> bool:
     return any(k in data for k in ("rules", "domain_config", "parent_id"))
 
 
+def _str_list(v: object) -> List[str]:
+    """Normaliza um valor YAML em lista de strings (fail-soft)."""
+    if isinstance(v, list):
+        return [str(x) for x in v]
+    return []
+
+
+def _opt_str(v: object) -> Optional[str]:
+    return v if isinstance(v, str) else None
+
+
 def _build_agent(data: Dict[str, object], caps: Dict[str, List[str]]) -> FleetAgent:
     """Mapeia o YAML de perfil para o contrato FleetAgent."""
     agent_id = str(data["id"])
-    domain_cfg = data.get("domain_config") or {}
+    domain_cfg = data.get("domain_config")
     bundle = next((k for k in domain_cfg if k != "general"), "default") \
         if isinstance(domain_cfg, dict) else "default"
     risk = "high" if bundle in _HIGH_RISK_BUNDLES else "medium"
@@ -99,8 +110,8 @@ def _build_agent(data: Dict[str, object], caps: Dict[str, List[str]]) -> FleetAg
         risk=str(data.get("risk", risk)),
         status=str(data.get("status", "online")),
         fria=bool(data.get("fria", False)),
-        friaDate=data.get("friaDate") if isinstance(data.get("friaDate"), str) else None,
-        jurisdictions=list(data.get("jurisdictions") or []),
+        friaDate=_opt_str(data.get("friaDate")),
+        jurisdictions=_str_list(data.get("jurisdictions")),
         capabilities=caps.get(agent_id, []),
         description=str(data.get("description", "")),
     )
