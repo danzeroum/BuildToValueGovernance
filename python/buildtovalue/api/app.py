@@ -20,7 +20,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,8 +55,6 @@ from buildtovalue.governance.goal_drift_sentinel import GoalDriftSentinel, Drift
 # Gap 12/19: TrustScoreCalculator como singleton (nao mais inline)
 from buildtovalue.governance.trust_score import TrustScoreCalculator
 from buildtovalue.api.auth import require_api_key
-from buildtovalue.api.routes.intelligence import get_ingestor, hydrate_from_sqlite
-from buildtovalue.intelligence.misp_ingestor import ThreatEvent as BridgeThreatEvent
 from buildtovalue.compliance.risk_classifier import RiskClassifier, RiskClassification
 from buildtovalue.governance.cross_agent_correlator import CrossAgentCorrelator
 from buildtovalue.governance.delegation_ledger import DelegationLedger
@@ -227,8 +225,6 @@ from buildtovalue.api._models import (  # noqa: E402
     MultiDecideRequest,
     MultiDecideResponse,
     RiskClassifyRequest,
-    ThreatIngestRequest,
-    ThreatQueryRequest,
 )
 
 
@@ -335,7 +331,10 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-BTV-Session", "X-BTV-Jurisdiction"],
 )
 
-from buildtovalue.api.routes.intelligence import router as intelligence_router
+from buildtovalue.api.routes.intelligence import (
+    router as intelligence_router,
+    hub_router as intelligence_hub_router,
+)
 from buildtovalue.api.routes.ledger import router as ledger_router
 from buildtovalue.api.routes.webhooks import router as webhooks_router
 from buildtovalue.api.routes.compliance_eval import router as compliance_eval_router
@@ -349,6 +348,7 @@ from buildtovalue.api.routes.compliance import router as compliance_router
 from buildtovalue.api.routes.agents import router as agents_router
 from buildtovalue.api.routes.slm_ner import router as slm_ner_router
 app.include_router(intelligence_router)
+app.include_router(intelligence_hub_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
 app.include_router(compliance_eval_router)
@@ -1180,61 +1180,6 @@ async def multi_decide(
 # routes/compliance.py. _risk_classifier via app.state.risk_classifier (Depends);
 # plugins/geradores module-level no router. Registrado abaixo.
 
-
-# ═══════════════════════════════════════════════════════════════
-# INTELLIGENCE HUB — /v1/intelligence (SQLite-backed)
-# ═══════════════════════════════════════════════════════════════
-
-from buildtovalue.intelligence.threat_feed import (
-    ingest_threat, query_threats, get_threat, get_stats,
-)
-
-
-@app.post("/v1/intelligence/ingest")
-def intelligence_ingest(req: ThreatIngestRequest, _=Depends(require_api_key)):
-    result = ingest_threat(
-        req.id, req.threat_type, req.severity, req.source,
-        req.indicators, req.description, req.mitre_id,
-    )
-    try:
-        get_ingestor().ingest(BridgeThreatEvent(
-            id=req.id,
-            threat_type=req.threat_type,
-            severity=req.severity,
-            source=req.source,
-            indicators=req.indicators or [],
-        ))
-    except Exception as exc:
-        logger.warning("Bridge ingestor feed failed (non-blocking): %s", exc)
-    return result
-
-
-@app.post("/v1/intelligence/ingest/batch")
-def intelligence_ingest_batch(threats: List[ThreatIngestRequest], _=Depends(require_api_key)):
-    results = [
-        ingest_threat(t.id, t.threat_type, t.severity, t.source,
-                      t.indicators, t.description, t.mitre_id)
-        for t in threats
-    ]
-    return {"ingested": len(results), "results": results}
-
-
-@app.post("/v1/intelligence/query")
-def intelligence_query(req: ThreatQueryRequest, _=Depends(require_api_key)):
-    threats = query_threats(req.threat_type, req.min_severity, req.source, req.limit)
-    return {"count": len(threats), "threats": threats}
-
-
-@app.get("/v1/intelligence/threat/{threat_id}")
-def intelligence_get(threat_id: str, _=Depends(require_api_key)):
-    threat = get_threat(threat_id)
-    if not threat:
-        return {"error": f"Threat {threat_id} not found"}
-    return threat
-
-
-@app.get("/v1/intelligence/stats")
-def intelligence_stats(_=Depends(require_api_key)):
-    return get_stats()
-
-
+# ADR-0093 Phase 2 (Passo 3, router 6): /v1/intelligence/* (ingest, ingest/batch,
+# query, threat/{id}, stats) fundido em routes/intelligence.py (hub_router, sem o
+# prefixo /bridge). Registrado abaixo.
