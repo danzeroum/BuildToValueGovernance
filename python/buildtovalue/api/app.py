@@ -1175,7 +1175,12 @@ async def multi_decide(
 # ADR-0093 Phase 2 (Passo 3, router 1): /health e /v1/trust migrados para
 # routes/health.py (leem app.state, não os globals). Registrado abaixo.
 
+# ADR-0093 Phase 2 (Passo 3, router 3): /v1/compliance/* (8 rotas) migrado para
+# routes/compliance.py. _risk_classifier via app.state.risk_classifier (Depends);
+# plugins/geradores module-level no router. Registrado abaixo.
 
+
+# ═══════════════════════════════════════════════════════════════
 # SLM METRICS — /v1/slm
 # ═══════════════════════════════════════════════════════════════
 
