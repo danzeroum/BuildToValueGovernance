@@ -5,10 +5,6 @@
 //! concorrente — testes paralelos exercitam o caminho direto e o
 //! `MultiAuditSink` pode fan-out para implementações futuras com
 //! semântica de concorrência diferente.
-//!
-//! `#![allow(dead_code)]`: caller de produção (drainer + AppState) chega
-//! em commits posteriores desta sprint. Removido após wire final.
-#![allow(dead_code)]
 
 use super::event::FairnessAuditEvent;
 use std::collections::HashMap;
@@ -65,7 +61,9 @@ impl JsonlAuditSink {
 
     /// Flush manual de todos os writers. Útil para testes que precisam
     /// inspecionar o JSONL imediatamente — em produção o BufWriter
-    /// libera no drop ou quando o buffer enche.
+    /// libera no drop ou quando o buffer enche. Reservado também para
+    /// drain-on-SIGTERM (fase futura). Não consumido pelo bin hoje.
+    #[allow(dead_code)]
     pub fn flush_all(&self) -> std::io::Result<()> {
         let Ok(mut guard) = self.writers.lock() else {
             return Ok(()); // lock poisoned → noop best-effort
@@ -175,10 +173,13 @@ impl MultiAuditSink {
         Self { sinks }
     }
 
+    // Introspecção usada apenas por testes; bin não consulta o fan-out.
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.sinks.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.sinks.is_empty()
     }
@@ -197,6 +198,8 @@ impl AuditSink for MultiAuditSink {
 // ─────────────────────────────────────────────────────────────────
 
 /// Sink que descarta tudo. Para testes e tenants opt-out (futuro).
+/// Não construído pelo bin hoje → `dead_code` localizado.
+#[allow(dead_code)]
 pub struct NullAuditSink;
 
 impl AuditSink for NullAuditSink {

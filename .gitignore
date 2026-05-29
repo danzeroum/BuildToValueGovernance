@@ -6,6 +6,10 @@
 /rust/data/ledger/btv.ledger
 /rust/data/ledger/btv.wal
 /rust/data/ledger/decisions.jsonl
+# Dados de runtime do gateway (ledger forense + audit JSONL) — gerados por
+# execução/testes, não devem ser rastreados.
+/rust/gateway/data/ledger/
+/rust/gateway/data/audit/
 /rust/.idea/
 /docs/estruturaArquivos/
 /docs/vision/

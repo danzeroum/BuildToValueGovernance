@@ -8,7 +8,10 @@ license.workspace = true
 [dependencies]
 buildtovalue-kernel = { path = "../kernel", features = ["observability"] }
 axum = { version = "0.7", features = ["json"] }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["time", "net", "fs", "io-util"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+tonic = "0.12"
+prost = "0.13"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
@@ -32,6 +35,10 @@ lazy_static = "1.5.0"
 serde_yaml = { workspace = true }
 subtle = "2.5"
 zeroize = "1.7"
+
+[build-dependencies]
+tonic-build = "0.12"
+protoc-bin-vendored = "3"
 
 [dev-dependencies]
 axum-test = "15"

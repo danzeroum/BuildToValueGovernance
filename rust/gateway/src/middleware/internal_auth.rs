@@ -21,11 +21,65 @@ use subtle::ConstantTimeEq;
 use tower::{Layer, Service};
 use zeroize::Zeroizing;
 
-const HEADER_NAME: &str = "X-BTV-Internal-Key";
+/// Nome do header/metadata da chave interna. Reusado pelo layer HTTP e
+/// pelo interceptor gRPC (ADR-0091) — gRPC normaliza para lowercase.
+pub(crate) const HEADER_NAME: &str = "X-BTV-Internal-Key";
 const ENV_VAR: &str = "BTV_INTERNAL_SECRET";
 /// Comprimento mínimo recomendado (256 bits = 32 bytes hex = 64 chars
 /// hex ou 44 chars base64). Sentinel anti-misconfiguration.
 const MIN_SECRET_BYTES: usize = 32;
+
+/// Segredo interno compartilhado. `None` → autenticação desligada
+/// (fail-secure: rejeita tudo).
+pub(crate) type InternalSecret = Arc<Option<Zeroizing<Vec<u8>>>>;
+
+/// Resultado da verificação de chave, agnóstico ao protocolo. O caller
+/// traduz para o status apropriado (HTTP 401/503 ou gRPC
+/// unauthenticated/unavailable).
+pub(crate) enum KeyCheck {
+    /// Chave válida — prosseguir.
+    Ok,
+    /// Chave ausente ou incorreta.
+    WrongKey,
+    /// `BTV_INTERNAL_SECRET` ausente/curto — endpoint desligado.
+    Disabled,
+}
+
+/// Lê `BTV_INTERNAL_SECRET` do ambiente aplicando o piso de
+/// `MIN_SECRET_BYTES`. Fonte única de verdade para o layer HTTP e o
+/// interceptor gRPC.
+pub(crate) fn internal_secret_from_env() -> InternalSecret {
+    let key = std::env::var(ENV_VAR).ok().and_then(|s| {
+        if s.len() < MIN_SECRET_BYTES {
+            tracing::warn!(
+                "{ENV_VAR} tem menos de {MIN_SECRET_BYTES} bytes — \
+                 endpoints internos ficarão desligados"
+            );
+            None
+        } else {
+            Some(Zeroizing::new(s.into_bytes()))
+        }
+    });
+    Arc::new(key)
+}
+
+/// Compara `provided` contra o segredo esperado em tempo constante.
+/// Checagem de comprimento primeiro (curto-circuito só no tamanho, sem
+/// vazar timing do conteúdo), depois `ct_eq`.
+pub(crate) fn check_internal_key(expected: &InternalSecret, provided: &[u8]) -> KeyCheck {
+    match expected.as_ref() {
+        None => KeyCheck::Disabled,
+        Some(expected_bytes) => {
+            if provided.len() == expected_bytes.len()
+                && bool::from(provided.ct_eq(expected_bytes.as_slice()))
+            {
+                KeyCheck::Ok
+            } else {
+                KeyCheck::WrongKey
+            }
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct InternalAuthLayer {
@@ -39,19 +93,8 @@ impl InternalAuthLayer {
     /// permanece `None` (todas as chamadas → 503). Em dev, igual — não
     /// há "modo permissivo" para endpoints internos.
     pub fn from_env() -> Self {
-        let key = std::env::var(ENV_VAR).ok().and_then(|s| {
-            if s.len() < MIN_SECRET_BYTES {
-                tracing::warn!(
-                    "{ENV_VAR} tem menos de {MIN_SECRET_BYTES} bytes — \
-                     endpoints internos ficarão desligados"
-                );
-                None
-            } else {
-                Some(Zeroizing::new(s.into_bytes()))
-            }
-        });
         Self {
-            expected: Arc::new(key),
+            expected: internal_secret_from_env(),
         }
     }
 
@@ -112,33 +155,22 @@ where
         let expected = Arc::clone(&self.expected);
         let mut inner = self.inner.clone();
         Box::pin(async move {
-            let response = match expected.as_ref() {
-                None => Some(
-                    Response::builder()
-                        .status(StatusCode::SERVICE_UNAVAILABLE)
-                        .body(Body::empty())
-                        .unwrap_or_else(|_| Response::new(Body::empty())),
-                ),
-                Some(expected_bytes) => {
-                    let provided = req
-                        .headers()
-                        .get(HEADER_NAME)
-                        .and_then(|v| v.to_str().ok())
-                        .unwrap_or("")
-                        .as_bytes();
-                    if provided.len() == expected_bytes.len()
-                        && bool::from(provided.ct_eq(expected_bytes.as_slice()))
-                    {
-                        None
-                    } else {
-                        Some(
-                            Response::builder()
-                                .status(StatusCode::UNAUTHORIZED)
-                                .body(Body::empty())
-                                .unwrap_or_else(|_| Response::new(Body::empty())),
-                        )
-                    }
-                }
+            let provided = req
+                .headers()
+                .get(HEADER_NAME)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .as_bytes();
+            let reject_with = |status: StatusCode| {
+                Response::builder()
+                    .status(status)
+                    .body(Body::empty())
+                    .unwrap_or_else(|_| Response::new(Body::empty()))
+            };
+            let response = match check_internal_key(&expected, provided) {
+                KeyCheck::Ok => None,
+                KeyCheck::WrongKey => Some(reject_with(StatusCode::UNAUTHORIZED)),
+                KeyCheck::Disabled => Some(reject_with(StatusCode::SERVICE_UNAVAILABLE)),
             };
             match response {
                 Some(rejection) => Ok(rejection),

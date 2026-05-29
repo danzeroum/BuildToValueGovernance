@@ -29,10 +29,6 @@
 //! - **Sem respawn automático** (D4 do design): se panic for repetitivo
 //!   (bug no sink), respawn cria loop infinito de panic+respawn. Métrica
 //!   alerta operador → redeploy é a mitigação operacional.
-//!
-//! `#![allow(dead_code)]`: caller produção é o wire em decide_handler
-//! (commit 5 desta sprint). Lib tests aqui exercitam todo o módulo.
-#![allow(dead_code)]
 
 use super::event::FairnessAuditEvent;
 use super::sink::AuditSink;
@@ -116,7 +112,8 @@ impl AuditChannel {
 
     /// Helper para testes que precisam aguardar todos os emits drenarem.
     /// Em produção, o drainer drena continuamente — não há motivo para
-    /// chamar isso.
+    /// chamar isso. Não consumido pelo bin → `dead_code` localizado.
+    #[allow(dead_code)]
     pub fn capacity_available(&self) -> usize {
         self.sender.capacity()
     }
