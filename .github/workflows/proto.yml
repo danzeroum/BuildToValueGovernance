@@ -26,13 +26,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # buf breaking resolve o ref `main` via git — precisa do histórico.
+          # buf breaking resolve o ref de `main` via git — precisa do histórico.
           fetch-depth: 0
+
+      - name: Fetch main for baseline comparison
+        # Garante que `origin/main` exista localmente como ref (o checkout da PR
+        # nem sempre traz um branch `main` local).
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
 
       - name: Setup buf
         uses: bufbuild/buf-setup-action@v1
 
-      - name: buf breaking against main
-        # `subdir=` escopa a comparação no lado `main` ao mesmo módulo, então
-        # o check é robusto mesmo sem buf.yaml na raiz do repo.
-        run: buf breaking rust/gateway/proto --against '.git#branch=main,subdir=rust/gateway/proto'
+      - name: buf breaking against main (skips if no baseline yet)
+        # O contrato pode ainda não existir em `main` (primeira introdução do
+        # `.proto`). Nesse caso não há baseline para comparar — pulamos o check
+        # com um aviso. Assim que o `.proto` estiver em `main`, o build do
+        # baseline passa a funcionar e o `buf breaking` vira gate bloqueante
+        # automaticamente. Qualquer OUTRA falha de build do baseline (ex.: proto
+        # inválido em main) ainda falha o job. `subdir=` escopa a comparação ao
+        # mesmo módulo, então o check é robusto sem buf.yaml na raiz do repo.
+        run: |
+          set -euo pipefail
+          AGAINST='.git#ref=origin/main,subdir=rust/gateway/proto'
+          if build_err="$(buf build "$AGAINST" -o /dev/null 2>&1)"; then
+            echo "Baseline do contrato encontrado em main — rodando buf breaking (bloqueante)."
+            buf breaking rust/gateway/proto --against "$AGAINST"
+          elif printf '%s' "$build_err" | grep -q 'had no .proto files'; then
+            echo "::notice title=buf breaking pulado::main ainda nao tem o baseline do .proto (rust/gateway/proto). O check vira gate bloqueante automaticamente quando o contrato estiver em main."
+          else
+            echo "::error title=buf build do baseline falhou::Build do baseline (origin/main) falhou por motivo inesperado:"
+            printf '%s\n' "$build_err"
+            exit 1
+          fi
