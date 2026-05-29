@@ -42,6 +42,21 @@ jobs:
 
       - name: Validate VPS nginx config syntax
         run: |
+          # `nginx -t` carrega os `ssl_certificate` referenciados — sem eles
+          # falha em "cannot load certificate" antes de checar a sintaxe. Os
+          # certs reais são provisionados pelo certbot em runtime (Let's
+          # Encrypt), inexistentes no runner. Geramos certs self-signed
+          # descartáveis nos caminhos esperados só para validar a SINTAXE.
           docker run --rm \
-            -v $(pwd)/ops/nginx/nginx.vps.conf:/etc/nginx/nginx.conf:ro \
-            nginx:alpine nginx -t && echo "nginx.vps.conf OK"
+            -v "$(pwd)/ops/nginx/nginx.vps.conf:/etc/nginx/nginx.conf:ro" \
+            nginx:alpine sh -ec '
+              apk add --no-cache openssl >/dev/null
+              for d in docs.buildtovalue.cloud demo.buildtovalue.cloud; do
+                mkdir -p "/etc/letsencrypt/live/$d"
+                openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+                  -keyout "/etc/letsencrypt/live/$d/privkey.pem" \
+                  -out    "/etc/letsencrypt/live/$d/fullchain.pem" \
+                  -subj "/CN=$d" >/dev/null 2>&1
+              done
+              nginx -t
+            ' && echo "nginx.vps.conf OK"

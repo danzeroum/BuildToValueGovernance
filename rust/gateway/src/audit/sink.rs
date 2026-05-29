@@ -19,6 +19,13 @@ pub trait AuditSink: Send + Sync {
     /// `catch_unwind` no drainer captura, mas evitar panic na fonte é
     /// preferível (operação best-effort, falhas logam via `tracing`).
     fn emit(&self, event: &FairnessAuditEvent);
+
+    /// Flush best-effort de buffers pendentes. Default no-op para sinks
+    /// sem buffer (stdout/null). Chamado pelo drainer após o canal fechar
+    /// (drain-on-SIGTERM) para garantir durabilidade antes do shutdown.
+    fn flush_all(&self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -57,21 +64,6 @@ impl JsonlAuditSink {
             .append(true)
             .open(&path)?;
         Ok(BufWriter::new(file))
-    }
-
-    /// Flush manual de todos os writers. Útil para testes que precisam
-    /// inspecionar o JSONL imediatamente — em produção o BufWriter
-    /// libera no drop ou quando o buffer enche. Reservado também para
-    /// drain-on-SIGTERM (fase futura). Não consumido pelo bin hoje.
-    #[allow(dead_code)]
-    pub fn flush_all(&self) -> std::io::Result<()> {
-        let Ok(mut guard) = self.writers.lock() else {
-            return Ok(()); // lock poisoned → noop best-effort
-        };
-        for w in guard.values_mut() {
-            w.flush()?;
-        }
-        Ok(())
     }
 }
 
@@ -127,6 +119,20 @@ impl AuditSink for JsonlAuditSink {
         // taxa. Caller que precisa garantia chama flush_all() em
         // pontos críticos (shutdown, teste).
         let _ = writer.flush();
+    }
+
+    /// Flush manual de todos os writers. Útil para testes que precisam
+    /// inspecionar o JSONL imediatamente — em produção o BufWriter
+    /// libera no drop ou quando o buffer enche. Consumido pelo drainer
+    /// no drain-on-SIGTERM antes do shutdown.
+    fn flush_all(&self) -> std::io::Result<()> {
+        let Ok(mut guard) = self.writers.lock() else {
+            return Ok(()); // lock poisoned → noop best-effort
+        };
+        for w in guard.values_mut() {
+            w.flush()?;
+        }
+        Ok(())
     }
 }
 
@@ -189,6 +195,21 @@ impl AuditSink for MultiAuditSink {
     fn emit(&self, event: &FairnessAuditEvent) {
         for sink in &self.sinks {
             sink.emit(event);
+        }
+    }
+
+    /// Fan-out do flush para todos os sinks. Best-effort: tenta todos
+    /// mesmo se um falhar, e propaga o primeiro erro observado.
+    fn flush_all(&self) -> std::io::Result<()> {
+        let mut first_err = None;
+        for sink in &self.sinks {
+            if let Err(e) = sink.flush_all() {
+                first_err.get_or_insert(e);
+            }
+        }
+        match first_err {
+            Some(e) => Err(e),
+            None => Ok(()),
         }
     }
 }

@@ -324,12 +324,18 @@ fn build_service(audit_dir: PathBuf) -> ExposerService {
 }
 
 /// Sobe o servidor gRPC do exposer numa porta. Chamado em paralelo ao HTTP
-/// no `main.rs`.
-pub async fn serve_grpc(audit_dir: PathBuf, addr: SocketAddr) -> Result<(), tonic::transport::Error> {
+/// no `main.rs`. `shutdown` é um future que, ao resolver, dispara o
+/// graceful shutdown do Tonic (drain-on-SIGTERM): para de aceitar conexões
+/// novas e deixa as ativas terminarem antes de retornar.
+pub async fn serve_grpc(
+    audit_dir: PathBuf,
+    addr: SocketAddr,
+    shutdown: impl std::future::Future<Output = ()>,
+) -> Result<(), tonic::transport::Error> {
     tracing::info!("BTV Gateway gRPC AuditExposer listening on {}", addr);
     Server::builder()
         .add_service(build_service(audit_dir))
-        .serve(addr)
+        .serve_with_shutdown(addr, shutdown)
         .await
 }
 
