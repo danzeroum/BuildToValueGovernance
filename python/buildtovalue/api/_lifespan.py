@@ -1,9 +1,11 @@
 """Ciclo de vida da aplicação FastAPI (ADR-0093 Phase 2, Passo 1).
 
 O bloco `lifespan` foi extraído de `app.py` para isolar a fiação de startup/
-shutdown da montagem do app. Símbolos definidos/importados em `app.py` são
-acessados via import preguiçoso (`import ... as M`) **dentro** da função, para
-evitar import circular (app.py importa `lifespan` deste módulo no topo).
+shutdown da montagem do app. Símbolos de biblioteca são importados das suas
+fontes reais (sem ciclo — esses módulos não importam `app.py`). As poucas
+funções definidas em `app.py` (`init_db`, `_load_slm_config`, `logger`) são
+importadas de forma preguiçosa **dentro** da função (executadas no startup,
+após `app.py` já estar carregado), evitando import circular.
 
 # ADR-0093-Phase2-shim: remove after Passo 4
 Enquanto os 105 read-sites de `app.py` ainda leem variáveis-módulo, o startup
@@ -17,16 +19,46 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator, Optional
+
+from fastapi import FastAPI
+
+from buildtovalue.api.routes.intelligence import hydrate_from_sqlite
+from buildtovalue.governance.context_engine import EthicalContextEngine
+from buildtovalue.governance.contestability_loop import ContestabilityLoop
+from buildtovalue.governance.cross_agent_correlator import CrossAgentCorrelator
+from buildtovalue.governance.delegation_ledger import DelegationLedger
+from buildtovalue.governance.ffi_client import (
+    BridgeNotAvailableError,
+    get_ffi_client,
+)
+from buildtovalue.governance.goal_drift_sentinel import GoalDriftSentinel
+from buildtovalue.governance.output_validator import OutputSchemaValidator
+from buildtovalue.governance.profile_manager import ProfileManager
+from buildtovalue.governance.sector_loader import SectorLoader
+from buildtovalue.governance.sensitivity_accumulator import (
+    SessionSensitivityAccumulator,
+)
+from buildtovalue.governance.trust_score import TrustScoreCalculator
+from buildtovalue.intelligence.ner_detector import NERDetector
+from buildtovalue.intelligence.slm_classifier import SLMClassifier
+from buildtovalue.security import get_hmac_key, init_hmac_key
 
 
 @asynccontextmanager
-async def lifespan(application):
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     """Startup/shutdown lifecycle (replaces deprecated on_event)."""
-    import buildtovalue.api.app as M  # lazy — evita import circular
-    logger = M.logger
+    # Lazy: definidos em app.py — import no startup (após app.py carregar) evita
+    # o ciclo de import. app.py não exporta __all__, daí o attr-defined ignore.
+    import buildtovalue.api.app as M
+    from buildtovalue.api.app import (  # type: ignore[attr-defined] # noqa: E402
+        _load_slm_config,
+        init_db,
+        logger,
+    )
 
     # S-01: initialize the HMAC key holder before any worker starts serving.
-    M.init_hmac_key()
+    init_hmac_key()
 
     # PR-4: dedicated kernel executor before anything touches Rust.
     _KERNEL_EXECUTOR = ThreadPoolExecutor(
@@ -36,37 +68,37 @@ async def lifespan(application):
     loop = asyncio.get_event_loop()
     try:
         application.state.ffi_client = await loop.run_in_executor(
-            _KERNEL_EXECUTOR, M.get_ffi_client
+            _KERNEL_EXECUTOR, get_ffi_client
         )
         logger.info("FFI bridge initialized in executor (bridge_mode=%s)",
                     application.state.ffi_client.bridge_mode)
-    except M.BridgeNotAvailableError as exc:
+    except BridgeNotAvailableError as exc:
         logger.warning("FFI bridge unavailable at startup: %s", exc)
         application.state.ffi_client = None
 
-    M.init_db()
+    init_db()  # type: ignore[no-untyped-call]  # app.py-defined, sem anotação
 
     from buildtovalue.intelligence.threat_feed import init_threats_db
-    init_threats_db()
+    init_threats_db()  # type: ignore[no-untyped-call]  # sem anotação na origem
 
-    _contestability_loop = M.ContestabilityLoop(
+    _contestability_loop = ContestabilityLoop(
         sla_hours=24,
         db_path=os.environ.get("BTV_APPEALS_DB"),
     )
     # S-09: signing_key_fn — SIGHUP rotation propaga sem restart.
-    _ethical_engine = M.EthicalContextEngine(signing_key_fn=M.get_hmac_key)
+    _ethical_engine = EthicalContextEngine(signing_key_fn=get_hmac_key)
 
-    _sensitivity_accumulator = M.SessionSensitivityAccumulator()
+    _sensitivity_accumulator = SessionSensitivityAccumulator()
     application.state.sensitivity_accumulator = _sensitivity_accumulator
     logger.info("SessionSensitivityAccumulator initialized")
 
     # Gap 12/19: singleton — activity_log persiste durante toda a vida do processo
-    _trust_calculator = M.TrustScoreCalculator()
+    _trust_calculator = TrustScoreCalculator()
     application.state.trust_calculator = _trust_calculator
     logger.info("TrustScoreCalculator initialized as singleton (Gap 12/19)")
 
     # Gap 10 + S-09: hmac_secret_fn — SIGHUP rotation propaga sem restart.
-    _goal_drift_sentinel = M.GoalDriftSentinel(hmac_secret_fn=M.get_hmac_key)
+    _goal_drift_sentinel = GoalDriftSentinel(hmac_secret_fn=get_hmac_key)
     application.state.goal_drift_sentinel = _goal_drift_sentinel
     logger.info("GoalDriftSentinel initialized as singleton (Gap 10)")
 
@@ -74,7 +106,7 @@ async def lifespan(application):
 
     # C6: CrossAgentCorrelator + DelegationLedger singletons
     _a2a_policy = policy_root / "agents" / "coordination_rules.yaml"
-    _cross_agent = M.CrossAgentCorrelator(
+    _cross_agent = CrossAgentCorrelator(
         policy_path=_a2a_policy if _a2a_policy.exists() else None
     )
     application.state.cross_agent = _cross_agent
@@ -82,16 +114,17 @@ async def lifespan(application):
 
     _deleg_policy = policy_root / "agents" / "delegation_rules.yaml"
     # S-09: hmac_key_fn — SIGHUP rotation propaga.
-    _delegation_ledger = M.DelegationLedger(
+    _delegation_ledger = DelegationLedger(
         policy_path=_deleg_policy if _deleg_policy.exists() else None,
-        hmac_key_fn=M.get_hmac_key,
+        hmac_key_fn=get_hmac_key,
     )
     application.state.delegation_ledger = _delegation_ledger
     logger.info("DelegationLedger initialized (C6)")
     profiles_dir = policy_root / "agents"
 
+    _profile_manager: Optional[ProfileManager]
     if profiles_dir.exists():
-        _profile_manager = M.ProfileManager(profiles_dir)
+        _profile_manager = ProfileManager(profiles_dir)
         application.state.profile_manager = _profile_manager
         logger.info("ProfileManager initialized: %s", profiles_dir)
     else:
@@ -99,19 +132,19 @@ async def lifespan(application):
         application.state.profile_manager = None
         logger.warning("Profiles dir not found: %s", profiles_dir)
 
-    _sector_loader = M.SectorLoader()
+    _sector_loader = SectorLoader()
     logger.info("SectorLoader initialized")
 
-    _output_validator = M.OutputSchemaValidator()  # noqa: F841 — paridade com app.py
+    _output_validator = OutputSchemaValidator()  # noqa: F841 — paridade com app.py
     logger.info("OutputSchemaValidator initialized")
 
-    hydrated = M.hydrate_from_sqlite()
+    hydrated = hydrate_from_sqlite()
     logger.info("Bridge hydration: %d threats loaded from SQLite", hydrated)
 
-    slm_config = M._load_slm_config()
-    _slm = None
+    slm_config = _load_slm_config()
+    _slm: Optional[SLMClassifier] = None
     if slm_config.get("enabled", False):
-        _slm = M.SLMClassifier(
+        _slm = SLMClassifier(
             model_path=slm_config["model_path"],
             model_id=slm_config.get("model_id", "local-slm"),
             n_ctx=slm_config.get("n_ctx", 512),
@@ -128,15 +161,16 @@ async def lifespan(application):
         logger.info("SLM disabled (slm.enabled=false or config missing)")
 
     # ADR-047: NER detector — reutiliza SLM para extração semântica de PII
+    _ner: Optional[NERDetector]
     if _slm is not None:
-        _ner = M.NERDetector(_slm)
+        _ner = NERDetector(_slm)
         logger.info("NER detector initialized (SLM-backed)")
     else:
         _ner = None
         logger.info("NER detector disabled (SLM not loaded)")
 
     from buildtovalue.api.auth import init_auth
-    init_auth()
+    init_auth()  # type: ignore[no-untyped-call]  # auth.init_auth sem anotação
 
     # ADR-0093-Phase2-shim: remove after Passo 4 — reinjeta singletons nos
     # globals de app.py para os 105 read-sites ainda não migrados.
