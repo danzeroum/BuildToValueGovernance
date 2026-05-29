@@ -25,6 +25,7 @@ from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from enum import Enum
 
@@ -106,6 +107,16 @@ def _block_guard_response(
         appeal_deadline_hours=24,
         signature=sig,
         latency_ms=(time.perf_counter() - start) * 1000,
+        bias_declaration=_build_bias_declaration(
+            trust_score=get_trust_score(session_id),
+            adjusted_risk=composite_risk,
+            mercy_applied=False,
+            pii_redacted=False,
+            explain=(
+                f"Guard '{guard_name}' blocked request. {explain} "
+                "Contestable within 24h (ADR-017)."
+            ),
+        ),
     )
 
 
@@ -310,6 +321,23 @@ class DecideRequest(BaseModel):
     # agent_policies: names of agents/*.yaml to activate (e.g. ["pa_channel_hierarchy"])
     agent_policies: Optional[List[str]] = None
 
+class BiasDeclaration(BaseModel):
+    """Quatro pilares filosóficos da decisão (ADR Lab v3.0).
+
+    Derivada de sinais reais do veredicto — não há precisão fabricada:
+      equity_score    Rawls    — proxy de equidade = trust da sessão/papel
+      pii_redacted    Levinas  — PII detectada e tratada de forma protetiva
+      long_term_impact Jonas   — rótulo qualitativo do risco ajustado
+      mercy_applied   Gilligan — downgrade de misericórdia aplicado (S1-S6)
+      explain         output de explain_decision() (Levinas, obrigatório)
+    """
+    equity_score: float = 0.0
+    pii_redacted: bool = False
+    long_term_impact: str = "low"
+    mercy_applied: bool = False
+    explain: str = ""
+
+
 class DecideResponse(BaseModel):
     verdict_id: str
     action: str
@@ -324,6 +352,8 @@ class DecideResponse(BaseModel):
     appeal_deadline_hours: int
     signature: str
     latency_ms: float
+    # Lab v3.0: declaração de viés sempre presente no envelope de decisão.
+    bias_declaration: BiasDeclaration = Field(default_factory=BiasDeclaration)
     slm_used: bool = False
     slm_intent: Optional[str] = None
     slm_risk: Optional[float] = None
@@ -331,6 +361,44 @@ class DecideResponse(BaseModel):
     compliance_violations: Optional[List[dict]] = None
     compliance_rate: Optional[float] = None
     schema_violations: Optional[list] = None
+
+
+def _impact_label(risk: float) -> str:
+    """Jonas — mapeia risco ajustado para rótulo de impacto de longo prazo."""
+    if risk >= 0.7:
+        return "high"
+    if risk >= 0.4:
+        return "moderate"
+    return "low"
+
+
+def _build_bias_declaration(
+    *,
+    trust_score: float,
+    adjusted_risk: float,
+    mercy_applied: bool,
+    pii_redacted: bool,
+    explain: str,
+) -> BiasDeclaration:
+    """Monta a BiasDeclaration a partir de sinais já computados do veredicto."""
+    return BiasDeclaration(
+        equity_score=round(trust_score, 2),
+        pii_redacted=pii_redacted,
+        long_term_impact=_impact_label(adjusted_risk),
+        mercy_applied=mercy_applied,
+        explain=explain,
+    )
+
+
+class MultiDecideRequest(BaseModel):
+    """Lab v3.0 — avalia o mesmo prompt contra vários agentes (multi-agente)."""
+    prompt: str
+    agent_ids: List[str] = Field(default_factory=list)
+    session_id: Optional[str] = None
+
+
+class MultiDecideResponse(BaseModel):
+    verdicts: List[DecideResponse]
 
 # ═══════════════════════════════════════════════════════════════
 # MODELS — Appeals (ADR-017)
@@ -679,7 +747,12 @@ def _cors_origins() -> list[str]:
             "BTV_CORS_ORIGINS must be set in production. "
             'Example: BTV_CORS_ORIGINS="https://app.example.com,https://admin.example.com"'
         )
-    return ["http://localhost:8501", "http://localhost:3000", "http://localhost:8080"]
+    return [
+        "http://localhost:8501",
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://localhost:8000",  # Lab v3.0 — demo/ servido same-origin pelo FastAPI
+    ]
 
 
 app.add_middleware(
@@ -702,6 +775,18 @@ app.include_router(webhooks_router)
 app.include_router(compliance_eval_router)
 app.include_router(auth_router)
 app.include_router(agent_decide_router)
+
+# ═══════════════════════════════════════════════════════════════
+# Lab v3.0 — demo/ servido estaticamente same-origin (CORS estrito)
+# app.py em python/buildtovalue/api/app.py → 4x .parent = raiz do repo
+# ═══════════════════════════════════════════════════════════════
+_BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+_DEMO_PATH = _BASE_DIR / "demo"
+if _DEMO_PATH.exists():
+    app.mount("/demo", StaticFiles(directory=str(_DEMO_PATH), html=True), name="demo")
+    logger.info("demo/ mounted at /demo: %s", _DEMO_PATH)
+else:
+    logger.warning("demo/ not found at %s — static UI not mounted", _DEMO_PATH)
 
 # ═══════════════════════════════════════════════════════════════
 # GLOBALS
@@ -785,6 +870,16 @@ def _decide_hard_block(
         appeal_deadline_hours=24,
         signature=sig,
         latency_ms=(time.perf_counter() - start) * 1000,
+        bias_declaration=_build_bias_declaration(
+            trust_score=get_trust_score(session_id),
+            adjusted_risk=req.composite_risk,
+            mercy_applied=False,
+            pii_redacted=False,
+            explain=(
+                f"Hard block triggered. Matched: {req.matched_policies}. "
+                "No mercy applicable. Contestable within 24h."
+            ),
+        ),
     )
 
 
@@ -1340,6 +1435,10 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
 
     _t    = req.input_text.lower()
     _cats = set(_ffi_categories) - _ANALYSIS_MODULES
+    # Levinas — PII detectada (sujeita a tratamento protetivo) para BiasDeclaration.
+    _PII_CATS = {"CPF", "CNPJ", "CreditCard", "Luhn", "SSN", "Email",
+                 "Phone", "Iban", "EuVat", "NhsNumber", "SensitiveData"}
+    _pii_detected = bool(_cats & _PII_CATS)
 
     if _cats:
         if _cats & _ALWAYS_BLOCK:
@@ -1431,6 +1530,13 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
         appeal_deadline_hours=24,
         signature=verdict.hmac_signature,
         latency_ms=latency,
+        bias_declaration=_build_bias_declaration(
+            trust_score=verdict.trust_score,
+            adjusted_risk=adj.risk,
+            mercy_applied=verdict.mercy_applied,
+            pii_redacted=_pii_detected,
+            explain=rationale,
+        ),
         slm_used=slm_meta.used,
         slm_intent=slm_meta.intent,
         slm_risk=slm_meta.risk,
@@ -1439,6 +1545,34 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
         compliance_rate=compliance.rate,
         schema_violations=schema_violations,
     )
+
+
+@app.post("/v1/multi-decide", response_model=MultiDecideResponse)
+async def multi_decide(
+    req: MultiDecideRequest, request: Request, _=Depends(require_api_key)
+):
+    """Lab v3.0 — fan-out concorrente do mesmo prompt para N agentes.
+
+    Governance é síncrono; paralelizamos no boundary FFI/I-O com
+    asyncio.to_thread (nunca threading manual). Reutiliza decide() — sem
+    duplicar a pipeline de decisão.
+    """
+    if not req.agent_ids:
+        raise HTTPException(status_code=422, detail="agent_ids must not be empty")
+
+    def _one(agent_id: str) -> DecideResponse:
+        single = DecideRequest(
+            input_text=req.prompt,
+            session_id=req.session_id or f"multi-{agent_id}",
+            profile=agent_id,
+            agent_policies=[agent_id],
+        )
+        return decide(single, request)
+
+    verdicts = await asyncio.gather(
+        *[asyncio.to_thread(_one, aid) for aid in req.agent_ids]
+    )
+    return MultiDecideResponse(verdicts=list(verdicts))
 
 
 # ═══════════════════════════════════════════════════════════════
