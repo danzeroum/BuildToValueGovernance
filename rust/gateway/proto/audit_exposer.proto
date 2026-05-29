@@ -21,6 +21,14 @@ service AuditExposer {
 message StreamRequest {
   // Filtro por tenant. Vazio = stream de todos os tenants.
   string tenant_id = 1;
+
+  // Cursor de retomada (ADR-0092 §D3). Vazio = stream desde o início do
+  // arquivo. Preenchido com um `event_id` (UUID v7) previamente recebido:
+  // o servidor avança o tail para logo APÓS a linha desse evento, evitando
+  // reprocessamento após reconexão. Se o cursor não for encontrado no
+  // arquivo (rotação, tenant distinto), o servidor retoma do início —
+  // a entrega é at-least-once e o consumidor deduplica por `event_id`.
+  string resume_after_event_id = 2;
 }
 
 // Espelha FairnessAuditEvent. Os enums Rust (FairnessMode, TenantStatus) são
