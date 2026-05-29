@@ -1,0 +1,38 @@
+name: Proto Contract
+
+# Guard contra contract drift no `.proto` do Audit Exposer (ADR-0091/0092).
+# O contrato é consumido por um cliente Java out-of-tree (btv-audit-consumer),
+# que depende APENAS deste `.proto` — uma mudança quebrante aqui quebra o
+# consumidor silenciosamente. `buf breaking` compara contra `main` e falha o
+# CI (bloqueante) se a semântica de um campo existente mudar.
+
+on:
+  push:
+    branches: [main, develop, "claude/**"]
+    paths:
+      - "rust/gateway/proto/**"
+      - ".github/workflows/proto.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "rust/gateway/proto/**"
+      - ".github/workflows/proto.yml"
+
+jobs:
+  breaking:
+    name: buf breaking (wire contract)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # buf breaking resolve o ref `main` via git — precisa do histórico.
+          fetch-depth: 0
+
+      - name: Setup buf
+        uses: bufbuild/buf-setup-action@v1
+
+      - name: buf breaking against main
+        # `subdir=` escopa a comparação no lado `main` ao mesmo módulo, então
+        # o check é robusto mesmo sem buf.yaml na raiz do repo.
+        run: buf breaking rust/gateway/proto --against '.git#branch=main,subdir=rust/gateway/proto'
