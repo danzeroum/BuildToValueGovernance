@@ -692,9 +692,9 @@ function genHeatData() {
   return data;
 }
 
-function renderHeatmap(data) {
-  data = data || genHeatData();
-  const max = Math.max(1, ...data.map(d => d.count));
+function renderHeatmap() {
+  const data = genHeatData();
+  const max = Math.max(...data.map(d => d.count));
   const grid = document.getElementById('heat-grid');
 
   // Get cell color based on intensity (0-1)
@@ -743,9 +743,49 @@ const VECTORS = [
   { name:'Social Eng. Idoso', count:  11, max: 250, c:'var(--block)' },
 ];
 
-function renderVectors(list) {
-  list = list || VECTORS;
-  document.getElementById('vec-list').innerHTML = list.map(v => `
+// agent strip (top 5 por BLOCK rate)
+const STRIP_AGENTS = [
+  { id:'finbot-credit', name:'Credit Scoring', avatar:'FC', c:'#d29922', bundle:'financial', block:22.4 },
+  { id:'legal-assist',  name:'Legal Research', avatar:'LA', c:'#bc8cff', bundle:'legal',     block:5.2 },
+  { id:'hr-screener',   name:'Resume Screener',avatar:'HR', c:'#79c0ff', bundle:'hr',        block:3.8 },
+  { id:'billing-bot',   name:'Invoice Analyst',avatar:'BB', c:'#d29922', bundle:'financial', block:2.1 },
+  { id:'dev-copilot',   name:'Code Review',    avatar:'DC', c:'#79c0ff', bundle:'research',  block:1.8 },
+];
+
+function sparkPath(values, W=100, H=26) {
+  const pad=2, min=Math.min(...values), max=Math.max(...values), range=max-min||1;
+  const stepX=(W-pad*2)/(values.length-1);
+  let line='';
+  values.forEach((v,i)=>{ const x=pad+i*stepX; const y=pad+(1-(v-min)/range)*(H-pad*2); line+=(i===0?`M ${x.toFixed(1)} ${y.toFixed(1)}`:` L ${x.toFixed(1)} ${y.toFixed(1)}`); });
+  return line;
+}
+
+function renderAgentStrip() {
+  document.getElementById('agent-strip').innerHTML = STRIP_AGENTS.map(a => {
+    // anomalous agent trends up, others flat/low
+    const series = [];
+    let v = a.block > 10 ? 3 : a.block;
+    for (let i=0;i<14;i++){ v += a.block > 10 ? (i>8?1.8:0.3)*Math.random()*2 : (Math.random()-0.5)*1.2; v=Math.max(0.2,v); series.push(v); }
+    series.push(a.block);
+    const color = a.block > 10 ? 'var(--block)' : a.block > 4 ? 'var(--educate)' : 'var(--allow)';
+    return `<a class="as-card" href="Fleet.html" style="--ac:${a.c}">
+      <div class="as-head">
+        <div class="as-avatar" style="background:${a.c}">${a.avatar}</div>
+        <div><div class="as-name">${a.name}</div><div class="as-bundle">${a.bundle}</div></div>
+      </div>
+      <div class="as-block">
+        <span class="as-block-val" style="color:${color}">${a.block.toFixed(1)}%</span>
+        <span class="as-block-lbl">block 24h</span>
+      </div>
+      <svg class="as-spark" viewBox="0 0 100 26" preserveAspectRatio="none" style="color:${color}">
+        <path d="${sparkPath(series)}" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+    </a>`;
+  }).join('');
+}
+
+function renderVectors() {
+  document.getElementById('vec-list').innerHTML = VECTORS.map(v => `
     <div class="vec-row">
       <div class="vec-name"><span class="dot" style="background:${v.c}"></span>${v.name}</div>
       <div class="vec-bar"><div class="vec-fill" style="width:${(v.count/v.max*100).toFixed(0)}%;background:${v.c}"></div></div>
@@ -824,9 +864,8 @@ const ACTIVITY_BASE = [
   { action:'ALLOW',   label:'definição técnica',     meta:'/v1/decide · 35ms', ago:312, risk:0.05 },
 ];
 
-function renderActivity(list) {
-  list = list || ACTIVITY_BASE;
-  document.getElementById('activity-list').innerHTML = list.map(a => {
+function renderActivity() {
+  document.getElementById('activity-list').innerHTML = ACTIVITY_BASE.map(a => {
     const ago = a.ago < 60 ? `${a.ago}s` : `${Math.floor(a.ago/60)}min ${a.ago % 60}s`;
     return `<div class="activity-row">
       <span class="act-dot ${a.action}"></span>
@@ -848,63 +887,12 @@ document.querySelectorAll('#range-pills button').forEach(b => {
   b.addEventListener('click', () => {
     document.querySelectorAll('#range-pills button').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
+    // Scale the values based on range
     const r = b.dataset.r;
-    // Fallback de exibição (modo offline): escala o valor sintético.
     const scale = { '24h': 0.143, '7d': 1, '30d': 4.28, '90d': 12.85 }[r];
     document.getElementById('kpi-decisions').textContent = Math.round(8742 * scale).toLocaleString('pt-BR');
-    // Lab v3.0 — tenta dados reais do ledger para a janela escolhida.
-    loadMetrics(r);
   });
 });
-
-// ━━━ LIVE METRICS (Lab v3.0) — /v1/metrics + fallback sintético ━━━
-
-const _VEC_COLOR = {
-  BLOCK: 'var(--block)', REDACT: 'var(--redact)', EDUCATE: 'var(--educate)',
-  ALLOW: 'var(--allow)', LOG: 'var(--accent-2)',
-};
-
-function _agoLabel(s) {
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}min ${s % 60}s`;
-}
-
-function applyMetrics(j) {
-  // KPIs
-  document.getElementById('kpi-decisions').textContent = (j.total_decisions || 0).toLocaleString('pt-BR');
-  document.getElementById('kpi-block-rate').textContent = ((j.block_rate || 0) * 100).toFixed(1) + '%';
-  document.getElementById('kpi-trust').textContent = (j.trust_avg || 0).toFixed(2);
-  // Heatmap: grid[7][24] → [{d,h,count}]
-  const data = [];
-  (j.heatmap || []).forEach((row, d) => row.forEach((count, h) => data.push({ d, h, count })));
-  if (data.length) renderHeatmap(data);
-  // Top vetores
-  if (Array.isArray(j.top_vectors) && j.top_vectors.length) {
-    const max = Math.max(1, ...j.top_vectors.map(v => v.count));
-    renderVectors(j.top_vectors.map(v => ({
-      name: v.name, count: v.count, max,
-      c: _VEC_COLOR[v.name] || 'var(--accent-2)',
-    })));
-  }
-  // Atividade
-  if (Array.isArray(j.activity) && j.activity.length) {
-    renderActivity(j.activity.map(a => ({
-      action: a.action, label: a.label,
-      meta: `/v1/decide · risk ${(a.risk || 0).toFixed(2)}`,
-      ago: a.ago_s || 0, risk: a.risk || 0,
-    })));
-  }
-}
-
-async function loadMetrics(range) {
-  try {
-    const res = await fetch('/v1/metrics?range=' + encodeURIComponent(range || '7d'));
-    if (!res.ok) return;                       // offline → mantém sintético
-    const j = await res.json();
-    if ((j.total_decisions || 0) > 0) applyMetrics(j);
-  } catch {
-    /* offline → mantém render sintético */
-  }
-}
 
 // ━━━ THEME ━━━
 
@@ -924,7 +912,7 @@ window.addEventListener('DOMContentLoaded', () => {
   renderVectors();
   renderTrust();
   renderActivity();
-  loadMetrics('7d');
+  renderAgentStrip();
 });
 </script>
 <script src="search.js" defer></script>

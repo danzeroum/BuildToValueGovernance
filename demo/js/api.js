@@ -52,9 +52,14 @@ const API = {
 
   // ── Core decisions ───────────────────────────
   decide:     (body) => API.post('/v1/decide', body),
+  multiDecide:(body) => API.post('/v1/multi-decide', body),
   validate:   (body) => API.post('/v1/validate', body),
   sanitize:   (body) => API.post('/v1/sanitize', body),
   agentDecide:(body) => API.post('/v1/agent/decide', body),
+
+  // ── Fleet & Metrics (Lab v3.0) ───────────────
+  fleet:      ()        => API.get('/v1/fleet'),
+  metrics:    (range)   => API.get('/v1/metrics' + (range ? `?range=${encodeURIComponent(range)}` : '')),
 
   // ── Trust ────────────────────────────────────
   trustScore: (sid)  => API.get(`/v1/trust/${sid}`),

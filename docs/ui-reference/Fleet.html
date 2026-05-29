@@ -571,7 +571,7 @@ const BUNDLES = {
   default:   { c:'#8b95a3', name:'default' },
 };
 
-let AGENTS = [
+const AGENTS = [
   { id:'med-triage-01', name:'Medical Triage Bot', avatar:'MT', avatarC:'#7c3aed',
     owner:'Hospital São Paulo', org:'hsp', model:'GPT-4 Turbo', bundle:'medical',
     risk:'high', status:'online', blockRate:1.2, decisions24h:8120, trust:0.94,
@@ -882,9 +882,9 @@ function openAgent(id) {
     </div>
 
     <div class="drawer-actions">
-      <a class="btn btn-primary" href="lab.html">🔬 Abrir no Lab</a>
-      <a class="btn btn-outline" href="ledger-explorer.html">📖 Ledger do agente</a>
-      ${!a.fria ? `<button class="btn btn-outline" style="color:var(--educate);border-color:rgba(210,153,34,.4)" onclick="generateFria('${a.id}')">📋 Gerar FRIA</button>` : ''}
+      <a class="btn btn-primary" href="Lab.html">🔬 Abrir no Lab</a>
+      <a class="btn btn-outline" href="Ledger Explorer.html">📖 Ledger do agente</a>
+      ${!a.fria ? '<button class="btn btn-outline" style="color:var(--educate);border-color:rgba(210,153,34,.4)" onclick="alert(\'Em produção: abre formulário FRIA pré-preenchido com dados do agente, pronto para revisão do DPO.\')">📋 Gerar FRIA</button>' : ''}
     </div>
 
   `;
@@ -915,83 +915,9 @@ function toggleTheme() {
   applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
 }
 
-// Lab v3.0 — carrega a frota real de /v1/fleet; fallback para o roster
-// estático quando a API estiver offline ou retornar vazio.
-const _AVATAR_PALETTE = ['#7c3aed', '#d29922', '#79c0ff', '#3fb950', '#bc8cff', '#f85149'];
-
-function _initials(name) {
-  const parts = (name || '?').trim().split(/\s+/);
-  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || parts[0]?.[1] || '')).toUpperCase();
-}
-
-function normalizeApiAgent(x, i) {
-  return {
-    id: x.id,
-    name: x.name,
-    avatar: _initials(x.name),
-    avatarC: _AVATAR_PALETTE[i % _AVATAR_PALETTE.length],
-    owner: x.owner && x.owner !== '—' ? x.owner : 'Internal',
-    org: (x.owner && x.owner !== '—' ? x.owner : 'internal').toLowerCase().replace(/\s+/g, ''),
-    model: x.model || '—',
-    bundle: x.bundle || 'default',
-    risk: x.risk || 'medium',
-    status: x.status || 'online',
-    blockRate: typeof x.blockRate === 'number' ? x.blockRate : 0,
-    decisions24h: x.decisions24h || 0,
-    trust: typeof x.trust === 'number' ? x.trust : 0.5,
-    fria: !!x.fria,
-    friaDate: x.friaDate || null,
-    jurisdictions: x.jurisdictions || [],
-    capabilities: x.capabilities || [],
-    description: x.description || '',
-  };
-}
-
-// Lab v3.0 — gera FRIA real via /v1/compliance/fria/generate (fria_generator.py).
-async function generateFria(agentId) {
-  const a = AGENTS.find(x => x.id === agentId);
-  if (!a) return;
-  try {
-    const res = await fetch('/v1/compliance/fria/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        agent_id: a.id,
-        sector: a.bundle,
-        capabilities: a.capabilities || [],
-        deployment_context: a.description || '',
-      }),
-    });
-    if (!res.ok) {
-      alert('FRIA: serviço indisponível (HTTP ' + res.status + '). Tente via gateway.');
-      return;
-    }
-    const doc = await res.json();
-    alert('FRIA gerada para ' + a.id + ' · risco=' + (doc.risk_level || '—') +
-          ' · conformidade=' + (doc.compliance_rate != null ? (doc.compliance_rate * 100).toFixed(0) + '%' : '—'));
-  } catch {
-    alert('FRIA: não foi possível contatar a API (modo offline).');
-  }
-}
-
-async function loadFleet() {
-  try {
-    const res = await fetch('/v1/fleet', { headers: { 'Content-Type': 'application/json' } });
-    if (!res.ok) return;                       // offline → mantém estático
-    const data = await res.json();
-    if (Array.isArray(data.agents) && data.agents.length) {
-      AGENTS = data.agents.map(normalizeApiAgent);
-      renderFleet();
-    }
-  } catch {
-    /* offline → mantém roster estático */
-  }
-}
-
 window.addEventListener('DOMContentLoaded', () => {
   applyTheme(localStorage.getItem('btv-theme') || 'dark');
   renderFleet();
-  loadFleet();
 });
 </script>
 
