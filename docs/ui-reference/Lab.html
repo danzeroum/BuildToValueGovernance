@@ -998,15 +998,7 @@ async function runDecision(s) {
   document.getElementById('verdict-body').innerHTML = `<div class="v-empty"><div class="glyph"><div style="border:2px solid currentColor;border-top-color:transparent;border-radius:50%;width:22px;height:22px;animation:spin 0.8s linear infinite"></div></div><div class="hint">Processando…</div></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
   document.getElementById('v-footer').style.display = 'none';
 
-  // Lab v3.0 — decisão ao vivo via /v1/decide (caminho absoluto, same-origin).
-  // Se a API estiver offline, faz fallback gracioso para o cenário estático.
-  const live = await fetchLiveDecision(s.text);
-  if (live) {
-    // Fail-Secure: payload sem assinatura válida paralisa a submissão.
-    if (!live.signature) { renderFailSecure(); running = false; return; }
-    applyLive(s, live);
-  }
-
+  // sequential validator reveal
   const t0 = performance.now();
   const order = [
     { idx:0, key:'R' }, { idx:1, key:'L' }, { idx:2, key:'J' }, { idx:3, key:'G' }
@@ -1064,81 +1056,22 @@ function renderVerdict(s, latencyMs) {
     </div>
   `;
 
-  // Usa dados reais quando a decisão veio da API; senão, simula (modo offline).
-  const sig = s._signature || makeSig();
-  const id  = s._verdictId || ('v_' + Math.random().toString(36).slice(2, 10));
-  const realLat = (s._latency != null) ? Math.round(s._latency) : lat;
+  const sig = makeSig();
+  const id  = 'v_' + Math.random().toString(36).slice(2, 10);
   document.getElementById('v-id').textContent = id;
   document.getElementById('v-sig').textContent = sig.slice(0,20) + '…';
-  document.getElementById('v-lat').textContent = realLat + 'ms';
+  document.getElementById('v-lat').textContent = lat + 'ms';
   document.getElementById('v-footer').style.display = 'flex';
 
-  const b = s._bias || null;
-  const biasRows = b ? `
-    <div class="forensic-row"><div class="k">bias · equity (Rawls)</div><div class="v">${(b.equity_score ?? 0).toFixed(2)}</div></div>
-    <div class="forensic-row"><div class="k">bias · pii_redacted (Levinas)</div><div class="v">${b.pii_redacted ? 'true' : 'false'}</div></div>
-    <div class="forensic-row"><div class="k">bias · long_term (Jonas)</div><div class="v">${b.long_term_impact || '—'}</div></div>
-    <div class="forensic-row"><div class="k">bias · mercy (Gilligan)</div><div class="v">${b.mercy_applied ? 'true' : 'false'}</div></div>` : '';
-
+  // forensic side
   document.getElementById('forensic-body').innerHTML = `
     <div class="forensic-row"><div class="k">verdict_id</div><div class="v">${id}</div></div>
     <div class="forensic-row"><div class="k">action</div><div class="v" style="color:${riskColor}">${s.action}</div></div>
     <div class="forensic-row"><div class="k">adjusted_risk</div><div class="v">${s.risk.toFixed(4)}</div></div>
-    <div class="forensic-row"><div class="k">latency_ms</div><div class="v">${realLat}</div></div>
-    ${biasRows}
+    <div class="forensic-row"><div class="k">latency_ms</div><div class="v">${lat}</div></div>
     <div class="forensic-row"><div class="k">HMAC-SHA256</div><div class="v sig">${sig}</div></div>
     <div class="forensic-row"><div class="k">ledger_seq</div><div class="v">#${(80000 + HISTORY.length + 1).toString().padStart(5,'0')}</div></div>
   `;
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// LIVE DECISION (Lab v3.0) — /v1/decide + fallback estático
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async function fetchLiveDecision(text) {
-  try {
-    const res = await fetch('/v1/decide', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input_text: text, session_id: 'lab-demo' }),
-    });
-    if (!res.ok) return null;        // offline/sem chave → fallback estático
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-function applyLive(s, d) {
-  s.action = d.action;
-  s.risk = (typeof d.adjusted_risk === 'number') ? d.adjusted_risk : s.risk;
-  s.reason = d.rationale || s.reason;
-  s._signature = d.signature;
-  s._verdictId = d.verdict_id;
-  s._latency = d.latency_ms;
-  const b = d.bias_declaration || {};
-  s._bias = b;
-  // Mapeia os 4 pilares para os pipe-cells (R/L/J/G).
-  s.pipe = {
-    R: (b.equity_score ?? 0) >= 0.66 ? 'ok' : (b.equity_score ?? 0) >= 0.4 ? 'warn' : 'fail',
-    L: b.pii_redacted ? 'warn' : 'ok',
-    J: b.long_term_impact === 'high' ? 'fail' : b.long_term_impact === 'moderate' ? 'warn' : 'ok',
-    G: b.mercy_applied ? 'warn' : 'ok',
-  };
-}
-
-function renderFailSecure() {
-  document.querySelectorAll('.pipe-cell .pipe-state').forEach(c => {
-    c.className = 'pipe-state fail';
-    c.innerHTML = '<span class="dot"></span>✗ veto';
-  });
-  document.getElementById('verdict-body').innerHTML = `
-    <div class="v-main">
-      <h2 class="BLOCK">FAIL-SECURE</h2>
-      <div class="v-tagline">Integridade do elo FFI/ACL rompida</div>
-      <div class="v-reason">Resposta sem assinatura válida — submissão paralisada (fail-secure).</div>
-    </div>`;
-  document.getElementById('v-footer').style.display = 'none';
 }
 
 function makeSig() {

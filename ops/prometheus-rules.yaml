@@ -59,3 +59,18 @@ groups:
         annotations:
           summary: "Latência /v1/decide p99 acima de 50ms"
           description: "p99 atual: {{ $value }}ms. SLA: <50ms (ADR-001)"
+
+      # ── Executivo: volume anômalo de BLOCK (Lab v3.0) ─────────
+      # Pico de BLOCK em 1h muito acima da média histórica → possível
+      # ataque/drift; deve acionar revisão (ContestabilityLoop).
+      - alert: BlockVolumeAnomaly
+        expr: |
+          rate(btv_decide_block_total[1h])
+            > 3 * rate(btv_decide_block_total[24h])
+        for: 10m
+        labels:
+          severity: warning
+          poder: executivo
+        annotations:
+          summary: "Volume anômalo de BLOCK na última hora"
+          description: "Taxa de BLOCK 1h excede 3× a média de 24h. Revisar via ContestabilityLoop."
