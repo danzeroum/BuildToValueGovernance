@@ -23,6 +23,7 @@ from typing import AsyncIterator, Optional
 
 from fastapi import FastAPI
 
+from buildtovalue.api._db import init_db
 from buildtovalue.api.routes.intelligence import hydrate_from_sqlite
 from buildtovalue.governance.context_engine import EthicalContextEngine
 from buildtovalue.governance.contestability_loop import ContestabilityLoop
@@ -53,7 +54,6 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     import buildtovalue.api.app as M
     from buildtovalue.api.app import (  # noqa: E402
         _load_slm_config,
-        init_db,
         logger,
     )
 
@@ -82,7 +82,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         logger.warning("FFI bridge unavailable at startup: %s", exc)
         application.state.ffi_client = None
 
-    init_db()  # type: ignore[no-untyped-call]  # app.py-defined, sem anotação
+    init_db()
 
     from buildtovalue.intelligence.threat_feed import init_threats_db
     init_threats_db()  # type: ignore[no-untyped-call]  # sem anotação na origem

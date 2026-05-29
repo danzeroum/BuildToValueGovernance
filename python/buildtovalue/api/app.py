@@ -1165,11 +1165,7 @@ async def multi_decide(
 # ADR-0093 Phase 2 (Passo 3, router 2): /v1/appeals/* migrado para
 # routes/appeals.py (lê app.state.contestability_loop via Depends). Registrado abaixo.
 
-
-# ═══════════════════════════════════════════════════════════════
-# HEALTH & TRUST
-# ═══════════════════════════════════════════════════════════════
-
+    else:
         path = _doc_exporter.export_json(data=data, template_name=doc_type)
         return {"status": "ok", "format": "json", "path": path}
 
