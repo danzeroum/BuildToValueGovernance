@@ -45,10 +45,11 @@ jobs:
       - name: "C-* control liveness ratchet (#185)"
         run: |
           set -e
-          pip install --quiet pytest pyyaml
-          # Pure-Python governance liveness guards + ratchet — no compiled
-          # kernel needed. Fails if any governance control has no proof of
-          # activation and is not allowlisted (catches dead controls at PR time).
+          # httpx: governance/__init__.py eagerly imports policy_tester (httpx).
+          # Mirrors the dep set in fail_secure_ci.yml. No compiled kernel needed.
+          pip install --quiet pytest pyyaml httpx
+          # Governance liveness guards + ratchet. Fails if any governance control
+          # has no proof of activation and is not allowlisted (dead control at PR).
           cd python
           python -m pytest -q \
             tests/governance/test_control_activation.py \
