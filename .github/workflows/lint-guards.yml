@@ -37,6 +37,23 @@ jobs:
       - name: Confirm RELEASE_GATES present
         run: test -f docs/RELEASE_GATES.md
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "C-* control liveness ratchet (#185)"
+        run: |
+          set -e
+          pip install --quiet pytest pyyaml
+          # Pure-Python governance liveness guards + ratchet — no compiled
+          # kernel needed. Fails if any governance control has no proof of
+          # activation and is not allowlisted (catches dead controls at PR time).
+          cd python
+          python -m pytest -q \
+            tests/governance/test_control_activation.py \
+            tests/governance/test_control_activation_ratchet.py
+
       - name: Validate VPS compose syntax
         run: docker compose -f ops/docker-compose.vps.yml config --quiet && echo "VPS compose OK"
 
