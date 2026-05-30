@@ -27,6 +27,7 @@ pub fn make_scan_result(findings: Vec<FindingRecord>, composite_risk: f32) -> Sc
         executed_stages:   0,
         detected_language: String::new(),
         scan_duration_us:  0,
+        bias:              btv_types::BiasDeclaration::bootstrap_unvalidated(),
     }
 }
 

@@ -25,6 +25,11 @@ pub struct Verdict {
     hmac_seal: [u8; 32],        // private
     jurisdiction: String,       // private
     policy_version: String,     // private
+    /// ADR-0097: calibrated bias bound at construction (signed-at-construction).
+    /// Carries the gatekeeper's worst-case aggregate, mapped conservatively from
+    /// the kernel by `btv-executive`'s bridge. Never the bootstrap placeholder in
+    /// production.
+    bias: BiasDeclaration,      // private
 }
 
 impl Verdict {
@@ -36,11 +41,16 @@ impl Verdict {
     ///
     /// The HMAC seal binds `evidence_hash || decision || explanation` into a
     /// tamper-evident record using the key from `BTV_HMAC_KEY`.
+    ///
+    /// ADR-0097: `bias` is the calibrated `BiasDeclaration` (gatekeeper worst-case
+    /// aggregate). It is bound here, at construction — never anchored after the
+    /// fact — so no `Verdict` can exist without a declared bias.
     pub fn new(
         evidence: EvidenceToken,
         compliance: ComplianceToken,
         decision: Decision,
         explanation: String,
+        bias: BiasDeclaration,
     ) -> Self {
         let hash = evidence.consume();   // pub(crate) — only callable here
         let seal = compute_seal(hash.as_bytes(), &decision, explanation.as_bytes());
@@ -52,6 +62,7 @@ impl Verdict {
             decision,
             explanation,
             hmac_seal: seal,
+            bias,
         }
     }
 
@@ -60,8 +71,9 @@ impl Verdict {
     /// `legislative_version: 0` is a placeholder — will carry the `MandateToken`
     /// version in Phase 6.
     ///
-    /// `bias_declaration` uses `bootstrap_unvalidated()` until real measurements are
-    /// provided. The bootstrap string in `validated_groups` triggers Dashboard alerts.
+    /// ADR-0097: `bias_declaration` carries the calibrated bias bound at
+    /// construction (`self.bias`) — the gatekeeper worst-case aggregate, not the
+    /// bootstrap placeholder.
     pub fn to_record(&self) -> VerdictRecord {
         VerdictRecord {
             evidence_hash: self.evidence_hash.to_wire(),
@@ -71,7 +83,7 @@ impl Verdict {
             ),
             hmac_tag: self.hmac_seal,
             legislative_version: 0,
-            bias_declaration: BiasDeclaration::bootstrap_unvalidated(),
+            bias_declaration: self.bias.clone(),
         }
     }
 
@@ -114,18 +126,19 @@ impl Verdict {
     /// zero-heap `BiasDeclarationFixed`. The resulting `TechnicalEvidence` is
     /// exactly 9596 bytes (enforced by compile-time assert in btv-types).
     pub fn to_technical_evidence(&self) -> btv_types::TechnicalEvidence {
-        use btv_types::{BiasDeclarationFixed, BiasDeclaration, TechnicalEvidence};
+        use btv_types::{BiasDeclarationFixed, TechnicalEvidence};
 
-        let bootstrap = BiasDeclaration::bootstrap_unvalidated();
-        let groups_json = serde_json::to_string(&bootstrap.validated_groups)
+        // ADR-0097: hash the calibrated bias bound at construction, not the bootstrap.
+        let bias = &self.bias;
+        let groups_json = serde_json::to_string(&bias.validated_groups)
             .unwrap_or_default();
-        let disparities_json = serde_json::to_string(&bootstrap.known_disparities)
+        let disparities_json = serde_json::to_string(&bias.known_disparities)
             .unwrap_or_default();
 
         let bias_fixed = BiasDeclarationFixed {
-            tool_version_hash:      *blake3::hash(bootstrap.measurement_tool_version.as_bytes()).as_bytes(),
-            false_positive_rate:    bootstrap.false_positive_rate,
-            false_negative_rate:    bootstrap.false_negative_rate,
+            tool_version_hash:      *blake3::hash(bias.measurement_tool_version.as_bytes()).as_bytes(),
+            false_positive_rate:    bias.false_positive_rate,
+            false_negative_rate:    bias.false_negative_rate,
             validated_groups_hash:  *blake3::hash(groups_json.as_bytes()).as_bytes(),
             known_disparities_hash: *blake3::hash(disparities_json.as_bytes()).as_bytes(),
         };
