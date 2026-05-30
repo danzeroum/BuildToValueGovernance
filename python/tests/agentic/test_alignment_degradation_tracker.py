@@ -175,3 +175,56 @@ def test_degradation_score_formula_correctness(
     assert report.window_sessions == 10
     assert "agent-formula" in report.explain_decision
     assert "degradation_score" in report.explain_decision
+
+
+# ─── Fail-secure path of compute_degradation (#183 — Jonas invariant) ──────────
+#
+# test_fail_secure_on_ledger_error (above) covers a ledger failure during
+# record_session (swallowed, buffer intact). It does NOT cover the distinct
+# path where compute_degradation's own computation raises: the try/except must
+# return a worst-case report (score=1.0, threshold_exceeded=True) so a failed
+# assessment forces manual review rather than silently passing.
+
+def test_compute_degradation_returns_fail_secure_on_internal_error(
+    tracker: AlignmentDegradationTracker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If _compute raises, compute_degradation returns a fail-secure report."""
+    tracker.record_session("agent-x", "s1", True, None, 0.1)
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("scoring backend exploded")
+
+    # Force the real try/except in compute_degradation (not a mock of itself):
+    # _sign_report is invoked inside _compute, so this raises mid-computation.
+    monkeypatch.setattr(tracker, "_sign_report", boom)
+
+    report = tracker.compute_degradation("agent-x")
+
+    assert isinstance(report, DegradationReport)
+    # Jonas: worst-case forces manual review.
+    assert report.degradation_score == 1.0
+    assert report.threshold_exceeded is True
+    assert report.problematic_collab_rate == 1.0
+    assert report.problematic_solo_rate == 0.0
+    assert report.window_sessions == 0
+    assert "FAIL-SECURE" in report.explain_decision
+    assert "agent-x" in report.explain_decision
+
+
+def test_fail_secure_report_is_signed(
+    tracker: AlignmentDegradationTracker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fail-secure report carries a non-empty HMAC signature (Jonas)."""
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise ValueError("kaboom")
+
+    monkeypatch.setattr(tracker, "_compute", boom)
+
+    report = tracker.compute_degradation("agent-y")
+
+    assert report.signature, "fail-secure report must be signed"
+    # Signature is a hex SHA-256 digest.
+    assert len(report.signature) == 64
+    assert int(report.signature, 16) >= 0  # valid hex

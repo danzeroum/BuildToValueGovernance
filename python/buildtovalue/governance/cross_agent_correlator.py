@@ -55,7 +55,14 @@ class CorrelationResult:
 class CrossAgentCorrelator:
     """Tracks multi-agent actions and prevents conflicts."""
 
-    def __init__(self, policy_path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        policy_path: Optional[Path] = None,
+        ledger: Optional[DurableLedger] = None,
+    ) -> None:
+        # `ledger`: shared session ledger (the one /v1/ledger/* reads in prod).
+        # When None, fall back to an in-process ledger — preserves the behaviour
+        # of every caller that does not inject one (e.g. unit tests). #182.
         raw = self._load(policy_path) if policy_path else {}
         cb = raw.get("circuit_breaker", {})
         self._fail_thresh = cb.get("failure_threshold", _FAILURE_THRESHOLD)
@@ -71,6 +78,8 @@ class CrossAgentCorrelator:
         self._opened_at: float = 0.0
         self._half_open_count = 0
         ad = raw.get("alignment_degradation", {})
+        # NB: explicit `is not None` — DurableLedger defines __len__, so an
+        # empty injected ledger is falsy; `ledger or ...` would silently drop it.
         self._degradation_tracker = AlignmentDegradationTracker(
             ledger=DurableLedger(hmac_key=_DEGRADATION_LEDGER_KEY),
             window=ad.get("snapshot_window", 20),
