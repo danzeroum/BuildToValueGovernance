@@ -26,8 +26,13 @@ def client():
 
 
 @pytest.fixture()
-def collusion_correlator(tmp_path: Path):
-    """Install a correlator with a known collusion pattern, restore afterwards."""
+def collusion_correlator(client, tmp_path: Path):
+    """Install a correlator with a known collusion pattern on app.state, restore after.
+
+    The /v1/a2a/scan route resolves the correlator via Depends(get_cross_agent),
+    which reads request.app.state.cross_agent — so the override must target
+    app.state, not a module global.
+    """
     policy = {
         "collusion_patterns": [
             {
@@ -38,12 +43,12 @@ def collusion_correlator(tmp_path: Path):
     }
     p = tmp_path / "coordination_rules.yaml"
     p.write_text(yaml.dump(policy))
-    original = app_module._cross_agent
-    app_module._cross_agent = CrossAgentCorrelator(policy_path=p)
+    original = app_module.app.state.cross_agent
+    app_module.app.state.cross_agent = CrossAgentCorrelator(policy_path=p)
     try:
         yield
     finally:
-        app_module._cross_agent = original
+        app_module.app.state.cross_agent = original
 
 
 def test_a2a_scan_reports_collusion(client, collusion_correlator) -> None:
