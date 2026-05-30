@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
@@ -70,7 +71,7 @@ class CrossAgentCorrelator:
             ad.get("threshold", 0.4), ad.get("snapshot_window", 20), ad.get("min_samples", 3))
 
     @staticmethod
-    def _load(path: Path) -> dict:
+    def _load(path: Path) -> dict[str, Any]:
         if not path.exists():
             return {}
         with open(path) as f:
@@ -101,10 +102,11 @@ class CrossAgentCorrelator:
                 circuit_state=self._circuit, explain=f"Conflict: {conflict}",
             )
         self._active[agent_id] = action
-        if d_reason := self._degradation_tracker.check(agent_id):
+        report = self._degradation_tracker.compute_degradation(agent_id)
+        if report.threshold_exceeded:
             return CorrelationResult(
                 allowed=False, conflict="ALIGNMENT_DEGRADATION",
-                circuit_state=self._circuit, explain=d_reason,
+                circuit_state=self._circuit, explain=report.explain_decision,
             )
         return CorrelationResult(
             allowed=True, conflict=None,
@@ -121,7 +123,11 @@ class CrossAgentCorrelator:
             self._circuit = CircuitState.OPEN
             self._opened_at = time.time()
             self._half_open_count = 0
-        self._degradation_tracker.record(agent_id, "BLOCK", is_collaborative=is_collab)
+        self._degradation_tracker.record_session(
+            agent_id=agent_id, session_id=uuid.uuid4().hex,
+            is_collaborative=is_collab, abort_reason="alignment_block",
+            drift_score=1.0,
+        )
 
     def record_success(self, agent_id: str) -> None:
         """Record agent success; may close half-open circuit."""
@@ -130,7 +136,11 @@ class CrossAgentCorrelator:
         if self._circuit == CircuitState.HALF_OPEN:
             self._circuit = CircuitState.CLOSED
             self._half_open_count = 0
-        self._degradation_tracker.record(agent_id, "ALLOW", is_collaborative=is_collab)
+        self._degradation_tracker.record_session(
+            agent_id=agent_id, session_id=uuid.uuid4().hex,
+            is_collaborative=is_collab, abort_reason=None,
+            drift_score=0.0,
+        )
 
     def detect_collusion(
         self, agent_actions: Dict[str, List[str]]
@@ -191,7 +201,7 @@ class CrossAgentCorrelator:
                     (action == a and other_action == b)
                     or (action == b and other_action == a)
                 ):
-                    return rule.get("reason", "Conflicting actions")
+                    return str(rule.get("reason", "Conflicting actions"))
         return None
 
     def _prune_failures(self) -> None:
