@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
@@ -24,6 +25,7 @@ import yaml
 from .agent_pdp import AgentVerdict
 from buildtovalue.agentic.alignment_degradation_tracker import AlignmentDegradationTracker
 from .chatbot_gates import GateResult
+from .durable_ledger import DurableLedger
 from .tool_sanitizer import _RE_SCREEN
 
 logger = logging.getLogger("btv.governance.cross_agent_correlator")
@@ -31,6 +33,9 @@ logger = logging.getLogger("btv.governance.cross_agent_correlator")
 _FAILURE_THRESHOLD = 5
 _WINDOW_S = 60
 _COOLDOWN_S = 30
+# Minimal fix (#180): in-process ledger for the degradation tracker. The shared
+# production ledger (app.state) should be injected via __init__ — tracked as debt.
+_DEGRADATION_LEDGER_KEY = b"btv-cross-agent-correlator-degradation-v1"
 
 
 class CircuitState(str, Enum):
@@ -67,10 +72,13 @@ class CrossAgentCorrelator:
         self._half_open_count = 0
         ad = raw.get("alignment_degradation", {})
         self._degradation_tracker = AlignmentDegradationTracker(
-            ad.get("threshold", 0.4), ad.get("snapshot_window", 20), ad.get("min_samples", 3))
+            ledger=DurableLedger(hmac_key=_DEGRADATION_LEDGER_KEY),
+            window=ad.get("snapshot_window", 20),
+            threshold=ad.get("threshold", 0.4),
+        )
 
     @staticmethod
-    def _load(path: Path) -> dict:
+    def _load(path: Path) -> dict[str, Any]:
         if not path.exists():
             return {}
         with open(path) as f:
@@ -101,10 +109,11 @@ class CrossAgentCorrelator:
                 circuit_state=self._circuit, explain=f"Conflict: {conflict}",
             )
         self._active[agent_id] = action
-        if d_reason := self._degradation_tracker.check(agent_id):
+        report = self._degradation_tracker.compute_degradation(agent_id)
+        if report.threshold_exceeded:
             return CorrelationResult(
                 allowed=False, conflict="ALIGNMENT_DEGRADATION",
-                circuit_state=self._circuit, explain=d_reason,
+                circuit_state=self._circuit, explain=report.explain_decision,
             )
         return CorrelationResult(
             allowed=True, conflict=None,
@@ -121,7 +130,11 @@ class CrossAgentCorrelator:
             self._circuit = CircuitState.OPEN
             self._opened_at = time.time()
             self._half_open_count = 0
-        self._degradation_tracker.record(agent_id, "BLOCK", is_collaborative=is_collab)
+        self._degradation_tracker.record_session(
+            agent_id=agent_id, session_id=uuid.uuid4().hex,
+            is_collaborative=is_collab, abort_reason="alignment_block",
+            drift_score=1.0,
+        )
 
     def record_success(self, agent_id: str) -> None:
         """Record agent success; may close half-open circuit."""
@@ -130,12 +143,23 @@ class CrossAgentCorrelator:
         if self._circuit == CircuitState.HALF_OPEN:
             self._circuit = CircuitState.CLOSED
             self._half_open_count = 0
-        self._degradation_tracker.record(agent_id, "ALLOW", is_collaborative=is_collab)
+        self._degradation_tracker.record_session(
+            agent_id=agent_id, session_id=uuid.uuid4().hex,
+            is_collaborative=is_collab, abort_reason=None,
+            drift_score=0.0,
+        )
 
     def detect_collusion(
         self, agent_actions: Dict[str, List[str]]
     ) -> Optional[str]:
-        """Return reason string if agents' combined actions match a collusion pattern."""
+        """Return reason string if agents' combined actions match a collusion pattern.
+
+        Matching is substring-based (#181): a role's action matches an agent when
+        the action keyword appears *within* any of that agent's action strings.
+        This lets callers pass payload content (e.g. an A2A message) as the action
+        list and still detect a pattern keyword embedded in it, while exact action
+        names continue to match as a special case (keyword == full string).
+        """
         for pattern in self._collusion_patterns:
             required: List[Dict[str, str]] = pattern.get("agents", [])
             reason: str = pattern.get("reason", "Collusion detected")
@@ -143,7 +167,9 @@ class CrossAgentCorrelator:
             for role in required:
                 role_action = role.get("action", "")
                 for agent_id, actions in agent_actions.items():
-                    if agent_id not in matched_agents and role_action in actions:
+                    if agent_id not in matched_agents and any(
+                        role_action in action for action in actions
+                    ):
                         matched_agents.append(agent_id)
                         break
             if len(matched_agents) == len(required) and required:
@@ -191,7 +217,7 @@ class CrossAgentCorrelator:
                     (action == a and other_action == b)
                     or (action == b and other_action == a)
                 ):
-                    return rule.get("reason", "Conflicting actions")
+                    return str(rule.get("reason", "Conflicting actions"))
         return None
 
     def _prune_failures(self) -> None:
