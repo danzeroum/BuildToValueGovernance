@@ -19,12 +19,13 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Optional, cast
 
 from fastapi import FastAPI
 
 from buildtovalue.api._db import init_db
 from buildtovalue.api.routes.intelligence import hydrate_from_sqlite
+from buildtovalue.compliance.risk_classifier import RiskClassifier
 from buildtovalue.governance.context_engine import EthicalContextEngine
 from buildtovalue.governance.contestability_loop import ContestabilityLoop
 from buildtovalue.governance.cross_agent_correlator import CrossAgentCorrelator
@@ -51,11 +52,6 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     """Startup/shutdown lifecycle (replaces deprecated on_event)."""
     # Lazy: definidos em app.py — import no startup (após app.py carregar) evita
     # o ciclo de import (app.py importa `lifespan` deste módulo no topo).
-    import buildtovalue.api.app as M
-    # ADR-0093 Phase 2 (Passo 4): hot path decide extraído para routes/decide.py.
-    # Os singletons do pipeline são reinjetados neste módulo (D.*) enquanto o shim
-    # provisório existir (removido no Commit 2).
-    import buildtovalue.api.routes.decide as D
     from buildtovalue.api.app import (  # noqa: E402
         _load_slm_config,
         logger,
@@ -64,11 +60,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     # S-01: initialize the HMAC key holder before any worker starts serving.
     init_hmac_key()
 
-    # ADR-0093 Phase 2 (Passo 3, router 3): expõe o _risk_classifier de escopo
-    # de módulo de app.py em app.state — MESMA instância usada pelo hot path
-    # _decide_compliance(). Router de compliance lê via Depends; consistência
-    # garantida (não cria instância nova). Aditivo; shim intacto.
-    application.state.risk_classifier = D._risk_classifier
+    # ADR-0093 Passo 4 Commit 2: shim removido. Os singletons do hot path são
+    # expostos exclusivamente em app.state; routes/decide.py os lê via
+    # Depends(get_decide_singletons). RiskClassifier criado aqui (antes era global
+    # eager de módulo) — instância única, lida pelo compliance router e pelo decide.
+    application.state.risk_classifier = RiskClassifier()
 
     # PR-4: dedicated kernel executor before anything touches Rust.
     _KERNEL_EXECUTOR = ThreadPoolExecutor(
@@ -145,9 +141,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         logger.warning("Profiles dir not found: %s", profiles_dir)
 
     _sector_loader = SectorLoader()
+    application.state.sector_loader = _sector_loader
     logger.info("SectorLoader initialized")
 
-    _output_validator = OutputSchemaValidator()  # noqa: F841 — paridade com app.py
+    _output_validator = OutputSchemaValidator()
+    application.state.output_validator = _output_validator
     logger.info("OutputSchemaValidator initialized")
 
     hydrated = hydrate_from_sqlite()
@@ -157,12 +155,12 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     _slm: Optional[SLMClassifier] = None
     if slm_config.get("enabled", False):
         _slm = SLMClassifier(
-            model_path=slm_config["model_path"],
-            model_id=slm_config.get("model_id", "local-slm"),
-            n_ctx=slm_config.get("n_ctx", 512),
-            n_threads=slm_config.get("n_threads", 2),
-            timeout_ms=slm_config.get("timeout_ms", 100),
-            n_gpu_layers=slm_config.get("n_gpu_layers", 0),
+            model_path=cast(str, slm_config["model_path"]),
+            model_id=cast(str, slm_config.get("model_id", "local-slm")),
+            n_ctx=cast(int, slm_config.get("n_ctx", 512)),
+            n_threads=cast(int, slm_config.get("n_threads", 2)),
+            timeout_ms=cast(int, slm_config.get("timeout_ms", 100)),
+            n_gpu_layers=cast(int, slm_config.get("n_gpu_layers", 0)),
         )
         if _slm.load_model():
             logger.info("SLM loaded: %s", slm_config["model_path"])
@@ -186,21 +184,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     from buildtovalue.api.auth import init_auth
     init_auth()  # type: ignore[no-untyped-call]  # auth.init_auth sem anotação
 
-    # ADR-0093-Phase2-shim: remove after Passo 4 — reinjeta singletons nos
-    # globals de app.py para os 105 read-sites ainda não migrados.
-    # Globais ainda em app.py (não usados pelo hot path; limpos no Commit 2):
-    M._contestability_loop = _contestability_loop
-    M._cross_agent = _cross_agent
-    M._delegation_ledger = _delegation_ledger
-    M._ner = _ner
-    M._KERNEL_EXECUTOR = _KERNEL_EXECUTOR
-    # ADR-0093 Passo 4: globais do hot path agora vivem em routes/decide.py (D.*):
-    D._ethical_engine = _ethical_engine
-    D._trust_calculator = _trust_calculator
-    D._goal_drift_sentinel = _goal_drift_sentinel
-    D._profile_manager = _profile_manager
-    D._sector_loader = _sector_loader
-    D._slm = _slm
+    # ADR-0093 Passo 4 Commit 2: SHIM REMOVIDO. Todos os singletons são expostos
+    # exclusivamente via app.state acima; nenhuma reinjeção reversa em globals de
+    # módulo. Os routers leem via Depends(request.app.state).
 
     yield
 

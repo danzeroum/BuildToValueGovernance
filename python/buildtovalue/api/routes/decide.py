@@ -13,7 +13,7 @@ import asyncio
 import logging
 import time
 from pathlib import Path
-from typing import Optional
+from typing import NamedTuple, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -62,16 +62,49 @@ from buildtovalue.intelligence.slm_classifier import SLMClassifier, SLMContext
 
 logger = logging.getLogger(__name__)
 
-# ── Hot-path singletons (shim provisório — reinjetados pelo lifespan via D.X) ──
-_risk_classifier: Optional[RiskClassifier] = RiskClassifier()
-_profile_manager: Optional[ProfileManager] = None
-_sector_loader: Optional[SectorLoader] = None
-_slm: Optional[SLMClassifier] = None
-_ethical_engine: Optional[EthicalContextEngine] = None
-_output_validator: Optional[OutputSchemaValidator] = None
-_sensitivity_accumulator: Optional[SessionSensitivityAccumulator] = None
-_trust_calculator: Optional[TrustScoreCalculator] = None
-_goal_drift_sentinel: Optional[GoalDriftSentinel] = None
+# ── Hot-path singletons (ADR-0093 Passo 4 Commit 2: shim removido) ──
+# As rotas resolvem os singletons de app.state via Depends(get_decide_singletons)
+# e os passam aos helpers _decide_* como parâmetros. Sem estado global de módulo.
+class _DecideCtx(NamedTuple):
+    # Obrigatórios (Fail-Secure gate → 503 se ausentes):
+    risk_classifier: RiskClassifier
+    ethical_engine: EthicalContextEngine
+    # Degradação graciosa (helpers já tratam None — comportamento legado preservado):
+    profile_manager: Optional[ProfileManager]
+    sector_loader: Optional[SectorLoader]
+    slm: Optional[SLMClassifier]
+    output_validator: Optional[OutputSchemaValidator]
+    sensitivity_accumulator: Optional[SessionSensitivityAccumulator]
+    trust_calculator: Optional[TrustScoreCalculator]
+    goal_drift_sentinel: Optional[GoalDriftSentinel]
+
+
+def get_decide_singletons(request: Request) -> _DecideCtx:
+    """Resolve os singletons do hot path de app.state (Fail-Secure 503).
+
+    A ausência dos singletons essenciais do ecossistema ético (ethical_engine,
+    risk_classifier) significa bootstrap quebrado → recusa Fail-Secure (HTTP 503),
+    nunca uma decisão não regulada. Os demais degradam graciosamente (None).
+    """
+    st = request.app.state
+    ethical = getattr(st, "ethical_engine", None)
+    risk = getattr(st, "risk_classifier", None)
+    if not isinstance(ethical, EthicalContextEngine) or not isinstance(risk, RiskClassifier):
+        raise HTTPException(
+            status_code=503,
+            detail="FAIL-SECURE: decide pipeline singletons não inicializados no lifespan.",
+        )
+    return _DecideCtx(
+        risk_classifier=risk,
+        ethical_engine=ethical,
+        profile_manager=getattr(st, "profile_manager", None),
+        sector_loader=getattr(st, "sector_loader", None),
+        slm=getattr(st, "slm", None),
+        output_validator=getattr(st, "output_validator", None),
+        sensitivity_accumulator=getattr(st, "sensitivity_accumulator", None),
+        trust_calculator=getattr(st, "trust_calculator", None),
+        goal_drift_sentinel=getattr(st, "goal_drift_sentinel", None),
+    )
 
 router = APIRouter()
 
@@ -153,7 +186,7 @@ def _run_channel_guard(
             return False, "", 1  # no config → LOW trust, not blocked
         with open(yaml_path) as f:
             cfg = _yaml.safe_load(f)
-        registry: dict = cfg.get("channel_registry", {}) if cfg else {}
+        registry: dict[str, object] = cfg.get("channel_registry", {}) if cfg else {}
         entry = registry.get(channel, {})
         level: int = entry.get("trust_level", 0) if isinstance(entry, dict) else 0
         return False, "", level
@@ -185,14 +218,14 @@ def _run_rag_guard(
 def get_trust_score(session_id: Optional[str]) -> float:
     if not session_id:
         return 0.5
-    return db_get_session(session_id)["trust_score"]
+    return cast(float, db_get_session(session_id)["trust_score"])
 
 
 def update_trust(session_id: Optional[str], action: str) -> float:
     if not session_id:
         return 0.5
     session = db_get_session(session_id)
-    current = session["trust_score"]
+    current = cast(float, session["trust_score"])
     if action in ("ALLOW", "LOG"):
         current = min(1.0, current + 0.02)
     elif action == "EDUCATE":
@@ -230,7 +263,7 @@ class _ComplianceMeta:
 
     def __init__(self) -> None:
         self.risk_class: Optional[str] = None
-        self.violations: Optional[list] = None
+        self.violations: Optional[list[dict[str, object]]] = None
         self.rate: Optional[float] = None
 
 
@@ -277,6 +310,7 @@ def _decide_run_guards(
     req: "DecideRequest",
     session_id: str,
     start: float,
+    _profile_manager: "Optional[ProfileManager]",
 ) -> "Optional[DecideResponse]":
     # Guards run early to short-circuit the expensive pipeline on BLOCK.
     # Layer 1 (source=visual, channel) run first; layer 2 (rag_verifier) after channel.
@@ -332,6 +366,8 @@ def _decide_run_guards(
 def _decide_accumulate_signals(
     req: "DecideRequest",
     session_id: str,
+    _sensitivity_accumulator: "Optional[SessionSensitivityAccumulator]",
+    _goal_drift_sentinel: "Optional[GoalDriftSentinel]",
 ) -> "tuple[Optional[SensitivityState], Optional[DriftReport]]":
     sensitivity_state: Optional[SensitivityState] = None
     if _sensitivity_accumulator is not None:
@@ -366,6 +402,7 @@ def _decide_slm(
     req: "DecideRequest",
     session_id: str,
     adj: _AdjSignals,
+    _slm: "Optional[SLMClassifier]",
 ) -> _SLMMeta:
     meta = _SLMMeta()
     if _slm is None:
@@ -380,7 +417,7 @@ def _decide_slm(
         leet_ratio=float(getattr(req, "leet_ratio", 0.0)),
         trust_score=get_trust_score(session_id),
         domain=_resolve_domain(req.profile),
-        violation_count=db_get_session(session_id)["offenses"] if session_id else 0,
+        violation_count=cast(int, db_get_session(session_id)["offenses"]) if session_id else 0,
     )
     slm_result = _slm.classify_with_context(
         text=req.input_text,
@@ -438,6 +475,8 @@ def _decide_adjust_risk(
     adj: _AdjSignals,
     sensitivity_state: "Optional[SensitivityState]",
     drift_report: "Optional[DriftReport]",
+    _profile_manager: "Optional[ProfileManager]",
+    _sector_loader: "Optional[SectorLoader]",
 ) -> "tuple[str, str, str]":
     """Profile/sector + cumulative + cross-signal adjustments.
 
@@ -511,6 +550,7 @@ def _decide_ethical_verdict(
     adj: _AdjSignals,
     slm_meta: _SLMMeta,
     sensitivity_state: "Optional[SensitivityState]",
+    _ethical_engine: EthicalContextEngine,
 ) -> "tuple[EthicalVerdict, RequestContext]":
     evidence = RustEvidence(
         composite_risk=adj.risk,
@@ -553,16 +593,18 @@ def _decide_compliance(
     req: "DecideRequest",
     adj: _AdjSignals,
     verdict: "EthicalVerdict",
+    _risk_classifier: RiskClassifier,
+    _profile_manager: "Optional[ProfileManager]",
 ) -> _ComplianceMeta:
     meta = _ComplianceMeta()
     if _risk_classifier is None:
         return meta
     sector_id = _resolve_domain(req.profile) or "general"
-    caps: list = []
+    caps: list[str] = []
     if req.profile and _profile_manager:
         try:
             loaded = _profile_manager.load_profile(req.profile)
-            caps = loaded.domain_config.get("capabilities", [])
+            caps = cast("list[str]", loaded.domain_config.get("capabilities", []))
         except ValueError:
             pass
     rc = _risk_classifier.classify(
@@ -606,12 +648,16 @@ def _decide_output_pipeline(
     context: "RequestContext",
     verdict: "EthicalVerdict",
     slm_meta: _SLMMeta,
-) -> "tuple[EthicalVerdict, Optional[list], Optional[str]]":
+    _profile_manager: "Optional[ProfileManager]",
+    _slm: "Optional[SLMClassifier]",
+    _ethical_engine: EthicalContextEngine,
+    _output_validator: "Optional[OutputSchemaValidator]",
+) -> "tuple[EthicalVerdict, Optional[list[object]], Optional[str]]":
     """Schema validation + SLM output analysis + SLM explanation.
 
     Returns (possibly updated verdict, schema_violations, slm_explanation).
     """
-    schema_violations = None
+    schema_violations: Optional[list[object]] = None
     if req.llm_output and req.profile and _profile_manager:
         try:
             loaded = _profile_manager.load_profile(req.profile)
@@ -619,10 +665,10 @@ def _decide_output_pipeline(
             if output_schema and _output_validator:
                 schema_result = _output_validator.validate(req.llm_output, output_schema)
                 if not schema_result.valid:
-                    schema_violations = [
+                    schema_violations = cast("list[object]", [
                         {"path": v.path, "rule": v.rule, "message": v.message}
                         for v in schema_result.violations
-                    ]
+                    ])
                     if ACTION_SEVERITY.get(verdict.final_action, 0) < ACTION_SEVERITY.get("REDACT", 0):
                         verdict = _ethical_engine.decide(
                             RustEvidence(
@@ -707,20 +753,21 @@ def _decide_persist_trust(
     req: "DecideRequest",
     verdict: "EthicalVerdict",
     context: "RequestContext",
+    _trust_calculator: "Optional[TrustScoreCalculator]",
 ) -> None:
     if session_id:
         prev = db_get_session(session_id)
-        if prev["last_action"] in ("BLOCK", "EDUCATE") and prev["last_entropy"] > 0.0:
+        if prev["last_action"] in ("BLOCK", "EDUCATE") and cast(float, prev["last_entropy"]) > 0.0:
             if _trust_calculator is not None:
                 delta = _trust_calculator.adjust_post_penalty(
                     session_id=session_id,
-                    pre_block_entropy=prev["last_entropy"],
+                    pre_block_entropy=cast(float, prev["last_entropy"]),
                     post_block_entropy=req.entropy,
                     subsequent_action=verdict.final_action,
                 )
                 if delta != 0.0:
                     session_data = db_get_session(session_id)
-                    new_trust = max(0.0, min(1.0, session_data["trust_score"] + delta))
+                    new_trust = max(0.0, min(1.0, cast(float, session_data["trust_score"]) + delta))
                     db_update_session(session_id, new_trust, 0)
                     logger.info(
                         "adjust_post_penalty persisted: session=%s delta=%.3f new_trust=%.3f",
@@ -729,7 +776,7 @@ def _decide_persist_trust(
         db_update_session_state(session_id, req.entropy, verdict.final_action)
 
         # Action Graph telemetry (ADR-041)
-        prev_action = prev["last_action"]
+        prev_action = cast(str, prev["last_action"])
         curr_action = verdict.final_action
         if prev_action:
             from buildtovalue.observability.metrics import (
@@ -767,7 +814,12 @@ def _decide_persist_trust(
 
 
 @router.post("/v1/decide", response_model=DecideResponse)
-def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
+def decide(
+    req: DecideRequest,
+    request: Request,
+    ctx: _DecideCtx = Depends(get_decide_singletons),
+    _: None = Depends(require_api_key),
+) -> DecideResponse:
     """
     Pipeline v2.3:
       0. Hard block → BLOCK imediato (sem mercy, sem ADR-046)
@@ -785,7 +837,7 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
     # ── Etapa 0: FFI scan — Rust Kernel populates TechnicalEvidence ─────────
     # Fail-secure: bridge unavailability never blocks the API (silent degradation).
     _ffi = getattr(request.app.state, "ffi_client", None)
-    _ffi_categories: list = []
+    _ffi_categories: list[str] = []
     if _ffi is not None:
         try:
             _ev = _ffi.scan(req.input_text)
@@ -879,24 +931,30 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
     if resp:
         return resp
 
-    resp = _decide_run_guards(req, session_id, start)
+    resp = _decide_run_guards(req, session_id, start, ctx.profile_manager)
     if resp:
         return resp
 
     adj = _AdjSignals(req)
-    sensitivity_state, drift_report = _decide_accumulate_signals(req, session_id)
-    slm_meta = _decide_slm(req, session_id, adj)
+    sensitivity_state, drift_report = _decide_accumulate_signals(
+        req, session_id, ctx.sensitivity_accumulator, ctx.goal_drift_sentinel,
+    )
+    slm_meta = _decide_slm(req, session_id, adj, ctx.slm)
     sector_note, cumulative_note, drift_cross_note = _decide_adjust_risk(
         req, session_id, adj, sensitivity_state, drift_report,
+        ctx.profile_manager, ctx.sector_loader,
     )
 
-    verdict, context = _decide_ethical_verdict(req, session_id, adj, slm_meta, sensitivity_state)
-    compliance = _decide_compliance(req, adj, verdict)
+    verdict, context = _decide_ethical_verdict(
+        req, session_id, adj, slm_meta, sensitivity_state, ctx.ethical_engine,
+    )
+    compliance = _decide_compliance(req, adj, verdict, ctx.risk_classifier, ctx.profile_manager)
     verdict, schema_violations, slm_explanation = _decide_output_pipeline(
         req, session_id, adj, context, verdict, slm_meta,
+        ctx.profile_manager, ctx.slm, ctx.ethical_engine, ctx.output_validator,
     )
 
-    _decide_persist_trust(session_id, req, verdict, context)
+    _decide_persist_trust(session_id, req, verdict, context, ctx.trust_calculator)
 
     latency = (time.perf_counter() - start) * 1000
     # F2-03: use SLM natural language explanation when available; fallback to template
@@ -935,8 +993,8 @@ def decide(req: DecideRequest, request: Request, _=Depends(require_api_key)):
 
 @router.post("/v1/multi-decide", response_model=MultiDecideResponse)
 async def multi_decide(
-    req: MultiDecideRequest, request: Request, _=Depends(require_api_key)
-):
+    req: MultiDecideRequest, request: Request, _: None = Depends(require_api_key)
+) -> MultiDecideResponse:
     """Lab v3.0 — fan-out concorrente do mesmo prompt para N agentes.
 
     Governance é síncrono; paralelizamos no boundary FFI/I-O com
@@ -946,6 +1004,10 @@ async def multi_decide(
     if not req.agent_ids:
         raise HTTPException(status_code=422, detail="agent_ids must not be empty")
 
+    # decide() é chamado diretamente (não via FastAPI), então o Depends de ctx
+    # não é auto-injetado — resolvemos uma vez e repassamos (Fail-Secure herdado).
+    ctx = get_decide_singletons(request)
+
     def _one(agent_id: str) -> DecideResponse:
         single = DecideRequest(
             input_text=req.prompt,
@@ -953,7 +1015,7 @@ async def multi_decide(
             profile=agent_id,
             agent_policies=[agent_id],
         )
-        return decide(single, request)
+        return decide(single, request, ctx)
 
     verdicts = await asyncio.gather(
         *[asyncio.to_thread(_one, aid) for aid in req.agent_ids]
