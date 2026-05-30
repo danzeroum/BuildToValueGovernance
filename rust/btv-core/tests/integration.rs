@@ -7,6 +7,7 @@
 use btv_core::{
     ComplianceAuthority, ComplianceError, ComplianceRegistry,
     Decision, EvidenceToken, OperatorToken, EscalatedVerdict, Verdict,
+    BiasDeclaration,
 };
 
 // ── Test registry ──────────────────────────────────────────────────────
@@ -37,7 +38,7 @@ fn verdict_new_produces_valid_record() {
     let evidence = EvidenceToken::new(b"user submitted: hello world");
     let compliance = authority.issue("BR", "LGPD-v1").expect("valid jurisdiction");
 
-    let verdict = Verdict::new(evidence, compliance, Decision::Allow, "no violations found".to_string());
+    let verdict = Verdict::new(evidence, compliance, Decision::Allow, "no violations found".to_string(), BiasDeclaration::bootstrap_unvalidated());
 
     assert!(verdict.verify_integrity(), "HMAC seal must be valid");
     assert_eq!(verdict.decision(), Decision::Allow);
@@ -58,7 +59,7 @@ fn verdict_deny_round_trip() {
     let evidence = EvidenceToken::new(b"suspicious: inject; DROP TABLE");
     let compliance = authority.issue("EU", "GDPR-v4").expect("valid jurisdiction");
 
-    let verdict = Verdict::new(evidence, compliance, Decision::Deny, "SQL injection detected".to_string());
+    let verdict = Verdict::new(evidence, compliance, Decision::Deny, "SQL injection detected".to_string(), BiasDeclaration::bootstrap_unvalidated());
 
     assert!(verdict.verify_integrity());
     assert_eq!(verdict.decision(), Decision::Deny);
@@ -92,11 +93,11 @@ fn record_evidence_hash_is_deterministic() {
 
     let e1 = EvidenceToken::new(context);
     let c1 = authority.issue("BR", "LGPD-v1").unwrap();
-    let v1 = Verdict::new(e1, c1, Decision::Allow, "ok".to_string());
+    let v1 = Verdict::new(e1, c1, Decision::Allow, "ok".to_string(), BiasDeclaration::bootstrap_unvalidated());
 
     let e2 = EvidenceToken::new(context);
     let c2 = authority.issue("BR", "LGPD-v1").unwrap();
-    let v2 = Verdict::new(e2, c2, Decision::Allow, "ok".to_string());
+    let v2 = Verdict::new(e2, c2, Decision::Allow, "ok".to_string(), BiasDeclaration::bootstrap_unvalidated());
 
     // Same context → same evidence hash
     assert_eq!(v1.to_record().evidence_hash, v2.to_record().evidence_hash);

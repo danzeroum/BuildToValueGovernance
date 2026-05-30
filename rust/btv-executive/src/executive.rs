@@ -118,7 +118,9 @@ impl Executive {
             .map_err(|e| DecisionError::ComplianceUnavailable(e.to_string()))?;
 
         // ── Step 5: Verdict (consumes E ⊗ C — both tokens are moved) ─────────
-        let verdict = Verdict::new(evidence, compliance, decision, explanation);
+        // ADR-0097: bind the calibrated bias (gatekeeper worst-case aggregate) at
+        // construction, so the verdict declares real fpr/fnr — not the bootstrap.
+        let verdict = Verdict::new(evidence, compliance, decision, explanation, scan.bias);
 
         // ── Step 6: Submit to Σ (btv-sigma via HTTP) ─────────────────────────
         let verdict_hash: [u8; 32] = verdict.to_record().evidence_hash.0;

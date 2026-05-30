@@ -8,20 +8,34 @@ warning: unreachable expression
   |
   = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
 
-error[E0451]: fields `evidence_hash`, `decision`, `explanation`, `hmac_seal`, `jurisdiction` and `policy_version` of struct `Verdict` are private
-  --> tests/ui/verdict_struct_literal.rs:8:9
+error: cannot construct `Verdict` with struct literal syntax due to private fields
+  --> tests/ui/verdict_struct_literal.rs:7:14
    |
  7 |     let _v = Verdict {
-   |              ------- in this type
+   |              ^^^^^^^
  8 |         evidence_hash: todo!(),
-   |         ^^^^^^^^^^^^^ private field
+   |         ---------------------- private field
  9 |         decision: Decision::Allow,
-   |         ^^^^^^^^ private field
+   |         ------------------------- private field
 10 |         explanation: String::new(),
-   |         ^^^^^^^^^^^ private field
+   |         -------------------------- private field
 11 |         hmac_seal: [0u8; 32],
-   |         ^^^^^^^^^ private field
+   |         -------------------- private field
 12 |         jurisdiction: String::new(),
-   |         ^^^^^^^^^^^^ private field
+   |         --------------------------- private field
 13 |         policy_version: String::new(),
-   |         ^^^^^^^^^^^^^^ private field
+   |         ----------------------------- private field
+   |
+   = note: ...and other private field `bias` that was not provided
+help: you might have meant to use the `new` associated function
+   |
+ 7 -     let _v = Verdict {
+ 8 -         evidence_hash: todo!(),
+ 9 -         decision: Decision::Allow,
+10 -         explanation: String::new(),
+11 -         hmac_seal: [0u8; 32],
+12 -         jurisdiction: String::new(),
+13 -         policy_version: String::new(),
+14 -     };
+ 7 +     let _v = Verdict::new(_, _, _, _, _);
+   |

@@ -113,4 +113,39 @@ mod gatekeeper_unit {
         assert_ne!(r1.evidence_bytes, r2.evidence_bytes,
             "different inputs must produce different evidence_bytes");
     }
+
+    // ── ADR-0097: calibrated bias is mapped from the kernel, not bootstrap ─────
+
+    /// The bridge must surface a real (non-bootstrap) `BiasDeclaration` so the
+    /// downstream verdict declares calibrated fpr/fnr instead of `UNVALIDATED`.
+    #[test]
+    fn scan_result_carries_non_bootstrap_bias() {
+        let bridge = GatekeeperBridgeHandle::new();
+        let result = bridge.scan(b"Hello, this is a normal message.").expect("scan");
+        assert!(
+            !result.bias.is_bootstrap(),
+            "bridge must map the kernel aggregate, never the UNVALIDATED bootstrap: {:?}",
+            result.bias.validated_groups,
+        );
+    }
+
+    /// ADR-0097 invariant: the conservative map must NEVER populate
+    /// `validated_groups` (groups the model was validated on) from the kernel's
+    /// `affected_groups` (groups harmed by the model) — they are opposite
+    /// concepts and conflating them would mislead audit / LGPD Art. 20.
+    #[test]
+    fn validated_groups_declares_aggregate_provenance_not_real_groups() {
+        let bridge = GatekeeperBridgeHandle::new();
+        let result = bridge.scan(b"Any text input here.").expect("scan");
+        assert_eq!(
+            result.bias.validated_groups,
+            vec!["aggregated-worst-case — see per-module docs".to_string()],
+            "validated_groups must declare aggregate provenance, not fabricated real groups",
+        );
+        assert!(
+            result.bias.measurement_tool_version.starts_with("kernel-aggregate"),
+            "measurement_tool_version must record kernel-aggregate provenance, got: {}",
+            result.bias.measurement_tool_version,
+        );
+    }
 }

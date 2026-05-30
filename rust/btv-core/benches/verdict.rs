@@ -3,7 +3,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use btv_core::{
     ComplianceAuthority, ComplianceError, ComplianceRegistry,
-    Decision, EvidenceToken, Verdict,
+    Decision, EvidenceToken, Verdict, BiasDeclaration,
 };
 
 struct BenchRegistry;
@@ -22,7 +22,7 @@ fn bench_verdict_new(c: &mut Criterion) {
         b.iter(|| {
             let evidence = EvidenceToken::new(black_box(&context_4kb));
             let compliance = authority.issue("BR", "LGPD-v1").unwrap();
-            let verdict = Verdict::new(evidence, compliance, Decision::Allow, "approved".to_string());
+            let verdict = Verdict::new(evidence, compliance, Decision::Allow, "approved".to_string(), BiasDeclaration::bootstrap_unvalidated());
             black_box(verdict);
         })
     });
@@ -33,7 +33,7 @@ fn bench_verify_integrity(c: &mut Criterion) {
     let authority = ComplianceAuthority::new(Box::new(BenchRegistry));
     let evidence = EvidenceToken::new(&[0x42u8; 64]);
     let compliance = authority.issue("BR", "LGPD-v1").unwrap();
-    let verdict = Verdict::new(evidence, compliance, Decision::Allow, "test".to_string());
+    let verdict = Verdict::new(evidence, compliance, Decision::Allow, "test".to_string(), BiasDeclaration::bootstrap_unvalidated());
 
     c.bench_function("Verdict::verify_integrity", |b| {
         b.iter(|| black_box(verdict.verify_integrity()))
