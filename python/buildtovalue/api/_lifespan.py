@@ -52,6 +52,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     # Lazy: definidos em app.py — import no startup (após app.py carregar) evita
     # o ciclo de import (app.py importa `lifespan` deste módulo no topo).
     import buildtovalue.api.app as M
+    # ADR-0093 Phase 2 (Passo 4): hot path decide extraído para routes/decide.py.
+    # Os singletons do pipeline são reinjetados neste módulo (D.*) enquanto o shim
+    # provisório existir (removido no Commit 2).
+    import buildtovalue.api.routes.decide as D
     from buildtovalue.api.app import (  # noqa: E402
         _load_slm_config,
         logger,
@@ -64,7 +68,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     # de módulo de app.py em app.state — MESMA instância usada pelo hot path
     # _decide_compliance(). Router de compliance lê via Depends; consistência
     # garantida (não cria instância nova). Aditivo; shim intacto.
-    application.state.risk_classifier = M._risk_classifier
+    application.state.risk_classifier = D._risk_classifier
 
     # PR-4: dedicated kernel executor before anything touches Rust.
     _KERNEL_EXECUTOR = ThreadPoolExecutor(
@@ -184,17 +188,19 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
     # ADR-0093-Phase2-shim: remove after Passo 4 — reinjeta singletons nos
     # globals de app.py para os 105 read-sites ainda não migrados.
+    # Globais ainda em app.py (não usados pelo hot path; limpos no Commit 2):
     M._contestability_loop = _contestability_loop
-    M._ethical_engine = _ethical_engine
-    M._trust_calculator = _trust_calculator
-    M._goal_drift_sentinel = _goal_drift_sentinel
     M._cross_agent = _cross_agent
     M._delegation_ledger = _delegation_ledger
-    M._profile_manager = _profile_manager
-    M._sector_loader = _sector_loader
-    M._slm = _slm
     M._ner = _ner
     M._KERNEL_EXECUTOR = _KERNEL_EXECUTOR
+    # ADR-0093 Passo 4: globais do hot path agora vivem em routes/decide.py (D.*):
+    D._ethical_engine = _ethical_engine
+    D._trust_calculator = _trust_calculator
+    D._goal_drift_sentinel = _goal_drift_sentinel
+    D._profile_manager = _profile_manager
+    D._sector_loader = _sector_loader
+    D._slm = _slm
 
     yield
 
