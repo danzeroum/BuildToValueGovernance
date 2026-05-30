@@ -1,79 +1,27 @@
 """
-BuildToValue Governance API v2.3
-Python side of the República Algorítmica (Judiciário).
-Trust scores persist in SQLite. Appeals via ContestabilityLoop.
-SLM Classifier (ADR-027) for semantic ambiguity zone.
-EthicalContextEngine (P8) orchestrates mercy + trust + HMAC.
+BuildToValue Governance API v2.3 — montagem de borda (edge wiring).
 
-Changelog v2.3 (Sprint 5, Gaps 10/12/14/19):
-  - Gap 12/19: TrustScoreCalculator singleton (activity_log persistido)
-  - Gap 14: adjust_post_penalty delta persistido no SQLite
-  - Gap 10: GoalDriftSentinel integrado ao pipeline; cross-signal drift×sensitivity
+Python side of the República Algorítmica (Judiciário). Após a decomposição
+ADR-0093 (Passos 1-4), este módulo contém estritamente a fiação: criação do
+app FastAPI, CORS/middleware, montagem dos routers e o mount estático do demo/.
+Toda a lógica de domínio vive em routes/* e os singletons em app.state
+(ver api/_lifespan.py). Sem estado global de módulo, sem shim.
 """
 
-import asyncio
-import hashlib
-import hmac
 import logging
 import os
-import sqlite3
-import time
-import uuid
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from enum import Enum
 
-from contextlib import asynccontextmanager
-from buildtovalue.intelligence.slm_classifier import SLMClassifier, SLMContext
-from buildtovalue.intelligence.ner_detector import NERDetector
-from buildtovalue.compliance.plugin import ComplianceReport
-from buildtovalue.compliance.lgpd_plugin import LGPDPlugin
-from buildtovalue.compliance.eu_ai_act_plugin import EUAIActPlugin
-from buildtovalue.compliance.risk_classifier import RiskClassifier
-from buildtovalue.compliance.fria_generator import FRIAGenerator
-from buildtovalue.governance.output_validator import OutputSchemaValidator
-from buildtovalue.governance.contestability_loop import (
-    ContestabilityLoop,
-    AppealStatus,
-)
-from buildtovalue.governance.profile_manager import ProfileManager
-from buildtovalue.governance.sector_loader import SectorLoader
-from buildtovalue.governance.context_engine import (
-    EthicalContextEngine,
-    RequestContext,
-    RustEvidence,
-)
-from buildtovalue.governance.sensitivity_accumulator import (
-    SessionSensitivityAccumulator,
-    SensitivityState,
-)
-from buildtovalue.governance.mercy_scenarios import ACTION_SEVERITY, SEVERITY_ACTION
-# Gap 10: GoalDriftSentinel integrado ao pipeline
-from buildtovalue.governance.goal_drift_sentinel import GoalDriftSentinel, DriftReport
-# Gap 12/19: TrustScoreCalculator como singleton (nao mais inline)
-from buildtovalue.governance.trust_score import TrustScoreCalculator
-from buildtovalue.api.auth import require_api_key
-from buildtovalue.api.routes.intelligence import get_ingestor, hydrate_from_sqlite
-from buildtovalue.intelligence.misp_ingestor import ThreatEvent as BridgeThreatEvent
-from buildtovalue.compliance.risk_classifier import RiskClassifier, RiskClassification
-from buildtovalue.governance.cross_agent_correlator import CrossAgentCorrelator
-from buildtovalue.governance.delegation_ledger import DelegationLedger
-# Guard modules — imported lazily to avoid startup cost when not used
-from buildtovalue.governance.visual_input_firewall import (
-    VisualInputFirewall,
-    FirewallVerdict as VisualFirewallVerdict,
-)
-from buildtovalue.governance.oracle_trust_gate import OracleTrustGate
-from buildtovalue.governance.rag_integrity_verifier import RagIntegrityVerifier
-from buildtovalue.governance.ffi_client import get_ffi_client, BridgeNotAvailableError, FFIError
 logger = logging.getLogger(__name__)
 
+# re-export: tests/integration/test_hmac_key.py consome este símbolo a partir do monolito
+from buildtovalue.api._decide_helpers import sign_verdict as sign_verdict  # noqa: F401,E402
 
 # ═══════════════════════════════════════════════════════════════
 # GUARD HELPERS — agent_policies, source, channel activation
@@ -420,167 +368,8 @@ class AppealSubmitRequest(BaseModel):
     evidence_hash: Optional[str] = None
     grounds: List[str] = []
 
-
-class AppealResponse(BaseModel):
-    appeal_id: str
-    audit_trail_id: int
-    user_id: str
-    timestamp: int
-    reason: str
-    evidence_provided: Optional[str] = None
-    status: AppealStatusEnum
-    reviewer_notes: Optional[str] = None
-    resolution_timestamp: Optional[int] = None
-    sla_deadline: int
-    is_overdue: bool
-    evidence_hash: Optional[str] = None
-    grounds: List[str] = []
-    mediator_recommendation: Optional[str] = None
-
-
-class AppealListResponse(BaseModel):
-    appeals: List[AppealResponse]
-    total: int
-
-
-class AppealResolveRequest(BaseModel):
-    accepted: bool
-    reviewer_notes: str = Field(..., min_length=10)
-    reviewer_id: str = Field(..., min_length=1)
-    mediator_recommendation: Optional[str] = None
-
-
-class AppealMetricsResponse(BaseModel):
-    appeals_submitted: int
-    appeals_accepted: int
-    appeals_rejected: int
-    sla_violations: int
-    pending_appeals: int
-    sla_compliance_rate: float
-    appeal_success_rate: float
-
-class RiskClassifyRequest(BaseModel):
-    agent_id: str
-    sector: str
-    capabilities: List[str] = []
-    deployment_context: dict = {}
-
-# ═══════════════════════════════════════════════════════════════
-# MODELS — Compliance & Intelligence
-# ═══════════════════════════════════════════════════════════════
-
-class ComplianceRequest(BaseModel):
-    framework: str
-    evidence: dict = {}
-    verdict: dict = {}
-
-
-class ThreatIngestRequest(BaseModel):
-    id: str
-    threat_type: str
-    severity: int
-    source: str = "manual"
-    indicators: List[str] = []
-    description: str = ""
-    mitre_id: str = ""
-
-
-class ThreatQueryRequest(BaseModel):
-    threat_type: Optional[str] = None
-    min_severity: int = 0
-    source: Optional[str] = None
-    limit: int = 50
-
-class FRIARequest(BaseModel):
-    agent_id: str
-    sector: str
-    capabilities: List[str] = []
-    deployment_context: dict = {}
-
-# ═══════════════════════════════════════════════════════════════
-# BUSINESS LOGIC
-# ═══════════════════════════════════════════════════════════════
-
-COMPLIANCE_PLUGINS = {
-    "LGPD": LGPDPlugin(),
-    "EU_AI_ACT": EUAIActPlugin(),
-}
-
-
-def get_trust_score(session_id: Optional[str]) -> float:
-    if not session_id:
-        return 0.5
-    return db_get_session(session_id)["trust_score"]
-
-
-def update_trust(session_id: Optional[str], action: str) -> float:
-    if not session_id:
-        return 0.5
-    session = db_get_session(session_id)
-    current = session["trust_score"]
-    if action in ("ALLOW", "LOG"):
-        current = min(1.0, current + 0.02)
-    elif action == "EDUCATE":
-        current = max(0.0, current - 0.05)
-    elif action == "BLOCK":
-        current = max(0.0, current - 0.15)
-    offense_delta = 1 if action not in ("ALLOW", "LOG") else 0
-    db_update_session(session_id, current, offense_delta)
-    return current
-
-
-def is_first_offense(session_id: Optional[str]) -> bool:
-    if not session_id:
-        return True
-    return db_get_session(session_id)["offenses"] == 0
-
-
-def sign_verdict(verdict_id: str, action: str, risk: float) -> str:
-    # PR-4 (S-09): fetch the current key on every call so SIGHUP rotation
-    # via rotate_hmac_key() takes effect on the next /v1/decide hot-path
-    # request without a process restart.
-    payload = f"{verdict_id}:{action}:{risk:.4f}"
-    return hmac.new(get_hmac_key(), payload.encode(), hashlib.sha256).hexdigest()
-
-
-def _appeal_to_response(appeal) -> AppealResponse:
-    return AppealResponse(
-        appeal_id=appeal.appeal_id,
-        audit_trail_id=appeal.audit_trail_id,
-        user_id=appeal.user_id,
-        timestamp=appeal.timestamp,
-        reason=appeal.reason,
-        evidence_provided=appeal.evidence_provided,
-        status=appeal.status.value,
-        reviewer_notes=appeal.reviewer_notes,
-        resolution_timestamp=appeal.resolution_timestamp,
-        sla_deadline=appeal.sla_deadline,
-        is_overdue=appeal.is_overdue(),
-        evidence_hash=getattr(appeal, "evidence_hash", None),
-        grounds=getattr(appeal, "grounds", []) or [],
-        mediator_recommendation=getattr(appeal, "mediator_recommendation", None),
-    )
-
-
-def _resolve_domain(profile: Optional[str]) -> str:
-    mapping = {
-        "medical": "medical",
-        "healthcare": "medical",
-        "financial": "finance",
-        "legal": "legal",
-        "research": "research",
-        "education": "education",
-    }
-    return mapping.get(profile or "", "general")
-
-
-def _resolve_role(session_id: str) -> str:
-    """In prod: lookup from session DB. For now: anonymous."""
-    return "anonymous"
-
-
-def _load_slm_config() -> dict:
-    """Load SLM config. Env var overrides YAML."""
+def _load_slm_config() -> dict[str, object]:
+    """Load SLM config. Env var overrides YAML. (bootstrap deferido — Passo 2)."""
     import yaml
     env_path = os.environ.get("BTV_SLM_MODEL_PATH")
     if env_path:
@@ -593,7 +382,9 @@ def _load_slm_config() -> dict:
         try:
             if config_path.exists():
                 with open(config_path) as f:
-                    return yaml.safe_load(f).get("slm", {})
+                    parsed = yaml.safe_load(f)
+                slm = parsed.get("slm", {}) if isinstance(parsed, dict) else {}
+                return slm if isinstance(slm, dict) else {}
         except Exception as e:
             logger.warning("Failed to load SLM config from %s: %s", config_path, e)
     return {}
@@ -756,6 +547,11 @@ def _cors_origins() -> list[str]:
         "http://localhost:8000",  # Lab v3.0 — demo/ servido same-origin pelo FastAPI
     ]
 
+# ADR-0093 Phase 2 (Passo 1): lifespan extraído para api/_lifespan.py (inicializa
+# todos os singletons em app.state; Passo 4 Commit 2 removeu o shim).
+from buildtovalue.api._lifespan import lifespan  # noqa: E402
+
+app = FastAPI(title="BuildToValue Governance", version="0.1.0a1", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -774,6 +570,7 @@ from buildtovalue.api.routes.agent_decide import router as agent_decide_router
 from buildtovalue.api.routes.fleet import router as fleet_router
 from buildtovalue.api.routes.metrics import router as metrics_router
 app.include_router(intelligence_router)
+app.include_router(intelligence_hub_router)
 app.include_router(ledger_router)
 app.include_router(webhooks_router)
 app.include_router(compliance_eval_router)

@@ -23,9 +23,15 @@ jobs:
       - name: Checkout do Repositório
         uses: actions/checkout@v4
 
-      - name: Instalação da Toolchain Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Instalação da Toolchain Rust (pinned — fix CI toolchain drift)
+        # Pinned to a known-good toolchain: `@stable` rastreia dinamicamente o
+        # último stable, e novos lints/warnings sob `RUSTFLAGS: -D warnings`
+        # tornam o gate vermelho em PRs sem qualquer mudança em rust/ (toolchain
+        # drift). 1.94.1 é a versão empiricamente verde (check + clippy strict +
+        # 59 binários de teste, 0 falhas). Reavaliar a versão deliberadamente.
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.94.1"
           components: clippy, rustfmt
 
       - name: Cache de Dependências Cargo
