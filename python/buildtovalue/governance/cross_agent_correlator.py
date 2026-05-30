@@ -25,6 +25,7 @@ import yaml
 from .agent_pdp import AgentVerdict
 from buildtovalue.agentic.alignment_degradation_tracker import AlignmentDegradationTracker
 from .chatbot_gates import GateResult
+from .durable_ledger import DurableLedger
 from .tool_sanitizer import _RE_SCREEN
 
 logger = logging.getLogger("btv.governance.cross_agent_correlator")
@@ -32,6 +33,9 @@ logger = logging.getLogger("btv.governance.cross_agent_correlator")
 _FAILURE_THRESHOLD = 5
 _WINDOW_S = 60
 _COOLDOWN_S = 30
+# Minimal fix (#180): in-process ledger for the degradation tracker. The shared
+# production ledger (app.state) should be injected via __init__ — tracked as debt.
+_DEGRADATION_LEDGER_KEY = b"btv-cross-agent-correlator-degradation-v1"
 
 
 class CircuitState(str, Enum):
@@ -68,7 +72,10 @@ class CrossAgentCorrelator:
         self._half_open_count = 0
         ad = raw.get("alignment_degradation", {})
         self._degradation_tracker = AlignmentDegradationTracker(
-            ad.get("threshold", 0.4), ad.get("snapshot_window", 20), ad.get("min_samples", 3))
+            ledger=DurableLedger(hmac_key=_DEGRADATION_LEDGER_KEY),
+            window=ad.get("snapshot_window", 20),
+            threshold=ad.get("threshold", 0.4),
+        )
 
     @staticmethod
     def _load(path: Path) -> dict[str, Any]:
