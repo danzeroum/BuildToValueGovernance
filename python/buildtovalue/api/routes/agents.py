@@ -288,19 +288,18 @@ def a2a_scan(
 ) -> Dict[str, object]:
     """Scan an agent-to-agent payload for injection patterns (C6)."""
     result = cross_agent.scan_a2a_payload(req.src, req.dst, req.payload)
-    # Auto-trigger collusion detection after scan (C6 — internal, no separate endpoint abuse)
-    # NOTE (extração Router 4): preserva o comportamento exato do app.py original.
-    # detect_collusion espera Dict[str, List[str]], mas o original passa str
-    # (payload[:64]) — mismatch latente pré-existente. Mudar para [payload[:64]]
-    # alteraria a semântica de detecção; preservado como-está e sinalizado ao
-    # comitê para tratamento fora deste refactor.
-    collusion = cross_agent.detect_collusion(
-        {req.src: req.payload[:64], req.dst: req.payload[:64]}  # type: ignore[dict-item]
-    )
+    # Auto-trigger collusion detection after scan (C6 — internal, no separate endpoint abuse).
+    # detect_collusion expects Dict[str, List[str]] and substring-matches the pattern
+    # keyword inside each action string (#181), so the payload snippet is passed as a
+    # 1-element list — behaviour-preserving and type-honest (no type:ignore needed).
+    snippet = req.payload[:64]
+    collusion = cross_agent.detect_collusion({req.src: [snippet], req.dst: [snippet]})
     return {
         "allowed": result.allowed if hasattr(result, "allowed") else True,
         "explain": result.explain if hasattr(result, "explain") else "",
-        "collusion_detected": not collusion.get("allowed", True) if isinstance(collusion, dict) else False,
+        # detect_collusion returns Optional[str] (reason or None) — never a dict (#181 Bug 2).
+        "collusion_detected": collusion is not None,
+        "collusion_reason": collusion,
     }
 
 
