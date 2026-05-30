@@ -9,7 +9,7 @@
 //! All other modules import only one or the other.
 
 use buildtovalue_kernel::TechnicalSeverity;
-use btv_types::RiskLevel;
+use btv_types::{RiskLevel, BiasDeclaration};
 
 /// Structured scan output — bridges kernel scan to constitutional types.
 #[derive(Debug)]
@@ -23,6 +23,11 @@ pub struct ScanResult {
     pub executed_stages:  u8,
     pub detected_language: String,
     pub scan_duration_us: u64,
+    /// ADR-0097: calibrated bias (gatekeeper worst-case aggregate), mapped
+    /// conservatively from the kernel's `BiasDeclaration`. Carried into
+    /// `Verdict::new` so the verdict declares real fpr/fnr instead of the
+    /// `UNVALIDATED` bootstrap.
+    pub bias:             BiasDeclaration,
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +127,9 @@ impl GatekeeperBridge {
         // executed_modules is u32 bitmask; count set bits for a comparable u8 stage count
         let executed_stages = ev.executed_modules.count_ones() as u8;
 
+        // ADR-0097: conservative map kernel::BiasDeclaration → btv_types::BiasDeclaration.
+        let bias = map_kernel_bias(&ev.bias);
+
         Ok(ScanResult {
             findings,
             composite_risk,
@@ -131,11 +139,43 @@ impl GatekeeperBridge {
             executed_stages,
             detected_language: String::new(),
             scan_duration_us: start.elapsed().as_micros() as u64,
+            bias,
         })
     }
 }
 
 // ── Private helpers ─────────────────────────────────────────────────────────
+
+/// ADR-0097: Conservative map from the kernel's `BiasDeclaration` to the
+/// constitutional `btv_types::BiasDeclaration`.
+///
+/// Only `fpr`/`fnr` map cleanly — these carry the gatekeeper's real worst-case
+/// aggregate. The remaining fields are handled honestly rather than fabricated:
+///
+/// - `validated_groups` declares its provenance (`aggregated-worst-case`) and is
+///   **never** populated from the kernel's `affected_groups`. Those are opposite
+///   concepts (groups *harmed by* the model vs. groups the model was *validated
+///   on*); copying one into the other would mislead audit/LGPD Art. 20.
+/// - `known_disparities` stays empty — the kernel carries free-text
+///   `known_limitations`, not structured disparities accepted by the Ethics
+///   Committee.
+/// - `measurement_tool_version` records the kernel aggregate + calibration date
+///   for traceability.
+fn map_kernel_bias(k: &buildtovalue_kernel::BiasDeclaration) -> BiasDeclaration {
+    let tool_version = format!(
+        "kernel-aggregate; calibration={}; dataset_size={}",
+        k.calibration_date, k.test_dataset_size,
+    );
+    BiasDeclaration {
+        false_positive_rate:      k.false_positive_rate,
+        false_negative_rate:      k.false_negative_rate,
+        // Provenance, NOT a real validated group — see doc comment / ADR-0097 invariant.
+        validated_groups:         vec!["aggregated-worst-case — see per-module docs".to_string()],
+        known_disparities:        vec![],
+        measurement_tool_version: tool_version,
+    }
+}
+
 
 /// Encode a float as a stable i64 (4 decimal places) to avoid ULP non-determinism
 /// from HashMap-based accumulators in the kernel's statistics computation.

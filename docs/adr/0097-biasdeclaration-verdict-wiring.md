@@ -1,6 +1,6 @@
 # ADR-0097: Fiação da `BiasDeclaration` calibrada até o `VerdictRecord`
 
-**Status**: 🆕 PROPOSTO (decide mudança a implementar)
+**Status**: ✅ ACEITO — Q1 + Q2(Opção A) implementadas
 **Data**: 30 de maio de 2026
 **Autores**: IA Arquiteta
 **Impacto**: `rust/btv-executive/src/gatekeeper_bridge.rs` (`ScanResult`,
@@ -143,13 +143,13 @@ Adicionar `calibration_date`, `test_dataset_size` e um campo de grupos afetados 
 - **Consequência**: exige processo de emenda constitucional próprio (Paper 6) e
   re-validação de toda a fronteira FFI de 9596 bytes. Blast-radius grande.
 
-#### Recomendação
+#### Recomendação e decisão
 
-**Opção A (conservador) agora.** Ela fecha o elo morto, entrega fpr/fnr
-calibrados em produção e elimina o `UNVALIDATED` enganoso **sem** tocar o wire
-format constitucional. A Opção B pode ser um ADR futuro se a auditoria exigir
-calibration_date/dataset_size no registro persistido — mas essa é uma emenda
-constitucional que não deve ser acoplada a um fix de fiação.
+**Opção A (conservador) — aceita e implementada.** Ela fecha o elo morto,
+entrega fpr/fnr calibrados em produção e elimina o `UNVALIDATED` enganoso **sem**
+tocar o wire format constitucional. A Opção B pode ser um ADR futuro se a
+auditoria exigir calibration_date/dataset_size no registro persistido — mas essa
+é uma emenda constitucional que não deve ser acoplada a um fix de fiação.
 
 ---
 
@@ -175,5 +175,17 @@ constitucional que não deve ser acoplada a um fix de fiação.
 
 ## Status de implementação
 
-Nenhum código alterado por este ADR. Aguarda aprovação da **Q2 (Opção A vs B)**
-antes da implementação.
+Implementado (Opção A). Mudanças:
+
+- `btv-core/src/verdict.rs`: `Verdict` ganha campo privado `bias`; `Verdict::new`
+  recebe `bias: BiasDeclaration` (5º parâmetro); `to_record()` e
+  `to_technical_evidence()` leem `self.bias` em vez de `bootstrap_unvalidated()`.
+- `btv-executive/src/gatekeeper_bridge.rs`: `ScanResult` ganha campo `bias`;
+  novo `map_kernel_bias()` aplica o mapa conservador (fpr/fnr reais; proveniência
+  explícita em `validated_groups`; nunca copia `affected_groups`).
+- `btv-executive/src/executive.rs`: passa `scan.bias` para `Verdict::new`.
+- Testes: `unit_gatekeeper_bridge.rs` cobre (a) bias não-bootstrap e (b) o
+  invariante de proveniência. O golden trybuild `verdict_struct_literal.stderr`
+  foi regenerado e agora também ancora `bias` como campo privado.
+
+Wire format inalterado: `size_of::<TechnicalEvidence>() == 9596` continua válido.
