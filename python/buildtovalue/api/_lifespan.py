@@ -114,8 +114,14 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
     # C6: CrossAgentCorrelator + DelegationLedger singletons
     _a2a_policy = policy_root / "agents" / "coordination_rules.yaml"
+    # #182: inject the shared session ledger if one exists in app.state, so
+    # degradation detection operates on the same ledger /v1/ledger/* reads.
+    # The canonical app.state.durable_ledger is not yet created (tracked in a
+    # follow-up); getattr→None falls back to the in-process ledger for now.
+    _shared_ledger = getattr(application.state, "durable_ledger", None)
     _cross_agent = CrossAgentCorrelator(
-        policy_path=_a2a_policy if _a2a_policy.exists() else None
+        policy_path=_a2a_policy if _a2a_policy.exists() else None,
+        ledger=_shared_ledger,
     )
     application.state.cross_agent = _cross_agent
     logger.info("CrossAgentCorrelator initialized (C6)")
