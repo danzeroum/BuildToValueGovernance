@@ -168,3 +168,38 @@ class TestNoPolicy:
         c = CrossAgentCorrelator()
         r = c.correlate("agent-a", "read")
         assert r.allowed is True
+
+
+class TestLedgerInjection:
+    """#182: the degradation tracker must operate on the injected shared
+    ledger (the one /v1/ledger/* reads), not a private in-process one."""
+
+    def test_injected_ledger_receives_degradation_records(self) -> None:
+        from buildtovalue.governance.durable_ledger import DurableLedger
+
+        shared = DurableLedger(hmac_key=b"shared-session-ledger-key-32bytes!")
+        c = CrossAgentCorrelator(ledger=shared)
+
+        before = len(shared)
+        # record_success → tracker.record_session → ledger.append
+        c.record_success("agent-a")
+
+        assert len(shared) == before + 1, (
+            "injected ledger should receive the degradation session record"
+        )
+        last = shared.entries()[-1]
+        assert last.payload["agent_id"] == "agent-a"
+        assert (
+            last.payload["event"]
+            == "alignment_degradation_tracker.record_session"
+        )
+
+    def test_default_ledger_does_not_leak_into_injected(self) -> None:
+        """A correlator with no injected ledger must NOT touch a shared one."""
+        from buildtovalue.governance.durable_ledger import DurableLedger
+
+        shared = DurableLedger(hmac_key=b"shared-session-ledger-key-32bytes!")
+        c = CrossAgentCorrelator()  # no injection → private in-process ledger
+
+        c.record_success("agent-a")
+        assert len(shared) == 0, "unrelated shared ledger must stay untouched"
