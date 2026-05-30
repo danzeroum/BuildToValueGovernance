@@ -195,3 +195,28 @@ class FRIARequest(BaseModel):
     sector: str
     capabilities: List[str] = []
     deployment_context: dict[str, object] = {}
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODELS — Compliance-as-Code (ADR-048: ROPA, Art.20, Export)
+# ═══════════════════════════════════════════════════════════════
+
+class ROPARequest(BaseModel):
+    controller: str = "Not specified"
+    dpo_name: str = "Not specified"
+    dpo_contact: str = "Not specified"
+    start_ts: Optional[int] = None
+    end_ts: Optional[int] = None
+
+
+class Art20Request(BaseModel):
+    start_ts: Optional[int] = None
+    end_ts: Optional[int] = None
+    include_decisions: bool = True
+    max_decisions: int = 500
+
+
+class DocumentExportRequest(BaseModel):
+    type: str = ""           # ropa | fria | art20
+    data: dict[str, object] = {}
+    format: str = "json"     # json | pdf
