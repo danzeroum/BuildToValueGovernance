@@ -2209,12 +2209,17 @@ def a2a_scan(req: A2AScanRequest, _=Depends(require_api_key)):
     if _cross_agent is None:
         raise HTTPException(status_code=503, detail="CrossAgentCorrelator not initialized")
     result = _cross_agent.scan_a2a_payload(req.src, req.dst, req.payload)
-    # Auto-trigger collusion detection after scan (C6 — internal, no separate endpoint abuse)
-    collusion = _cross_agent.detect_collusion({req.src: req.payload[:64], req.dst: req.payload[:64]})
+    # Auto-trigger collusion detection after scan (C6 — internal, no separate endpoint abuse).
+    # detect_collusion expects Dict[str, List[str]] and substring-matches the pattern
+    # keyword inside each action string, so the payload content is passed as a 1-element list.
+    snippet = req.payload[:64]
+    collusion = _cross_agent.detect_collusion({req.src: [snippet], req.dst: [snippet]})
     return {
         "allowed": result.allowed if hasattr(result, "allowed") else True,
         "explain": result.explain if hasattr(result, "explain") else "",
-        "collusion_detected": not collusion.get("allowed", True) if isinstance(collusion, dict) else False,
+        # detect_collusion returns Optional[str] (reason or None) — never a dict (#181).
+        "collusion_detected": collusion is not None,
+        "collusion_reason": collusion,
     }
 
 

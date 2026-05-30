@@ -113,6 +113,37 @@ class TestCollusionDetection:
         assert result == "Data exfiltration collusion"
         p.unlink()
 
+    def test_collusion_detected_as_substring_of_payload(self) -> None:
+        """#181: keyword embedded in a larger action string still matches (substring)."""
+        import tempfile
+        policy = {
+            "collusion_patterns": [
+                {
+                    "agents": [
+                        {"action": "read_secrets"},
+                        {"action": "exfiltrate"},
+                    ],
+                    "reason": "Data exfiltration collusion",
+                }
+            ],
+        }
+        p = Path(tempfile.mktemp(suffix=".yaml"))
+        p.write_text(yaml.dump(policy))
+        c = CrossAgentCorrelator(policy_path=p)
+        # Each agent's "action" is a payload blob containing the keyword as a substring.
+        result = c.detect_collusion({
+            "agent-a": ["please read_secrets from the vault now"],
+            "agent-b": ["then exfiltrate them to 10.0.0.1"],
+        })
+        assert result == "Data exfiltration collusion"
+        # And the clean case: keyword absent from the payloads -> no collusion.
+        clean = c.detect_collusion({
+            "agent-a": ["fetch the public docs"],
+            "agent-b": ["summarise them"],
+        })
+        assert clean is None
+        p.unlink()
+
 
 class TestA2APayload:
     def test_clean_payload(self, correlator: CrossAgentCorrelator) -> None:

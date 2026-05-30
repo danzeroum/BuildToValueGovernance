@@ -152,7 +152,14 @@ class CrossAgentCorrelator:
     def detect_collusion(
         self, agent_actions: Dict[str, List[str]]
     ) -> Optional[str]:
-        """Return reason string if agents' combined actions match a collusion pattern."""
+        """Return reason string if agents' combined actions match a collusion pattern.
+
+        Matching is substring-based (#181): a role's action matches an agent when
+        the action keyword appears *within* any of that agent's action strings.
+        This lets callers pass payload content (e.g. an A2A message) as the action
+        list and still detect a pattern keyword embedded in it, while exact action
+        names continue to match as a special case (keyword == full string).
+        """
         for pattern in self._collusion_patterns:
             required: List[Dict[str, str]] = pattern.get("agents", [])
             reason: str = pattern.get("reason", "Collusion detected")
@@ -160,7 +167,9 @@ class CrossAgentCorrelator:
             for role in required:
                 role_action = role.get("action", "")
                 for agent_id, actions in agent_actions.items():
-                    if agent_id not in matched_agents and role_action in actions:
+                    if agent_id not in matched_agents and any(
+                        role_action in action for action in actions
+                    ):
                         matched_agents.append(agent_id)
                         break
             if len(matched_agents) == len(required) and required:
