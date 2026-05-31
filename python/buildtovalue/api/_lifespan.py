@@ -202,6 +202,12 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     from buildtovalue.api.auth import init_auth
     init_auth()  # type: ignore[no-untyped-call]  # auth.init_auth sem anotação
 
+    # CRITICO-06: initialise the users DB once at startup (was previously run on
+    # every /v1/auth/login request).
+    from buildtovalue.api.routes.auth import _init_users_db
+    _init_users_db()
+    logger.info("Users DB initialized (startup only)")
+
     # ADR-0093 Passo 4 Commit 2: SHIM REMOVIDO. Todos os singletons são expostos
     # exclusivamente via app.state acima; nenhuma reinjeção reversa em globals de
     # módulo. Os routers leem via Depends(request.app.state).

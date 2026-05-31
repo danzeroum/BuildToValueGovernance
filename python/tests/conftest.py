@@ -18,6 +18,9 @@ os.environ.setdefault(
     "ci-test-jwt-secret-32bytes-padding!!",  # exactly 36 chars >= 32
 )
 os.environ.setdefault("BTV_ENV", "development")
+# CRITICO-02: the admin password is mandatory for the startup seed. Provide a
+# strong test value so the app lifespan can boot under pytest.
+os.environ.setdefault("BTV_ADMIN_PASSWORD", "ci-test-admin-password-2026")
 
 
 @pytest.fixture(autouse=False)
