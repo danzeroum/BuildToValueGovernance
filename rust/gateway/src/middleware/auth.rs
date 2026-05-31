@@ -16,6 +16,8 @@ const STATIC_EXTENSIONS: &[&str] = &[".js", ".css", ".svg", ".png", ".ico", ".ht
 #[derive(Clone)]
 pub struct ApiKeyLayer {
     valid_keys: Arc<HashSet<String>>,
+    /// CRITICO-07: JWT secret used to validate Bearer tokens (defense in depth).
+    jwt_secret: Arc<Option<Vec<u8>>>,
 }
 
 impl ApiKeyLayer {
@@ -39,10 +41,32 @@ impl ApiKeyLayer {
             tracing::info!("API key auth enabled: {} keys loaded", keys.len());
         }
 
+        // CRITICO-07: load the JWT secret so Bearer tokens are validated rather
+        // than blindly accepted. Mirrors TenantExtractorLayer::from_env.
+        let jwt_secret = std::env::var("BTV_JWT_SECRET").ok().map(|s| s.into_bytes());
+
         Self {
             valid_keys: Arc::new(keys),
+            jwt_secret: Arc::new(jwt_secret),
         }
     }
+}
+
+/// Build a 401 UNAUTHORIZED JSON response and bump the rejection counter.
+fn unauthorized(message: &str) -> Response<Body> {
+    crate::state::AUTH_REJECTED_TOTAL.inc();
+    let body = serde_json::json!({
+        "error": "UNAUTHORIZED",
+        "message": message,
+    });
+    // Response::builder() with literal status + header never returns Err, and
+    // serde_json::to_string of a json! value cannot fail.
+    #[allow(clippy::unwrap_used)]
+    Response::builder()
+        .status(axum::http::StatusCode::UNAUTHORIZED)
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&body).unwrap()))
+        .unwrap()
 }
 
 impl<S> Layer<S> for ApiKeyLayer {
@@ -53,6 +77,7 @@ impl<S> Layer<S> for ApiKeyLayer {
             inner,
             // Arc::clone is explicit per clippy::clone_on_ref_ptr
             valid_keys: Arc::clone(&self.valid_keys),
+            jwt_secret: Arc::clone(&self.jwt_secret),
         }
     }
 }
@@ -61,6 +86,7 @@ impl<S> Layer<S> for ApiKeyLayer {
 pub struct ApiKeyService<S> {
     inner: S,
     valid_keys: Arc<HashSet<String>>,
+    jwt_secret: Arc<Option<Vec<u8>>>,
 }
 
 impl<S> Service<Request<Body>> for ApiKeyService<S>
@@ -80,6 +106,7 @@ where
         let path = req.uri().path().to_string();
         // Arc::clone is explicit per clippy::clone_on_ref_ptr
         let valid_keys = Arc::clone(&self.valid_keys);
+        let jwt_secret = Arc::clone(&self.jwt_secret);
         let mut inner = self.inner.clone();
 
         Box::pin(async move {
@@ -96,17 +123,23 @@ where
                 return inner.call(req).await;
             }
 
-            // JWT Bearer token auth (dashboard sessions)
+            // JWT Bearer token auth (dashboard sessions).
+            // CRITICO-07: validate the token instead of accepting any Bearer
+            // header. A forged/expired token is rejected with 401; a valid one
+            // is forwarded. Validation is shared with the tenant extractor.
             if let Some(auth_header) = req
                 .headers()
                 .get("authorization")
                 .and_then(|v| v.to_str().ok())
             {
                 if auth_header.starts_with("Bearer ") {
-                    // JWT validation -- accept token if present (full validation in future)
-                    // TODO: decode and validate JWT with BTV_JWT_SECRET
-                    let _token = auth_header.strip_prefix("Bearer ").unwrap_or("");
-                    return inner.call(req).await;
+                    let token = auth_header.strip_prefix("Bearer ").unwrap_or("").trim();
+                    return match crate::middleware::tenant_extractor::validate_bearer_token(
+                        token, &jwt_secret,
+                    ) {
+                        Ok(()) => inner.call(req).await,
+                        Err(()) => Ok(unauthorized("Invalid or expired Bearer token.")),
+                    };
                 }
             }
 
@@ -126,22 +159,9 @@ where
                 return inner.call(req).await;
             }
 
-            // Reject -- Response::builder() with literal status + header never returns Err
-            crate::state::AUTH_REJECTED_TOTAL.inc();
-
-            let body = serde_json::json!({
-                "error": "UNAUTHORIZED",
-                "message": "Invalid or missing API key. Provide X-API-Key header.",
-            });
-
-            #[allow(clippy::unwrap_used)]
-            let response = Response::builder()
-                .status(axum::http::StatusCode::UNAUTHORIZED)
-                .header("Content-Type", "application/json")
-                .body(Body::from(serde_json::to_string(&body).unwrap()))
-                .unwrap();
-
-            Ok(response)
+            Ok(unauthorized(
+                "Invalid or missing API key. Provide X-API-Key header.",
+            ))
         })
     }
 }
