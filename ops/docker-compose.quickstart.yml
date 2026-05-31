@@ -23,6 +23,7 @@ services:
       BTV_DB_PATH: "/app/data/runtime/trust.db"
       BTV_APPEALS_DB: "/app/data/runtime/appeals.db"
       BTV_THREATS_DB: "/app/data/runtime/threats.db"
+      BTV_ADMIN_PASSWORD: "demo-admin-NOT-for-production"
     volumes:
       - ../data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
       - ledger_data:/app/data/ledger

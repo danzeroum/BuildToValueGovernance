@@ -67,6 +67,7 @@ jobs:
           BTV_DB_PATH="/tmp/ci-trust.db" \
           BTV_APPEALS_DB="/tmp/ci-appeals.db" \
           BTV_THREATS_DB="/tmp/ci-threats.db" \
+          BTV_ADMIN_PASSWORD="${BTV_ADMIN_PASSWORD:-ci-blind-admin-password-2026}" \
             python -m uvicorn buildtovalue.api.app:app \
               --host 127.0.0.1 --port 8000 --log-level warning &
           echo "Aguardando governance /health..."
