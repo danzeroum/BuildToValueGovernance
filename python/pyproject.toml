@@ -38,6 +38,8 @@ dependencies = [
     # JWT authentication — cryptography is an unconditional import in PyJWT>=2.8
     "PyJWT>=2.8.0",
     "cryptography>=41.0.0",
+    # Password hashing — bcrypt (salted, slow KDF) replaces SHA-256 (CRITICO-01)
+    "bcrypt>=4.0.0",
 ]
 
 [project.optional-dependencies]
