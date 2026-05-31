@@ -67,6 +67,16 @@ from buildtovalue.api._lifespan import lifespan  # noqa: E402
 
 app = FastAPI(title="BuildToValue Governance", version="0.1.0a1", lifespan=lifespan)
 
+# HIGH-01: rate limiting (slowapi). The shared limiter lives in api/_limiter.py;
+# per-route limits are applied with @limiter.limit (e.g. login = 10/minute).
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+
+from buildtovalue.api._limiter import limiter  # noqa: E402
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
@@ -74,6 +84,12 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-BTV-Session", "X-BTV-Jurisdiction"],
 )
+
+# CRITICO-04: security headers applied to every response (was dead code in an
+# isolated FastAPI() instance in response_sanitizer.py).
+from buildtovalue.api.response_sanitizer import SecurityHeadersMiddleware  # noqa: E402
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ─── Routers (toda a lógica de domínio; ADR-0093 Passos 3-4) ───────────────────
 from buildtovalue.api.routes.intelligence import (  # noqa: E402
