@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field
 
 class DecideRequest(BaseModel):
     """Request from Rust Gateway (or direct call)."""
-    input_text: str = ""
+    # HIGH-03: cap payload size to prevent unbounded-memory DoS.
+    input_text: str = Field(default="", max_length=50000)
     finding_count: int = 0
     critical_count: int = 0
     composite_risk: float = 0.0
