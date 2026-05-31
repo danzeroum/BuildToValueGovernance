@@ -67,17 +67,27 @@ def test_seed_rejects_short_admin_password(tmp_path, monkeypatch):
 
 # ── CRITICO-06: init runs at startup, not on every login ───────────────────
 
-def test_login_does_not_initialise_users_db(monkeypatch):
-    """login() must NOT call _init_users_db (it belongs in the lifespan)."""
-    auth = importlib.reload(__import__("buildtovalue.api.routes.auth",
-                                       fromlist=["login"]))
-    calls = {"n": 0}
-    monkeypatch.setattr(auth, "_init_users_db", lambda: calls.__setitem__("n", calls["n"] + 1))
-    monkeypatch.setattr(auth, "_verify_user", lambda u, p: None)
+def test_login_does_not_initialise_users_db(monkeypatch, tmp_path):
+    """login() must NOT call _init_users_db (it belongs in the lifespan).
 
-    from fastapi import HTTPException
-    for _ in range(3):
-        with pytest.raises(HTTPException):
-            auth.login(auth.LoginRequest(username="x", password="y"))
+    Exercised via the real HTTP path: the lifespan seeds the DB once at
+    startup, then login requests must not trigger _init_users_db again.
+    """
+    monkeypatch.setenv("BTV_USERS_DB", str(tmp_path / "u.db"))
+    monkeypatch.setenv("BTV_ADMIN_PASSWORD", "ci-test-admin-password-2026")
+    monkeypatch.delenv("BTV_API_KEYS", raising=False)
 
-    assert calls["n"] == 0, "login still calls _init_users_db per request"
+    import buildtovalue.api.routes.auth as auth
+    import buildtovalue.api.app as app_module
+    from fastapi.testclient import TestClient
+
+    app_module._contestability_loop = None
+    with TestClient(app_module.app) as client:
+        # Startup has already seeded once; count any further calls from logins.
+        calls = {"n": 0}
+        monkeypatch.setattr(
+            auth, "_init_users_db", lambda: calls.__setitem__("n", calls["n"] + 1)
+        )
+        for _ in range(3):
+            client.post("/v1/auth/login", json={"username": "x", "password": "wrong"})
+        assert calls["n"] == 0, "login still calls _init_users_db per request"
