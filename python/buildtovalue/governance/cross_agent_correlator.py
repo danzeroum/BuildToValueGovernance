@@ -81,7 +81,7 @@ class CrossAgentCorrelator:
         # NB: explicit `is not None` — DurableLedger defines __len__, so an
         # empty injected ledger is falsy; `ledger or ...` would silently drop it.
         self._degradation_tracker = AlignmentDegradationTracker(
-            ledger=DurableLedger(hmac_key=_DEGRADATION_LEDGER_KEY),
+            ledger=ledger if ledger is not None else DurableLedger(hmac_key=_DEGRADATION_LEDGER_KEY),
             window=ad.get("snapshot_window", 20),
             threshold=ad.get("threshold", 0.4),
         )
