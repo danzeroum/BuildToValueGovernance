@@ -210,9 +210,9 @@ def _guard_liveness(
     if impact != ActionImpact.IRREVERSIBLE:
         return None
     try:
-        ledger_path = Path("data/ledger/liveness.jsonl")
-        ledger_path.parent.mkdir(parents=True, exist_ok=True)
-        ledger = DurableLedger(ledger_path)
+        # #193: DurableLedger is in-memory and takes hmac_key: bytes (no path).
+        # Use the canonical key fn (precedent: DelegationLedger in _lifespan.py).
+        ledger = DurableLedger(hmac_key=_hmac_key())
         monitor = LivenessMonitor()
         level = monitor.autonomy_level(agent_id, ledger)
         days = monitor.days_since_last_confirmation(agent_id, ledger)
@@ -305,9 +305,8 @@ def _guard_skill_anomaly(
 ) -> None:
     """Runs SkillBehaviorMonitor (fail-open — anomaly is logged, not blocking here)."""
     try:
-        ledger_path = Path("data/ledger/skill_behavior.jsonl")
-        ledger_path.parent.mkdir(parents=True, exist_ok=True)
-        ledger = DurableLedger(ledger_path)
+        # #193: DurableLedger is in-memory and takes hmac_key: bytes (no path).
+        ledger = DurableLedger(hmac_key=_hmac_key())
         monitor = SkillBehaviorMonitor()
         monitor.record_action(
             skill_id=agent_id,
