@@ -8,15 +8,19 @@ ADR: 0024-ledger-query-api.md
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from buildtovalue.api.auth import require_api_key
 from buildtovalue.api.ledger_reader import (
     LedgerQuery,
     LedgerReader,
 )
 
 logger = logging.getLogger("btv.api.ledger")
-router = APIRouter(prefix="/v1/ledger", tags=["ledger"])
+# CRITICO-03: ledger reads require an API key (router-level dependency).
+router = APIRouter(
+    prefix="/v1/ledger", tags=["ledger"], dependencies=[Depends(require_api_key)]
+)
 
 _reader = LedgerReader()
 
