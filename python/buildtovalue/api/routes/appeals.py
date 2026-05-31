@@ -19,6 +19,8 @@ from buildtovalue.api._models import (
     AppealResponse,
     AppealSubmitRequest,
 )
+from buildtovalue.api.auth import require_api_key
+from buildtovalue.api.routes.auth import require_jwt
 from buildtovalue.governance.contestability_loop import (
     AppealStatus,
     ContestabilityLoop,
@@ -38,7 +40,12 @@ def get_contestability_loop(request: Request) -> ContestabilityLoop:
     return loop
 
 
-@router.post("/v1/appeals", response_model=AppealResponse, status_code=201)
+@router.post(
+    "/v1/appeals",
+    response_model=AppealResponse,
+    status_code=201,
+    dependencies=[Depends(require_jwt)],  # CRITICO-03: write requires JWT
+)
 def submit_appeal(
     req: AppealSubmitRequest,
     loop: ContestabilityLoop = Depends(get_contestability_loop),
@@ -59,7 +66,11 @@ def submit_appeal(
     return _appeal_to_response(appeal)
 
 
-@router.get("/v1/appeals/metrics", response_model=AppealMetricsResponse)
+@router.get(
+    "/v1/appeals/metrics",
+    response_model=AppealMetricsResponse,
+    dependencies=[Depends(require_api_key)],  # CRITICO-03: read requires API key
+)
 def appeals_metrics(
     loop: ContestabilityLoop = Depends(get_contestability_loop),
 ) -> AppealMetricsResponse:
@@ -78,7 +89,11 @@ def appeals_metrics(
     )
 
 
-@router.get("/v1/appeals/{appeal_id}", response_model=AppealResponse)
+@router.get(
+    "/v1/appeals/{appeal_id}",
+    response_model=AppealResponse,
+    dependencies=[Depends(require_api_key)],  # CRITICO-03: read requires API key
+)
 def get_appeal(
     appeal_id: str,
     loop: ContestabilityLoop = Depends(get_contestability_loop),
@@ -89,7 +104,11 @@ def get_appeal(
     return _appeal_to_response(appeal)
 
 
-@router.get("/v1/appeals", response_model=AppealListResponse)
+@router.get(
+    "/v1/appeals",
+    response_model=AppealListResponse,
+    dependencies=[Depends(require_api_key)],  # CRITICO-03: read requires API key
+)
 def list_appeals(
     status: Optional[str] = None,
     user_id: Optional[str] = None,
@@ -114,7 +133,11 @@ def list_appeals(
     )
 
 
-@router.post("/v1/appeals/{appeal_id}/resolve", response_model=AppealResponse)
+@router.post(
+    "/v1/appeals/{appeal_id}/resolve",
+    response_model=AppealResponse,
+    dependencies=[Depends(require_jwt)],  # CRITICO-03: write requires JWT
+)
 def resolve_appeal(
     appeal_id: str,
     req: AppealResolveRequest,

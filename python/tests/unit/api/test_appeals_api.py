@@ -26,8 +26,21 @@ def client(tmp_path):
     # Força reset do singleton para o lifespan recriar com o DB correto
     app_module._contestability_loop = None
 
+    # CRITICO-03: write endpoints (POST submit/resolve) now require a JWT. Sign
+    # one with the test secret and send it by default on every request.
+    import time
+    import jwt as _jwt
+    _secret = os.environ.get("BTV_JWT_SECRET", "ci-test-jwt-secret-32bytes-padding!!")
+    _now = int(time.time())
+    _token = _jwt.encode(
+        {"sub": "tester", "role": "admin", "iat": _now, "exp": _now + 3600},
+        _secret, algorithm="HS256",
+    )
+
     from fastapi.testclient import TestClient
-    with TestClient(app_module.app) as c:
+    with TestClient(
+        app_module.app, headers={"Authorization": f"Bearer {_token}"}
+    ) as c:
         yield c
 
     # Limpeza

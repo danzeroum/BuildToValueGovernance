@@ -20,7 +20,11 @@ def test_submit_appeal_without_credentials_is_rejected(client_with_api_key):
 def test_submit_appeal_with_jwt_is_accepted(client_with_api_key, bearer):
     res = client_with_api_key.post(
         "/v1/appeals",
-        json={"audit_trail_id": 222, "user_id": "u", "reason": "valid jwt"},
+        json={
+            "audit_trail_id": 222,
+            "user_id": "user-001",
+            "reason": "A valid appeal reason that is at least twenty chars long.",
+        },
         headers=bearer("admin"),
     )
     assert res.status_code == 201
