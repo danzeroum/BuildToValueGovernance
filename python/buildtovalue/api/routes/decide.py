@@ -403,6 +403,7 @@ def _decide_slm(
     session_id: str,
     adj: _AdjSignals,
     _slm: "Optional[SLMClassifier]",
+    user_role: str,
 ) -> _SLMMeta:
     meta = _SLMMeta()
     if _slm is None:
@@ -456,7 +457,7 @@ def _decide_slm(
             text=req.input_text,
             finding_types=req.matched_policies if hasattr(req, "matched_policies") else [],
             domain=_resolve_domain(req.profile),
-            user_role=_resolve_role(session_id),
+            user_role=user_role,
             is_first_offense=(db_get_session(session_id)["offenses"] == 0 if session_id else True),
             trust_score=get_trust_score(session_id),
         )
@@ -551,6 +552,7 @@ def _decide_ethical_verdict(
     slm_meta: _SLMMeta,
     sensitivity_state: "Optional[SensitivityState]",
     _ethical_engine: EthicalContextEngine,
+    user_role: str,
 ) -> "tuple[EthicalVerdict, RequestContext]":
     evidence = RustEvidence(
         composite_risk=adj.risk,
@@ -565,7 +567,7 @@ def _decide_ethical_verdict(
         agent_id=req.profile or "default",
         session_id=session_id,
         domain=_resolve_domain(req.profile),
-        user_role=_resolve_role(session_id),
+        user_role=user_role,
         ip_jurisdiction=req.ip_jurisdiction,
         ip_risk=req.ip_risk,
         drift_level=req.drift_level,
@@ -833,6 +835,9 @@ def decide(
     """
     start = time.perf_counter()
     session_id = req.session_id or "anonymous"
+    # HIGH-04: resolve the caller's role once from the validated JWT (the HTTP
+    # request is only in scope here) and thread it through the pipeline.
+    user_role = _resolve_role(request)
 
     # ── Etapa 0: FFI scan — Rust Kernel populates TechnicalEvidence ─────────
     # Fail-secure: bridge unavailability never blocks the API (silent degradation).
@@ -939,7 +944,7 @@ def decide(
     sensitivity_state, drift_report = _decide_accumulate_signals(
         req, session_id, ctx.sensitivity_accumulator, ctx.goal_drift_sentinel,
     )
-    slm_meta = _decide_slm(req, session_id, adj, ctx.slm)
+    slm_meta = _decide_slm(req, session_id, adj, ctx.slm, user_role)
     sector_note, cumulative_note, drift_cross_note = _decide_adjust_risk(
         req, session_id, adj, sensitivity_state, drift_report,
         ctx.profile_manager, ctx.sector_loader,
@@ -947,6 +952,7 @@ def decide(
 
     verdict, context = _decide_ethical_verdict(
         req, session_id, adj, slm_meta, sensitivity_state, ctx.ethical_engine,
+        user_role,
     )
     compliance = _decide_compliance(req, adj, verdict, ctx.risk_classifier, ctx.profile_manager)
     verdict, schema_violations, slm_explanation = _decide_output_pipeline(
