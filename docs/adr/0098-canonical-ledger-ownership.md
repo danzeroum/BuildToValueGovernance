@@ -1,6 +1,6 @@
 # ADR-0098: Propriedade do ledger canônico (Python `DurableLedger` vs `decisions.jsonl` do Rust)
 
-**Status**: 🆕 PROPOSTO — decisão central A/B/C em aberto; recomendação (C)
+**Status**: ✅ ACEITO — Opção C (ledgers disjuntos por design) — 31 de maio de 2026
 **Data**: 31 de maio de 2026
 **Autores**: IA Arquiteta
 **Impacto**: `python/buildtovalue/api/_lifespan.py` (criação/ordem de
@@ -106,7 +106,16 @@ E então:
 
 ## Decisão
 
-**Recomendada: (C).** Justificativa em duas linhas:
+**HOMOLOGADO: Opção C.** Os ledgers são **logicamente disjuntos por design**,
+preservando a barreira fail-secure entre o Kernel (Rust/Merkle, system-of-record
+persistido) e a camada de estado operacional (Python). A rastreabilidade
+cross-ledger é garantida por **Ligação de Evidência Débil** — hashes de
+referência cruzada — e **não** por unificação física ou via de escrita única. O
+`DurableLedger` (Python) é o source-of-truth da camada Python; o Kernel Rust
+permanece validador de integridade externo. O critério de aceite do #189 é
+reescrito sob esta base (ver checklist abaixo).
+
+Justificativa em duas linhas:
 
 1. Respeita a separação Rust/Python já estabelecida — Rust é o system-of-record
    do ledger de decisões; o Python o lê (`LedgerReader`/`LedgerAnalytics`).
@@ -119,11 +128,11 @@ exigir que sinais do correlator entrem no ledger persistido de decisões — cas
 que o canal correto é o pipeline de decisão do Rust, não uma escrita Python no
 arquivo do Rust.
 
-> **Status PROPOSTO**: a escolha A/B/C é uma decisão de arquitetura/segurança
-> (gestão de HMAC-key + ordem de init + propriedade do ledger) e aguarda
-> ratificação antes de qualquer código. Sob (C), as notas de segurança do #189
-> reduzem-se a: chave via `get_hmac_key()` (snapshot no boot; rotação SIGHUP
-> **não** propaga ao trilho in-process — aceitável por não ser system-of-record).
+> **Nota de segurança (sob C)**: as notas de segurança do #189 reduzem-se a:
+> chave via `get_hmac_key()` (snapshot no boot; rotação SIGHUP **não** propaga ao
+> trilho in-process — aceitável por não ser system-of-record). A Ligação de
+> Evidência Débil (hash de referência cruzada) não cria caminho de escrita Python
+> no ledger Rust, preservando a barreira fail-secure.
 
 ## Decisões em aberto (dependentes da ratificação de C)
 
