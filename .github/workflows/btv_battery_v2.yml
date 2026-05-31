@@ -28,6 +28,8 @@ jobs:
       BTV_ENV: development
       BTV_API_KEY: "2e9854d03357579fa1a48b7cbdfc3296"
       BTV_DB_PATH: "/tmp/btv_ci_trust.db"
+      # CRITICO-02: admin seed requires a mandatory password (no default).
+      BTV_ADMIN_PASSWORD: "ci-test-admin-password-2026"
 
     steps:
       - uses: actions/checkout@v4

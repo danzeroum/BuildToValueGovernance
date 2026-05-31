@@ -4,7 +4,6 @@ Login, refresh, and user info endpoints for the React dashboard.
 Keeps backward compatibility with API key auth for SDK/programmatic access.
 """
 
-import hashlib
 import logging
 import os
 import sqlite3  # noqa: F401 — kept for type compatibility
@@ -13,6 +12,7 @@ from buildtovalue.security import sqlite_connect_wal
 import time
 from typing import Optional
 
+import bcrypt
 import jwt
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -52,6 +52,33 @@ REFRESH_EXPIRY_SECONDS = 3600 * 24 * 7  # 7 days
 
 USERS_DB_PATH = os.environ.get("BTV_USERS_DB", "data/users.db")
 
+# CRITICO-01/02: bcrypt cost factor and the minimum length enforced on the
+# mandatory admin password. No default password is permitted.
+BCRYPT_ROUNDS = 12
+ADMIN_PASSWORD_MIN_LEN = 12
+
+
+def _hash_password(password: str) -> str:
+    """Hash a password with bcrypt (per-hash random salt, slow KDF)."""
+    return bcrypt.hashpw(
+        password.encode("utf-8"), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
+    ).decode("utf-8")
+
+
+def _require_admin_password() -> str:
+    """Return the mandatory admin password or fail-fast (CRITICO-02)."""
+    pw = os.environ.get("BTV_ADMIN_PASSWORD")
+    if not pw:
+        raise RuntimeError(
+            "BTV_ADMIN_PASSWORD is required to seed the admin user. "
+            "Set it to a strong secret before startup; no default is permitted."
+        )
+    if len(pw) < ADMIN_PASSWORD_MIN_LEN:
+        raise RuntimeError(
+            f"BTV_ADMIN_PASSWORD must be at least {ADMIN_PASSWORD_MIN_LEN} characters."
+        )
+    return pw
+
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
@@ -87,16 +114,17 @@ def _init_users_db():
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
-    # Seed default admin if no users exist
+    # Seed admin only if no users exist. The admin password is mandatory and
+    # is hashed with bcrypt (CRITICO-01/02).
     count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     if count == 0:
-        default_pw = os.environ.get("BTV_ADMIN_PASSWORD", "admin")
-        pw_hash = hashlib.sha256(default_pw.encode()).hexdigest()
+        admin_pw = _require_admin_password()
+        pw_hash = _hash_password(admin_pw)
         conn.execute(
             "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
             ("admin", pw_hash, "admin"),
         )
-        logger.info("Seeded default admin user (change password in production!)")
+        logger.info("Seeded admin user with bcrypt hash")
     conn.commit()
     conn.close()
 
@@ -110,8 +138,14 @@ def _verify_user(username: str, password: str) -> Optional[dict]:
     conn.close()
     if not row:
         return None
-    pw_hash = hashlib.sha256(password.encode()).hexdigest()
-    if row[1] != pw_hash:
+    stored_hash = row[1]
+    try:
+        ok = bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+    except ValueError:
+        # Legacy/non-bcrypt hash (e.g. pre-migration SHA-256) — treat as invalid
+        # so the account must be re-seeded with a bcrypt hash.
+        return None
+    if not ok:
         return None
     return {"username": row[0], "role": row[2]}
 
@@ -151,7 +185,8 @@ async def require_jwt(
 
 @router.post("/login", response_model=LoginResponse)
 def login(req: LoginRequest):
-    _init_users_db()
+    # CRITICO-06: users DB is initialised once at startup (see api/_lifespan.py),
+    # not on every login request.
     user = _verify_user(req.username, req.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
