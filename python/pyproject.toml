@@ -40,6 +40,8 @@ dependencies = [
     "cryptography>=41.0.0",
     # Password hashing — bcrypt (salted, slow KDF) replaces SHA-256 (CRITICO-01)
     "bcrypt>=4.0.0",
+    # Rate limiting (HIGH-01)
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

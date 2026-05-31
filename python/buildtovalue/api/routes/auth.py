@@ -14,9 +14,11 @@ from typing import Optional
 
 import bcrypt
 import jwt
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
+
+from buildtovalue.api._limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +186,8 @@ async def require_jwt(
 # ── Routes ──────────────────────────────────────────────────
 
 @router.post("/login", response_model=LoginResponse)
-def login(req: LoginRequest):
+@limiter.limit("10/minute")  # HIGH-01: throttle credential brute-force
+def login(request: Request, req: LoginRequest):
     # CRITICO-06: users DB is initialised once at startup (see api/_lifespan.py),
     # not on every login request.
     user = _verify_user(req.username, req.password)

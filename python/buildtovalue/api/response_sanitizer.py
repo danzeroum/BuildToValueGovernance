@@ -92,35 +92,20 @@ class ResponseSanitizer:
         }
 
 # FastAPI middleware para aplicar headers
-from fastapi import Request, Response
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        
+
         # Adiciona headers de segurança
         for key, value in ResponseSanitizer.get_safe_headers().items():
             response.headers[key] = value
-        
+
         return response
 
-# Uso no FastAPI
-from fastapi import FastAPI
-
-app = FastAPI()
-app.add_middleware(SecurityHeadersMiddleware)
-
-@app.post("/api/v2/validate")
-async def validate_input(text: str):
-    # Process input...
-    result = {
-        "action": "BLOCK",
-        "rationale": "CPF detected in general context",
-        "user_input": text,  # ← DANGER: XSS se não sanitizado!
-    }
-    
-    # Sanitiza response
-    safe_result = ResponseSanitizer.sanitize_json_response(result)
-    
-    return safe_result
+# CRITICO-04: o `app = FastAPI()` isolado + rota de demo foram REMOVIDOS — eram
+# código morto (middleware nunca chegava às respostas de produção). O middleware
+# agora é registrado no app principal em api/app.py via
+# `app.add_middleware(SecurityHeadersMiddleware)`.
