@@ -90,6 +90,35 @@ def _resolve_domain(profile: Optional[str]) -> str:
     return mapping.get(profile or "", "general")
 
 
-def _resolve_role(session_id: str) -> str:
-    """In prod: lookup from session DB. For now: anonymous."""
-    return "anonymous"
+def _resolve_role(request) -> str:
+    """Resolve the caller's role from a validated JWT Bearer token (HIGH-04).
+
+    Returns the ``role`` claim of a valid token, or ``"anonymous"`` when no
+    Bearer token is present or the token is missing/invalid/expired. Fails
+    closed to ``"anonymous"`` (least privilege) on any decode error.
+
+    ``request`` only needs a ``headers`` mapping with ``.get`` (FastAPI
+    ``Request`` or any compatible object).
+    """
+    headers = getattr(request, "headers", None)
+    if headers is None:
+        return "anonymous"
+    auth = headers.get("Authorization") or headers.get("authorization")
+    if not auth or not auth.startswith("Bearer "):
+        return "anonymous"
+    token = auth[len("Bearer "):].strip()
+    if not token:
+        return "anonymous"
+    # Lazy import keeps this "pure" helper module free of import-time coupling
+    # to the route layer while reusing the canonical JWT secret (DRY).
+    try:
+        import jwt
+
+        from buildtovalue.api.routes.auth import JWT_ALGORITHM, JWT_SECRET
+
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except Exception:  # noqa: BLE001 — fail closed to anonymous on any error
+        return "anonymous"
+    role = payload.get("role")
+    return role if isinstance(role, str) and role else "anonymous"
+
