@@ -10,15 +10,22 @@ ADR: 0025-webhook-notifications.md
 import logging
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from buildtovalue.api.auth import require_api_key
 from buildtovalue.api.webhook_dispatcher import (
     WebhookDispatcher,
     WebhookPayload,
 )
 
 logger = logging.getLogger("btv.api.webhooks")
-router = APIRouter(prefix="/v1/webhooks", tags=["webhooks"])
+# CRITICO-03: webhook management endpoints (status/reload/test) are privileged
+# internal operations gated by an API key. NOTE: these are management routes,
+# not inbound provider receivers (github/gitlab/jira), so HMAC signature
+# verification (per the audit doc) does not apply here.
+router = APIRouter(
+    prefix="/v1/webhooks", tags=["webhooks"], dependencies=[Depends(require_api_key)]
+)
 
 # Shared dispatcher instance
 dispatcher = WebhookDispatcher()
