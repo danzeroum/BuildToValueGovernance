@@ -225,6 +225,19 @@ fn decode_tenant_claims(token: &str, jwt_secret: &Option<Vec<u8>>) -> Result<Btv
     }
 }
 
+/// CRITICO-07: valida um Bearer JWT reutilizando a MESMA lógica de
+/// `decode_tenant_claims` (assinatura HS256 + `exp` em prod; decode leniente em
+/// dev sem `BTV_JWT_SECRET`). Retorna `Ok(())` se o token é aceitável e
+/// `Err(())` se for inválido/forjado. Usado pela camada de API key
+/// (`middleware/auth.rs`) como defesa em profundidade para que um header
+/// `Authorization: Bearer ...` não conceda bypass sem validação.
+pub(crate) fn validate_bearer_token(
+    token: &str,
+    jwt_secret: &Option<Vec<u8>>,
+) -> Result<(), ()> {
+    decode_tenant_claims(token, jwt_secret).map(|_| ())
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
