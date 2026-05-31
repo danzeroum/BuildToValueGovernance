@@ -30,6 +30,7 @@ from buildtovalue.governance.context_engine import EthicalContextEngine
 from buildtovalue.governance.contestability_loop import ContestabilityLoop
 from buildtovalue.governance.cross_agent_correlator import CrossAgentCorrelator
 from buildtovalue.governance.delegation_ledger import DelegationLedger
+from buildtovalue.governance.durable_ledger import DurableLedger
 from buildtovalue.governance.ffi_client import (
     BridgeNotAvailableError,
     get_ffi_client,
@@ -112,12 +113,23 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
     policy_root = Path(os.environ.get("BTV_POLICY_DIR", "data/policies"))
 
+    # #189 / ADR-0098 (Opção C): ledger compartilhado in-process do Python.
+    # NÃO é o ledger canônico — esse é decisions.jsonl (Rust), servido por
+    # /v1/ledger/*. Este é o trilho de auditoria in-process compartilhado por
+    # CrossAgentCorrelator e oracle-revocation. hmac_key=get_hmac_key() é um
+    # SNAPSHOT no boot (vs. os *_fn dos outros componentes): coerência
+    # criptográfica durante a vida do processo, sem rotação — aceitável por não
+    # ser system-of-record.
+    _durable_ledger = DurableLedger(hmac_key=get_hmac_key())
+    application.state.durable_ledger = _durable_ledger
+    logger.info("DurableLedger (shared in-process audit trail) initialized (#189)")
+
     # C6: CrossAgentCorrelator + DelegationLedger singletons
     _a2a_policy = policy_root / "agents" / "coordination_rules.yaml"
-    # #182: inject the shared session ledger if one exists in app.state, so
-    # degradation detection operates on the same ledger /v1/ledger/* reads.
-    # The canonical app.state.durable_ledger is not yet created (tracked in a
-    # follow-up); getattr→None falls back to the in-process ledger for now.
+    # #182 + #189: inject the shared in-process ledger (created above), so
+    # degradation detection and oracle-revocation share one ledger. NB: this is
+    # NOT the Rust decisions.jsonl that /v1/ledger/* serves (ADR-0098 Opção C —
+    # ledgers disjuntos; ligação por hash, sem fusão). getattr stays defensive.
     _shared_ledger = getattr(application.state, "durable_ledger", None)
     _cross_agent = CrossAgentCorrelator(
         policy_path=_a2a_policy if _a2a_policy.exists() else None,
