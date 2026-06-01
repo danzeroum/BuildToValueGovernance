@@ -8,6 +8,7 @@ use buildtovalue_kernel::keys::try_kernel_mac_key;
 use crate::fairness_mode::FairnessModeRegistry;
 use crate::tenant_status::TenantStatusRegistry;
 use crate::audit::drainer::{spawn_drainer, AuditChannel};
+use crate::plugins::GatewayPluginRegistry;
 use crate::audit::sink::{AuditSink, JsonlAuditSink, MultiAuditSink, StdoutAuditSink};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -230,6 +231,10 @@ pub struct AppState {
     /// gracioso (drain-on-SIGTERM): `main` guarda um clone do `Arc` via
     /// `audit_handle()` e o aguarda após os servidores pararem.
     _audit_handle: Arc<JoinHandle<()>>,
+    /// Passo 14: gateway plugin registry (thread-safe, starts empty).
+    /// Plugins are registered at boot; extension point for tenant plugins.
+    #[allow(dead_code)]
+    pub plugin_registry: GatewayPluginRegistry,
 }
 
 impl Default for AppState {
@@ -315,6 +320,7 @@ impl AppState {
             audit_dir: audit_dir.clone(),
             audit_tx,
             _audit_handle: Arc::new(audit_handle),
+            plugin_registry: GatewayPluginRegistry::new(),
         }
     }
 

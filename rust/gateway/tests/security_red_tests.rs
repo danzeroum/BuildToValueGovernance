@@ -418,3 +418,110 @@ mod med_r02_r03_rate_limit {
         );
     }
 }
+
+/// Passo 14: GatewayPlugin contract and registry.
+#[cfg(test)]
+mod passo14_plugin_registry {
+    use btv_gateway::plugins::{
+        GatewayPlugin, GatewayPluginRegistry, HookContext, PluginError,
+    };
+
+    struct OkPlugin;
+    impl GatewayPlugin for OkPlugin {
+        fn plugin_id(&self) -> &'static str { "ok-plugin" }
+        fn version(&self) -> &'static str { "1.0.0" }
+        fn on_pre_auth(&self, _: &HookContext) -> Result<(), PluginError> { Ok(()) }
+        fn on_post_auth(&self, _: &HookContext) -> Result<(), PluginError> { Ok(()) }
+        fn on_audit_event(&self, _: &HookContext) -> Result<(), PluginError> { Ok(()) }
+    }
+
+    struct FailPreAuth;
+    impl GatewayPlugin for FailPreAuth {
+        fn plugin_id(&self) -> &'static str { "fail-pre-auth" }
+        fn version(&self) -> &'static str { "1.0.0" }
+        fn on_pre_auth(&self, _: &HookContext) -> Result<(), PluginError> {
+            Err(PluginError { plugin_id: "fail-pre-auth", message: "intentional" })
+        }
+        fn on_post_auth(&self, _: &HookContext) -> Result<(), PluginError> { Ok(()) }
+        fn on_audit_event(&self, _: &HookContext) -> Result<(), PluginError> { Ok(()) }
+    }
+
+    fn ctx(hook: &'static str) -> HookContext {
+        HookContext { hook, request_id: "req-test".to_string() }
+    }
+
+    #[test]
+    fn registry_starts_empty() {
+        let r = GatewayPluginRegistry::new();
+        assert!(r.is_empty());
+        assert_eq!(r.len(), 0);
+    }
+
+    #[test]
+    fn register_adds_plugin() {
+        let r = GatewayPluginRegistry::new();
+        let added = r.register(Box::new(OkPlugin));
+        assert!(added, "first registration must succeed");
+        assert_eq!(r.len(), 1);
+    }
+
+    #[test]
+    fn register_is_idempotent() {
+        let r = GatewayPluginRegistry::new();
+        r.register(Box::new(OkPlugin));
+        let second = r.register(Box::new(OkPlugin));
+        assert!(!second, "duplicate plugin_id must return false");
+        assert_eq!(r.len(), 1, "registry must not grow on duplicate register");
+    }
+
+    #[test]
+    fn run_pre_auth_ok_returns_empty_failed() {
+        let r = GatewayPluginRegistry::new();
+        r.register(Box::new(OkPlugin));
+        let failed = r.run_pre_auth(&ctx("pre_auth"));
+        assert!(failed.is_empty(), "no failures expected");
+    }
+
+    #[test]
+    fn run_pre_auth_failing_plugin_appears_in_failed_list() {
+        let r = GatewayPluginRegistry::new();
+        r.register(Box::new(FailPreAuth));
+        let failed = r.run_pre_auth(&ctx("pre_auth"));
+        assert_eq!(failed, vec!["fail-pre-auth"]);
+    }
+
+    #[test]
+    fn fault_isolation_other_plugins_still_run() {
+        use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+
+        let ran = Arc::new(AtomicBool::new(false));
+
+        struct WitnessPlugin(Arc<AtomicBool>);
+        impl GatewayPlugin for WitnessPlugin {
+            fn plugin_id(&self) -> &'static str { "witness" }
+            fn version(&self) -> &'static str { "1.0.0" }
+            fn on_pre_auth(&self, _: &HookContext) -> Result<(), PluginError> {
+                self.0.store(true, Ordering::SeqCst);
+                Ok(())
+            }
+            fn on_post_auth(&self, _: &HookContext) -> Result<(), PluginError> { Ok(()) }
+            fn on_audit_event(&self, _: &HookContext) -> Result<(), PluginError> { Ok(()) }
+        }
+
+        let r = GatewayPluginRegistry::new();
+        r.register(Box::new(FailPreAuth));
+        r.register(Box::new(WitnessPlugin(Arc::clone(&ran))));
+
+        let failed = r.run_pre_auth(&ctx("pre_auth"));
+        assert!(failed.contains(&"fail-pre-auth"), "failing plugin in failed list");
+        assert!(ran.load(Ordering::SeqCst), "witness plugin must still run after failure");
+    }
+
+    #[test]
+    fn run_post_auth_and_audit_event_ok() {
+        let r = GatewayPluginRegistry::new();
+        r.register(Box::new(OkPlugin));
+        assert!(r.run_post_auth(&ctx("post_auth")).is_empty());
+        assert!(r.run_audit_event(&ctx("on_audit_event")).is_empty());
+    }
+}
