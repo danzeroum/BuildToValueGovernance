@@ -8,6 +8,9 @@
 //!   unconditionally, so a bogus token reaches the handler (no 401).
 //! - MED-R05 (Passo 7): when JWT decode fails in `TenantExtractorService`, the
 //!   request must be rejected with 401, not silently routed to the default tenant.
+//! - CRITICO-10 (Passo 9): `warm_policies()` must be called in `main.rs` before
+//!   `axum::serve`. Before the fix, the first request sees stale/default tenant
+//!   state (cold-load latency or wrong fairness mode).
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
@@ -213,5 +216,118 @@ mod med_r05_tenant_extractor {
             "request without Bearer should be accepted (anonymous → default tenant)"
         );
         assert_eq!(res.text(), "default", "anonymous request must use default tenant");
+    }
+}
+
+/// CRITICO-10: startup contract — tenant policies must be loaded before the
+/// server accepts its first request. `warm_policies` must be called in
+/// `main.rs` BEFORE `axum::serve`.
+///
+/// The "RED" scenario is a cold-start gateway: without this call, a tenant
+/// configured as Enforced on disk would appear as Disabled (the default) on
+/// the first request, silently skipping fairness checks.
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod critico_10_warm_policies {
+    use std::sync::Arc;
+    use tempfile::TempDir;
+
+    use btv_gateway::fairness_mode::FairnessMode;
+    use btv_gateway::policy_loader::warm_policies;
+    use btv_gateway::state::AppState;
+    use btv_gateway::tenant_status::TenantStatus;
+
+    const BASELINE_YAML: &str = r#"
+version: "1.0.0"
+model_id: "startup-test"
+bins: 10
+reference_proportions:
+  - 0.05
+  - 0.07
+  - 0.10
+  - 0.13
+  - 0.15
+  - 0.18
+  - 0.15
+  - 0.10
+  - 0.05
+  - 0.02
+"#;
+
+    fn setup_tenant(root: &std::path::Path, id: &str, mode: &str, baseline: bool) {
+        let dir = root.join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("fairness.yaml"), format!("mode: {mode}\n")).unwrap();
+        if baseline {
+            std::fs::write(dir.join("drift_baseline.yaml"), BASELINE_YAML).unwrap();
+        }
+    }
+
+    /// BDD "fluxo 7": after startup warm, tenant state is loaded from disk
+    /// before the first request. Without `warm_policies()`, `fairness_mode_for`
+    /// returns Disabled (the registry default) even for Enforced tenants.
+    #[tokio::test]
+    async fn tenant_policy_loaded_before_first_request() {
+        let tmp = TempDir::new().unwrap();
+        setup_tenant(tmp.path(), "acme", "enforced", true);
+        setup_tenant(tmp.path(), "legacy", "disabled", false);
+
+        let state = Arc::new(AppState::with_policies_dir(tmp.path().to_path_buf()));
+
+        // Before warm_policies: acme looks Disabled (registry default).
+        assert_eq!(
+            state.fairness_mode_for("acme"),
+            FairnessMode::Disabled,
+            "CRITICO-10 pre-condition: before warm, acme must be Disabled (not yet loaded)"
+        );
+
+        // CRITICO-10 fix: this call must happen in main.rs before axum::serve.
+        warm_policies(
+            &state.policies_dir,
+            &state.jonas_monitor,
+            &state.fairness_modes,
+            &state.tenant_statuses,
+        )
+        .await;
+
+        // After warm_policies: acme is Enforced, legacy is Disabled, both Active.
+        assert_eq!(
+            state.fairness_mode_for("acme"),
+            FairnessMode::Enforced,
+            "CRITICO-10: acme must be Enforced after warm_policies"
+        );
+        assert_eq!(
+            state.fairness_mode_for("legacy"),
+            FairnessMode::Disabled,
+            "CRITICO-10: legacy must be Disabled (config file)"
+        );
+        assert_eq!(
+            state.tenant_statuses.status_for("acme"),
+            TenantStatus::Active,
+            "CRITICO-10: acme must be Active after warm_policies"
+        );
+    }
+
+    /// Regression: gateway must still start cleanly with no policies_dir
+    /// (dev environment with no tenants configured yet).
+    #[tokio::test]
+    async fn empty_policies_dir_does_not_block_startup() {
+        let tmp = TempDir::new().unwrap();
+        let state = Arc::new(AppState::with_policies_dir(tmp.path().to_path_buf()));
+
+        // warm_policies with empty dir must not panic or return error.
+        warm_policies(
+            &state.policies_dir,
+            &state.jonas_monitor,
+            &state.fairness_modes,
+            &state.tenant_statuses,
+        )
+        .await;
+
+        assert_eq!(
+            state.fairness_modes.declared_tenant_count(),
+            0,
+            "no tenants loaded from empty dir"
+        );
     }
 }
