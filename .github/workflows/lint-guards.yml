@@ -59,6 +59,7 @@ jobs:
         run: docker compose -f ops/docker-compose.vps.yml config --quiet && echo "VPS compose OK"
 
       - name: Validate VPS nginx config syntax
+
         run: |
           # `nginx -t` carrega os `ssl_certificate` referenciados — sem eles
           # falha em "cannot load certificate" antes de checar a sintaxe. Os
@@ -78,3 +79,60 @@ jobs:
               done
               nginx -t
             ' && echo "nginx.vps.conf OK"
+
+  bandit:
+    name: SAST — Bandit HIGH severity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install bandit
+        run: pip install --quiet bandit
+      - name: Run bandit (HIGH only, -lll)
+        run: bandit -r buildtovalue/ -lll -q
+        working-directory: python
+
+  cargo-audit:
+    name: Dependency audit — cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: Run cargo audit
+        run: cargo audit
+        working-directory: rust
+
+  python-coverage:
+    name: Coverage gate — Python (total ≥75%)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install --quiet -e ".[dev]"
+        working-directory: python
+      - name: Run pytest with --cov
+        run: python -m pytest --cov=buildtovalue --cov-report=term-missing -q
+        working-directory: python
+        env:
+          BTV_JWT_SECRET: "ci-test-jwt-secret-32bytes-padding!!"
+          BTV_ENV: "development"
+          BTV_ADMIN_PASSWORD: "ci-test-admin-password-2026"
+
+  trufflehog:
+    name: Secret scan — TruffleHog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified

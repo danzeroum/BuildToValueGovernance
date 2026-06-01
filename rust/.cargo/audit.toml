@@ -1,0 +1,30 @@
+# cargo-audit configuration — deferred advisories with documented rationale.
+# Each entry here is an explicit acceptance; it is NOT a dismissal.
+# Entries must be reviewed when the blocking condition is resolved.
+#
+# To re-evaluate all deferred advisories:
+#   cargo audit --no-ignore (if supported) or remove this file temporarily.
+
+[advisories]
+ignore = [
+    # RUSTSEC-2024-0437: protobuf 2.28.0 — crash via uncontrolled recursion.
+    # Root cause: prometheus 0.13.4 depends on protobuf 2.x; upgrading to
+    # protobuf 3.x requires prometheus 0.14+ which has breaking API changes
+    # across all metric registration code.  Tracked as a separate refactor.
+    "RUSTSEC-2024-0437",
+
+    # RUSTSEC-2025-0020: pyo3 0.20.3 — buffer overflow in PyString::from_object.
+    # Root cause: pyo3 0.24.1+ drops the GIL by default and changes the FFI
+    # API significantly.  Upgrading requires rewriting all Python bindings.
+    # Tracked as a separate refactor.
+    "RUSTSEC-2025-0020",
+
+    # RUSTSEC-2026-0099 / 0104 / 0098: rustls-webpki 0.101.7 — name-constraint
+    # and CRL-parsing issues.  Root cause: aws-smithy-http-client 1.1.10 pulls
+    # hyper-rustls 0.24.2 which depends on rustls 0.21.12 (→ webpki 0.101.7).
+    # Cannot be resolved by cargo update alone; requires the AWS SDK to drop
+    # its rustls 0.21 compatibility shim in a future minor release.
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
+    "RUSTSEC-2026-0098",
+]
