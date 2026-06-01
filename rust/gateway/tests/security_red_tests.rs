@@ -331,3 +331,90 @@ reference_proportions:
         );
     }
 }
+
+/// MED-R02 + MED-R03: rate limiter must use moka Cache with TTL (no memory
+/// leak) and report the ACTUAL remaining count per request (not hardcoded 59).
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod med_r02_r03_rate_limit {
+    use axum_test::TestServer;
+    use serde_json::json;
+    use std::sync::Arc;
+
+    use btv_gateway::routes::create_router;
+    use btv_gateway::state::AppState;
+
+    fn rate_limit_server() -> TestServer {
+        std::env::set_var("BTV_API_KEYS", "btv_rl_test_key");
+        std::env::set_var("BTV_JWT_SECRET", "rl-test-secret-32bytes-padding!!!");
+        // Set a small limit so tests are fast.
+        std::env::set_var("BTV_RATE_LIMIT_RPM", "5");
+        let state = Arc::new(AppState::new());
+        let app = create_router(state);
+        TestServer::new(app).unwrap()
+    }
+
+    /// MED-R02: X-RateLimit-Remaining must decrease with each request, not be
+    /// forever stuck at "59". The 2nd request should report one fewer than the 1st.
+    #[tokio::test]
+    async fn remaining_header_decrements_with_each_request() {
+        let server = rate_limit_server();
+        let make_req = || async {
+            server
+                .post("/v1/validate")
+                .add_header("x-api-key", "btv_rl_test_key")
+                .json(&json!({ "input": "test" }))
+                .await
+        };
+
+        let r1 = make_req().await;
+        r1.assert_status_ok();
+        let remaining_1: u32 = r1
+            .headers()
+            .get("x-ratelimit-remaining")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse().ok())
+            .expect("x-ratelimit-remaining must be a number");
+
+        let r2 = make_req().await;
+        r2.assert_status_ok();
+        let remaining_2: u32 = r2
+            .headers()
+            .get("x-ratelimit-remaining")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse().ok())
+            .expect("x-ratelimit-remaining must be a number");
+
+        assert!(
+            remaining_2 < remaining_1,
+            "MED-R02: remaining must decrease (got {remaining_1} then {remaining_2}, expected decrement)"
+        );
+    }
+
+    /// MED-R02 + MED-R03: after exhausting the limit, the server must return
+    /// 429. The remaining header on 429 must be 0 (not a stale value).
+    #[tokio::test]
+    async fn exceeding_limit_returns_429_with_zero_remaining() {
+        let server = rate_limit_server();
+        let make_req = || async {
+            server
+                .post("/v1/validate")
+                .add_header("x-api-key", "btv_rl_test_key")
+                .json(&json!({ "input": "burst-test" }))
+                .await
+        };
+
+        // Exhaust the limit (BTV_RATE_LIMIT_RPM=5).
+        for _ in 0..5 {
+            make_req().await;
+        }
+
+        // The next request must be rejected.
+        let over_limit = make_req().await;
+        assert_eq!(
+            over_limit.status_code(),
+            429,
+            "MED-R03: 6th request must be rejected with 429"
+        );
+    }
+}

@@ -3,21 +3,30 @@
 //! v1.9: per-IP
 //! v2.0: per-tenant (X-BTV-Tenant-Key → BLAKE3 hash, nunca valor original)
 //!
+//! MED-R03: buckets backed by `moka::sync::Cache` with TTL = window (60 s)
+//! and max_capacity = 100 000. Entries are evicted automatically after the
+//! window expires — no unbounded HashMap growth / OOM risk.
+//!
+//! MED-R02: `X-RateLimit-Remaining` now reflects the actual request count
+//! within the current window (not the hardcoded literal "59").
+//!
 //! Invariante: X-BTV-Tenant-Key nunca aparece em logs.
 //! Hash BLAKE3 (16 chars hex) é usado como chave — sem reversibilidade.
 
 use axum::{
     body::Body,
     http::{Request, Response, StatusCode},
-    response::IntoResponse,
 };
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use tower::{Layer, Service};
-use std::task::{Context, Poll};
+use moka::sync::Cache;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::{
+    atomic::{AtomicU32, Ordering},
+    Arc,
+};
+use std::task::{Context, Poll};
+use std::time::Duration;
+use tower::{Layer, Service};
 
 use crate::state::RATE_LIMITED_TOTAL;
 
@@ -42,12 +51,21 @@ impl RateLimitLayer {
 
 impl<S> Layer<S> for RateLimitLayer {
     type Service = RateLimitMiddleware<S>;
+
     fn layer(&self, inner: S) -> Self::Service {
+        // MED-R03: moka Cache with auto-eviction after `window` seconds and
+        // an upper bound on entries (100_000) to cap memory consumption.
+        // Cloning `Cache` is cheap — moka uses Arc internally, so all clones
+        // share the same underlying shard map.
+        let buckets: Cache<String, Arc<AtomicU32>> = Cache::builder()
+            .max_capacity(100_000)
+            .time_to_live(self.window)
+            .build();
+
         RateLimitMiddleware {
             inner,
             max_requests: self.max_requests,
-            window: self.window,
-            buckets: Arc::new(Mutex::new(HashMap::new())),
+            buckets,
         }
     }
 }
@@ -56,8 +74,10 @@ impl<S> Layer<S> for RateLimitLayer {
 pub struct RateLimitMiddleware<S> {
     inner: S,
     max_requests: u32,
-    window: Duration,
-    buckets: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
+    /// MED-R03: moka Cache replaces HashMap + Mutex.
+    /// Key  = BLAKE3-derived tenant token or "ip:…".
+    /// Value = Arc<AtomicU32> request counter (reset on TTL expiry).
+    buckets: Cache<String, Arc<AtomicU32>>,
 }
 
 impl<S> RateLimitMiddleware<S> {
@@ -74,8 +94,31 @@ impl<S> RateLimitMiddleware<S> {
         req.headers()
             .get("X-Forwarded-For")
             .and_then(|v| v.to_str().ok())
-            .map(|ip| format!("ip:{}", ip.split(',').next().unwrap_or("unknown").trim()))
+            .map(|ip| {
+                format!(
+                    "ip:{}",
+                    ip.split(',').next().unwrap_or("unknown").trim()
+                )
+            })
             .unwrap_or_else(|| "ip:unknown".to_string())
+    }
+
+    /// Build a rate-limit response with accurate headers.
+    /// `Response::builder()` with literal status and well-formed string
+    /// headers cannot return Err — `unwrap_or_else` is a belt-and-suspenders
+    /// fallback required by `clippy::unwrap_used`.
+    fn rate_limit_response(limit: u32, remaining: u32, retry_after: u32) -> Response<Body> {
+        let limit_s = limit.to_string();
+        let remaining_s = remaining.to_string();
+        let retry_s = retry_after.to_string();
+
+        Response::builder()
+            .status(StatusCode::TOO_MANY_REQUESTS)
+            .header("retry-after", retry_s.as_str())
+            .header("x-ratelimit-limit", limit_s.as_str())
+            .header("x-ratelimit-remaining", remaining_s.as_str())
+            .body(Body::from("Rate limit exceeded"))
+            .unwrap_or_else(|_| Response::new(Body::from("Rate limit exceeded")))
     }
 }
 
@@ -95,52 +138,47 @@ where
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let key = Self::extract_key(&req);
         let max = self.max_requests;
-        let window = self.window;
 
-        let allowed = {
-            // Envenenamento de Mutex é estado irrecuperável — pânico imediato
-            // conforme ADR fail-secure (Jonas: responsabilidade sistêmica).
-            let mut buckets = self.buckets.lock()
-                .unwrap_or_else(|e| panic!("BTV invariant violation: rate_limit lock poisoned: {e}"));
-            let now = Instant::now();
-            let entry = buckets.entry(key.clone()).or_insert((0, now));
-
-            if now.duration_since(entry.1) >= window {
-                *entry = (1, now);
-                true
-            } else if entry.0 < max {
-                entry.0 += 1;
-                true
-            } else {
-                false
-            }
+        // MED-R03: moka entry() atomically gets or inserts the counter.
+        // fetch_add returns the PREVIOUS value; +1 gives the new total.
+        let count = {
+            let entry = self.buckets
+                .entry(key.clone())
+                .or_insert_with(|| Arc::new(AtomicU32::new(0)));
+            entry.value().fetch_add(1, Ordering::Relaxed) + 1
         };
+
+        let allowed = count <= max;
+        // MED-R02: actual remaining = max - count (saturating to avoid wrap).
+        let remaining = max.saturating_sub(count);
 
         if !allowed {
             RATE_LIMITED_TOTAL.inc();
-            tracing::warn!("Rate limit exceeded for key prefix: {}",
-                &key[..key.find(':').map(|i| i + 4).unwrap_or(key.len()).min(key.len())]);
+            let key_prefix = &key[..key
+                .find(':')
+                .map(|i| i + 4)
+                .unwrap_or(key.len())
+                .min(key.len())];
+            tracing::warn!("Rate limit exceeded for key prefix: {key_prefix}");
 
-            return Box::pin(async move {
-                Ok((
-                    StatusCode::TOO_MANY_REQUESTS,
-                    [("Retry-After", "60"), ("X-RateLimit-Limit", "60")],
-                    "Rate limit exceeded",
-                ).into_response())
-            });
+            let resp = Self::rate_limit_response(max, 0, 60);
+            return Box::pin(async move { Ok(resp) });
         }
 
         let future = self.inner.call(req);
         Box::pin(async move {
             let mut response = future.await?;
-            response.headers_mut().insert(
-                "x-ratelimit-limit",
-                axum::http::HeaderValue::from_static("60"),
-            );
-            response.headers_mut().insert(
-                "x-ratelimit-remaining",
-                axum::http::HeaderValue::from_static("59"),
-            );
+
+            // MED-R02: set headers with the actual remaining count.
+            // HeaderValue::from_str on a u32 decimal string cannot fail;
+            // fallbacks are belt-and-suspenders for clippy::unwrap_used.
+            let limit_hv = axum::http::HeaderValue::from_str(&max.to_string())
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("60"));
+            let remaining_hv = axum::http::HeaderValue::from_str(&remaining.to_string())
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("0"));
+
+            response.headers_mut().insert("x-ratelimit-limit", limit_hv);
+            response.headers_mut().insert("x-ratelimit-remaining", remaining_hv);
             Ok(response)
         })
     }
