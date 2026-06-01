@@ -1,63 +1,23 @@
-# ops/docker-compose.vps.yml
-# ═══════════════════════════════════════════════════════════════
-# BuildToValue Sovereign Trust OS — Orquestração VPS
-# República Algorítmica: Nginx como único Ingress Controller
-# ═══════════════════════════════════════════════════════════════
-#
-# ARQUITETURA (ADR-009 v2):
-#   PROD → nginx-prod (Docker) serve arquivos estáticos de /var/www/
-#   DEV  → scripts/deploy.sh gerencia processos nativos em /opt/btv/
-#
-# Separação de responsabilidades:
-#   Docker    = Produção estável, declarativa, auditável
-#   deploy.sh = Desenvolvimento ágil, hot-reload nativo
-#
-# Setup inicial (executar uma vez na VPS):
-#   sudo mkdir -p /var/www/buildtovalue/{docs,demo} /var/www/html
-#   sudo systemctl stop nginx && sudo systemctl disable nginx
-#   cd /opt/buildtovalue
-#   python3 scripts/autogen_reference.py
-#   mkdocs build --site-dir /var/www/buildtovalue/docs --clean
-#   rsync -av --delete demo/ /var/www/buildtovalue/demo/
-#   sudo chown -R www-data:www-data /var/www/buildtovalue
-#   docker compose -f ops/docker-compose.vps.yml up -d
-#
-# Teardown seguro (antes do primeiro deploy com este compose):
-#   docker compose -f ops/docker-compose.vps.yml down --remove-orphans
-#   lsof -i:9090 -i:9091  # deve retornar vazio
-#
-# Deploy de atualização de conteúdo (sem restart de contêiner):
-#   git pull origin main
-#   mkdocs build --site-dir /var/www/buildtovalue/docs --clean
-#   rsync -av --delete demo/ /var/www/buildtovalue/demo/
-#   # Nginx lê os arquivos novos automaticamente (volume :ro)
-#
-# Ver logs:
-#   docker compose -f ops/docker-compose.vps.yml logs -f nginx-prod
-# ═══════════════════════════════════════════════════════════════
+# ops/docker-compose.vps.yml — BuildToValue VPS Ingress Controller
+# ADR-009 v2: btv-nginx-prod como único ingress Docker para todos os domínios
 
 services:
   nginx-prod:
     image: nginx:alpine
     container_name: btv-nginx-prod
-    # PRÉ-REQUISITO: sudo systemctl stop nginx && sudo systemctl disable nginx
-    # O Nginx do host e este container disputam as portas 80 e 443.
     restart: unless-stopped
-    # unless-stopped: respeita paradas manuais (docker compose down),
-    # mas reinicia automaticamente após reboot da VPS. Semântica correta
-    # para produção que você quer poder parar voluntariamente.
     networks:
       - btvchatcorp_btv-net
+      - ops_btv-prod-net
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.vps.conf:/etc/nginx/nginx.conf:ro      # config VPS (auto-contida)
-      - /etc/letsencrypt:/etc/letsencrypt:ro                 # certificados Let's Encrypt
-      - /var/www/buildtovalue:/var/www/buildtovalue:ro       # conteúdo estático compilado
-      - /var/www/html:/var/www/html:ro                       # ACME challenge webroot (certbot)
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/buildtovalue:/var/www/buildtovalue:ro
+      - /var/www/html:/var/www/html:ro
     healthcheck:
-      # Porta 8080 interna (dedicada) — evita ambiguidade com bloco :80 de redirect
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 15s
       timeout: 5s
@@ -74,4 +34,5 @@ services:
 networks:
   btvchatcorp_btv-net:
     external: true
-    # Rede do projeto btvChatCorp — permite nginx-prod rotear chatcorp.buildtovalue.cloud
+  ops_btv-prod-net:
+    external: true
