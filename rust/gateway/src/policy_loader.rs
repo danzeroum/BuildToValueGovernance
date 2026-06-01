@@ -1,13 +1,6 @@
 //! Filesystem walk + boot step para carregar policies de fairness por tenant
 //! (ADR-0089 §D1).
 //!
-//! NOTE on `dead_code`: o módulo é introduzido neste Commit 4. O caller
-//! produção (`main.rs` → `warm_policies().await`) entra no Commit 7 do
-//! roadmap (junto com o handler de `/internal/v1/reload-policy` que
-//! também usa `load_tenant_policy` para reload sob demanda). Lib tests
-//! aqui já exercitam todas as funções. `#![allow(dead_code)]` evita
-//! falha em `RUSTFLAGS="-D warnings"`. Remover após Commit 7.
-#![allow(dead_code)]
 //!
 //! Layout esperado:
 //!
