@@ -48,14 +48,17 @@ class TestAuthEnabled:
         assert res.status_code == 200
 
     def test_decide_with_invalid_key(self, client_with_auth):
-        """Invalid key → 401."""
+        """Invalid key → 401 with RFC 7807 Problem Details (Passo 11)."""
         res = client_with_auth.post(
             "/v1/decide",
             json={"action": "ALLOW"},
             headers={"X-API-Key": "wrong_key"},
         )
         assert res.status_code == 401
-        assert res.json()["detail"]["error"] == "UNAUTHORIZED"
+        body = res.json()
+        assert body["status"] == 401
+        assert body["title"] == "Unauthorized"
+        assert "Invalid or missing API key" in body["detail"]
 
     def test_decide_without_key(self, client_with_auth):
         """No key → 401."""

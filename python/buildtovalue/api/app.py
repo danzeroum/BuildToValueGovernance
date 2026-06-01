@@ -12,8 +12,10 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
@@ -134,3 +136,87 @@ if _DEMO_PATH.exists():
     logger.info("demo/ mounted at /demo: %s", _DEMO_PATH)
 else:
     logger.warning("demo/ not found at %s — static UI not mounted", _DEMO_PATH)
+
+# ─── Passo 11: /api/v1/* → /v1/* 301 redirect (§1.4 item 7) ─────────────────
+# All active routes use /v1/... directly. Applying /api/v1 prefix would create
+# /api/v1/v1/... (double prefix). This catch-all redirects legacy /api/v1 callers
+# to the canonical /v1 path for a 90-day compatibility window.
+@app.api_route(
+    "/api/v1/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+async def _redirect_legacy_api_v1(path: str, request: Request) -> RedirectResponse:
+    target = f"/v1/{path}"
+    if request.url.query:
+        target = f"{target}?{request.url.query}"
+    return RedirectResponse(url=target, status_code=301)
+
+
+# ─── Passo 11: RFC 7807 Problem Details — global 4xx/5xx handler ─────────────
+_PROBLEM_BASE = os.environ.get(
+    "BTV_PROBLEM_TYPE_BASE", "https://btv.example.com/problems"
+)
+
+_STATUS_TITLES: dict[int, str] = {
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "Not Found",
+    405: "Method Not Allowed",
+    409: "Conflict",
+    422: "Unprocessable Entity",
+    429: "Too Many Requests",
+    500: "Internal Server Error",
+    503: "Service Unavailable",
+}
+
+
+def _problem_body(status: int, detail: object) -> dict[str, object]:
+    if isinstance(detail, dict):
+        msg: str = str(detail.get("message") or detail.get("detail") or detail)
+    else:
+        msg = str(detail) if detail else _STATUS_TITLES.get(status, "Error")
+    return {
+        "type": f"{_PROBLEM_BASE}/{status}",
+        "title": _STATUS_TITLES.get(status, "Error"),
+        "status": status,
+        "detail": msg,
+    }
+
+
+async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=_problem_body(exc.status_code, exc.detail),
+        headers={"Content-Type": "application/problem+json"},
+    )
+
+
+async def _validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content=_problem_body(422, f"Validation error: {exc.errors()}"),
+        headers={"Content-Type": "application/problem+json"},
+    )
+
+
+# Register AFTER the RateLimitExceeded handler (already bound above) so that
+# Starlette's exact-type lookup finds the slowapi handler for RateLimitExceeded
+# first, and falls through to our HTTPException handler for all other errors.
+app.add_exception_handler(HTTPException, _http_exception_handler)
+app.add_exception_handler(RequestValidationError, _validation_exception_handler)
+
+# Starlette 1.x returns a plain PlainTextResponse("Not Found") for unmatched
+# routes — it never raises HTTPException, so the handler above cannot intercept
+# it. A catch-all registered LAST raises HTTPException(404) explicitly, which
+# the handler above then converts to RFC 7807 format.
+@app.api_route(
+    "/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+async def _catch_all_404(path: str) -> JSONResponse:
+    raise HTTPException(status_code=404)
