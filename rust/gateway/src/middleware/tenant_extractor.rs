@@ -133,6 +133,24 @@ where
     }
 }
 
+/// Constrói uma resposta 401 UNAUTHORIZED em formato RFC 7807.
+/// Retorna `Response<Body>` nunca-falha — usada em pontos de fail-fast.
+fn problem_401(detail: &str) -> Response<Body> {
+    let body = serde_json::to_string(&serde_json::json!({
+        "type": "about:blank",
+        "title": "Unauthorized",
+        "status": 401u16,
+        "detail": detail,
+    }))
+    .unwrap_or_else(|_| r#"{"type":"about:blank","status":401}"#.to_string());
+
+    Response::builder()
+        .status(StatusCode::UNAUTHORIZED)
+        .header("Content-Type", "application/problem+json")
+        .body(Body::from(body))
+        .unwrap_or_else(|_| Response::new(Body::empty()))
+}
+
 /// Extrai e valida `tenant_id` da requisição.
 /// Retorna `Ok(tenant_id)` em sucesso ou `Err(Box<Response>)` com E131 em falha.
 /// O Err é boxado porque `Response<Body>` é grande (≥128 bytes); clippy lint
@@ -156,11 +174,15 @@ fn extract_tenant_from_request(
     let tenant_id = match claims {
         Ok(c) => c.tenant_id.unwrap_or_else(|| DEFAULT_TENANT_ID.to_string()),
         Err(()) => {
-            // JWT malformado mas não vazio — fail-secure para "default"
-            // só em dev (sem secret). Em prod, jwt_secret é Some → decode
-            // teria validado; chegamos aqui apenas se o token é inválido.
-            tracing::warn!("JWT decode failed; routing to default tenant");
-            DEFAULT_TENANT_ID.to_string()
+            // MED-R05: fail-fast — a Bearer token that cannot be decoded is
+            // rejected with 401, never silently routed to the default tenant.
+            // The default tenant is reserved for requests WITHOUT a Bearer
+            // header (anonymous/unauthenticated). Presenting a token that
+            // fails validation is not the same as presenting no token at all.
+            tracing::warn!("JWT decode failed; rejecting request (MED-R05 fail-fast)");
+            return Err(Box::new(problem_401(
+                "Bearer token could not be decoded or validated.",
+            )));
         }
     };
 
@@ -339,5 +361,59 @@ mod tests {
     fn tenant_id_newtype_as_str() {
         let t = TenantId("acme".to_string());
         assert_eq!(t.as_str(), "acme");
+    }
+
+    // ── MED-R05 RED tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn malformed_bearer_returns_401_not_default_tenant() {
+        // MED-R05: a Bearer token that fails to decode must be rejected with
+        // 401, never silently routed to the default tenant (fail-fast).
+        // "not-a-jwt" has no dots → splitn gives 1 part → Err(()).
+        let req = make_req_with_bearer("not-a-jwt");
+        let result = extract_tenant_from_request(&req, &None);
+        assert!(
+            result.is_err(),
+            "malformed Bearer must return Err (401 response), not fall through to DEFAULT_TENANT_ID"
+        );
+        let resp = result.unwrap_err();
+        assert_eq!(
+            resp.status(),
+            StatusCode::UNAUTHORIZED,
+            "expected 401, not 403 or 200 with default tenant (MED-R05)"
+        );
+    }
+
+    #[test]
+    fn bearer_with_wrong_signature_returns_401_not_default_tenant() {
+        // MED-R05: in prod mode (jwt_secret = Some), a token signed with the
+        // wrong key must be rejected with 401, not silently routed to default.
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        #[derive(serde::Serialize)]
+        struct Claims {
+            tenant_id: String,
+            exp: u64,
+        }
+        let token = encode(
+            &Header::default(),
+            &Claims { tenant_id: "acme-corp".to_string(), exp: u64::MAX },
+            &EncodingKey::from_secret(b"attacker-key"),
+        )
+        .unwrap();
+
+        // Validate with the REAL secret → signature mismatch → Err(())
+        let prod_secret = Some(b"correct-prod-secret-32bytes!!!!!".to_vec());
+        let req = make_req_with_bearer(&token);
+        let result = extract_tenant_from_request(&req, &prod_secret);
+        assert!(
+            result.is_err(),
+            "token signed with wrong key must return Err (401), not fall through to DEFAULT_TENANT_ID"
+        );
+        let resp = result.unwrap_err();
+        assert_eq!(
+            resp.status(),
+            StatusCode::UNAUTHORIZED,
+            "expected 401 UNAUTHORIZED for wrong-signature token (MED-R05)"
+        );
     }
 }

@@ -6,6 +6,8 @@
 //! - CRITICO-07 (Passo 6): an invalid `Authorization: Bearer ...` must NOT
 //!   bypass the API-key layer. Today the Bearer branch calls `inner.call(req)`
 //!   unconditionally, so a bogus token reaches the handler (no 401).
+//! - MED-R05 (Passo 7): when JWT decode fails in `TenantExtractorService`, the
+//!   request must be rejected with 401, not silently routed to the default tenant.
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
@@ -56,5 +58,62 @@ mod security_red {
             .await;
 
         assert_eq!(res.status_code(), 200, "valid API key should be accepted");
+    }
+}
+
+/// MED-R05: TenantExtractorService in isolation — malformed Bearer must yield
+/// 401 rather than falling through to the default tenant (cross-tenant risk).
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod med_r05_tenant_extractor {
+    use axum::{routing::get, Router};
+    use axum_test::TestServer;
+    use btv_gateway::middleware::tenant_extractor::{TenantExtractorLayer, TenantId};
+    use axum::Extension;
+
+    /// Minimal handler that echoes the resolved tenant_id.
+    async fn echo_tenant(Extension(tid): Extension<TenantId>) -> String {
+        tid.as_str().to_string()
+    }
+
+    /// Build a server wrapped ONLY with TenantExtractorLayer (no ApiKeyLayer).
+    /// This tests MED-R05 defence-in-depth: the extractor must reject bad tokens
+    /// independently of the upstream auth layer.
+    fn tenant_extractor_only_server() -> TestServer {
+        std::env::set_var("BTV_JWT_SECRET", "med-r05-test-secret-32bytes-padding");
+        let app = Router::new()
+            .route("/probe", get(echo_tenant))
+            .layer(TenantExtractorLayer::from_env());
+        TestServer::new(app).unwrap()
+    }
+
+    /// MED-R05 BDD scenario: "Bearer inválido → 401 em vez de roteado para `default`".
+    /// Before the fix this returns 200 (with tenant_id = "default").
+    /// After the fix it must return 401.
+    #[tokio::test]
+    async fn malformed_bearer_rejected_not_routed_to_default() {
+        let server = tenant_extractor_only_server();
+        let res = server
+            .get("/probe")
+            .add_header("authorization", "Bearer not-a-valid-jwt")
+            .await;
+        assert_eq!(
+            res.status_code(),
+            401,
+            "MED-R05: malformed Bearer must be rejected with 401, not silently routed to default tenant"
+        );
+    }
+
+    /// Regression: absence of Bearer must still succeed (anonymous → default tenant).
+    #[tokio::test]
+    async fn no_bearer_anonymous_request_allowed() {
+        let server = tenant_extractor_only_server();
+        let res = server.get("/probe").await;
+        assert_eq!(
+            res.status_code(),
+            200,
+            "request without Bearer should be accepted (anonymous → default tenant)"
+        );
+        assert_eq!(res.text(), "default", "anonymous request must use default tenant");
     }
 }
