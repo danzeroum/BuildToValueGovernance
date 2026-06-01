@@ -25,6 +25,9 @@ services:
       BTV_THREATS_DB: "/tmp/threats.db"
       BTV_AUTOGEN_DIR: "/tmp/autogen-policies"
       BTV_ADMIN_PASSWORD: "demo-admin-NOT-for-production"
+      # §3.2 E2E flows: API key + JWT secret required for auth flows 1–5.
+      BTV_API_KEYS: "${BTV_API_KEY:-btv-e2e-test-key}"
+      BTV_JWT_SECRET: "${BTV_JWT_SECRET:-e2e-jwt-secret-NOT-for-production!!}"
     volumes:
       - ../data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
       - ledger_data:/app/data/ledger
