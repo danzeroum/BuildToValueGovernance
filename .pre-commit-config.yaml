@@ -21,6 +21,22 @@ repos:
         stages: [commit]
         verbose: true
 
+      - id: btv-bandit-sast
+        name: Bandit SAST (HIGH severity only, -lll)
+        entry: bandit
+        args: ["-r", "python/buildtovalue/", "-lll", "-q"]
+        language: python
+        additional_dependencies: ["bandit>=1.7.9"]
+        pass_filenames: false
+        stages: [commit]
+
+      - id: btv-trufflehog-scan
+        name: TruffleHog secret scan (requires trufflehog in PATH)
+        entry: bash -c 'if command -v trufflehog >/dev/null 2>&1; then trufflehog git file://. --only-verified --since-commit HEAD --fail; else echo "SKIP: trufflehog not found — install from https://github.com/trufflesecurity/trufflehog"; fi'
+        language: system
+        pass_filenames: false
+        stages: [commit]
+
       - id: btv-no-secrets-tracked
         name: Refuse to commit .env, *.db, *.key, *.crt, *.bin
         entry: |
