@@ -37,6 +37,13 @@ subtle = "2.5"
 zeroize = "1.7"
 # MED-R03: concurrent cache with TTL eviction — replaces HashMap + Mutex in rate_limit.rs
 moka = { version = "0.12", features = ["sync"] }
+# Passo 13: OTel distributed tracing — bridges tracing spans to OTLP exporter.
+# No-op (default) when OTEL_EXPORTER_OTLP_ENDPOINT is absent.
+opentelemetry = { version = "0.27", features = ["trace"] }
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic", "tonic"] }
+opentelemetry-semantic-conventions = "0.27"
+tracing-opentelemetry = "0.28"
 
 [build-dependencies]
 tonic-build = "0.12"
