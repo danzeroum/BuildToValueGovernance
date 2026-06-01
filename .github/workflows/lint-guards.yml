@@ -67,10 +67,10 @@ jobs:
           # Encrypt), inexistentes no runner. Geramos certs self-signed
           # descartáveis nos caminhos esperados só para validar a SINTAXE.
           docker run --rm \
-            -v "$(pwd)/ops/nginx/nginx.vps.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$(pwd)/ops/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
             nginx:alpine sh -ec '
               apk add --no-cache openssl >/dev/null
-              for d in docs.buildtovalue.cloud demo.buildtovalue.cloud; do
+              for d in docs.buildtovalue.cloud demo.buildtovalue.cloud chatcorp.buildtovalue.cloud prompte.buildtovalue.cloud; do
                 mkdir -p "/etc/letsencrypt/live/$d"
                 openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
                   -keyout "/etc/letsencrypt/live/$d/privkey.pem" \
