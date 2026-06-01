@@ -12,6 +12,7 @@ mod fairness_mode;
 mod tenant_status;
 mod policy_loader;
 mod audit;
+mod plugins;
 // nota: routes::internal e middleware::internal_auth são compilados
 // via mod routes; / mod middleware; — não precisam ser top-level.
 
