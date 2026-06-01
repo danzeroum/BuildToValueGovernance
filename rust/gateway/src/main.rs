@@ -19,10 +19,19 @@ use state::AppState;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Passo 13: init OTel before tracing so the layer is available at subscriber init.
+    // Returns None (NoopTracerProvider) when OTEL_EXPORTER_OTLP_ENDPOINT is absent.
+    let _otel_provider = init_otel();
+    let otel_layer = _otel_provider.as_ref().map(|p: &opentelemetry_sdk::trace::TracerProvider| {
+        use opentelemetry::trace::TracerProvider as _;
+        tracing_opentelemetry::OpenTelemetryLayer::new(p.tracer("btv-gateway"))
+    });
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .with(tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| "btv_gateway=info".into()))
+        .with(otel_layer)
         .init();
 
     // S-01 / PROP-031: initialize the kernel MAC key from BTV_HMAC_KEY before
@@ -120,6 +129,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(_) => tracing::warn!("audit handle ainda referenciado; pulando drain await"),
     }
     Ok(())
+}
+
+/// Initialises the OTel OTLP tracer when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+/// Returns the `TracerProvider` so the caller keeps it alive for the process
+/// lifetime (dropping it would flush and shut down the exporter). Returns `None`
+/// when the env var is absent — tracing continues with the fmt layer only (CI-safe).
+fn init_otel() -> Option<opentelemetry_sdk::trace::TracerProvider> {
+    let endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok()?;
+
+    use opentelemetry_otlp::WithExportConfig;
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint(&endpoint)
+        .build()
+        .map_err(|e| eprintln!("OTel OTLP exporter init failed (tracing degraded): {e}"))
+        .ok()?;
+
+    let resource = opentelemetry_sdk::Resource::new(vec![
+        opentelemetry::KeyValue::new("service.name", "btv-gateway"),
+    ]);
+
+    let provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+        .with_resource(resource)
+        .build();
+
+    opentelemetry::global::set_tracer_provider(provider.clone());
+    eprintln!("OTel OTLP tracer initialised: endpoint={endpoint}");
+    Some(provider)
 }
 
 /// Aguarda um sinal de término do processo: `SIGTERM` (orquestrador, ex.
