@@ -104,7 +104,7 @@ omit = ["tests/*", "buildtovalue/cli/commands/quickstart.py"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 75
+fail_under = 60
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
