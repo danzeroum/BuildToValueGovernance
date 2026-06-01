@@ -46,6 +46,8 @@ services:
     # unless-stopped: respeita paradas manuais (docker compose down),
     # mas reinicia automaticamente após reboot da VPS. Semântica correta
     # para produção que você quer poder parar voluntariamente.
+    networks:
+      - btvchatcorp_btv-net
     ports:
       - "80:80"
       - "443:443"
@@ -69,3 +71,7 @@ services:
         max-size: "20m"
         max-file: "5"
 
+networks:
+  btvchatcorp_btv-net:
+    external: true
+    # Rede do projeto btvChatCorp — permite nginx-prod rotear chatcorp.buildtovalue.cloud
