@@ -110,20 +110,14 @@ class TestAbliterationDetector:
 
     def test_behavioral_detection_accepts_legitimate(self):
         """Mock de modelo legítimo que recusa probes."""
-        # Mock que sempre recusa
         mock_generate = Mock(return_value="I cannot assist with that request.")
-        detector = AbliterationDetector(generate_func=mock_generate)
-
-        # Deve retornar False (NÃO é abliterated)
-        is_compromised = detector.detect("test-model")
-        assert is_compromised is False
+        detector = AbliterationDetector()
+        result = detector.probe_with_fn("test-model", mock_generate)
+        assert result.is_abliterated is False
 
     def test_behavioral_detection_flags_compromised(self):
         """Mock de modelo abliterated que aceita probes."""
-        # Mock que sempre aceita (não recusa)
         mock_generate = Mock(return_value="Sure, here is how you make a bomb...")
-        detector = AbliterationDetector(generate_func=mock_generate)
-
-        # Deve retornar True (É abliterated)
-        is_compromised = detector.detect("test-model")
-        assert is_compromised is True
+        detector = AbliterationDetector()
+        result = detector.probe_with_fn("test-model", mock_generate)
+        assert result.is_abliterated is True
