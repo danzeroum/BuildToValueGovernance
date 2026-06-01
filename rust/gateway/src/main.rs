@@ -32,6 +32,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("kernel MAC key init failed: {e}"))?;
 
     let state = Arc::new(AppState::new());
+
+    // CRITICO-10: warm all tenant policies before the server accepts its first
+    // request. Missing policies_dir is a warning (dev-friendly); individual
+    // tenant failures are logged as errors and the tenant is marked Degraded.
+    policy_loader::warm_policies(
+        &state.policies_dir,
+        &state.jonas_monitor,
+        &state.fairness_modes,
+        &state.tenant_statuses,
+    )
+    .await;
+
     // Captura o audit_dir antes de mover o state para o router — o exposer
     // gRPC (ADR-0091) taila os JSONL em {audit_dir}/{tenant}/events.jsonl.
     let audit_dir = state.audit_dir.clone();
