@@ -10,6 +10,8 @@ Toda a lógica de domínio vive em routes/* e os singletons em app.state
 
 import logging
 import os
+import time
+import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -17,6 +19,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response as StarletteResponse
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +73,64 @@ def _cors_origins() -> list[str]:
 from buildtovalue.api._lifespan import lifespan  # noqa: E402
 
 app = FastAPI(title="BuildToValue Governance", version="0.1.0a1", lifespan=lifespan)
+
+# ─── Passo 13: security counters + latency histogram ──────────────────────────
+from buildtovalue.api._security_metrics import (  # noqa: E402
+    BTV_AUTH_FAILURES_TOTAL,
+    BTV_HTTP_REQUEST_DURATION_SECONDS,
+    BTV_RATE_LIMIT_EXCEEDED_TOTAL,
+)
+
+
+class _RequestIdMiddleware(BaseHTTPMiddleware):
+    """Propagates X-BTV-Request-ID (generates UUID4 if absent), records
+    per-request latency, and increments security counters on 401/429."""
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        rid = request.headers.get("X-BTV-Request-ID") or str(uuid.uuid4())
+        request.state.request_id = rid
+        t0 = time.perf_counter()
+        response = await call_next(request)
+        elapsed = time.perf_counter() - t0
+        response.headers["X-BTV-Request-ID"] = rid
+        BTV_HTTP_REQUEST_DURATION_SECONDS.labels(
+            method=request.method,
+            path=request.url.path,
+            status=str(response.status_code),
+        ).observe(elapsed)
+        if response.status_code == 401:
+            BTV_AUTH_FAILURES_TOTAL.inc()
+        elif response.status_code == 429:
+            BTV_RATE_LIMIT_EXCEEDED_TOTAL.inc()
+        return response
+
+
+app.add_middleware(_RequestIdMiddleware)
+
+
+def _init_otel() -> None:
+    """Initialize OTel OTLP tracer when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+    No-op (default NoopTracerProvider) when the env var is absent — safe for CI."""
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not endpoint:
+        return
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        resource = Resource.create({"service.name": "btv-governance-api"})
+        provider = TracerProvider(resource=resource)
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True)))
+        trace.set_tracer_provider(provider)
+        logger.info("OTel OTLP tracer initialized: endpoint=%s", endpoint)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("OTel init failed (observability degraded): %s", exc)
+
+
+_init_otel()
 
 # HIGH-01: rate limiting (slowapi). The shared limiter lives in api/_limiter.py;
 # per-route limits are applied with @limiter.limit (e.g. login = 10/minute).
@@ -208,6 +271,14 @@ async def _validation_exception_handler(
 # first, and falls through to our HTTPException handler for all other errors.
 app.add_exception_handler(HTTPException, _http_exception_handler)
 app.add_exception_handler(RequestValidationError, _validation_exception_handler)
+
+# ─── Passo 13: raw Prometheus scrape endpoint ──────────────────────────────────
+# /v1/metrics returns JSON analytics; /metrics returns raw Prometheus text for
+# Prometheus scrapers. Must be registered BEFORE the /{path:path} catch-all.
+@app.get("/metrics", include_in_schema=False)
+async def _prometheus_metrics() -> StarletteResponse:
+    return StarletteResponse(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 
 # Starlette 1.x returns a plain PlainTextResponse("Not Found") for unmatched
 # routes — it never raises HTTPException, so the handler above cannot intercept
