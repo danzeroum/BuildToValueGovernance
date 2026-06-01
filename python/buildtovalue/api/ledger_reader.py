@@ -23,9 +23,9 @@ REQUIRED_FIELDS = {
     "critical", "hard_blocked", "verdict_id", "latency_ms",
 }
 
-DEFAULT_PAGE_SIZE = 100
-MAX_PAGE_SIZE = 1000
-MIN_PAGE_SIZE = 10
+DEFAULT_LIMIT = 20
+MAX_LIMIT = 1000
+MIN_LIMIT = 1
 
 
 @dataclass(frozen=True)
@@ -38,34 +38,34 @@ class LedgerQuery:
     start_ts: Optional[int] = None
     end_ts: Optional[int] = None
     page: int = 1
-    page_size: int = DEFAULT_PAGE_SIZE
+    limit: int = DEFAULT_LIMIT
 
     def __post_init__(self) -> None:
         if self.page < 1:
             object.__setattr__(self, "page", 1)
-        size = max(MIN_PAGE_SIZE, min(MAX_PAGE_SIZE, self.page_size))
-        object.__setattr__(self, "page_size", size)
+        clamped = max(MIN_LIMIT, min(MAX_LIMIT, self.limit))
+        object.__setattr__(self, "limit", clamped)
 
 
 @dataclass(frozen=True)
 class LedgerResult:
     """Immutable result of a ledger query."""
 
-    entries: List[Dict]
-    total_matched: int
+    data: List[Dict]
+    total: int
     page: int
-    page_size: int
-    total_pages: int
+    limit: int
+    pages: int
     ledger_file: str
 
     def to_dict(self) -> Dict:
         return {
-            "entries": self.entries,
+            "data": self.data,
             "pagination": {
                 "page": self.page,
-                "page_size": self.page_size,
-                "total_matched": self.total_matched,
-                "total_pages": self.total_pages,
+                "limit": self.limit,
+                "total": self.total,
+                "pages": self.pages,
             },
             "ledger_file": self.ledger_file,
         }
@@ -134,17 +134,17 @@ class LedgerReader:
             return self._empty_result(q)
 
         total = len(matched)
-        total_pages = max(1, (total + q.page_size - 1) // q.page_size)
-        start = (q.page - 1) * q.page_size
-        end = start + q.page_size
-        page_entries = matched[start:end]
+        pages = max(1, (total + q.limit - 1) // q.limit)
+        start = (q.page - 1) * q.limit
+        end = start + q.limit
+        page_data = matched[start:end]
 
         return LedgerResult(
-            entries=page_entries,
-            total_matched=total,
+            data=page_data,
+            total=total,
             page=q.page,
-            page_size=q.page_size,
-            total_pages=total_pages,
+            limit=q.limit,
+            pages=pages,
             ledger_file=str(self._path),
         )
 
@@ -164,10 +164,10 @@ class LedgerReader:
 
     def _empty_result(self, q: LedgerQuery) -> LedgerResult:
         return LedgerResult(
-            entries=[],
-            total_matched=0,
+            data=[],
+            total=0,
             page=q.page,
-            page_size=q.page_size,
-            total_pages=0,
+            limit=q.limit,
+            pages=0,
             ledger_file=str(self._path),
         )

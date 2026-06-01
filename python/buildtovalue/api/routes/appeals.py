@@ -7,17 +7,20 @@ provedor `Depends` fail-secure (503 se não inicializado no lifespan).
 """
 from __future__ import annotations
 
-from typing import Optional, cast
+import math
+from typing import List, Optional, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from buildtovalue.api._decide_helpers import _appeal_to_response
 from buildtovalue.api._models import (
     AppealListResponse,
     AppealMetricsResponse,
+    AppealPageResponse,
     AppealResolveRequest,
     AppealResponse,
     AppealSubmitRequest,
+    PaginationMeta,
 )
 from buildtovalue.api.auth import require_api_key
 from buildtovalue.api.routes.auth import require_jwt
@@ -104,20 +107,31 @@ def get_appeal(
     return _appeal_to_response(appeal)
 
 
+_SORT_FIELDS = {"timestamp", "status", "user_id"}
+_SORT_ORDERS = {"asc", "desc"}
+
+
 @router.get(
     "/v1/appeals",
-    response_model=AppealListResponse,
+    response_model=AppealPageResponse,
     dependencies=[Depends(require_api_key)],  # CRITICO-03: read requires API key
 )
 def list_appeals(
     status: Optional[str] = None,
     user_id: Optional[str] = None,
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    limit: int = Query(20, ge=1, le=100, description="Results per page (default 20)"),
+    sort_by: Optional[str] = Query(None, description="Sort field: timestamp|status|user_id"),
+    order: str = Query("asc", description="Sort order: asc|desc"),
     loop: ContestabilityLoop = Depends(get_contestability_loop),
-) -> AppealListResponse:
+) -> AppealPageResponse:
     loop.list_expired_appeals()
-    # TODO(Governance): encapsular valores de apelação via getter público na
-    # próxima sprint de refatoração do domínio. `appeals` é atributo público
-    # de ContestabilityLoop hoje — mantemos o acesso direto (fidelidade).
+    if sort_by is not None and sort_by not in _SORT_FIELDS:
+        raise HTTPException(status_code=400, detail=f"Invalid sort_by: {sort_by}. Must be one of {sorted(_SORT_FIELDS)}")
+    if order not in _SORT_ORDERS:
+        raise HTTPException(status_code=400, detail=f"Invalid order: {order}. Must be 'asc' or 'desc'")
+
+    # Filter
     appeals = list(loop.appeals.values())
     if status:
         try:
@@ -127,9 +141,21 @@ def list_appeals(
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
     if user_id:
         appeals = [a for a in appeals if a.user_id == user_id]
-    return AppealListResponse(
-        appeals=[_appeal_to_response(a) for a in appeals],
-        total=len(appeals),
+
+    # Sort
+    if sort_by:
+        reverse = order == "desc"
+        appeals = sorted(appeals, key=lambda a: getattr(a, sort_by, 0), reverse=reverse)
+
+    # Paginate
+    total = len(appeals)
+    pages = max(1, math.ceil(total / limit))
+    start = (page - 1) * limit
+    page_items: List[AppealResponse] = [_appeal_to_response(a) for a in appeals[start:start + limit]]
+
+    return AppealPageResponse(
+        data=page_items,
+        pagination=PaginationMeta(page=page, limit=limit, total=total, pages=pages),
     )
 
 
