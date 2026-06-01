@@ -121,9 +121,9 @@ pub async fn proxy_forward(
 
     // ── Kernel scan (síncrono, bloqueante) ─────────────────────────
     let scan_result = {
-        let Ok(mut gk) = state.gatekeeper.lock() else {
-            return block_response("Gatekeeper lock failed — fail-secure block");
-        };
+        // CRITICO-09: tokio::sync::Mutex cannot be poisoned — lock() never
+        // fails, so the fail-secure fallback for poison is no longer needed.
+        let mut gk = state.gatekeeper.lock().await;
 
         let evidence = gk.scan_for_evidence(&input_text, 0u128);
         let findings = evidence.get_all_findings();

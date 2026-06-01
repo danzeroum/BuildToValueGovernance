@@ -127,8 +127,8 @@ pub async fn validate_handler(
 
     // ── EXECUTIVO: Rust scan + policy (sync block) ────────────
     let scan = {
-        let mut gk = state.gatekeeper.lock()
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        // CRITICO-09: yields cooperatively; executor thread never blocked.
+        let mut gk = state.gatekeeper.lock().await;
 
         let session_id: u128 = req.session_id
             .as_deref()
@@ -160,21 +160,19 @@ pub async fn validate_handler(
             .fold(0.0_f32, f32::max);
 
         // ADR-044: drift calculado dentro do bloco onde evidence existe
+        // CRITICO-09: tokio::sync::Mutex — no poison, no Result wrapping.
         let drift_level = {
             let sid: u128 = req.session_id
                 .as_deref().and_then(|s| s.parse().ok()).unwrap_or(0);
-            if let Ok(mut tracker) = state.session_tracker.lock() {
-                let result = tracker.track(sid, &evidence);
-                match result.level {
-                    buildtovalue_kernel::session_guard::DriftLevel::None   => "None",
-                    buildtovalue_kernel::session_guard::DriftLevel::Low    => "LOW",
-                    buildtovalue_kernel::session_guard::DriftLevel::Medium => "MEDIUM",
-                    buildtovalue_kernel::session_guard::DriftLevel::High     => "HIGH",
-                    buildtovalue_kernel::session_guard::DriftLevel::Critical => "CRITICAL",
-                }.to_string()
-            } else {
-                "None".to_string()
-            }
+            let mut tracker = state.session_tracker.lock().await;
+            let result = tracker.track(sid, &evidence);
+            match result.level {
+                buildtovalue_kernel::session_guard::DriftLevel::None   => "None",
+                buildtovalue_kernel::session_guard::DriftLevel::Low    => "LOW",
+                buildtovalue_kernel::session_guard::DriftLevel::Medium => "MEDIUM",
+                buildtovalue_kernel::session_guard::DriftLevel::High     => "HIGH",
+                buildtovalue_kernel::session_guard::DriftLevel::Critical => "CRITICAL",
+            }.to_string()
         };
 
         ScanResult {
