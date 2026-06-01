@@ -33,13 +33,29 @@ python3 demo/proxy.py &
 # http://<IP-DA-VPS>:8080
 ```
 
-## Variáveis de ambiente (opcional)
+## Variáveis de ambiente
 
 ```bash
-export BTV_DEMO_KEY="sua-api-key"    # padrão: usa BTV_API_KEYS do .env
+# Autenticação — API key (injetada em todos os requests pelo proxy)
+export BTV_DEMO_KEY="sua-api-key"        # padrão: usa BTV_API_KEYS do .env
+
+# Autenticação — JWT para operações de escrita (Appeals, Governança)
+export BTV_DEMO_USER="admin"             # padrão: "admin"
+export BTV_DEMO_PASSWORD="sua-senha"     # obrigatória para escrita; ausente = modo somente-leitura
+
+# Infraestrutura
 export BTV_API_BASE="http://localhost:8000"  # padrão
-export BTV_DEMO_PORT="8080"          # padrão
+export BTV_DEMO_PORT="8080"                  # padrão
 ```
+
+### Modo somente-leitura (fail-secure)
+
+Se `BTV_DEMO_PASSWORD` não for configurada, o proxy bloqueia o endpoint `/demo-login`
+com `HTTP 403` e payload `{"action": "BLOCK", "verdict": "DENY"}`. O frontend opera
+em modo somente-leitura: personas de leitura (Engenheiro, CISO, DPO em GETs) funcionam
+normalmente; a persona **Governança** (Appeals — escrita) exibe aviso de modo restrito.
+
+Isso é **intencional e auditável** — não um erro silencioso.
 
 ## Personas e endpoints usados
 

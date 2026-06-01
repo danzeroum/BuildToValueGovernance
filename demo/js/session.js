@@ -1,6 +1,13 @@
 /**
  * BuildToValue — Session Manager (localStorage)
  * Persists verdicts, trust history, appeals, and preferences across pages.
+ *
+ * NOTA DE GOVERNANÇA: dados de sessão de demonstração (histórico de verdicts,
+ * preferências) são persistidos em localStorage. Tokens JWT de autenticação
+ * são tratados separadamente em sessionStorage por DemoAuth (api.js).
+ * Em produção, o BuildToValue exige cookies HttpOnly + Secure para tokens JWT,
+ * eliminando o risco de exfiltração por XSS. O uso de Web Storage aqui é uma
+ * concessão explícita do ambiente de demonstração — NÃO é padrão BTV de produção.
  */
 
 const Session = (() => {

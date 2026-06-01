@@ -17,9 +17,12 @@ import time
 import urllib.error
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from typing import Dict, Optional
 
 API_KEY         = os.environ.get("BTV_DEMO_KEY", os.environ.get("BTV_API_KEYS", "demo-key"))
 API_BASE        = os.environ.get("BTV_API_BASE", "http://localhost:8000")
+DEMO_USER       = os.environ.get("BTV_DEMO_USER", "admin")
+DEMO_PASSWORD   = os.environ.get("BTV_DEMO_PASSWORD", "")  # fail-secure: vazio = somente-leitura
 RUST_API_BASE   = os.environ.get("BTV_RUST_BASE", "http://localhost:8080")
 DEEPSEEK_KEY    = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE   = os.environ.get("DEEPSEEK_BASE", "https://api.deepseek.com")
@@ -80,7 +83,9 @@ class DemoHandler(SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
-        if self.path.startswith("/api/"):
+        if self.path == "/demo-login":
+            self._demo_login()
+        elif self.path.startswith("/api/"):
             self._proxy("POST")
         elif self.path.startswith("/deepseek/"):
             self._deepseek_proxy()
@@ -113,11 +118,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
             url,
             data=body,
             method=method,
-            headers={
-                "X-API-Key": API_KEY,
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
+            headers=self._build_headers(self.headers.get("Authorization")),
         )
 
         try:
@@ -167,6 +168,54 @@ class DemoHandler(SimpleHTTPRequestHandler):
         except Exception as exc:
             err = json.dumps({"error": str(exc)})
             self._write_json(503, err.encode())
+
+    # ── Demo login ────────────────────────────────────────
+    def _demo_login(self) -> None:
+        """POST /demo-login — obtém JWT do backend com credenciais de ambiente.
+
+        Fail-secure: BTV_DEMO_PASSWORD ausente ou vazio → 403 imediato.
+        A senha nunca é logada — apenas o estado da decisão.
+        Não aplica cache (POST, sem efeito colateral idempotente).
+        """
+        if not DEMO_PASSWORD:
+            print("[DEMO-AUTH] Decision: BLOCK. Reason: Password not provisioned.")
+            payload = json.dumps({
+                "action": "BLOCK",
+                "verdict": "DENY",
+                "reason": "Missing BTV_DEMO_PASSWORD environment variable. Fail-Secure enforced.",
+            }).encode()
+            self._write_json(403, payload)
+            return
+
+        url = f"{API_BASE}/v1/auth/login"
+        body = json.dumps({"username": DEMO_USER, "password": DEMO_PASSWORD}).encode()
+        req = urllib.request.Request(
+            url, data=body, method="POST",
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = resp.read()
+                print(f"[DEMO-AUTH] Decision: ALLOW. User: {DEMO_USER}")
+                self._write_json(resp.status, data)
+        except urllib.error.HTTPError as e:
+            print(f"[DEMO-AUTH] Decision: BLOCK. Reason: Backend returned {e.code}.")
+            self._write_json(e.code, e.read())
+        except Exception as exc:
+            print(f"[DEMO-AUTH] Decision: BLOCK. Reason: {exc}")
+            err = json.dumps({"action": "BLOCK", "verdict": "DENY", "reason": str(exc)}).encode()
+            self._write_json(502, err)
+
+    def _build_headers(self, auth_header: Optional[str]) -> Dict[str, str]:
+        """Monta headers de saída: injeta API key; repassa Bearer do browser se presente."""
+        headers_out: Dict[str, str] = {
+            "X-API-Key": API_KEY,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if auth_header:
+            headers_out["Authorization"] = auth_header
+        return headers_out
 
     # ── Helpers ───────────────────────────────────────────
     def _write_json(self, status: int, data: bytes):

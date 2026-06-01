@@ -3,6 +3,50 @@
  * All calls go through /api/* proxy (no key exposure)
  */
 
+/**
+ * DemoAuth — gerencia autenticação JWT para personas de escrita (e.g. Governança/Appeals).
+ *
+ * NOTA DE GOVERNANÇA: tokens JWT são armazenados em sessionStorage aqui por ser
+ * um ambiente de demonstração. Em produção, o BuildToValue exige cookies HttpOnly
+ * + Secure para mitigar ataques XSS. O uso de sessionStorage é uma concessão
+ * explícita e exclusiva do contexto demo — NÃO é um padrão arquitetural do BTV.
+ */
+const DemoAuth = {
+  _token: /** @type {string|null} */ (null),
+  _readOnly: false,
+
+  /** Inicializa — tenta restaurar token da sessão ou faz login automático. */
+  async init() {
+    const stored = sessionStorage.getItem('btv_demo_token');
+    if (stored) { this._token = stored; return; }
+    try {
+      const res = await fetch('/demo-login', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token) {
+          this._token = data.token;
+          sessionStorage.setItem('btv_demo_token', data.token);
+          return;
+        }
+      }
+      // 403 = BTV_DEMO_PASSWORD não configurada → modo somente-leitura por fail-secure
+      this._readOnly = true;
+      console.info('[DemoAuth] Modo somente-leitura: BTV_DEMO_PASSWORD não provisionada.');
+    } catch {
+      this._readOnly = true;
+    }
+  },
+
+  /** Retorna o Bearer token atual, ou null em modo somente-leitura. */
+  getToken() { return this._token; },
+
+  /** True quando não há credenciais de escrita configuradas. */
+  isReadOnly() { return this._readOnly || !this._token; },
+
+  /** Remove token da sessão (logout). */
+  clear() { this._token = null; sessionStorage.removeItem('btv_demo_token'); },
+};
+
 const API = {
   base: '/api',
   timeout: 5000,
@@ -11,9 +55,14 @@ const API = {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeout || this.timeout);
 
+    const headers = { 'Content-Type': 'application/json' };
+    // Injeta Bearer para operações de escrita (Passo 3 adicionou require_jwt em POSTs).
+    const token = DemoAuth.getToken();
+    if (token && method !== 'GET') headers['Authorization'] = `Bearer ${token}`;
+
     const fetchOpts = {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       signal: controller.signal,
     };
     if (body) fetchOpts.body = JSON.stringify(body);
