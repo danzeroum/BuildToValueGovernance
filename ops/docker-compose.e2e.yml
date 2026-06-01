@@ -25,8 +25,11 @@ services:
       BTV_THREATS_DB: "/tmp/threats.db"
       BTV_AUTOGEN_DIR: "/tmp/autogen-policies"
       BTV_ADMIN_PASSWORD: "demo-admin-NOT-for-production"
-      # §3.2 E2E flows: API key + JWT secret required for auth flows 1–5.
-      BTV_API_KEYS: "${BTV_API_KEY:-btv-e2e-test-key}"
+      # JWT secret for §3.2 auth flows 1–5 (login, Bearer validation).
+      # Note: BTV_API_KEYS is intentionally omitted so auth is disabled in dev mode;
+      # existing e2e tests use X-BTV-API-Key which the governance service does not
+      # recognise as X-API-Key.  Auth-gating (Flow 3) is covered by the Python
+      # in-process system tests (tests/system/test_passo15_e2e_7flows.py).
       BTV_JWT_SECRET: "${BTV_JWT_SECRET:-e2e-jwt-secret-NOT-for-production!!}"
     volumes:
       - ../data/policies/quickstart/bundles/${BTV_POLICY_BUNDLE:-baseline_trust}:/app/data/policies:ro
