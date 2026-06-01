@@ -61,6 +61,104 @@ mod security_red {
     }
 }
 
+/// CRITICO-09: gatekeeper and session_tracker must use tokio::sync::Mutex so
+/// waiting tasks yield cooperatively rather than blocking the executor thread.
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod critico_09_async_locks {
+    use std::sync::{
+        atomic::{AtomicU32, Ordering::Relaxed},
+        Arc,
+    };
+
+    use btv_gateway::state::AppState;
+
+    /// 50 concurrent tasks must all acquire the gatekeeper lock and complete
+    /// without deadlock or executor starvation.
+    ///
+    /// On a `current_thread` runtime: `std::sync::Mutex::lock()` is NOT a
+    /// `Future` (compile error with `.await`), and blocking on it would starve
+    /// the single executor thread.  `tokio::sync::Mutex::lock().await` yields
+    /// cooperatively — all 50 tasks complete.
+    #[tokio::test(flavor = "current_thread")]
+    async fn gatekeeper_lock_does_not_block_executor_under_concurrency() {
+        let state = Arc::new(AppState::new());
+        let done = Arc::new(AtomicU32::new(0));
+
+        let tasks: Vec<_> = (0u128..50)
+            .map(|i| {
+                let state = Arc::clone(&state);
+                let done = Arc::clone(&done);
+                tokio::spawn(async move {
+                    // tokio::sync::Mutex::lock() returns a Future → awaitable.
+                    // std::sync::Mutex::lock() is NOT a Future → compile error here.
+                    let mut gk = state.gatekeeper.lock().await;
+                    let _ = gk.scan_for_evidence(
+                        &format!("concurrent-scan-input-{i}"),
+                        i,
+                    );
+                    drop(gk);
+                    done.fetch_add(1, Relaxed);
+                })
+            })
+            .collect();
+
+        for task in tasks {
+            task.await.expect("task panicked (CRITICO-09 gatekeeper)");
+        }
+
+        assert_eq!(
+            done.load(Relaxed),
+            50,
+            "CRITICO-09: all 50 concurrent gatekeeper accesses must complete"
+        );
+    }
+
+    /// session_tracker must also use tokio::sync::Mutex.
+    /// Each task produces its own TechnicalEvidence (via gatekeeper scan) and
+    /// then calls session_tracker.track() — both locks are exercised concurrently.
+    #[tokio::test(flavor = "current_thread")]
+    async fn session_tracker_lock_does_not_block_executor_under_concurrency() {
+        use buildtovalue_kernel::session_guard::DriftLevel;
+
+        let state = Arc::new(AppState::new());
+        let done = Arc::new(AtomicU32::new(0));
+
+        let tasks: Vec<_> = (1u128..=50)
+            .map(|i| {
+                let state = Arc::clone(&state);
+                let done = Arc::clone(&done);
+                tokio::spawn(async move {
+                    // Produce fresh evidence inside the task (TechnicalEvidence: !Clone).
+                    let evidence = {
+                        let mut gk = state.gatekeeper.lock().await;
+                        gk.scan_for_evidence(&format!("tracker-input-{i}"), i)
+                    };
+                    let mut tracker = state.session_tracker.lock().await;
+                    let result = tracker.track(i, &evidence);
+                    let _ = match result.level {
+                        DriftLevel::None | DriftLevel::Low => "low",
+                        DriftLevel::Medium => "medium",
+                        DriftLevel::High | DriftLevel::Critical => "high",
+                    };
+                    drop(tracker);
+                    done.fetch_add(1, Relaxed);
+                })
+            })
+            .collect();
+
+        for task in tasks {
+            task.await.expect("task panicked (CRITICO-09 session_tracker)");
+        }
+
+        assert_eq!(
+            done.load(Relaxed),
+            50,
+            "CRITICO-09: all 50 concurrent session_tracker accesses must complete"
+        );
+    }
+}
+
 /// MED-R05: TenantExtractorService in isolation — malformed Bearer must yield
 /// 401 rather than falling through to the default tenant (cross-tenant risk).
 #[cfg(test)]

@@ -772,8 +772,9 @@ pub async fn decide_handler(
         entropy, total_chars, blake3_hash, drift_level, evidence): (
         u32, u32, f32, String, bool, _, _, f32, f32, u32, String, String, TechnicalEvidence,
     ) = {
-        let mut gk = state.gatekeeper.lock()
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        // CRITICO-09: tokio::sync::Mutex::lock() yields cooperatively; the
+        // executor thread is never blocked while contention is resolved.
+        let mut gk = state.gatekeeper.lock().await;
 
         let session_id: u128 = req.session_id
             .as_deref()
@@ -812,7 +813,9 @@ pub async fn decide_handler(
             .map(|f| f.confidence as f32 / 255.0)
             .fold(0.0_f32, f32::max);
 
-        let drift_str = if let Ok(mut tracker) = state.session_tracker.lock() {
+        // CRITICO-09: tokio::sync::Mutex — no poison, no Result wrapping.
+        let drift_str = {
+            let mut tracker = state.session_tracker.lock().await;
             let sid: u128 = req.session_id.as_deref().and_then(|s| s.parse().ok()).unwrap_or(0);
             let result = tracker.track(sid, &evidence);
             match result.level {
@@ -822,7 +825,7 @@ pub async fn decide_handler(
                 buildtovalue_kernel::session_guard::DriftLevel::High     => "HIGH",
                 buildtovalue_kernel::session_guard::DriftLevel::Critical => "CRITICAL",
             }.to_string()
-        } else { "None".to_string() };
+        };
 
         (
             evidence.finding_count as u32,

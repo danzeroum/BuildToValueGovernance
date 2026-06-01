@@ -54,8 +54,8 @@ pub async fn policy_test_handler(
     let mut engine = PolicyEngine::from_yaml_str(&req.policy_yaml)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    let mut gk = state.gatekeeper.lock()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // CRITICO-09: yields cooperatively; executor thread never blocked.
+    let mut gk = state.gatekeeper.lock().await;
 
     let mut results = Vec::new();
     let mut blocked = 0usize;

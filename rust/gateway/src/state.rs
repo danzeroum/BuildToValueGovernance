@@ -10,7 +10,11 @@ use crate::tenant_status::TenantStatusRegistry;
 use crate::audit::drainer::{spawn_drainer, AuditChannel};
 use crate::audit::sink::{AuditSink, JsonlAuditSink, MultiAuditSink, StdoutAuditSink};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+// CRITICO-09: tokio::sync::Mutex yields cooperatively (non-blocking on the
+// executor thread) when contended. std::sync::Mutex would block the tokio
+// worker thread, serialising all concurrent requests through the lock.
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use prometheus::{
     opts, register_histogram, register_int_counter, register_int_counter_vec,
