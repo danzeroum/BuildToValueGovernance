@@ -32,13 +32,14 @@ def query_ledger(
     action: Optional[str] = Query(None, description="ALLOW|EDUCATE|BLOCK|LOG"),
     start_ts: Optional[int] = Query(None, description="Min timestamp (ms)"),
     end_ts: Optional[int] = Query(None, description="Max timestamp (ms)"),
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(100, ge=10, le=1000, description="Results per page"),
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    limit: int = Query(20, ge=1, le=1000, description="Results per page (default 20)"),
 ):
     """
     Query the immutable audit ledger.
 
-    Filters are optional and combinable. Returns paginated results.
+    Filters are optional and combinable. Returns paginated results with
+    canonical envelope {data, pagination:{page,limit,total,pages}}.
     Read-only: this endpoint never modifies the ledger.
     """
     q = LedgerQuery(
@@ -48,7 +49,7 @@ def query_ledger(
         start_ts=start_ts,
         end_ts=end_ts,
         page=page,
-        page_size=page_size,
+        limit=limit,
     )
     result = _reader.query(q)
     return result.to_dict()

@@ -71,9 +71,9 @@ def _collect_window(since_ms: int) -> List[Entry]:
     out: List[Dict[str, object]] = []
     page = 1
     while True:
-        res = _reader.query(LedgerQuery(start_ts=since_ms, page=page, page_size=1000))
-        out.extend(res.entries)
-        if page >= res.total_pages or not res.entries:
+        res = _reader.query(LedgerQuery(start_ts=since_ms, page=page, limit=1000))
+        out.extend(res.data)
+        if page >= res.pages or not res.data:
             break
         page += 1
     return out

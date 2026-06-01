@@ -184,13 +184,14 @@ class TestResolveAppeal:
 class TestListAppeals:
 
     def test_list_empty(self, client):
-        """200: No appeals."""
+        """200: No appeals — canonical envelope."""
         res = client.get("/v1/appeals")
         assert res.status_code == 200
-        assert res.json()["total"] == 0
+        assert res.json()["pagination"]["total"] == 0
+        assert res.json()["data"] == []
 
     def test_list_filter_by_status(self, client):
-        """200: Filter by status=pending."""
+        """200: Filter by status=pending — paginated envelope."""
         # Create 2 appeals
         client.post("/v1/appeals", json={
             "audit_trail_id": 1,
@@ -213,11 +214,11 @@ class TestListAppeals:
         # Filter pending only
         res = client.get("/v1/appeals?status=pending")
         assert res.status_code == 200
-        assert res.json()["total"] == 1
-        assert res.json()["appeals"][0]["status"] == "pending"
+        assert res.json()["pagination"]["total"] == 1
+        assert res.json()["data"][0]["status"] == "pending"
 
     def test_list_filter_by_user(self, client):
-        """200: Filter by user_id."""
+        """200: Filter by user_id — paginated envelope."""
         client.post("/v1/appeals", json={
             "audit_trail_id": 1, "user_id": "alice",
             "reason": "Alice's reason is long enough.",
@@ -228,8 +229,8 @@ class TestListAppeals:
         })
 
         res = client.get("/v1/appeals?user_id=alice")
-        assert res.json()["total"] == 1
-        assert res.json()["appeals"][0]["user_id"] == "alice"
+        assert res.json()["pagination"]["total"] == 1
+        assert res.json()["data"][0]["user_id"] == "alice"
 
 
 # ═══════════════════════════════════════════════════════════════

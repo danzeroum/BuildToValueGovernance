@@ -140,6 +140,22 @@ class AppealListResponse(BaseModel):
     total: int
 
 
+class PaginationMeta(BaseModel):
+    """Canonical pagination envelope (Passo 12)."""
+
+    page: int
+    limit: int
+    total: int
+    pages: int
+
+
+class AppealPageResponse(BaseModel):
+    """Paginated appeals list — canonical envelope {data, pagination}."""
+
+    data: List[AppealResponse]
+    pagination: PaginationMeta
+
+
 class AppealResolveRequest(BaseModel):
     accepted: bool
     reviewer_notes: str = Field(..., min_length=10)

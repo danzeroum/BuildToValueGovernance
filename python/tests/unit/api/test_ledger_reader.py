@@ -79,8 +79,8 @@ class TestMissingLedger:
     def test_missing_file_returns_empty(self, tmp_path):
         reader = LedgerReader(str(tmp_path / "nonexistent.jsonl"))
         result = reader.query(LedgerQuery())
-        assert result.total_matched == 0
-        assert result.entries == []
+        assert result.total == 0
+        assert result.data == []
 
     def test_exists_false(self, tmp_path):
         reader = LedgerReader(str(tmp_path / "nope.jsonl"))
@@ -96,8 +96,8 @@ class TestNoFilters:
 
     def test_returns_all(self, populated_ledger):
         result = populated_ledger.query(LedgerQuery())
-        assert result.total_matched == 5
-        assert len(result.entries) == 5
+        assert result.total == 5
+        assert len(result.data) == 5
 
     def test_entry_count(self, populated_ledger):
         assert populated_ledger.entry_count() == 5
@@ -108,13 +108,13 @@ class TestFilterBySession:
     def test_filter_s1(self, populated_ledger):
         q = LedgerQuery(session_id="s1")
         result = populated_ledger.query(q)
-        assert result.total_matched == 2
-        assert all(e["session"] == "s1" for e in result.entries)
+        assert result.total == 2
+        assert all(e["session"] == "s1" for e in result.data)
 
     def test_filter_nonexistent(self, populated_ledger):
         q = LedgerQuery(session_id="s_nope")
         result = populated_ledger.query(q)
-        assert result.total_matched == 0
+        assert result.total == 0
 
 
 class TestFilterByVerdict:
@@ -122,8 +122,8 @@ class TestFilterByVerdict:
     def test_exact_verdict(self, populated_ledger):
         q = LedgerQuery(verdict_id="v3")
         result = populated_ledger.query(q)
-        assert result.total_matched == 1
-        assert result.entries[0]["verdict_id"] == "v3"
+        assert result.total == 1
+        assert result.data[0]["verdict_id"] == "v3"
 
 
 class TestFilterByAction:
@@ -131,13 +131,13 @@ class TestFilterByAction:
     def test_block_only(self, populated_ledger):
         q = LedgerQuery(action="BLOCK")
         result = populated_ledger.query(q)
-        assert result.total_matched == 2
-        assert all(e["final_action"] == "BLOCK" for e in result.entries)
+        assert result.total == 2
+        assert all(e["final_action"] == "BLOCK" for e in result.data)
 
     def test_educate_only(self, populated_ledger):
         q = LedgerQuery(action="EDUCATE")
         result = populated_ledger.query(q)
-        assert result.total_matched == 1
+        assert result.total == 1
 
 
 class TestFilterByTimestamp:
@@ -145,19 +145,19 @@ class TestFilterByTimestamp:
     def test_start_ts(self, populated_ledger):
         q = LedgerQuery(start_ts=3000)
         result = populated_ledger.query(q)
-        assert result.total_matched == 3
-        assert all(e["ts"] >= 3000 for e in result.entries)
+        assert result.total == 3
+        assert all(e["ts"] >= 3000 for e in result.data)
 
     def test_end_ts(self, populated_ledger):
         q = LedgerQuery(end_ts=2000)
         result = populated_ledger.query(q)
-        assert result.total_matched == 2
-        assert all(e["ts"] <= 2000 for e in result.entries)
+        assert result.total == 2
+        assert all(e["ts"] <= 2000 for e in result.data)
 
     def test_range(self, populated_ledger):
         q = LedgerQuery(start_ts=2000, end_ts=4000)
         result = populated_ledger.query(q)
-        assert result.total_matched == 3
+        assert result.total == 3
 
 
 class TestCombinedFilters:
@@ -165,22 +165,22 @@ class TestCombinedFilters:
     def test_session_plus_action(self, populated_ledger):
         q = LedgerQuery(session_id="s2", action="BLOCK")
         result = populated_ledger.query(q)
-        assert result.total_matched == 2
+        assert result.total == 2
 
     def test_session_plus_time(self, populated_ledger):
         q = LedgerQuery(session_id="s1", end_ts=1500)
         result = populated_ledger.query(q)
-        assert result.total_matched == 1
-        assert result.entries[0]["verdict_id"] == "v1"
+        assert result.total == 1
+        assert result.data[0]["verdict_id"] == "v1"
 
 
 class TestPagination:
 
-    def test_page_size_limits(self, populated_ledger):
-        q = LedgerQuery(page_size=10)
+    def test_limit_fits_all(self, populated_ledger):
+        q = LedgerQuery(limit=10)
         result = populated_ledger.query(q)
-        assert len(result.entries) == 5  # only 5 entries, fits in 1 page
-        assert result.total_pages == 1
+        assert len(result.data) == 5  # only 5 entries, fits in 1 page
+        assert result.pages == 1
 
     def test_pagination_with_many_entries(self, ledger_file):
         """Test real pagination with enough entries."""
@@ -191,32 +191,32 @@ class TestPagination:
         _write_entries(ledger_file, entries)
         reader = LedgerReader(ledger_path=ledger_file)
 
-        q1 = LedgerQuery(page=1, page_size=10)
+        q1 = LedgerQuery(page=1, limit=10)
         r1 = reader.query(q1)
-        assert len(r1.entries) == 10
-        assert r1.total_matched == 25
-        assert r1.total_pages == 3
+        assert len(r1.data) == 10
+        assert r1.total == 25
+        assert r1.pages == 3
 
-        q2 = LedgerQuery(page=2, page_size=10)
+        q2 = LedgerQuery(page=2, limit=10)
         r2 = reader.query(q2)
-        assert len(r2.entries) == 10
+        assert len(r2.data) == 10
 
-        q3 = LedgerQuery(page=3, page_size=10)
+        q3 = LedgerQuery(page=3, limit=10)
         r3 = reader.query(q3)
-        assert len(r3.entries) == 5  # last page partial
+        assert len(r3.data) == 5  # last page partial
 
     def test_beyond_last_page(self, populated_ledger):
-        q = LedgerQuery(page=99, page_size=10)
+        q = LedgerQuery(page=99, limit=10)
         result = populated_ledger.query(q)
-        assert len(result.entries) == 0
+        assert len(result.data) == 0
 
-    def test_page_size_clamped_min(self):
-        q = LedgerQuery(page_size=1)
-        assert q.page_size == 10
+    def test_limit_clamped_min(self):
+        q = LedgerQuery(limit=0)
+        assert q.limit == 1
 
-    def test_page_size_clamped_max(self):
-        q = LedgerQuery(page_size=9999)
-        assert q.page_size == 1000
+    def test_limit_clamped_max(self):
+        q = LedgerQuery(limit=9999)
+        assert q.limit == 1000
 
 class TestCorruptLines:
     """Resilience against malformed JSONL."""
@@ -231,8 +231,8 @@ class TestCorruptLines:
 
         reader = LedgerReader(ledger_path=ledger_file)
         result = reader.query(LedgerQuery())
-        assert result.total_matched == 2
-        ids = [e["verdict_id"] for e in result.entries]
+        assert result.total == 2
+        ids = [e["verdict_id"] for e in result.data]
         assert "good1" in ids
         assert "good2" in ids
 
@@ -241,7 +241,7 @@ class TestCorruptLines:
             f.write("")
         reader = LedgerReader(ledger_path=ledger_file)
         result = reader.query(LedgerQuery())
-        assert result.total_matched == 0
+        assert result.total == 0
 
 
 class TestResultSerialization:
@@ -249,8 +249,11 @@ class TestResultSerialization:
     def test_to_dict_structure(self, populated_ledger):
         result = populated_ledger.query(LedgerQuery())
         d = result.to_dict()
-        assert "entries" in d
+        assert "data" in d
         assert "pagination" in d
         assert "ledger_file" in d
-        assert d["pagination"]["total_matched"] == 5
-        assert d["pagination"]["page"] == 1
+        pg = d["pagination"]
+        for field in ("page", "limit", "total", "pages"):
+            assert field in pg, f"pagination must have '{field}'"
+        assert pg["total"] == 5
+        assert pg["page"] == 1
