@@ -35,6 +35,8 @@ lazy_static = "1.5.0"
 serde_yaml = { workspace = true }
 subtle = "2.5"
 zeroize = "1.7"
+# MED-R03: concurrent cache with TTL eviction — replaces HashMap + Mutex in rate_limit.rs
+moka = { version = "0.12", features = ["sync"] }
 
 [build-dependencies]
 tonic-build = "0.12"
