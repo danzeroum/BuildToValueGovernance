@@ -306,19 +306,19 @@
 <body>
 
 <nav class="nav">
-  <a href="BuildToValue Landing.html" class="nav-logo">
+  <a href="index.html" class="nav-logo">
     <span class="logo-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 21l18 0M12 21l0 -10M5 21l0 -8M19 21l0 -8M3 11l9 -8l9 8"/></svg></span>
     BuildToValue
   </a>
   <span class="nav-tag">Compliance Studio</span>
   <div class="nav-mid">
-    <div class="nav-group"><a href="BuildToValue Landing.html">Home</a><a href="Fleet.html">Fleet</a><a href="Lab.html">Lab</a></div>
-    <div class="nav-group"><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Compliance Studio.html" class="active">Compliance</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a></div>
-    <div class="nav-group"><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a></div>
+    <div class="nav-group"><a href="index.html">Home</a><a href="fleet.html">Fleet</a><a href="lab.html">Lab</a></div>
+    <div class="nav-group"><a href="proxy-demo.html">Proxy</a><a href="sanitizer-demo.html">Sanitizer</a><a href="Compliance Studio.html" class="active">Compliance</a><a href="ledger-explorer.html">Ledger</a><a href="dashboard.html">Dashboard</a></div>
+    <div class="nav-group"><a href="persona-eng.html">Eng</a><a href="persona-ciso.html">CISO</a><a href="persona-dpo.html">DPO</a><a href="persona-gov.html">Gov</a></div>
   </div>
   <div class="nav-right">
     <button class="nav-icon-btn" onclick="window.openGlobalSearch&&window.openGlobalSearch()" title="Pesquisar (Ctrl+K)" aria-label="Pesquisa global"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
-    <button class="nav-icon-btn" onclick="window.location.href='BuildToValue Landing.html#top'" title="Tour" aria-label="Tour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+    <button class="nav-icon-btn" onclick="window.location.href='index.html#top'" title="Tour" aria-label="Tour"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
     <button class="nav-icon-btn" onclick="toggleTheme()" aria-label="Alternar tema">
       <svg id="t-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       <svg id="t-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
@@ -327,9 +327,9 @@
   </div>
 </nav>
 <div class="mobile-menu" id="mobile-menu">
-  <div class="group-label">Principal</div><a href="BuildToValue Landing.html">Home</a><a href="Fleet.html">Fleet</a><a href="Lab.html">Lab</a>
-  <div class="group-label">Demos</div><a href="Proxy Demo.html">Proxy</a><a href="Sanitizer Demo.html">Sanitizer</a><a href="Compliance Studio.html">Compliance</a><a href="Ledger Explorer.html">Ledger</a><a href="Dashboard.html">Dashboard</a>
-  <div class="group-label">Personas</div><a href="Persona Eng.html">Eng</a><a href="Persona CISO.html">CISO</a><a href="Persona DPO.html">DPO</a><a href="Persona Gov.html">Gov</a>
+  <div class="group-label">Principal</div><a href="index.html">Home</a><a href="fleet.html">Fleet</a><a href="lab.html">Lab</a>
+  <div class="group-label">Demos</div><a href="proxy-demo.html">Proxy</a><a href="sanitizer-demo.html">Sanitizer</a><a href="Compliance Studio.html">Compliance</a><a href="ledger-explorer.html">Ledger</a><a href="dashboard.html">Dashboard</a>
+  <div class="group-label">Personas</div><a href="persona-eng.html">Eng</a><a href="persona-ciso.html">CISO</a><a href="persona-dpo.html">DPO</a><a href="persona-gov.html">Gov</a>
 </div>
 
 <main>
@@ -540,6 +540,12 @@
 </div>
 
 <script>
+// ━━━━━━━━━━━━━━━━━━━━━━ API CONFIG ━━━━━━━━━━━━━━━━━━━━━━
+const API = 'http://localhost:8000';
+const API_KEY = '';      // X-API-Key — para /v1/multi-decide e /v1/ledger/query
+const JWT_TOKEN = '';    // Authorization: Bearer — para /v1/appeals
+let SESSION_ID = 'demo-' + Math.random().toString(36).slice(2, 10);
+let LAST_VERDICT_ID = null;
 // ━━━━━━━━━━━━━━━━━━━━━━ DADOS ━━━━━━━━━━━━━━━━━━━━━━
 const FRAMEWORKS = {
   lgpd:    { name:'LGPD',       color:'#3fb950', label:'LGPD' },
@@ -748,38 +754,76 @@ async function runDecide(){
   btn.disabled = true;
   btn.innerHTML = '<div style="border:2px solid white;border-top-color:transparent;border-radius:50%;width:12px;height:12px;animation:spin .8s linear infinite"></div> Avaliando 3 agentes…';
   const text = document.getElementById('prompt').value.trim() || 'test';
-  const profile = document.getElementById('profile').value;
 
   const out = document.getElementById('agents-out');
   out.innerHTML = AGENTS.map(a=>`<div class="agent-card"><div class="agent-name"><b>${a.id}</b><span>…</span></div><div style="margin:auto 0;color:#6B7280;font-family:var(--mono);font-size:10px">avaliando…</div></div>`).join('');
 
   await sleep(620);
 
+  // pré-computar localmente para uso como fallback e enriquecer o display
+  const localResults = AGENTS.map(a => evaluate(text, a.sector));
+
+  // tentar chamada real à API
+  let apiVerdicts = null;
+  if(API_KEY) {
+    try {
+      const res = await fetch(`${API}/v1/multi-decide`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+        body: JSON.stringify({
+          prompt: text,
+          agent_ids: AGENTS.map(a => a.id),
+          session_id: SESSION_ID
+        })
+      });
+      if(res.ok) {
+        const data = await res.json();
+        apiVerdicts = data.verdicts || null;
+        if(apiVerdicts?.[0]?.verdict_id) LAST_VERDICT_ID = apiVerdicts[0].verdict_id;
+      }
+    } catch(_) { /* fallback para local */ }
+  }
+
   let blocked=0, latTotal=0;
-  out.innerHTML = AGENTS.map(a=>{
-    const r = evaluate(text, a.sector);
-    const lat = Math.round(18 + Math.random()*16); latTotal += lat;
-    if(r.action!=='ALLOW') blocked++;
-    r.violations.forEach(v=> pushTrail(v.fw, a.id, text, v));
-    const viol = r.violations.length
-      ? `<div class="agent-viol">${r.violations.slice(0,3).map(v=>`<div class="vchip r-${v.sev}"><span class="bar"></span><span>${v.code} · ${v.act}</span></div>`).join('')}</div>`
+  out.innerHTML = AGENTS.map((a, i) => {
+    const local = localResults[i];
+    const api = apiVerdicts?.[i];
+
+    const action = api ? (api.action || local.action) : local.action;
+    const lat = api ? Math.round(api.latency_ms || (18 + Math.random()*16)) : Math.round(18 + Math.random()*16);
+    latTotal += lat;
+    if(action !== 'ALLOW') blocked++;
+
+    local.violations.forEach(v => pushTrail(v.fw, a.id, text, v));
+    const viol = local.violations.length
+      ? `<div class="agent-viol">${local.violations.slice(0,3).map(v=>`<div class="vchip r-${v.sev}"><span class="bar"></span><span>${v.code} · ${v.act}</span></div>`).join('')}</div>`
       : `<div class="agent-clean">✓ nenhuma violação</div>`;
-    return `<div class="agent-card ${r.action}">
+    return `<div class="agent-card ${action}">
       <div class="agent-name"><b>${a.id}</b><span>${lat}ms</span></div>
-      <div class="agent-action ${r.action}">${r.action==='ALLOW'?'✓ ALLOW':r.action==='BLOCK'?'✕ BLOCK':'⚑ ESCAL'}</div>
+      <div class="agent-action ${action}">${action==='ALLOW'?'✓ ALLOW':action==='BLOCK'?'✕ BLOCK':'⚑ ESCAL'}</div>
       ${viol}
     </div>`;
   }).join('');
 
-  const sig = rid(64);
-  const compRate = ((AGENTS.length-blocked)/AGENTS.length*100).toFixed(0);
   const tl = text.toLowerCase();
   const sliderRm = +document.getElementById('rm').value || 1;
   const attackHit = /select|drop\s+table|ignore.*instru|--|union\s/.test(tl);
   const piiRe = /cpf|hiv|prontu|paciente|diagn|seguradora|phi|cart[aã]o|e-?mail|telefone/.test(tl);
-  const adjRisk = Math.min(0.99, (blocked? 0.82 : 0.11) * sliderRm).toFixed(2);
+
+  // preferir dados reais da API, fallback para calculado localmente
+  const api0 = apiVerdicts?.[0];
+  const sig = api0?.signature || rid(64);
+  const compRate = api0?.compliance_rate != null
+    ? Math.round(api0.compliance_rate * 100)
+    : ((AGENTS.length - blocked) / AGENTS.length * 100).toFixed(0);
+  const adjRisk = api0?.adjusted_risk != null
+    ? api0.adjusted_risk.toFixed(2)
+    : Math.min(0.99, (blocked ? 0.82 : 0.11) * sliderRm).toFixed(2);
+  const piiReal = api0?.bias_declaration?.pii_redacted ?? piiRe;
+  const mercyApplied = api0?.mercy_applied ?? false;
   const blockType = blocked ? (attackHit ? '🔵 Matemático · Rust kernel' : '🟠 Inferencial · Python Gov') : '— sem bloqueio';
-  _lastForensic = { signature:sig, latency_ms:latTotal, compliance_rate:compRate, contestable:blocked>0, bias_declaration:{ pii_redacted:piiRe, adjusted_risk:+adjRisk, mercy_applied:false, block_type: blocked?(attackHit?'mathematical_rust':'inferential_python'):null }, timestamp:new Date().toISOString() };
+
+  _lastForensic = { signature:sig, latency_ms:latTotal, compliance_rate:compRate, contestable:blocked>0, bias_declaration:{ pii_redacted:piiReal, adjusted_risk:+adjRisk, mercy_applied:mercyApplied, block_type: blocked?(attackHit?'mathematical_rust':'inferential_python'):null }, timestamp:new Date().toISOString(), verdict_id: api0?.verdict_id || null };
   const fEl = document.getElementById('forensic');
   fEl.style.display = 'flex';
   fEl.innerHTML = `
@@ -790,15 +834,18 @@ async function runDecide(){
     <button class="copy-mini" onclick="copyForensic()">copiar evidência</button>
     <div style="flex-basis:100%;height:0;border-top:1px dashed var(--border);margin:5px 0"></div>
     <span class="k" style="color:var(--accent-2);font-weight:700;letter-spacing:.04em">BiasDeclaration</span>
-    <span><span class="k">PII redigida</span> <span class="v">${piiRe?'SIM':'NÃO'}</span></span>
+    <span><span class="k">PII redigida</span> <span class="v">${piiReal?'SIM':'NÃO'}</span></span>
     <span><span class="k">risco ajustado</span> <span class="v">${adjRisk}</span></span>
-    <span><span class="k">mercy</span> <span class="v">NÃO</span></span>
+    <span><span class="k">mercy</span> <span class="v">${mercyApplied?'SIM':'NÃO'}</span></span>
     <span><span class="k">tipo de bloqueio</span> <span class="v">${blockType}</span></span>`;
   const contestEl = document.getElementById('contest');
   if(blocked>0){ contestEl.style.display='block'; resetContest(); } else { contestEl.style.display='none'; }
 
-  // alimenta o ledger
-  AGENTS.forEach((a,i)=>{ const r = evaluate(text, a.sector); setTimeout(()=>pushLedger(r.action, a.id), i*260); });
+  // alimenta o ledger com ações reais (ou locais como fallback)
+  AGENTS.forEach((a, i) => {
+    const action = apiVerdicts?.[i]?.action || localResults[i].action;
+    setTimeout(() => pushLedger(action, a.id), i * 260);
+  });
 
   btn.disabled = false;
   btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Executar de novo';
@@ -806,12 +853,43 @@ async function runDecide(){
 }
 function copyForensic(){ if(_lastForensic) navigator.clipboard?.writeText(JSON.stringify(_lastForensic,null,2)); }
 function resetContest(){ const b=document.getElementById('contest-btn'); if(b){ b.disabled=false; b.textContent='⚖️ Contestar (SLA 24h)'; } const r=document.getElementById('contest-result'); if(r){ r.style.display='none'; r.innerHTML=''; } }
-function doContest(){
-  const ov=rid(8), hm=rid(40);
-  pushLedger('OVERRIDE','auditor-human');
-  const r=document.getElementById('contest-result'); r.style.display='block';
-  r.innerHTML = `<span style="color:var(--allow);font-weight:700">⚖️ OVERRIDE registrado · auditor-human</span><br>veredicto original: <b style="color:var(--block)">BLOCK</b> → revisado: <b style="color:var(--allow)">ALLOW</b> (com ressalvas)<br><span class="dim">novo hash de override:</span> ${ov}f4e1…<br><span class="dim">HMAC-SHA256:</span> <span style="color:#7ee787">${hm}…</span><br><span class="dim">encadeado ao veredicto original · imutável · resolvido em 18h (SLA 24h)</span>`;
-  const b=document.getElementById('contest-btn'); b.disabled=true; b.textContent='✓ Contestação registrada no ledger';
+async function doContest(){
+  const b = document.getElementById('contest-btn');
+  b.disabled = true; b.textContent = 'Processando…';
+  const ov = rid(8), hm = rid(40);
+
+  let appealed = false;
+  if(API_KEY && JWT_TOKEN && LAST_VERDICT_ID) {
+    try {
+      // etapa 1: buscar audit_trail_id numérico do ledger via verdict_id
+      const lRes = await fetch(`${API}/v1/ledger/query?verdict_id=${LAST_VERDICT_ID}&limit=1`, {
+        headers: { 'X-API-Key': API_KEY }
+      });
+      const lData = lRes.ok ? await lRes.json() : { data: [] };
+      const auditId = lData.data?.[0]?.id ?? null;
+
+      if(auditId != null) {
+        // etapa 2: submeter appeal com audit_trail_id numérico real
+        const aRes = await fetch(`${API}/v1/appeals`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${JWT_TOKEN}` },
+          body: JSON.stringify({
+            audit_trail_id: auditId,
+            user_id: 'auditor-human',
+            reason: 'Revisão manual: contexto excepcional autorizado pelo auditor responsável.',
+            grounds: ['exceptional_context', 'human_oversight'],
+            evidence: 'Revisão presencial confirmada'
+          })
+        });
+        if(aRes.ok) appealed = true;
+      }
+    } catch(_) { /* fallback local */ }
+  }
+
+  pushLedger('OVERRIDE', 'auditor-human');
+  const r = document.getElementById('contest-result'); r.style.display = 'block';
+  r.innerHTML = `<span style="color:var(--allow);font-weight:700">⚖️ OVERRIDE registrado · auditor-human${appealed?' · via API real':''}</span><br>veredicto original: <b style="color:var(--block)">BLOCK</b> → revisado: <b style="color:var(--allow)">ALLOW</b> (com ressalvas)<br><span class="dim">novo hash de override:</span> ${ov}f4e1…<br><span class="dim">HMAC-SHA256:</span> <span style="color:#7ee787">${hm}…</span><br><span class="dim">encadeado ao veredicto original · imutável · resolvido em 18h (SLA 24h)</span>`;
+  b.textContent = '✓ Contestação registrada no ledger';
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━ ZONA 4 — simulador ━━━━━━━━━━━━━━━━━━━━━━
@@ -890,26 +968,49 @@ function ledgerDetail(i){
       <dt>Assinatura</dt><dd style="color:var(--allow)"><code style="color:var(--allow)">HMAC-SHA256 ✓ verificada</code></dd>
     </dl>
     <div class="hash-block">
-      <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">explain_decision() · Judiciário Python</div>
-      <div style="font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text);background:var(--code-bg);border:1px solid var(--code-border);border-radius:9px;padding:12px 14px">“${EXPLAIN[e.action]||EXPLAIN.ALLOW}”</div>
+      <div style=”font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px”>rationale · Judiciário Python</div>
+      <div style=”font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text);background:var(--code-bg);border:1px solid var(--code-border);border-radius:9px;padding:12px 14px”>”${e._raw?.rationale || e._raw?.bias_declaration?.explain || EXPLAIN[e.action] || EXPLAIN.ALLOW}”</div>
     </div>
-    <div class="hash-block"><a href="Ledger Explorer.html">Abrir no Ledger Explorer ↗</a></div>`;
+    <div class="hash-block"><a href="ledger-explorer.html">Abrir no Ledger Explorer ↗</a></div>`;
   document.getElementById('scrim').classList.add('open');
   document.getElementById('drawer').classList.add('open');
 }
-// seed + polling simulado
+// seed inicial + polling real (fallback simulado se API indisponível)
 function seedLedger(){
   const seed = [['BLOCK','medical-agent'],['ALLOW','default'],['BLOCK','hr-screener'],['ESCALATE','medical-agent'],['ALLOW','support-l1']];
-  seed.forEach(([a,g],i)=> LEDGER.push({ ts:nowTs(), action:a, agent:g, hash:rid(6), fresh:false }));
+  seed.forEach(([a,g])=> LEDGER.push({ ts:nowTs(), action:a, agent:g, hash:rid(6), fresh:false }));
   renderLedger();
 }
-setInterval(()=>{
-  if(document.hidden || busy) return;
-  if(Math.random()>0.55){
-    const acts = ['ALLOW','ALLOW','BLOCK','ESCALATE','EDUCATE'];
-    pushLedger(acts[Math.floor(Math.random()*acts.length)], AG_POOL[Math.floor(Math.random()*AG_POOL.length)]);
+async function pollLedger(){
+  if(!API_KEY) {
+    // sem chave: comportamento simulado aleatório
+    if(!document.hidden && !busy && Math.random() > 0.55){
+      const acts = ['ALLOW','ALLOW','BLOCK','ESCALATE','EDUCATE'];
+      pushLedger(acts[Math.floor(Math.random()*acts.length)], AG_POOL[Math.floor(Math.random()*AG_POOL.length)]);
+    }
+    return;
   }
-}, 3200);
+  try {
+    const res = await fetch(`${API}/v1/ledger/query?limit=20`, {
+      headers: { 'X-API-Key': API_KEY }
+    });
+    if(!res.ok) return;
+    const { data } = await res.json();
+    if(!data?.length) return;
+    // substituir o LEDGER local pelas entradas reais mais recentes
+    const mapped = data.map(e => ({
+      ts: e.ts ? new Date(e.ts).toLocaleTimeString('pt-BR') : nowTs(),
+      action: e.final_action || e.policy_action || 'ALLOW',
+      agent: e.profile || 'default',
+      hash: (e.verdict_id || rid(8)).slice(0, 8),
+      fresh: false,
+      _raw: e
+    }));
+    LEDGER.splice(0, LEDGER.length, ...mapped.slice(0, 40));
+    renderLedger();
+  } catch(_) { /* manter dados locais */ }
+}
+setInterval(pollLedger, 3200);
 
 // ━━━━━━━━━━━━━━━ POLICY LENS ━━━━━━━━━━━━━━━
 const BASE_CONTROLS = [
@@ -919,12 +1020,12 @@ const BASE_CONTROLS = [
   { id:'INV-4', status:'compliant', title:'Toda decisão vai ao ledger',     action:'LOG',    cond:['always'], conf:1.0, note:'Nenhuma decisão escapa do registro imutável assinado.' },
 ];
 const LENS_META = {
-  base: { file:'base.yaml',         name:'Base',         ver:'3.0', commit:'2026-05-20', locked:true },
-  lgpd: { file:'lgpd.yaml',         name:'LGPD',         ver:'2.1', commit:'2026-05-14' },
-  euai: { file:'eu-ai-act.yaml',    name:'EU AI Act',    ver:'1.4', commit:'2026-04-30' },
-  iso:  { file:'iso-42001.yaml',    name:'ISO 42001',    ver:'1.2', commit:'2026-05-02' },
-  hipaa:{ file:'hipaa.yaml',        name:'HIPAA',        ver:'1.1', commit:'2026-03-22' },
-  nist: { file:'nist-ai-rmf.yaml',  name:'NIST AI RMF',  ver:'1.0', commit:'2026-02-18' },
+  base: { file:'base.yaml',              name:'Base',         ver:'3.0', commit:'2026-05-20', locked:true, _basePath:true },
+  lgpd: { file:'lgpd_base.yaml',         name:'LGPD',         ver:'2.1', commit:'2026-05-14' },
+  euai: { file:'eu_ai_act_base.yaml',    name:'EU AI Act',    ver:'1.4', commit:'2026-04-30' },
+  iso:  { file:'iso_42001_base.yaml',    name:'ISO 42001',    ver:'1.2', commit:'2026-05-02' },
+  hipaa:{ file:'hipaa_base.yaml',        name:'HIPAA',        ver:'1.1', commit:'2026-03-22' },
+  nist: { file:'nist_ai_rmf_base.yaml',  name:'NIST AI RMF',  ver:'1.0', commit:'2026-02-18' },
 };
 Object.keys(LENS_META).forEach(k=> LENS_META[k].hash = rid(8));
 const LENS_FW = ['base','lgpd','euai','iso','hipaa','nist'];
@@ -966,7 +1067,11 @@ function yamlHighlightRaw(text){
 function ensureRealYaml(fw){
   if(YAML_CACHE[fw]!==undefined) return;
   YAML_CACHE[fw]=null;
-  fetch(`https://raw.githubusercontent.com/danzeroum/BuildToValueGovernance/main/data/policies/frameworks/${LENS_META[fw].file}`)
+  const m = LENS_META[fw];
+  const path = m._basePath
+    ? `data/policies/${m.file}`
+    : `data/policies/frameworks/${m.file}`;
+  fetch(`https://raw.githubusercontent.com/danzeroum/BuildToValueGovernance/main/${path}`)
     .then(r=>{ if(!r.ok) throw new Error('404'); return r.text(); })
     .then(txt=>{ YAML_CACHE[fw]=txt; if(lensFw===fw && document.getElementById('lens').classList.contains('open')) renderLens(); })
     .catch(()=>{ YAML_CACHE[fw]='__gen__'; });
@@ -997,8 +1102,9 @@ function renderLens(){
     const mm=LENS_META[k];
     return `<button class="lens-tab ${k===lensFw?'active':''}" onclick="openLens('${k}', null)">${mm.locked?'🔒 ':''}${mm.file}</button>`;
   }).join('');
+  const filePath = m._basePath ? `data/policies/${m.file}` : `data/policies/frameworks/${m.file}`;
   document.getElementById('lens-meta').innerHTML =
-    `<span class="file">data/policies/frameworks/${m.file}</span><span>Hash <span class="h">${dispHash}…</span></span><span>Versão ${m.ver}</span><span>commit ${m.commit}</span><span>fonte: <span class="h">${source}</span></span><a href="https://github.com/danzeroum/BuildToValueGovernance/blob/main/data/policies/frameworks/${m.file}" target="_blank" rel="noopener">ver no GitHub ↗</a>`;
+    `<span class="file">${filePath}</span><span>Hash <span class="h">${dispHash}…</span></span><span>Versão ${m.ver}</span><span>commit ${m.commit}</span><span>fonte: <span class="h">${source}</span></span><a href="https://github.com/danzeroum/BuildToValueGovernance/blob/main/${filePath}" target="_blank" rel="noopener">ver no GitHub ↗</a>`;
   document.querySelectorAll('#persona-seg button').forEach(b=> b.classList.toggle('on', b.dataset.p===lensPersona));
   const ctrls=controlsFor(lensFw), st=PERSPECTIVE[lensPersona];
   const col1 = ctrls.map(c=>`<div class="pl1 ${c.id===lensHi?'hi':''}"><div class="nm"><i style="background:${dotColor(c.action)}"></i>${c.title}</div><div class="ds">${c.note}</div></div>`).join('');
@@ -1063,6 +1169,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
   applyTheme(localStorage.getItem('btv-theme')||'dark');
   setSector('saude');
   renderFw(); renderCoverage(); renderRules(); seedLedger(); renderLens();
+  pollLedger();
 });
 </script>
 <script src="search.js" defer></script>
