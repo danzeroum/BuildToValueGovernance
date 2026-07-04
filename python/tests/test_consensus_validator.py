@@ -42,7 +42,9 @@ def _judge(action: ActionType, confidence: float = 0.9):
 
 
 def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # asyncio.run cria um loop novo por chamada — get_event_loop() herdava um
+    # loop já fechado por testes anteriores na suíte completa (RuntimeError).
+    return asyncio.run(coro)
 
 
 # ─── Constantes ───────────────────────────────────────────────────────────────
@@ -346,7 +348,7 @@ def test_engine_judge_with_consensus_no_validator():
     req.user_role  = "user"; req.domain = "test"
     req.timestamp  = int(t.time())
 
-    result = asyncio.get_event_loop().run_until_complete(
+    result = run(
         engine.judge_with_consensus(evidence, req, Reversibility.IRREVERSIBLE)
     )
     assert result is not None
@@ -372,7 +374,7 @@ def test_engine_judge_with_consensus_metrics_tracked():
     req.session_id = "s2"; req.agent_id = "a2"
     req.user_role = "user"; req.domain = "test"
     req.timestamp = int(t.time())
-    asyncio.get_event_loop().run_until_complete(
+    run(
         engine.judge_with_consensus(evidence, req)
     )
     assert engine.metrics["decisions_total"] == initial + 1

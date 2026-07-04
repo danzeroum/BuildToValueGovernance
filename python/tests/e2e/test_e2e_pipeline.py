@@ -5,6 +5,7 @@ Validates Phase B runtime compliance integration.
 
 import os
 import time
+import jwt as _jwt
 import pytest
 from fastapi.testclient import TestClient
 from buildtovalue.api.app import app
@@ -14,7 +15,14 @@ from buildtovalue.api.app import app
 def client():
     os.environ.pop("BTV_API_KEYS", None)
     os.environ["BTV_ENV"] = "development"
-    with TestClient(app) as c:
+    # CRITICO-03: POST /v1/appeals exige JWT — assina com o secret de teste
+    _secret = os.environ.get("BTV_JWT_SECRET", "ci-test-jwt-secret-32bytes-padding!!")
+    _now = int(time.time())
+    _token = _jwt.encode(
+        {"sub": "e2e-tester", "role": "admin", "iat": _now, "exp": _now + 3600},
+        _secret, algorithm="HS256",
+    )
+    with TestClient(app, headers={"Authorization": f"Bearer {_token}"}) as c:
         yield c
 
 

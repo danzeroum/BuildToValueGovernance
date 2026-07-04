@@ -111,9 +111,13 @@ def test_internal_abliteration_detector_reads_threshold_from_policy(
 def test_internal_abliteration_detector_fallback_without_policy(
     empty_policy_engine: PolicyEngine,
 ) -> None:
-    """Sem PolicyEngine: threshold padrão da constante da classe (0.7)."""
+    """Sem PolicyEngine: threshold padrão da constante canônica do módulo."""
+    from buildtovalue.governance.abliteration_detector import (
+        _DEFAULT_REFUSAL_THRESHOLD,
+    )
+
     detector = InternalAbliterationDetector()
-    assert detector._refusal_threshold == pytest.approx(0.7)
+    assert detector._refusal_threshold == pytest.approx(_DEFAULT_REFUSAL_THRESHOLD)
 
 
 # ---------------------------------------------------------------------------

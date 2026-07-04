@@ -58,7 +58,7 @@ O BTV adiciona **~1,67μs** por decisão para um payload de contexto de 4KB — 
 
 | Operação | Latência | Notas |
 |---|---|---|
-| `scan_for_evidence` (4KB) | 1,67 μs | BLAKE3 + pipeline de 15 módulos |
+| `scan_for_evidence` (4KB) | 1,67 μs | BLAKE3 + pipeline de 21 módulos |
 | Verificação de integridade | 327 ns | Auditoria retroativa |
 | Gateway HTTP (sidecar) | < 50ms p99 | Inclui round-trip de rede |
 
@@ -93,7 +93,7 @@ fn main() {
     let audit_id: u128 = 1;
 
     // scan_for_evidence() sempre retorna TechnicalEvidence com hash BLAKE3 selado.
-    // O pipeline executa 15 módulos (deobfuscação, análise, validação de PII).
+    // O pipeline executa 21 módulos (deobfuscação, análise, validação de PII).
     let evidence = gatekeeper.scan_for_evidence("Aprovar crédito para CPF 123.456.789-09", audit_id);
 
     println!("Hash BLAKE3:    {:?}", &evidence.hash[..8]);
@@ -111,28 +111,30 @@ cd ops && docker compose up gateway
 ```
 
 ```bash
-curl -X POST http://localhost:3000/v1/scan \
+curl -X POST http://localhost:8080/v1/scan \
   -H "Content-Type: application/json" \
-  -d '{"input": "Aprovar crédito para CPF 123.456.789-09", "audit_trail_id": 1}'
-# Retorna: TechnicalEvidence serializada com hash BLAKE3 imutável
+  -d '{"input": "Aprovar crédito para CPF 123.456.789-09"}'
+# Retorna: veredito com finding_count, critical_count e hash BLAKE3 imutável
+# (/v1/scan é alias de /v1/validate)
 ```
 
 ### Path C — Python SDK
 
 ```bash
-pip install -e python/
+pip install -e sdk/python/    # SDK cliente (BTVClient)
+# Para rodar a API de governança localmente, use: pip install -e python/
 ```
 
 ```python
 from buildtovalue import BTVClient
 
-client = BTVClient("http://localhost:3000")
-evidence = client.scan(
-    input_text="Aprovar crédito para CPF 123.456.789-09",
-    audit_trail_id=1
+client = BTVClient("http://localhost:8080")  # gateway Rust
+verdict = client.validate(
+    input_text="Aprovar crédito para CPF 123.456.789-09"
 )
-print(evidence["hash"])          # hash BLAKE3 — prova imutável
-print(evidence["critical_count"])  # > 0 = BLOCK recomendado
+print(verdict.blake3_hash)      # hash BLAKE3 — prova imutável
+print(verdict.critical_count)   # > 0 = BLOCK recomendado
+print(verdict.action)           # ALLOW | EDUCATE | BLOCK
 ```
 
 ---
@@ -178,14 +180,15 @@ A combinação é: **descarte acidental → erro de build em CI; evidência não
 ```
 ┌────────────────────────────────────────────────────┐
 │               Axum HTTP Gateway                    │
-│   /v1/scan    /v1/verify   /v1/audit   /health    │
+│  /v1/scan  /v1/validate  /v1/decide  /v1/proxy    │
+│  /v1/sanitize  /v1/appeals  /v1/trust  /health    │
 ├────────────────────┬───────────────────────────────┤
 │   Rust Kernel      │      Python Governance        │
 │   < 30ms p99       │      < 10ms p99               │
 │                    │                               │
 │  Gatekeeper        │  ComplianceEngine             │
 │  BLAKE3 hash       │  explain_decision()           │
-│  15 módulos        │  AppealEngine (SLA 24h)       │
+│  21 módulos        │  AppealEngine (SLA 24h)       │
 │  Fail-secure       │  BiasDetector                 │
 │  Zero-heap hot path│                               │
 ├────────────────────┴───────────────────────────────┤
@@ -203,7 +206,7 @@ A combinação é: **descarte acidental → erro de build em CI; evidência não
 
 ---
 
-## Módulos do Kernel — 15 Validadores
+## Módulos do Kernel — 21 Validadores
 
 | Estágio | Módulos |
 |---|---|
@@ -321,7 +324,7 @@ Veja `benchmarks/` para resultados comparativos contra Guardrails AI e NeMo Guar
 
 ## Licença
 
-Apache 2.0 — veja [LICENSE-MIT](LICENSE-MIT).
+Licença dupla Apache 2.0 / MIT — veja [LICENSE](LICENSE) e [LICENSE-MIT](LICENSE-MIT).
 
 ---
 
