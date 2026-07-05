@@ -1158,7 +1158,8 @@ pub async fn decide_handler(
 /// isolado do tenant via `DurableLedger::append_with_key`. Retorna
 /// `(entry_id, audit_trail_id)`. Em caso de falha de I/O do ledger,
 /// retorna `Err(())` para o caller decidir fallback (decisão não bloqueia).
-async fn build_and_append_tenant_entry(
+/// `pub(crate)`: também usado pelo proxy para gravar o recibo de cada 451.
+pub(crate) async fn build_and_append_tenant_entry(
     state: &Arc<AppState>,
     tenant_id: &str,
     tek: &[u8],

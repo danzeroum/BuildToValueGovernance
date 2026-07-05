@@ -17,7 +17,7 @@
 
 use axum::{
     body::Bytes,
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::{HeaderMap, Method, StatusCode},
     response::{IntoResponse, Response},
     Json,
@@ -27,10 +27,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 use ulid::Ulid;
+use buildtovalue_kernel::evidence::TechnicalEvidence;
 use buildtovalue_kernel::policy::{PolicyEngine, PolicyAction};
 
+use crate::middleware::tenant_extractor::TenantId;
 use crate::state::{AppState, PROXY_BLOCKED_TOTAL, PROXY_FORWARD_LATENCY_MS, PROXY_REQUESTS_TOTAL};
 use super::common::{governance_url, FALLBACK_POLICY};
+use super::decide::build_and_append_tenant_entry;
 
 // Inline policy for proxy scan — same source as validate.rs
 const DEFAULT_POLICY: &str = include_str!("../../../../data/policies/core/default.yaml");
@@ -43,7 +46,16 @@ const FORWARD_HEADERS: &[&str] = &[
     "accept",
     "accept-language",
     "accept-encoding",
+    // Anthropic Messages API (a chave vai via x-upstream-api-key, abaixo)
+    "anthropic-version",
+    "anthropic-beta",
 ];
+
+/// A Anthropic autentica via `x-api-key`, mas esse header já é a chave do
+/// PRÓPRIO gateway BTV (ApiKeyLayer). Para não colidir, o cliente envia a
+/// chave do provider em `x-upstream-api-key` e o proxy a reescreve como
+/// `x-api-key` na chamada ao upstream. Bedrock (SigV4) segue não suportado.
+const UPSTREAM_KEY_HEADER: &str = "x-upstream-api-key";
 
 #[derive(Serialize)]
 struct ProxyGovernanceRequest {
@@ -88,6 +100,13 @@ fn filter_forward_headers(incoming: &HeaderMap) -> reqwest::header::HeaderMap {
             }
         }
     }
+    // Chave do provider Anthropic: x-upstream-api-key → x-api-key no upstream.
+    // (O x-api-key recebido é a chave BTV e nunca é encaminhado.)
+    if let Some(val) = incoming.get(UPSTREAM_KEY_HEADER) {
+        if let Ok(v) = HeaderValue::from_bytes(val.as_bytes()) {
+            out.insert(HeaderName::from_static("x-api-key"), v);
+        }
+    }
     out
 }
 
@@ -105,9 +124,51 @@ fn block_response(reason: &str) -> Response {
         .into_response()
 }
 
+/// 451 com recibo: persiste a evidência no ledger isolado do tenant ANTES de
+/// responder, e devolve `ledger_entry_id`/`audit_trail_id` no body — o
+/// "recibo de evidência imutável por bloqueio" prometido no README. Falha de
+/// I/O do ledger não desbloqueia (fail-secure): o 451 sai mesmo assim, com
+/// `receipt_persisted: false` para o consumidor saber que deve investigar.
+async fn block_with_receipt(
+    state: &Arc<AppState>,
+    tenant_id: &str,
+    tek: &[u8],
+    evidence: &TechnicalEvidence,
+    policy_action: &str,
+    verdict_id: &str,
+    reason: &str,
+) -> Response {
+    PROXY_BLOCKED_TOTAL.inc();
+    let receipt = build_and_append_tenant_entry(
+        state, tenant_id, tek, evidence, policy_action, "BLOCK",
+    )
+    .await;
+
+    let (persisted, entry_id, audit_id) = match receipt {
+        Ok((entry_id, audit_id)) => (true, Some(entry_id), Some(audit_id.to_string())),
+        Err(()) => (false, None, None),
+    };
+
+    (
+        StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS,
+        Json(json!({
+            "blocked": true,
+            "verdict": "BLOCK",
+            "reason": reason,
+            "verdict_id": verdict_id,
+            "receipt_persisted": persisted,
+            "ledger_entry_id": entry_id,
+            "audit_trail_id": audit_id,
+            "appeal_url": "/v1/appeals",
+        })),
+    )
+        .into_response()
+}
+
 /// ANY /v1/proxy/*path — intercepta, valida e encaminha (ou bloqueia).
 pub async fn proxy_forward(
     State(state): State<Arc<AppState>>,
+    Extension(tenant_id): Extension<TenantId>,
     method: Method,
     Path(path): Path<String>,
     headers: HeaderMap,
@@ -117,7 +178,15 @@ pub async fn proxy_forward(
     let _timer = PROXY_FORWARD_LATENCY_MS.start_timer();
 
     let input_text = String::from_utf8_lossy(&body).to_string();
-    let verdict_id = format!("VRD-PROXY-{}", Ulid::new());
+    let ulid = Ulid::new();
+    let verdict_id = format!("VRD-PROXY-{}", ulid);
+
+    // ADR-0083: TEK do tenant derivada antes de qualquer acesso ao ledger —
+    // necessária para o recibo de bloqueio. Falha de derivação → fail-secure.
+    let tek = match state.tenant_deriver.derive(tenant_id.as_str()) {
+        Ok(t) => t,
+        Err(_) => return block_response("TEK derivation failed — fail-secure block"),
+    };
 
     // ── Kernel scan (síncrono, bloqueante) ─────────────────────────
     let scan_result = {
@@ -125,7 +194,9 @@ pub async fn proxy_forward(
         // fails, so the fail-secure fallback for poison is no longer needed.
         let mut gk = state.gatekeeper.lock().await;
 
-        let evidence = gk.scan_for_evidence(&input_text, 0u128);
+        // audit_trail_id = u128 do ULID do verdict — correlaciona o recibo
+        // do ledger com o verdict_id devolvido no 451.
+        let evidence = gk.scan_for_evidence(&input_text, ulid.0);
         let findings = evidence.get_all_findings();
 
         let engine_result = PolicyEngine::from_yaml_str(DEFAULT_POLICY)
@@ -159,15 +230,22 @@ pub async fn proxy_forward(
             evidence.stats.entropy,
             evidence.stats.total_chars,
             format!("{:016x}", evidence.original_request_hash),
+            evidence,
         )
     };
 
     let (finding_count, critical_count, composite_risk, policy_action,
-         hard_blocked, matched_policies, max_conf, entropy, total_chars, blake3_hash) = scan_result;
+         hard_blocked, matched_policies, max_conf, entropy, total_chars, blake3_hash,
+         evidence) = scan_result;
 
-    // Fail-secure: hard block never reaches governance
+    // Fail-secure: hard block never reaches governance.
+    // README: "cada bloqueio gera um recibo armazenado em ledger imutável".
     if hard_blocked {
-        return block_response("Hard block — fail-secure");
+        return block_with_receipt(
+            &state, tenant_id.as_str(), tek.as_ref(), &evidence, &policy_action,
+            &verdict_id, "Hard block — fail-secure",
+        )
+        .await;
     }
 
     // ── Governance /v1/decide (assíncrono) ─────────────────────────
@@ -180,7 +258,7 @@ pub async fn proxy_forward(
         matched_policies,
         session_id: None,
         input_text: input_text.clone(),
-        verdict_id,
+        verdict_id: verdict_id.clone(),
         max_finding_confidence: max_conf,
         entropy,
         total_chars,
@@ -208,7 +286,11 @@ pub async fn proxy_forward(
     };
 
     if final_action != "ALLOW" {
-        return block_response("Policy violation detected by BTV Trust OS");
+        return block_with_receipt(
+            &state, tenant_id.as_str(), tek.as_ref(), &evidence, &policy_action,
+            &verdict_id, "Policy violation detected by BTV Trust OS",
+        )
+        .await;
     }
 
     // ── Forward ao upstream ─────────────────────────────────────────
@@ -233,5 +315,36 @@ pub async fn proxy_forward(
             (status, upstream_body).into_response()
         }
         Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn forwards_anthropic_headers_and_rewrites_upstream_key() {
+        let mut incoming = HeaderMap::new();
+        incoming.insert("anthropic-version", "2023-06-01".parse().unwrap());
+        incoming.insert("anthropic-beta", "prompt-caching-2024-07-31".parse().unwrap());
+        incoming.insert("x-api-key", "btv-gateway-key".parse().unwrap());
+        incoming.insert("x-upstream-api-key", "sk-ant-example".parse().unwrap());
+
+        let out = filter_forward_headers(&incoming);
+
+        assert_eq!(out.get("anthropic-version").unwrap(), "2023-06-01");
+        assert_eq!(out.get("anthropic-beta").unwrap(), "prompt-caching-2024-07-31");
+        // A chave BTV nunca vaza; o upstream recebe a chave do provider.
+        assert_eq!(out.get("x-api-key").unwrap(), "sk-ant-example");
+    }
+
+    #[test]
+    fn btv_key_not_forwarded_without_upstream_key() {
+        let mut incoming = HeaderMap::new();
+        incoming.insert("x-api-key", "btv-gateway-key".parse().unwrap());
+
+        let out = filter_forward_headers(&incoming);
+
+        assert!(out.get("x-api-key").is_none());
     }
 }
