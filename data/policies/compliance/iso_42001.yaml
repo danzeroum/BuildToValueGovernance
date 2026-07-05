@@ -82,7 +82,7 @@ articles:
     - requirement_text: "Impact assessment for AI systems"
       policy_name: "ISO 42001: Impact Assessment Required"
       policy_action: "ESCALATE"
-      condition_template: "agent.impact_assessment_types_completed not contains 'DPIA' and agent.processes_personal_data == true"
+      condition_template: "'DPIA' not in agent.impact_assessment_types_completed and agent.processes_personal_data == true"
       parameters: {}
       confidence: 0.92
       notes: "DPIA required when processing personal data"
@@ -245,7 +245,7 @@ articles:
     - requirement_text: "Continual improvement of AI management system suitability"
       policy_name: "ISO 42001: Track AI Improvement Actions"
       policy_action: "LOG"
-      condition_template: "count(agent.improvement_actions_implemented_last_quarter) == 0 and count(agent.incidents_last_quarter) > 3"
+      condition_template: "len(agent.improvement_actions_implemented_last_quarter) == 0 and len(agent.incidents_last_quarter) > 3"
       parameters: {}
       confidence: 0.84
       notes: "Incidents without improvements indicate systemic issues"

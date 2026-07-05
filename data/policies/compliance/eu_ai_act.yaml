@@ -13,7 +13,7 @@ _metadata:
   version: "1.0.0"
   source: "legacy_migration"
   migrated_at: "2026-02-17"
-  total_rules: 4
+  total_rules: 13
   btv_actions: ["BLOCK", "ESCALATE", "LOG"]
   reference_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689"
 
@@ -23,7 +23,7 @@ articles:
     - requirement_text: "Prohibited: AI systems that deploy subliminal techniques"
       policy_name: "Block Subliminal Manipulation Techniques"
       policy_action: "BLOCK"
-      condition_template: "agent.capabilities.contains('behavior_modification') and agent.transparency_score < 0.5"
+      condition_template: "'behavior_modification' in agent.capabilities and agent.transparency_score < 0.5"
       parameters: {}
       confidence: 0.9
       notes: "Art. 5(1)(a) - In force since Feb 2025"

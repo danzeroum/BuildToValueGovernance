@@ -232,7 +232,7 @@ articles:
     - requirement_text: "File integrity monitoring on critical files"
       policy_name: "PCI-DSS: FIM Alerts on CHD System Changes"
       policy_action: "ESCALATE"
-      condition_template: "file.is_critical == true and file.integrity_check_failed == true"
+      condition_template: "monitored_file.is_critical == true and monitored_file.integrity_check_failed == true"
       parameters: {}
       confidence: 0.94
       notes: "FIM on system files, configs, CHD databases"

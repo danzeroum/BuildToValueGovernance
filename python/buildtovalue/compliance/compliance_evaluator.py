@@ -51,6 +51,11 @@ class ComplianceEvalResult:
     skipped_count: int
     evaluation_time_ms: float
     timestamp: int = field(default_factory=lambda: int(time.time()))
+    # Regras que não puderam ser avaliadas (erro de expressão/segurança) —
+    # sem isto um compliance_rate alto pode esconder regras que nunca rodaram.
+    skipped_rules: List[Dict[str, str]] = field(default_factory=list)
+    # Arquivos de framework que falharam no load (ex.: YAML inválido).
+    load_errors: List[str] = field(default_factory=list)
 
     @property
     def violation_count(self) -> int:
@@ -80,6 +85,8 @@ class ComplianceEvalResult:
             ],
             "compliant_count": self.compliant_count,
             "skipped_count": self.skipped_count,
+            "skipped_rules": self.skipped_rules,
+            "load_errors": self.load_errors,
             "violation_count": self.violation_count,
             "compliance_rate": round(self.compliance_rate, 4),
             "evaluation_time_ms": round(self.evaluation_time_ms, 2),
@@ -115,6 +122,32 @@ def _days_since(date_value) -> int:
         return 99999
 
     return (dt.date.today() - d).days
+
+
+def _hours_since(ts_value) -> float:
+    """Calculate hours since a timestamp (epoch int/float ou ISO-8601 str)."""
+    import datetime as dt
+
+    if ts_value is None:
+        return 999999.0  # Treat null as "very long ago"
+
+    if isinstance(ts_value, (int, float)):
+        try:
+            then = dt.datetime.fromtimestamp(float(ts_value), tz=dt.timezone.utc)
+        except (ValueError, OSError, OverflowError):
+            return 999999.0
+    elif isinstance(ts_value, str):
+        try:
+            then = dt.datetime.fromisoformat(ts_value)
+            if then.tzinfo is None:
+                then = then.replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            return 999999.0
+    else:
+        return 999999.0
+
+    delta = dt.datetime.now(tz=dt.timezone.utc) - then
+    return delta.total_seconds() / 3600.0
 
 
 def _contains(collection, item) -> bool:
@@ -186,6 +219,7 @@ class ComplianceEvaluator:
         self._dir = compliance_dir or COMPLIANCE_DIR
         self._evaluator = SafeExpressionEvaluator(timeout_ms=timeout_ms)
         self._frameworks: Dict[str, Dict] = {}
+        self._load_errors: List[str] = []
         self._load_frameworks()
 
     def _load_frameworks(self) -> None:
@@ -208,6 +242,7 @@ class ComplianceEvaluator:
                             fw_id, len(data.get("articles", {})))
 
             except Exception as e:
+                self._load_errors.append(f"{path.name}: {e}")
                 logger.error("Failed to load %s: %s", path, e)
 
     @property
@@ -251,6 +286,7 @@ class ComplianceEvaluator:
             "interaction_type": agent_metadata.get("interaction_type"),
             # Builtin functions
             "days_since": _days_since,
+            "hours_since": _hours_since,
             "contains": _contains,
             "len": len,
             "max": max,
@@ -264,14 +300,19 @@ class ComplianceEvaluator:
         }
 
         for key, val in agent_metadata.items():
-            if key not in eval_context and not isinstance(val, dict):
-                eval_context[key] = val
+            if key in eval_context:
+                continue
+            # Entidades de contexto (processing, user, phi, transfer, breach…)
+            # chegam como dicts e precisam de dot-notation — sem isto as regras
+            # que as referenciam caem em NameError e nunca são avaliadas.
+            eval_context[key] = DotDict(val) if isinstance(val, dict) else val
 
         # Merge parameters from each rule into context at eval time
         target_fws = frameworks or list(self._frameworks.keys())
         violations: List[ComplianceViolation] = []
         compliant = 0
         skipped = 0
+        skipped_rules: List[Dict[str, str]] = []
         rules_evaluated = 0
         fws_evaluated = 0
 
@@ -304,8 +345,14 @@ class ComplianceEvaluator:
 
                         if not result.success:
                             skipped += 1
-                            logger.debug(
-                                "Eval error %s/%s: %s",
+                            skipped_rules.append({
+                                "framework": fw_id,
+                                "article": str(article_key),
+                                "policy_name": rule.get("policy_name", ""),
+                                "reason": str(result.error),
+                            })
+                            logger.warning(
+                                "Rule skipped (eval error) %s/%s: %s",
                                 fw_id, article_key, result.error,
                             )
                             continue
@@ -327,6 +374,12 @@ class ComplianceEvaluator:
 
                     except (SecurityError, Exception) as e:
                         skipped += 1
+                        skipped_rules.append({
+                            "framework": fw_id,
+                            "article": str(article_key),
+                            "policy_name": rule.get("policy_name", ""),
+                            "reason": str(e),
+                        })
                         logger.warning(
                             "Security/eval error %s/%s: %s",
                             fw_id, article_key, e,
@@ -342,4 +395,6 @@ class ComplianceEvaluator:
             compliant_count=compliant,
             skipped_count=skipped,
             evaluation_time_ms=elapsed_ms,
+            skipped_rules=skipped_rules,
+            load_errors=list(self._load_errors),
         )

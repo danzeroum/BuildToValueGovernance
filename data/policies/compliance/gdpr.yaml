@@ -236,7 +236,7 @@ articles:
       confidence: 0.97
       notes: "Adequacy decision, SCCs, or BCRs required"
 
-"Article 5 - Lawfulness":
+  "Article 5 - Lawfulness":
     - requirement_text: "Processing must be lawful, fair and transparent"
       policy_name: "GDPR: Lawfulness Fairness Transparency"
       policy_action: "ESCALATE"

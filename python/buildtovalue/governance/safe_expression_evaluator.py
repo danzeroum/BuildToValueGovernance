@@ -13,6 +13,7 @@ Platform: Windows, Linux, macOS
 
 import ast
 import operator
+import re
 import threading
 import queue
 import time
@@ -95,7 +96,7 @@ class SafeExpressionEvaluator:
         'upper', 'lower', 'strip', 'split',
         'startswith', 'endswith',
         'pow', 'divmod',
-        'contains', 'days_since',  # P1: compliance builtins
+        'contains', 'days_since', 'hours_since',  # P1: compliance builtins
     }
 
     OPERATORS: Dict[type, Callable] = {
@@ -214,18 +215,26 @@ class SafeExpressionEvaluator:
                 f"Expression too long: {len(expression)} > {self.max_length}"
             )
 
-        # Blacklist de keywords perigosas
+        # Blacklist de keywords perigosas (defesa em profundidade — a garantia
+        # real é a whitelist de AST + resolução de nomes restrita ao contexto).
+        # Casamento por palavra inteira: substring pura gerava falso positivo
+        # em identificadores legítimos ('exit' em complexity_score, 'file' em
+        # file.is_critical) e derrubava regras de compliance silenciosamente.
         forbidden_keywords = [
             'import', 'exec', 'eval', 'compile', '__import__',
             'open', 'file', 'input', 'raw_input',
-            '__', 'globals', 'locals', 'vars', 'dir',
+            'globals', 'locals', 'vars', 'dir',
             'getattr', 'setattr', 'delattr', 'hasattr',
             'breakpoint', 'exit', 'quit'
         ]
 
         expr_lower = expression.lower()
+        # Dunders continuam bloqueados por substring — nunca são legítimos.
+        if '__' in expr_lower:
+            raise SecurityError("Forbidden keyword detected: __")
+        words = set(re.findall(r"[a-z_][a-z0-9_]*", expr_lower))
         for keyword in forbidden_keywords:
-            if keyword in expr_lower:
+            if keyword in words:
                 raise SecurityError(f"Forbidden keyword detected: {keyword}")
 
     def _get_or_compile(self, expression: str) -> ast.Expression:
