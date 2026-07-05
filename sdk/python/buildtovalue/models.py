@@ -165,7 +165,24 @@ class TrustScore(BaseModel):
 
 
 class SanitizeResult(BaseModel):
-    """Result from /v1/sanitize."""
-    sanitized: str
-    redactions: int
+    """Result from /v1/sanitize.
+
+    Campos alinhados ao contrato real do gateway Rust (SanitizeResponse em
+    rust/gateway/src/routes/sanitize.rs) e da API Python (gateway_compat.py).
+    A versão anterior esperava `sanitized`/`redactions`, que nenhum backend
+    retorna — a validação falhava contra ambos.
+    """
+    sanitized_text: str
+    masked_count: int
+    masked_types: list[str] = []
+    original_length: int = 0
     latency_ms: float = 0.0
+
+    # Compatibilidade retroativa com o contrato antigo do SDK.
+    @property
+    def sanitized(self) -> str:
+        return self.sanitized_text
+
+    @property
+    def redactions(self) -> int:
+        return self.masked_count

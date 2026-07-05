@@ -174,6 +174,7 @@ from buildtovalue.api.routes.compliance import router as compliance_router  # no
 from buildtovalue.api.routes.agents import router as agents_router  # noqa: E402
 from buildtovalue.api.routes.slm_ner import router as slm_ner_router  # noqa: E402
 from buildtovalue.api.routes.decide import router as decide_router  # noqa: E402
+from buildtovalue.api.routes.gateway_compat import router as gateway_compat_router  # noqa: E402
 
 app.include_router(intelligence_router)
 app.include_router(intelligence_hub_router)
@@ -190,6 +191,7 @@ app.include_router(compliance_router)
 app.include_router(agents_router)
 app.include_router(slm_ner_router)
 app.include_router(decide_router)
+app.include_router(gateway_compat_router)
 
 # ─── Lab v3.0 — demo/ servido estaticamente same-origin (4× .parent = raiz) ────
 _BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent

@@ -1,8 +1,10 @@
 """
-LGPD Compliance Plugin v1.1
+LGPD Compliance Plugin v1.2
 Lei Geral de Protecao de Dados (Brazil).
 
 v1.1 (ADR-048): Added generate_ropa() for Art. 37 compliance.
+v1.2: status derivado dos dados reais (fim do COMPLIANT hard-coded);
+      Art. 48 tem teto PARTIAL (sem pipeline de notificação à ANPD).
 """
 
 from typing import List, Optional
@@ -22,12 +24,16 @@ class LGPDPlugin:
         artifacts = []
 
         # Art. 6 - Legitimate purpose
+        # Finalidade legítima é um fato organizacional — um sistema runtime
+        # não pode verificá-la, apenas registrar a autodeclaração.
         artifacts.append(ComplianceArtifact(
             framework="LGPD",
             article="Art. 6",
             requirement="Processing must have legitimate purpose",
-            status=ComplianceLevel.COMPLIANT,
-            evidence="System processes data for security governance (legitimate interest)",
+            status=ComplianceLevel.PARTIAL,
+            evidence="Finalidade autodeclarada (governança de segurança / legítimo "
+                     "interesse) — não verificável em runtime; exige documentação "
+                     "organizacional.",
             recommendation="Document processing purpose in privacy policy",
         ))
 
@@ -57,23 +63,32 @@ class LGPDPlugin:
         ))
 
         # Art. 46 - Security measures
+        # COMPLIANT só quando a decisão traz prova de integridade real.
+        has_integrity = bool(verdict.get("signature")) or bool(evidence.get("blake3_hash"))
         artifacts.append(ComplianceArtifact(
             framework="LGPD",
             article="Art. 46",
             requirement="Technical and administrative security measures",
-            status=ComplianceLevel.COMPLIANT,
-            evidence="HMAC-SHA256 signatures, BLAKE3 hashing, fail-secure design, immutable ledger",
+            status=ComplianceLevel.COMPLIANT if has_integrity else ComplianceLevel.PARTIAL,
+            evidence=f"Prova de integridade nesta decisão: "
+                     f"{'presente (HMAC-SHA256/BLAKE3)' if has_integrity else 'AUSENTE'}. "
+                     f"Design fail-secure e ledger imutável no sistema.",
             recommendation="Schedule annual security audit",
         ))
 
         # Art. 48 - Incident notification
+        # HONESTIDADE: não existe pipeline de notificação automática à ANPD.
+        # O incidente é registrado no ledger; a notificação é processo manual
+        # da organização. Teto: PARTIAL (nunca COMPLIANT via runtime).
         hard_blocked = verdict.get("hard_blocked", False) or evidence.get("hard_blocked", False)
         artifacts.append(ComplianceArtifact(
             framework="LGPD",
             article="Art. 48",
             requirement="Incident notification to ANPD within 72h",
-            status=ComplianceLevel.COMPLIANT if not hard_blocked else ComplianceLevel.PARTIAL,
-            evidence=f"Hard block detected: {hard_blocked}. Incident logged in ledger.",
+            status=ComplianceLevel.PARTIAL,
+            evidence=f"Hard block detected: {hard_blocked}. Incidente registrado no "
+                     f"ledger; notificação automática à ANPD NÃO implementada — "
+                     f"processo manual da organização.",
             recommendation="Automate ANPD notification for critical incidents",
         ))
 
@@ -103,13 +118,10 @@ class LGPDPlugin:
         return ropa.to_dict()
 
     def validate_requirements(self) -> ComplianceReport:
-        # Validate system-level compliance (no specific evidence)
-        artifacts = self.generate_artifacts({}, {
-            "rationale": "system check",
-            "signature": "system check",
-            "contestable": True,
-            "appeal_deadline_hours": 24,
-        })
+        # Self-check SEM evidência de runtime: os status refletem a ausência
+        # de dados (a versão anterior injetava um verdict pré-fabricado e o
+        # relatório saía sempre ~100% conforme — falsa segurança).
+        artifacts = self.generate_artifacts({}, {})
         compliant = sum(1 for a in artifacts if a.status == ComplianceLevel.COMPLIANT)
         partial = sum(1 for a in artifacts if a.status == ComplianceLevel.PARTIAL)
         non_compliant = sum(1 for a in artifacts if a.status == ComplianceLevel.NON_COMPLIANT)
@@ -117,7 +129,7 @@ class LGPDPlugin:
 
         return ComplianceReport(
             framework="LGPD",
-            version="1.0",
+            version="1.2",
             total_requirements=total,
             compliant=compliant,
             partial=partial,

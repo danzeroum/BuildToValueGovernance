@@ -221,11 +221,27 @@ class TestTrustScore:
 
 
 class TestSanitizeResult:
-    def test_parses_sanitize_result(self):
+    def test_parses_real_gateway_contract(self):
+        # Payload como o gateway Rust e a API Python realmente respondem
+        # (rust/gateway/src/routes/sanitize.rs / api/routes/gateway_compat.py).
         sr = SanitizeResult.model_validate({
-            "sanitized": "My [REDACTED] is hidden.",
-            "redactions": 1,
+            "original_length": 30,
+            "sanitized_text": "CPF: ***.***.***-09",
+            "masked_count": 1,
+            "masked_types": ["cpf"],
             "latency_ms": 3.0,
         })
-        assert sr.redactions == 1
-        assert "[REDACTED]" in sr.sanitized
+        assert sr.masked_count == 1
+        assert "***" in sr.sanitized_text
+        assert sr.masked_types == ["cpf"]
+
+    def test_backward_compat_properties(self):
+        sr = SanitizeResult.model_validate({
+            "original_length": 10,
+            "sanitized_text": "oi ***",
+            "masked_count": 2,
+            "masked_types": ["email", "phone"],
+        })
+        # Contrato antigo do SDK continua acessível como propriedades.
+        assert sr.sanitized == "oi ***"
+        assert sr.redactions == 2

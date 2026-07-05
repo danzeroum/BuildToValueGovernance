@@ -38,6 +38,15 @@ from buildtovalue.compliance.risk_classifier import RiskClassifier
 
 router = APIRouter()
 
+# Escopo honesto dos endpoints de plugin (check/report): avaliam a evidência
+# de decisões individuais fornecida na requisição — não certificam
+# conformidade organizacional nem substituem auditoria externa.
+_PLUGIN_SCOPE_DISCLAIMER = (
+    "Avaliacao derivada dos dados de runtime fornecidos nesta requisicao. "
+    "Nao constitui certificacao de conformidade organizacional; artigos que "
+    "exigem processos organizacionais aparecem no maximo como PARTIAL."
+)
+
 # Instâncias module-level (compliance-only, sem estado compartilhado externo).
 COMPLIANCE_PLUGINS: Dict[str, Union[LGPDPlugin, EUAIActPlugin]] = {
     "LGPD": LGPDPlugin(),
@@ -75,6 +84,7 @@ def compliance_check(
     compliant = sum(1 for a in artifacts if a.status.value == "COMPLIANT")
     return {
         "framework": req.framework,
+        "scope": _PLUGIN_SCOPE_DISCLAIMER,
         "total": len(artifacts),
         "compliant": compliant,
         "compliance_rate": compliant / len(artifacts) if artifacts else 0,
@@ -107,6 +117,8 @@ def compliance_report(
     report = plugin.validate_requirements()
     return {
         "framework": report.framework,
+        "scope": _PLUGIN_SCOPE_DISCLAIMER
+        + " Este relatorio e um self-check SEM evidencia de runtime.",
         "version": report.version,
         "total_requirements": report.total_requirements,
         "compliant": report.compliant,
