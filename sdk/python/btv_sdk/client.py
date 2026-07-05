@@ -2,7 +2,7 @@
 BTVClient — synchronous and asynchronous clients for the BTV governance gateway.
 
 Quick start:
-    from buildtovalue import BTVClient
+    from btv_sdk import BTVClient
 
     btv = BTVClient(api_key="...", gateway_url="http://localhost:8080")
     verdict = btv.decide("Meu CPF é 123.456.789-09", session_id="sess-001")

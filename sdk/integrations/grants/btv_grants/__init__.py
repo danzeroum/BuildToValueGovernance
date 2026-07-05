@@ -7,7 +7,7 @@ integration with quadratic funding platforms (Gitcoin Rounds), DAO treasury
 management, and public goods funding pipelines.
 
 Quick Start:
-    from buildtovalue import BTVClient
+    from btv_sdk import BTVClient
     from btv_grants import GrantGuard, GrantProposal, GrantCategory, LinguisticGroup
 
     client = BTVClient(api_key="your-key")

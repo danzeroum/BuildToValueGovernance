@@ -4,7 +4,7 @@ BuildToValue Python SDK — ethical AI governance in 5 minutes.
 Quick start:
     pip install buildtovalue
 
-    from buildtovalue import BTVClient
+    from btv_sdk import BTVClient
 
     btv = BTVClient(api_key="your-key", gateway_url="http://localhost:8080")
     verdict = btv.decide("Meu CPF é 123.456.789-09", session_id="sess-001", profile="healthcare")

@@ -95,7 +95,7 @@ pip install buildtovalue-sdk
 ```
 
 ```python
-from buildtovalue import BTVClient
+from btv_sdk import BTVClient
 
 client = BTVClient("http://localhost:3000")
 

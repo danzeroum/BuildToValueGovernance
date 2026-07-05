@@ -5,7 +5,7 @@ import pytest
 import respx
 import httpx
 
-from buildtovalue import BTVClient, AsyncBTVClient, VerdictAction, BTVAuthError, BTVBlockedError
+from btv_sdk import BTVClient, AsyncBTVClient, VerdictAction, BTVAuthError, BTVBlockedError
 
 GATEWAY = "http://localhost:8080"
 API_KEY = "test-key"

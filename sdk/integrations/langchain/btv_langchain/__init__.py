@@ -2,7 +2,7 @@
 BTV LangChain integration — guardrail callback for input/output governance.
 
 Usage:
-    from buildtovalue import AsyncBTVClient
+    from btv_sdk import AsyncBTVClient
     from btv_langchain import BTVGuardrailCallback
 
     btv = AsyncBTVClient(api_key="your-key")

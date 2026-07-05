@@ -30,8 +30,8 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
-from buildtovalue import AsyncBTVClient
-from buildtovalue.exceptions import BTVError
+from btv_sdk import AsyncBTVClient
+from btv_sdk.exceptions import BTVError
 
 # ─── Tier 2 Agentic imports (ADR-0054: separate from Tier 1 hot path) ────────
 

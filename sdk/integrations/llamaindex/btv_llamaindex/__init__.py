@@ -2,7 +2,7 @@
 BTV LlamaIndex integration — query engine guard for input/output governance.
 
 Usage:
-    from buildtovalue import BTVClient
+    from btv_sdk import BTVClient
     from btv_llamaindex import BTVQueryEngineGuard
 
     btv = BTVClient(api_key="your-key")

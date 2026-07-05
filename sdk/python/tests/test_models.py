@@ -2,7 +2,7 @@
 Unit tests for Pydantic models — validates field parsing and computed properties.
 """
 import pytest
-from buildtovalue.models import (
+from btv_sdk.models import (
     Verdict,
     ValidateVerdict,
     Appeal,

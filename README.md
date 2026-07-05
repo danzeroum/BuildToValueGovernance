@@ -121,12 +121,14 @@ curl -X POST http://localhost:8080/v1/scan \
 ### Path C — Python SDK
 
 ```bash
-pip install -e sdk/python/    # SDK cliente (BTVClient)
+pip install -e sdk/python/    # SDK cliente (distribuição buildtovalue-sdk)
 # Para rodar a API de governança localmente, use: pip install -e python/
 ```
 
 ```python
-from buildtovalue import BTVClient
+from btv_sdk import BTVClient
+# (com o pacote da aplicação também instalado, o import
+#  `from buildtovalue import BTVClient` continua funcionando via reexport)
 
 client = BTVClient("http://localhost:8080")  # gateway Rust
 verdict = client.validate(

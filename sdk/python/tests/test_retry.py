@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import httpx
 
-from buildtovalue._retry import retry_sync, retry_async
-from buildtovalue.exceptions import BTVGatewayError, BTVRateLimitError
+from btv_sdk._retry import retry_sync, retry_async
+from btv_sdk.exceptions import BTVGatewayError, BTVRateLimitError
 
 
 def _make_response(status: int, body: str = "", headers: dict | None = None) -> httpx.Response:
@@ -34,7 +34,7 @@ class TestRetrySync:
         assert result.status_code == 422
         fn.assert_called_once()
 
-    @patch("buildtovalue._retry.time.sleep")
+    @patch("btv_sdk._retry.time.sleep")
     def test_retries_on_503(self, mock_sleep):
         responses = [
             _make_response(503),
@@ -47,7 +47,7 @@ class TestRetrySync:
         assert fn.call_count == 3
         assert mock_sleep.call_count == 2
 
-    @patch("buildtovalue._retry.time.sleep")
+    @patch("btv_sdk._retry.time.sleep")
     def test_raises_gateway_error_after_max_retries(self, mock_sleep):
         fn = MagicMock(return_value=_make_response(503))
         with pytest.raises(BTVGatewayError) as exc:
@@ -55,21 +55,21 @@ class TestRetrySync:
         assert exc.value.status_code == 503
         assert fn.call_count == 3  # initial + 2 retries
 
-    @patch("buildtovalue._retry.time.sleep")
+    @patch("btv_sdk._retry.time.sleep")
     def test_raises_rate_limit_error_on_429(self, mock_sleep):
         fn = MagicMock(return_value=_make_response(429, "", {"Retry-After": "30"}))
         with pytest.raises(BTVRateLimitError) as exc:
             retry_sync(fn, max_retries=2, base_delay=1.0)
         assert exc.value.retry_after == 30
 
-    @patch("buildtovalue._retry.time.sleep")
+    @patch("btv_sdk._retry.time.sleep")
     def test_raises_gateway_error_on_network_failure(self, mock_sleep):
         fn = MagicMock(side_effect=httpx.ConnectError("Connection refused"))
         with pytest.raises(BTVGatewayError):
             retry_sync(fn, max_retries=2, base_delay=1.0)
         assert fn.call_count == 3
 
-    @patch("buildtovalue._retry.time.sleep")
+    @patch("btv_sdk._retry.time.sleep")
     def test_exponential_backoff_delays(self, mock_sleep):
         fn = MagicMock(side_effect=[
             _make_response(503),

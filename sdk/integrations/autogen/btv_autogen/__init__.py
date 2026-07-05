@@ -2,7 +2,7 @@
 BTV AutoGen integration — message filter for AI agent governance.
 
 Usage:
-    from buildtovalue import BTVClient
+    from btv_sdk import BTVClient
     from btv_autogen import BTVAutoGenGuard
 
     btv = BTVClient(api_key="your-key")

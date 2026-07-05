@@ -10,7 +10,7 @@ import asyncio
 import functools
 from typing import Any, Callable, Optional, Union
 
-from buildtovalue import AsyncBTVClient, BTVClient
+from btv_sdk import AsyncBTVClient, BTVClient
 
 
 class BTVBlockedTaskError(Exception):

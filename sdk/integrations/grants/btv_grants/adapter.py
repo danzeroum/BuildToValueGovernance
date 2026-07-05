@@ -28,8 +28,8 @@ if TYPE_CHECKING:
     # These imports are used ONLY for type annotations (never executed at runtime).
     # The buildtovalue SDK is an optional runtime dependency — code that actually
     # calls BTVClient methods imports it lazily inside evaluate().
-    from buildtovalue import BTVClient  # noqa: F401
-    from buildtovalue.models import Verdict  # noqa: F401
+    from btv_sdk import BTVClient  # noqa: F401
+    from btv_sdk.models import Verdict  # noqa: F401
 
 from .exceptions import (
     GrantBlockedError,
@@ -52,7 +52,7 @@ logger = logging.getLogger("btv_grants")
 def _require_btvclient() -> Any:
     """Lazy-load BTVClient at runtime; raises ImportError with clear message."""
     try:
-        from buildtovalue import BTVClient  # type: ignore[import]
+        from btv_sdk import BTVClient  # type: ignore[import]
         return BTVClient
     except ImportError as exc:
         raise ImportError(
@@ -64,7 +64,7 @@ def _require_btvclient() -> Any:
 def _require_verdict_class() -> Any:
     """Lazy-load Verdict at runtime; raises ImportError with clear message."""
     try:
-        from buildtovalue.models import Verdict  # type: ignore[import]
+        from btv_sdk.models import Verdict  # type: ignore[import]
         return Verdict
     except ImportError as exc:
         raise ImportError(
@@ -107,7 +107,7 @@ class GrantGuard:
     """BTV Governance Guard for grant proposal evaluation.
 
     Usage:
-        from buildtovalue import BTVClient
+        from btv_sdk import BTVClient
         from btv_grants import GrantGuard, GrantProposal, GrantCategory, LinguisticGroup
 
         client = BTVClient(api_key="...")

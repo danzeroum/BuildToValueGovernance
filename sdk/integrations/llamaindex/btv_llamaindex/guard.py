@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from typing import Optional, Union
 
-from buildtovalue import AsyncBTVClient, BTVClient
+from btv_sdk import AsyncBTVClient, BTVClient
 
 
 class BTVBlockedQueryError(Exception):

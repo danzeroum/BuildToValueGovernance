@@ -15,8 +15,8 @@ from typing import Any, Optional, Union
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
-from buildtovalue import AsyncBTVClient, BTVClient
-from buildtovalue.models import VerdictAction
+from btv_sdk import AsyncBTVClient, BTVClient
+from btv_sdk.models import VerdictAction
 
 
 class BTVBlockedByGuardrailError(Exception):

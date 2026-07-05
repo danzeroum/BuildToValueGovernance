@@ -8,7 +8,7 @@ import respx
 import httpx
 
 from btv_llamaindex import BTVQueryEngineGuard, BTVBlockedQueryError
-from buildtovalue import BTVClient
+from btv_sdk import BTVClient
 
 GATEWAY = "http://localhost:8080"
 API_KEY = "test-key"
