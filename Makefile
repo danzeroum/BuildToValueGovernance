@@ -97,20 +97,16 @@ clean:
 	cd python && rm -rf build/ dist/ *.egg-info .pytest_cache __pycache__
 	find . -name "*.pyc" -delete
 
-# React Dashboard
+# Dashboard Streamlit (python/buildtovalue/dashboard/app.py)
+# Requer: pip install -e "python/[dashboard]"
 dashboard:
-	@echo "Building React dashboard..."
-	cd dashboard && npm ci && npm run build
+	@echo "Launching Streamlit dashboard on http://localhost:8501 ..."
+	$(PYTHON) -m streamlit run python/buildtovalue/dashboard/app.py
 
 # Public Benchmark
 benchmark:
 	@echo "Running BTV benchmark..."
 	cd benchmarks/comparative && $(PYTHON) runner.py --adapters btv
-
-# ARIA Scaling Trust Arena — iterative demo (Streamlit)
-arena-demo:
-	@echo "Launching Arena demo on http://localhost:8501 ..."
-	streamlit run playground/arena_demo.py
 
 # ARIA Scaling Trust Arena — iterative demo (CLI walkthrough)
 arena-demo-cli:

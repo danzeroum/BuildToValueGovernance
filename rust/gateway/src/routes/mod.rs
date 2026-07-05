@@ -70,6 +70,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .merge(internal_router)
         // ── Rotas v1.9 (inalteradas) ──────────────────────────
         .route("/v1/validate",              post(validate::validate_handler))
+        // Alias documentado no README (Path B) — mesmo handler de /v1/validate
+        .route("/v1/scan",                  post(validate::validate_handler))
         .route("/v1/sanitize",              post(sanitize::sanitize_handler))
         .route("/v1/policy/test",           post(blind_review::policy_test_handler))
         .route("/v1/guard",                 post(guard::guard_handler))

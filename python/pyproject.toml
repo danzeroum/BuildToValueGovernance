@@ -66,6 +66,10 @@ otel = [
 compliance = [
     "PyMuPDF>=1.23.0",
 ]
+dashboard = [
+    "streamlit>=1.30.0",
+    "requests>=2.31.0",
+]
 
 [project.scripts]
 btv = "buildtovalue.cli.main:cli"

@@ -24,6 +24,11 @@ mod pipeline_integration {
     }
 
     fn make_no_log_exec() -> Executive {
+        // btv-core exige BTV_HMAC_KEY em qualquer caminho que sela verdicts;
+        // sem ela os testes falham por ambiente, não por comportamento.
+        if std::env::var("BTV_HMAC_KEY").is_err() {
+            std::env::set_var("BTV_HMAC_KEY", "integration-test-key");
+        }
         // Port 19999 is not listening — log calls will fail as LogUnavailable
         Executive::new(
             stub_auth(),
