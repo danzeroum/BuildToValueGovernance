@@ -125,6 +125,7 @@ nav:
       - Dimensionamento Econômico: developer/compliance/sizing-guide.md
       - Mapa Regulatório: developer/compliance/regulatory-map.md
       - Mapa Operacional de YAMLs: developer/compliance/dpo-ciso-yaml-map.md
+    - Arquitetura UML (gerada): arquitetura-uml.md
     - Trilha de ADRs: developer/adr-trail/README.md
     - Protocolo CAP: developer/cap-protocol.md
     - Registro de Riscos: developer/RISK_REGISTER.md
