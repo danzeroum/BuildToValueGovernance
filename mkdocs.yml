@@ -127,6 +127,14 @@ nav:
       - Mapa Operacional de YAMLs: developer/compliance/dpo-ciso-yaml-map.md
     - Arquitetura UML (gerada): arquitetura-uml.md
     - Arquitetura Completa C4 (gerada): arquitetura-completa.md
+    - Mapa de Dados (gerado):
+      - Visão geral: mapa-de-dados/README.md
+      - Rust — Kernel: mapa-de-dados/01-rust-kernel.md
+      - Rust — Gateway & Constitucional: mapa-de-dados/02-rust-gateway-constitucional.md
+      - Python — Governança: mapa-de-dados/03-python-governance.md
+      - Python — API & Compliance: mapa-de-dados/04-python-api-compliance.md
+      - Python — Intelligence/Agentic/Core: mapa-de-dados/05-python-intelligence-agentic-core.md
+      - SDK/TypeScript/HTML/Spec: mapa-de-dados/06-sdk-typescript-html-spec.md
     - Trilha de ADRs: developer/adr-trail/README.md
     - Protocolo CAP: developer/cap-protocol.md
     - Registro de Riscos: developer/RISK_REGISTER.md
